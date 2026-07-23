@@ -1,6 +1,5 @@
 package org.cardanofoundation.lob.app.keri_attestation.service;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -22,26 +21,34 @@ import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProp
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestationCeremonyEntity;
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentityLinkEntity;
-import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestationCeremonyRepository;
+import org.cardanofoundation.lob.app.keri_attestation.domain.view.CeremonyView;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
 
 /**
- * Drives the AUTH_BEGIN step (design §4.5): either verifies a user-supplied external tx hash already
- * establishes on-chain signing authority for the linked AID ("I already have authority" skip), or
- * builds and submits a fresh AUTH_BEGIN transaction from the linked credential chain, then — on the
- * async continuation, {@link #awaitAuthBeginConfirmation} — polls for confirmation depth before
- * advancing the ceremony to {@code AUTH_BEGIN_CONFIRMED}.
+ * Drives the AUTH_BEGIN step (design §4.5) SYNCHRONOUSLY, in the request thread: either verifies a
+ * user-supplied external tx hash already establishes on-chain signing authority for the linked AID ("I
+ * already have authority" skip), or builds and submits a fresh AUTH_BEGIN transaction from the linked
+ * credential chain — then, in BOTH cases, advances the ceremony to {@code AUTH_BEGIN_CONFIRMED}
+ * immediately, in this same call.
  *
- * <p><b>Return-value convention (deliberate, and different from {@link KeriAttestService}):</b> per
- * the brief, {@link #submitAuthBegin} returns {@link Either#left} <em>only</em> when the initial
- * {@link CeremonyService#beginStep} guard itself fails (the ceremony never left its prior state, so
- * there is nothing to report via ceremony state). Every failure after that point — no linked identity,
- * an unverifiable external tx, a failed build/submit of a fresh tx — is reported by transitioning the
- * ceremony to {@code FAILED} via {@code failStep} while still returning {@link Either#right}: the
- * request was accepted and processed, and its outcome is visible via ceremony polling (design §4.2
- * "the triggering POST returns 202 immediately and the frontend polls"), exactly like the wallet-wait
- * steps ({@link KeriCredentialService#awaitPresentation}, {@link KeriAttestService#awaitAnchor}) never
- * return anything to a caller at all.
+ * <p><b>cip113 parity, "fire the chain tx and move on" (design rev, user-directed):</b> the own-chain
+ * path used to persist the submitted tx hash and dispatch a background poll that waited for N block
+ * confirmations before completing the step — the exact kind of background runner this refactor removes.
+ * cip113's own on-chain flows never wait for confirmation depth at all; they submit and consider the
+ * step done. This class now does the same: {@link #submitOwn} completes the step the moment {@link
+ * CardanoMetadataTxSubmitter#submitMetadataTransaction} returns a tx hash, WITHOUT blocking the request
+ * thread waiting for confirmations. (A submitted-but-unconfirmed/rolled-back tx is not specially
+ * detected by this class any more than cip113 detects one — this mirrors the accepted reference
+ * behavior, not a regression introduced here.)
+ *
+ * <p><b>Return-value convention (deliberate, and different from {@link KeriAttestService}/{@link
+ * KeriCredentialService}):</b> per the original design, {@link #submitAuthBegin} returns {@link
+ * Either#left} <em>only</em> when the initial {@link CeremonyService#beginStep} guard itself fails (the
+ * ceremony never left its prior state, so there is nothing to report via ceremony state). Every failure
+ * after that point — no linked identity, an unverifiable external tx, a failed build/submit of a fresh
+ * tx — is reported by transitioning the ceremony to {@code FAILED} via {@code failStep} while still
+ * returning {@link Either#right} with the resulting (FAILED) {@link CeremonyView}: the request was
+ * accepted and processed, and its outcome is visible in the returned ceremony state.
  *
  * <p><b>F9 fix:</b> {@link CardanoMetadataTxSubmitter} is implemented by {@code blockchain_publisher}
  * (design §3.3) — a module that is not guaranteed to be enabled alongside this one. A hard
@@ -66,15 +73,18 @@ public class KeriAuthBeginService {
     private final Cip170MetadataFactory metadataFactory;
     private final ObjectProvider<CardanoMetadataTxSubmitter> submitterProvider;
     private final CeremonyService ceremonyService;
-    private final KeriAttestationCeremonyRepository ceremonyRepository;
     private final KeriIdentityLinkRepository identityLinkRepository;
     private final KeriAttestationProperties properties;
-    private final CeremonyAsyncRunner asyncRunner;
 
-    // --- synchronous: verify external authority, or build + submit a fresh AUTH_BEGIN tx ---
-
-    public Either<ProblemDetail, Void> submitAuthBegin(String ceremonyId, String userId, String externalTxHash,
-            boolean retry) {
+    /**
+     * Orchestrates the AUTH_BEGIN step end-to-end, synchronously: {@link CeremonyService#beginStep}
+     * from {@code CREDENTIAL_RECEIVED} to {@code AUTH_BEGIN_SUBMITTED}, then either {@link
+     * #verifyExternal} or {@link #submitOwn} depending on whether the caller supplied an external tx
+     * hash — both complete (or fail) the step in this same call. See the class javadoc for the
+     * return-value convention.
+     */
+    public Either<ProblemDetail, CeremonyView> submitAuthBegin(String ceremonyId, String userId,
+            String externalTxHash, boolean retry) {
         Either<ProblemDetail, KeriAttestationCeremonyEntity> begun = ceremonyService.beginStep(ceremonyId, userId,
                 CeremonyState.CREDENTIAL_RECEIVED, CeremonyState.AUTH_BEGIN_SUBMITTED, retry);
         if (begun.isLeft()) {
@@ -85,56 +95,48 @@ public class KeriAuthBeginService {
 
         Optional<KeriIdentityLinkEntity> linkOpt = identityLinkRepository.findById(userId);
         if (linkOpt.isEmpty() || linkOpt.get().getAid() == null) {
-            ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
-                    KeriAttestationProblems.IDENTITY_NOT_LINKED,
+            return failAuthBegin(ceremonyId, userId, generation, KeriAttestationProblems.IDENTITY_NOT_LINKED,
                     "User %s has no linked identity to submit AUTH_BEGIN for.".formatted(userId));
-            return Either.right(null);
         }
         KeriIdentityLinkEntity link = linkOpt.get();
 
         if (externalTxHash != null) {
-            verifyExternal(ceremonyId, generation, ceremony, link, externalTxHash);
-        } else {
-            submitOwn(ceremonyId, generation, ceremony, link);
+            return verifyExternal(ceremonyId, userId, generation, ceremony, link, externalTxHash);
         }
-        return Either.right(null);
+        return submitOwn(ceremonyId, userId, generation, ceremony, link);
     }
 
     // --- external authority verification (design §4.5 "the skip") ---
 
-    private void verifyExternal(String ceremonyId, int generation, KeriAttestationCeremonyEntity ceremony,
-            KeriIdentityLinkEntity link, String txHash) {
+    private Either<ProblemDetail, CeremonyView> verifyExternal(String ceremonyId, String userId, int generation,
+            KeriAttestationCeremonyEntity ceremony, KeriIdentityLinkEntity link, String txHash) {
         CardanoMetadataTxSubmitter submitter = submitterProvider.getIfAvailable();
         if (submitter == null) {
-            ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
-                    KeriAttestationProblems.AUTH_BEGIN_UNVERIFIED, NO_SUBMITTER_DETAIL);
-            return;
+            return failAuthBegin(ceremonyId, userId, generation, KeriAttestationProblems.AUTH_BEGIN_UNVERIFIED,
+                    NO_SUBMITTER_DETAIL);
         }
 
         Optional<Map<String, Object>> metadataOpt;
         try {
             metadataOpt = submitter.readCip170Metadata(txHash);
         } catch (Exception e) {
-            ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
-                    KeriAttestationProblems.AUTH_BEGIN_UNVERIFIED,
+            return failAuthBegin(ceremonyId, userId, generation, KeriAttestationProblems.AUTH_BEGIN_UNVERIFIED,
                     "Failed to read CIP-170 metadata for tx %s: %s".formatted(txHash, e.getMessage()));
-            return;
         }
 
         String rejectionReason = validateExternalMetadata(metadataOpt, link, properties.credentialPolicy());
         if (rejectionReason != null) {
-            ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
-                    KeriAttestationProblems.AUTH_BEGIN_UNVERIFIED, rejectionReason);
-            return;
+            return failAuthBegin(ceremonyId, userId, generation, KeriAttestationProblems.AUTH_BEGIN_UNVERIFIED,
+                    rejectionReason);
         }
 
-        String userId = link.getUserId();
+        String linkUserId = link.getUserId();
         int bindingVersion = ceremony.getBindingVersion();
         Long blockNumber = blockNumberOf(metadataOpt.get());
         try {
             ceremonyService.completeStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
                     CeremonyState.AUTH_BEGIN_CONFIRMED,
-                    c -> persistAuthBeginIfIdentityStillCurrent(userId, bindingVersion, txHash, blockNumber));
+                    c -> persistAuthBeginIfIdentityStillCurrent(linkUserId, bindingVersion, txHash, blockNumber));
         } catch (Exception e) {
             // The mutator does real JPA work (findById + save) that can throw — unlike every other
             // external-boundary call in this class, completeStep itself has no checked-exception
@@ -142,10 +144,11 @@ public class KeriAuthBeginService {
             // submitAuthBegin as an unhandled failure; it must still resolve the ceremony.
             log.warn("Failed to complete AUTH_BEGIN external verification for ceremony {}: {}", ceremonyId,
                     e.getMessage());
-            ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
-                    KeriAttestationProblems.AUTH_BEGIN_UNVERIFIED,
+            return failAuthBegin(ceremonyId, userId, generation, KeriAttestationProblems.AUTH_BEGIN_UNVERIFIED,
                     "Failed to persist the AUTH_BEGIN confirmation: " + e.getMessage());
         }
+        log.info("AUTH_BEGIN externally verified via tx {}, step complete", txHash);
+        return ceremonyService.get(ceremonyId, userId);
     }
 
     private static Long blockNumberOf(Map<String, Object> metadata) {
@@ -175,33 +178,28 @@ public class KeriAuthBeginService {
         return null;
     }
 
-    // --- fresh AUTH_BEGIN submission from the linked credential chain ---
+    // --- fresh AUTH_BEGIN submission from the linked credential chain, synchronous fire-and-complete ---
 
-    private void submitOwn(String ceremonyId, int generation, KeriAttestationCeremonyEntity ceremony,
-            KeriIdentityLinkEntity link) {
+    private Either<ProblemDetail, CeremonyView> submitOwn(String ceremonyId, String userId, int generation,
+            KeriAttestationCeremonyEntity ceremony, KeriIdentityLinkEntity link) {
         if (link.getCredentialSaid() == null || link.getCredentialSchemaSaid() == null) {
-            ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
-                    KeriAttestationProblems.IDENTITY_NOT_LINKED,
+            return failAuthBegin(ceremonyId, userId, generation, KeriAttestationProblems.IDENTITY_NOT_LINKED,
                     "User %s has no validated credential to build an AUTH_BEGIN chain from."
                             .formatted(link.getUserId()));
-            return;
         }
 
         CardanoMetadataTxSubmitter submitter = submitterProvider.getIfAvailable();
         if (submitter == null) {
-            ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
+            return failAuthBegin(ceremonyId, userId, generation,
                     KeriAttestationProblems.AUTH_BEGIN_SUBMISSION_UNAVAILABLE, NO_SUBMITTER_DETAIL);
-            return;
         }
 
         String txHash;
         try {
             Optional<String> cesrOpt = client.client().credentials().get(link.getCredentialSaid());
             if (cesrOpt.isEmpty()) {
-                ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
-                        KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
+                return failAuthBegin(ceremonyId, userId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
                         "Credential %s was not found in the credential store.".formatted(link.getCredentialSaid()));
-                return;
             }
 
             byte[] reducedChain = cesrChainReducer.reduceToVcpIssAcdc(cesrOpt.get());
@@ -212,152 +210,67 @@ public class KeriAuthBeginService {
                     submitter.submitMetadataTransaction(AUTH_BEGIN_METADATA_LABEL, map);
             if (submitResult.isLeft()) {
                 ProblemDetail problem = submitResult.getLeft();
-                ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
-                        problem.getTitle(), problem.getDetail());
-                return;
+                return failAuthBegin(ceremonyId, userId, generation, problem.getTitle(), problem.getDetail());
             }
             txHash = submitResult.get();
+            log.info("AUTH_BEGIN tx submitted {}", txHash);
         } catch (Exception e) {
             interruptIfNeeded(e);
             log.warn("Failed to build/submit AUTH_BEGIN for ceremony {}: {}", ceremonyId, e.getMessage());
-            ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
-                    KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
+            return failAuthBegin(ceremonyId, userId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
                     "Failed to build/submit the AUTH_BEGIN transaction: " + e.getMessage());
-            return;
         }
 
-        // Routed through the guarded update (F2 fix) rather than a direct save of this detached entity:
-        // a concurrent retry/sweep transition landing between beginStep's row lock releasing and this
-        // write must never be silently overwritten. A stale (false) result means the ceremony has
-        // already moved on for some other reason — abandon here the same way an unsupervised async
-        // worker would, rather than dispatching a confirmation wait for a step that no longer exists.
-        boolean persisted = ceremonyService.updateWaitingStepData(ceremonyId, generation,
-                CeremonyState.AUTH_BEGIN_SUBMITTED, c -> c.setAuthBeginTxHash(txHash));
-        if (!persisted) {
-            log.warn("Skipping AUTH_BEGIN confirmation dispatch for ceremony {}: no longer waiting on "
-                    + "AUTH_BEGIN_SUBMITTED.", ceremonyId);
-            return;
-        }
-
+        // cip113 parity: complete the step the moment the tx is submitted — no wait for confirmation
+        // depth (see class javadoc). The link write is folded into completeStep's mutator, same idiom as
+        // KeriCredentialService#persistCredentialIfIdentityStillCurrent.
+        String finalTxHash = txHash;
+        int bindingVersion = ceremony.getBindingVersion();
         try {
-            asyncRunner.awaitAuthBeginConfirmation(ceremonyId, generation);
+            boolean completed = ceremonyService.completeStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
+                    CeremonyState.AUTH_BEGIN_CONFIRMED,
+                    c -> persistAuthBeginIfIdentityStillCurrent(userId, bindingVersion, finalTxHash, null));
+            if (!completed) {
+                // Stale CAS (a concurrent retry superseded this attempt) — the tx is already submitted
+                // on-chain, but this attempt is no longer the current one; the winning attempt's own
+                // state is authoritative, so this just reports whatever that ended up being rather than
+                // clobbering it via failStep.
+                log.warn("Skipping AUTH_BEGIN completion for ceremony {}: no longer waiting on "
+                        + "AUTH_BEGIN_SUBMITTED.", ceremonyId);
+                return ceremonyService.get(ceremonyId, userId);
+            }
         } catch (Exception e) {
-            // The executor rejected the dispatch (pool/queue saturated) — the tx is already submitted
-            // on-chain, but with no worker left to watch it, the ceremony must not sit non-terminal
-            // with an unhandled exception as the only signal. FAILED(AUTH_BEGIN_ROLLED_BACK) matches the
-            // "resubmittable" story a genuine rollback would get; a retry submits a fresh tx.
-            log.warn("Failed to dispatch AUTH_BEGIN confirmation wait for ceremony {}: {}", ceremonyId,
-                    e.getMessage());
-            ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
-                    KeriAttestationProblems.AUTH_BEGIN_ROLLED_BACK,
-                    "Failed to dispatch the AUTH_BEGIN confirmation wait: " + e.getMessage());
+            // completeStep's mutator does real JPA work that can throw; an escaped exception here must
+            // not propagate out of submitAuthBegin, it must still resolve the ceremony.
+            log.warn("Failed to complete AUTH_BEGIN submission for ceremony {}: {}", ceremonyId, e.getMessage());
+            return failAuthBegin(ceremonyId, userId, generation, KeriAttestationProblems.AUTH_BEGIN_ROLLED_BACK,
+                    "Failed to persist the AUTH_BEGIN confirmation: " + e.getMessage());
         }
-    }
-
-    // --- asynchronous continuation: poll for confirmations, complete or roll back ---
-
-    /**
-     * Runs unsupervised on {@link CeremonyAsyncRunner}'s background executor — see
-     * {@link KeriCredentialService#awaitPresentation}'s javadoc for the "must always resolve, never
-     * propagate" rationale this method follows too. Polls
-     * {@link KeriAttestationProperties#authBeginPollInterval()} until
-     * {@link CardanoMetadataTxSubmitter#confirmations} reaches
-     * {@link KeriAttestationProperties#authBeginConfirmations()}, or
-     * {@link KeriAttestationProperties#authBeginRollbackWindow()} elapses without that happening —
-     * {@code FAILED(AUTH_BEGIN_ROLLED_BACK)}, resubmittable per design §4.5.
-     */
-    public void awaitAuthBeginConfirmation(String ceremonyId, int generation) {
-        Optional<KeriAttestationCeremonyEntity> ceremonyOpt = ceremonyRepository.findById(ceremonyId);
-        if (ceremonyOpt.isEmpty()) {
-            return;
-        }
-        KeriAttestationCeremonyEntity ceremony = ceremonyOpt.get();
-        String txHash = ceremony.getAuthBeginTxHash();
-        if (txHash == null) {
-            ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
-                    KeriAttestationProblems.AUTH_BEGIN_ROLLED_BACK,
-                    "No pending AUTH_BEGIN transaction hash was recorded to confirm.");
-            return;
-        }
-
-        // Defensive (F9 fix): submitOwn already required the submitter to exist to reach this point, but
-        // this worker can run well after that (the confirmation poll can last up to
-        // authBeginRollbackWindow, default 30 minutes) — a redeploy that removes the submitter mid-wait
-        // must still resolve the ceremony rather than NPE.
-        CardanoMetadataTxSubmitter submitter = submitterProvider.getIfAvailable();
-        if (submitter == null) {
-            ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
-                    KeriAttestationProblems.AUTH_BEGIN_ROLLED_BACK, NO_SUBMITTER_DETAIL);
-            return;
-        }
-
-        Instant deadline = Instant.now().plus(properties.authBeginRollbackWindow());
-        while (true) {
-            Optional<Long> confirmations;
-            try {
-                confirmations = submitter.confirmations(txHash);
-            } catch (Exception e) {
-                log.warn("Failed to check confirmations for AUTH_BEGIN tx {}: {}", txHash, e.getMessage());
-                confirmations = Optional.empty();
-            }
-
-            if (confirmations.isPresent() && confirmations.get() >= properties.authBeginConfirmations()) {
-                String userId = ceremony.getUserId();
-                int bindingVersion = ceremony.getBindingVersion();
-                try {
-                    ceremonyService.completeStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
-                            CeremonyState.AUTH_BEGIN_CONFIRMED,
-                            c -> persistAuthBeginIfIdentityStillCurrent(userId, bindingVersion, txHash, null));
-                } catch (Exception e) {
-                    // Same rationale as verifyExternal's guard: the mutator's JPA work can throw, and
-                    // this is an unsupervised async worker — it must resolve the ceremony, never
-                    // propagate and leave it stuck at AUTH_BEGIN_SUBMITTED for the TTL sweep alone to
-                    // eventually catch.
-                    log.warn("Failed to complete AUTH_BEGIN confirmation for ceremony {}: {}", ceremonyId,
-                            e.getMessage());
-                    ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
-                            KeriAttestationProblems.AUTH_BEGIN_ROLLED_BACK,
-                            "Failed to persist the AUTH_BEGIN confirmation: " + e.getMessage());
-                }
-                return;
-            }
-
-            if (!Instant.now().isBefore(deadline)) {
-                ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED,
-                        KeriAttestationProblems.AUTH_BEGIN_ROLLED_BACK,
-                        "Tx %s did not reach %d confirmations within the rollback window.".formatted(txHash,
-                                properties.authBeginConfirmations()));
-                return;
-            }
-
-            Duration pollInterval = properties.authBeginPollInterval();
-            try {
-                Thread.sleep(pollInterval.toMillis());
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return;
-            }
-        }
+        log.info("AUTH_BEGIN step complete");
+        return ceremonyService.get(ceremonyId, userId);
     }
 
     // --- internals ---
+
+    private Either<ProblemDetail, CeremonyView> failAuthBegin(String ceremonyId, String userId, int generation,
+            String title, String detail) {
+        ceremonyService.failStep(ceremonyId, generation, CeremonyState.AUTH_BEGIN_SUBMITTED, title, detail);
+        return ceremonyService.get(ceremonyId, userId);
+    }
 
     /**
      * Persists the confirmed (or verified-external) AUTH_BEGIN tx hash to the identity link.
      * <b>Only ever called from inside a {@link CeremonyService#completeStep} mutator</b> — that method
      * only invokes its mutator after the ceremony row's own {@code (state, attemptGeneration)} CAS has
-     * already confirmed this is the current, non-superseded attempt (design §4.2), so a stale
-     * generation's mutator (e.g. a retry raced by a slower earlier worker) never runs at all, and both
-     * the link write and the ceremony transition commit together in {@code CeremonyService}'s one
-     * transaction.
+     * already confirmed this is the current, non-superseded attempt, so a stale generation's mutator
+     * never runs at all, and both the link write and the ceremony transition commit together in
+     * {@code CeremonyService}'s one transaction.
      *
      * <p>That CAS alone does not cover a relink, though: relink doesn't touch the ceremony's own
-     * {@code (state, attemptGeneration)} directly (a separate {@code KeriOobiService} write fails the
-     * ceremony out-of-band), so this re-fetches the link fresh and compares {@code bindingVersion}
+     * {@code (state, attemptGeneration)} directly (a separate {@code KeriOobiService} write invalidates
+     * the ceremony out-of-band), so this re-fetches the link fresh and compares {@code bindingVersion}
      * against the version this attempt was authorized under — the same idiom
-     * {@code KeriCredentialService#awaitPresentation} uses for the identical race (a relink landing
-     * mid-flight must never let a stale write re-attach authority data to what is now a different
-     * identity).
+     * {@code KeriCredentialService#persistCredentialIfIdentityStillCurrent} uses for the identical race.
      *
      * <p>The re-fetch is row-locked (F3 fix) via
      * {@link org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository#findByUserIdForUpdate}

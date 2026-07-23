@@ -141,39 +141,50 @@ public class KeriAttestationCeremonyEntity implements Persistable<String> {
     private String attesterAid;
 
     /** F5 fix: the wallet's KEL sequence (hex) at ATTEST-request time, queried and persisted BEFORE the
-     *  remotesign request is sent. Any candidate/fallback anchoring event {@code awaitAnchor} accepts
-     *  must have a sequence at or after this floor, so an old KEL event that happens to carry the same
-     *  {@link #metadataDigest} (e.g. left over from a prior attestation of identical content) can never
-     *  satisfy a fresh request. */
+     *  remotesign request is sent. Any candidate/fallback anchoring event {@code KeriAttestService
+     *  #resolveAndComplete} accepts must have a sequence at or after this floor, so an old KEL event
+     *  that happens to carry the same {@link #metadataDigest} (e.g. left over from a prior attestation
+     *  of identical content) can never satisfy a fresh request. */
     @Nullable
     @Column(name = "kel_floor_sequence", length = 64)
     private String kelFloorSequence;
 
-    /** Pending AUTH_BEGIN tx hash while this ceremony is {@code AUTH_BEGIN_SUBMITTED} (Task 9). The
-     *  CONFIRMED hash is persisted separately to {@code KeriIdentityLinkEntity#authBeginTxHash} (one
-     *  per identity, not per ceremony) once {@code KeriAuthBeginService#awaitAuthBeginConfirmation}
-     *  observes enough confirmations. */
+    /** DEAD COLUMN (synchronous refactor, cip113 parity, design rev user-directed): originally the
+     *  pending AUTH_BEGIN tx hash while this ceremony sat at {@code AUTH_BEGIN_SUBMITTED} across
+     *  multiple requests, read back by the now-removed {@code KeriAuthBeginService
+     *  #awaitAuthBeginConfirmation} background poll. {@code KeriAuthBeginService#submitAuthBegin} now
+     *  completes the step synchronously, in the same call that submits the tx — the hash goes straight
+     *  from a local variable into {@code KeriIdentityLinkEntity#authBeginTxHash} without ever needing to
+     *  round-trip through this column. No longer written. Column intentionally left in place (harmless)
+     *  rather than dropped, per the migration-safety note on {@link #stepPhase}. */
     @Nullable
     @Column(name = "auth_begin_tx_hash")
     private String authBeginTxHash;
 
-    /** F8 fix: which half of the two-phase CREDENTIAL_REQUESTED wait (apply/offer, then agree/grant) a
-     *  retry last reached — {@code APPLY_SENT} or {@code AGREE_SENT} (see
-     *  {@code KeriCredentialService}'s constants of the same names). {@code null} means no phase
-     *  recorded yet, equivalent to {@code APPLY_SENT} for retry purposes. Cleared on step
-     *  completion/failure so a stale value never lingers once this ceremony's CREDENTIAL_REQUESTED step
-     *  is done. */
+    /** DEAD COLUMN (synchronous refactor, cip113 parity, design rev user-directed): originally recorded
+     *  which half of the two-phase CREDENTIAL_REQUESTED wait (apply/offer, then agree/grant) a retry
+     *  last reached, so a background worker resuming on a LATER request could skip re-sending the apply
+     *  or the agree. {@code KeriCredentialService#presentCredential} now runs the entire
+     *  apply→offer→agree→grant→admit round trip on the original request thread in one call (mirroring
+     *  cip113's {@code KeriService#presentCredential} exactly) — there is no longer a separate request to
+     *  resume mid-step into, so no phase needs recording. A crash mid-flight simply abandons the whole
+     *  request; a subsequent retry re-enters from {@code beginStep} and, at most, re-checks for a
+     *  late-arriving offer before re-sending. No longer written. Column intentionally left in place
+     *  (harmless) rather than dropped: dropping a column is a separate, independently-riskier migration
+     *  than simply retiring the code that wrote it. */
     @Nullable
     @Column(name = "step_phase", length = 32)
     private String stepPhase;
 
-    /** cip113 wire-flow parity (design rev, user-directed 2026-07-22, {@code KeriService
-     *  #presentCredential}): the IPEX AGREE exchange's own {@code atc} (attachment) — not the ADMIT's
-     *  own — is what {@code submitAdmit} must be given, a proven cip113 wallet-contract quirk this
-     *  module now matches exactly. Persisted alongside {@link #requestExnSaid} at the {@code AGREE_SENT}
-     *  phase transition so a worker restart resuming at that phase (F8 fix) can still supply it, rather
-     *  than only being available from the in-memory {@code ExchangeMessageResult} of the attempt that
-     *  originally built the agree. */
+    /** DEAD COLUMN (synchronous refactor, cip113 parity, design rev user-directed): originally
+     *  persisted the IPEX AGREE exchange's own {@code atc} (attachment) — not the ADMIT's own, a proven
+     *  cip113 wallet-contract quirk {@code submitAdmit} must still honor — alongside {@link
+     *  #requestExnSaid} at the (now-removed) {@code AGREE_SENT} phase transition, so a worker restart
+     *  resuming at that phase on a LATER request could still supply it. {@code
+     *  KeriCredentialService#presentCredential} now holds the agree's {@code atc} as a local variable for
+     *  the lifetime of the one synchronous call that needs it (build agree → ... → submit admit), so it
+     *  never needs to survive past that call. No longer written; see {@link #stepPhase}'s javadoc for why
+     *  the column stays. */
     @Nullable
     @Column(name = "agree_atc")
     private String agreeAtc;

@@ -118,12 +118,16 @@ public class CeremonyCleanupJob {
      * §4.6's two-phase IPEX flow), not one, so its budget is {@code 2 × remotesignTimeout + grace}
      * rather than the single {@code remotesignTimeout + grace} every other waiting state gets. Without
      * this, a ceremony legitimately still waiting on the SECOND wallet approval (grant, after an already
-     * -completed offer/agree round trip) could be swept as stale mid-flight. This is defense in depth
-     * on top of the F8 fix's own heartbeat: {@code KeriCredentialService#awaitPresentation}'s
-     * AGREE_SENT phase persist refreshes {@code updatedAt} between the two waits via the same guarded
-     * update that records the phase transition, so a ceremony that's actually making progress resets its
-     * own clock; the doubled budget here is what protects the (rarer, but real) case where the whole
-     * offer round trip alone takes close to the single-{@code remotesignTimeout} budget.
+     * -completed offer/agree round trip) could be swept as stale mid-flight.
+     *
+     * <p><b>Synchronous refactor note:</b> {@code KeriCredentialService#presentCredential} now runs the
+     * whole apply→offer→agree→grant→admit round trip on the ORIGINAL request thread (cip113 parity; no
+     * more background continuation, no more mid-flight phase persist/heartbeat between the two waits).
+     * A ceremony genuinely still in flight therefore never reaches this sweep at all — its row simply
+     * isn't touched again until the request thread returns (success or failure). This sweep now only
+     * ever fires for a ceremony whose request thread died mid-flight (e.g. the process crashed) and
+     * therefore never will complete or fail the step itself; the doubled budget remains the correct
+     * bound for that case, since a live (uncrashed) request can legitimately take up to that long.
      */
     private void failStaleWaitingSteps() {
         LocalDateTime now = LocalDateTime.now();

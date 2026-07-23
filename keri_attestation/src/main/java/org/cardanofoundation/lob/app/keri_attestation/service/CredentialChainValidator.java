@@ -129,7 +129,7 @@ public class CredentialChainValidator {
         // A structurally-plausible ACDC (isAcdc() only requires the "i" key present, not its value
         // non-null) can still carry a null issuer. Guarded here, once, before either branch below
         // reads it via .equals() — a malformed/hostile chain is rejected outright instead of NPE-ing
-        // the caller (see KeriCredentialService.awaitPresentation's javadoc for the matching
+        // the caller (see KeriCredentialService.presentCredential's javadoc for the matching
         // defense-in-depth wrapper around this whole call).
         String nodeIssuer = (String) node.get("i");
         if (nodeIssuer == null) {

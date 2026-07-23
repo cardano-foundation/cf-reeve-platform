@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.keri_attestation.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -36,11 +37,19 @@ import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProp
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestationCeremonyEntity;
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentityLinkEntity;
-import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestationCeremonyRepository;
+import org.cardanofoundation.lob.app.keri_attestation.domain.view.CeremonyView;
+import org.cardanofoundation.lob.app.keri_attestation.domain.view.RequiredSteps;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
 import org.cardanofoundation.signify.app.credentialing.credentials.Credentials;
 
+/**
+ * Tests {@link KeriAuthBeginService#submitAuthBegin}: both the external-verification path and the
+ * own-chain submission path complete (or fail) the ceremony synchronously in this one call — the
+ * own-chain path no longer dispatches a background confirmation poll ({@code awaitAuthBeginConfirmation}
+ * / {@code CeremonyAsyncRunner} are gone); it fires the AUTH_BEGIN tx and completes the step the moment
+ * the submitter returns a tx hash (cip113 parity), without waiting for block confirmations.
+ */
 @ExtendWith(MockitoExtension.class)
 class KeriAuthBeginServiceTest {
 
@@ -70,11 +79,7 @@ class KeriAuthBeginServiceTest {
     @Mock
     private CeremonyService ceremonyService;
     @Mock
-    private KeriAttestationCeremonyRepository ceremonyRepository;
-    @Mock
     private KeriIdentityLinkRepository identityLinkRepository;
-    @Mock
-    private CeremonyAsyncRunner asyncRunner;
 
     private KeriAuthBeginService service;
 
@@ -85,7 +90,7 @@ class KeriAuthBeginServiceTest {
         // Present by default (F9 fix) — the specific "submitter unavailable" tests override this to null.
         lenient().when(submitterProvider.getIfAvailable()).thenReturn(submitter);
         service = new KeriAuthBeginService(keriClient, cesrChainReducer, metadataFactory, submitterProvider,
-                ceremonyService, ceremonyRepository, identityLinkRepository, properties(), asyncRunner);
+                ceremonyService, identityLinkRepository, properties());
     }
 
     private static KeriAttestationProperties properties() {
@@ -116,6 +121,11 @@ class KeriAuthBeginServiceTest {
         return link;
     }
 
+    private static CeremonyView ceremonyView(CeremonyState state) {
+        return new CeremonyView(CEREMONY_ID, state, new RequiredSteps(false, false, false), null, null, null, null,
+                null, null);
+    }
+
     // ==================== submitAuthBegin: guards ====================
 
     @Test
@@ -124,11 +134,11 @@ class KeriAuthBeginServiceTest {
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.CREDENTIAL_RECEIVED,
                 CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.left(problem));
 
-        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
 
         assertTrue(result.isLeft());
         assertEquals(problem, result.getLeft());
-        verifyNoInteractions(identityLinkRepository, submitter, asyncRunner);
+        verifyNoInteractions(identityLinkRepository, submitter);
     }
 
     @Test
@@ -136,24 +146,21 @@ class KeriAuthBeginServiceTest {
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.CREDENTIAL_RECEIVED,
                 CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremony()));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.empty());
+        when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
 
-        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
 
         assertTrue(result.isRight());
         verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.AUTH_BEGIN_SUBMITTED,
                 KeriAttestationProblems.IDENTITY_NOT_LINKED,
                 "User user-1 has no linked identity to submit AUTH_BEGIN for.");
-        verifyNoInteractions(submitter, asyncRunner);
+        verifyNoInteractions(submitter);
     }
 
     // ==================== submitAuthBegin: external verification ====================
 
     @Test
-    void submitAuthBeginExternalVerifiedPersistsLinkAndCompletesStep() {
-        // The link write happens inside completeStep's mutator (only runs once the ceremony's own CAS
-        // has confirmed this attempt is current) — the guard at the top of submitAuthBegin uses the
-        // plain findById; the fresh re-fetch inside the mutator uses the row-locked
-        // findByUserIdForUpdate (F3 fix) — a different mocked method, stubbed separately.
+    void submitAuthBeginExternalVerifiedPersistsLinkAndCompletesStepSynchronously() {
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.CREDENTIAL_RECEIVED,
                 CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremony()));
         KeriIdentityLinkEntity link = linkedWithCredential();
@@ -161,12 +168,15 @@ class KeriAuthBeginServiceTest {
         when(identityLinkRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(link));
         when(submitter.readCip170Metadata(TX_HASH)).thenReturn(
                 Optional.of(Map.of("t", "AUTH_BEGIN", "i", WALLET_AID, "s", SCHEMA_SAID, "block", 12345L)));
+        when(ceremonyService.get(CEREMONY_ID, USER_ID))
+                .thenReturn(Either.right(ceremonyView(CeremonyState.AUTH_BEGIN_CONFIRMED)));
 
-        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, TX_HASH, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, TX_HASH, false);
 
         assertTrue(result.isRight());
-        verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
-        verifyNoInteractions(asyncRunner);
+        assertEquals(CeremonyState.AUTH_BEGIN_CONFIRMED, result.get().state());
+        verify(ceremonyService, never()).failStep(any(), anyInt(),
+                any(), any(), any());
 
         ArgumentCaptor<Consumer<KeriAttestationCeremonyEntity>> mutatorCaptor = ArgumentCaptor.forClass(Consumer.class);
         verify(ceremonyService).completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
@@ -183,9 +193,6 @@ class KeriAuthBeginServiceTest {
 
     @Test
     void submitAuthBeginExternalVerifiedButIdentityRelinkedMidFlightSkipsTheLinkWrite() {
-        // The freshly re-fetched link (as the mutator would see it, post-relink) carries a different
-        // bindingVersion than the ceremony's own — the write must be skipped, not silently reattach
-        // AUTH_BEGIN authority data to what is now a different identity.
         KeriAttestationCeremonyEntity ceremonyEntity = ceremony();
         ceremonyEntity.setBindingVersion(1);
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.CREDENTIAL_RECEIVED,
@@ -195,12 +202,13 @@ class KeriAuthBeginServiceTest {
         KeriIdentityLinkEntity relinkedLink = linkedWithCredential();
         relinkedLink.setBindingVersion(2);
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(initialLink));
-        // F3 fix: the mutator's re-fetch is row-locked, a different mocked method.
         when(identityLinkRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(relinkedLink));
         when(submitter.readCip170Metadata(TX_HASH)).thenReturn(
                 Optional.of(Map.of("t", "AUTH_BEGIN", "i", WALLET_AID, "s", SCHEMA_SAID)));
+        when(ceremonyService.get(CEREMONY_ID, USER_ID))
+                .thenReturn(Either.right(ceremonyView(CeremonyState.AUTH_BEGIN_CONFIRMED)));
 
-        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, TX_HASH, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, TX_HASH, false);
 
         assertTrue(result.isRight());
         ArgumentCaptor<Consumer<KeriAttestationCeremonyEntity>> mutatorCaptor = ArgumentCaptor.forClass(Consumer.class);
@@ -209,16 +217,12 @@ class KeriAuthBeginServiceTest {
 
         mutatorCaptor.getValue().accept(ceremonyEntity);
 
-        assertTrue(relinkedLink.getAuthBeginTxHash() == null);
+        assertNull(relinkedLink.getAuthBeginTxHash());
         verify(identityLinkRepository, never()).save(any());
     }
 
     @Test
     void submitAuthBeginExternalVerifiedButCompleteStepThrowsFailsWithAuthBeginUnverifiedInsteadOfPropagating() {
-        // completeStep's mutator does real JPA work (findById + save) that can throw — unlike every
-        // other external-boundary call in this class, completeStep itself has no checked-exception
-        // contract to remind us of that. An escaped exception here must not propagate out of
-        // submitAuthBegin as an unhandled failure; it must still resolve the ceremony via failStep.
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.CREDENTIAL_RECEIVED,
                 CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremony()));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
@@ -226,8 +230,9 @@ class KeriAuthBeginServiceTest {
                 Optional.of(Map.of("t", "AUTH_BEGIN", "i", WALLET_AID, "s", SCHEMA_SAID)));
         when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
                 eq(CeremonyState.AUTH_BEGIN_CONFIRMED), any())).thenThrow(new RuntimeException("db down"));
+        when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
 
-        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, TX_HASH, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, TX_HASH, false);
 
         assertTrue(result.isRight());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
@@ -240,8 +245,9 @@ class KeriAuthBeginServiceTest {
                 CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremony()));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
         when(submitter.readCip170Metadata(TX_HASH)).thenReturn(Optional.empty());
+        when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
 
-        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, TX_HASH, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, TX_HASH, false);
 
         assertTrue(result.isRight());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
@@ -256,8 +262,9 @@ class KeriAuthBeginServiceTest {
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
         when(submitter.readCip170Metadata(TX_HASH))
                 .thenReturn(Optional.of(Map.of("t", "ATTEST", "i", WALLET_AID, "s", SCHEMA_SAID)));
+        when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
 
-        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, TX_HASH, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, TX_HASH, false);
 
         assertTrue(result.isRight());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
@@ -271,8 +278,9 @@ class KeriAuthBeginServiceTest {
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
         when(submitter.readCip170Metadata(TX_HASH))
                 .thenReturn(Optional.of(Map.of("t", "AUTH_BEGIN", "i", "ESOMEONEELSE", "s", SCHEMA_SAID)));
+        when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
 
-        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, TX_HASH, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, TX_HASH, false);
 
         assertTrue(result.isRight());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
@@ -286,8 +294,9 @@ class KeriAuthBeginServiceTest {
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
         when(submitter.readCip170Metadata(TX_HASH))
                 .thenReturn(Optional.of(Map.of("t", "AUTH_BEGIN", "i", WALLET_AID, "s", OTHER_SCHEMA_SAID)));
+        when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
 
-        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, TX_HASH, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, TX_HASH, false);
 
         assertTrue(result.isRight());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
@@ -300,8 +309,9 @@ class KeriAuthBeginServiceTest {
                 CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremony()));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
         when(submitter.readCip170Metadata(TX_HASH)).thenThrow(new RuntimeException("blockfrost down"));
+        when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
 
-        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, TX_HASH, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, TX_HASH, false);
 
         assertTrue(result.isRight());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
@@ -315,8 +325,9 @@ class KeriAuthBeginServiceTest {
                 CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremony()));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
         when(submitterProvider.getIfAvailable()).thenReturn(null);
+        when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
 
-        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, TX_HASH, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, TX_HASH, false);
 
         assertTrue(result.isRight());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
@@ -324,22 +335,51 @@ class KeriAuthBeginServiceTest {
         verifyNoInteractions(submitter);
     }
 
-    // ==================== submitAuthBegin: own submission ====================
+    // ==================== submitAuthBegin: own submission (cip113 fire-and-complete) ====================
 
-    /** Stubs {@code ceremonyService.updateWaitingStepData} (F2 fix) to apply the mutator to
-     *  {@code ceremony} and report success, mirroring the real guarded update when the row lock still
-     *  matches. */
-    private void stubGuardedUpdateSuccess(KeriAttestationCeremonyEntity ceremony) {
-        when(ceremonyService.updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
-                eq(CeremonyState.AUTH_BEGIN_SUBMITTED), any())).thenAnswer(inv -> {
-                    Consumer<KeriAttestationCeremonyEntity> mutator = inv.getArgument(3);
-                    mutator.accept(ceremony);
+    @Test
+    void submitAuthBeginOwnSubmissionHappyPathSubmitsTxAndCompletesTheStepSynchronouslyWithoutWaitingForConfirmations() throws Exception {
+        KeriAttestationCeremonyEntity ceremonyEntity = ceremony();
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.CREDENTIAL_RECEIVED,
+                CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremonyEntity));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
+        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR"));
+        byte[] reduced = "reduced".getBytes();
+        when(cesrChainReducer.reduceToVcpIssAcdc("FULL-CESR")).thenReturn(reduced);
+        MetadataMap map = mock(MetadataMap.class);
+        when(metadataFactory.authBeginMap(WALLET_AID, SCHEMA_SAID, reduced, null, List.of(1447L))).thenReturn(map);
+        when(submitter.submitMetadataTransaction(170L, map)).thenReturn(Either.right(TX_HASH));
+        KeriIdentityLinkEntity link = linkedWithCredential();
+        when(identityLinkRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(link));
+        when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
+                eq(CeremonyState.AUTH_BEGIN_CONFIRMED), any())).thenAnswer(inv -> {
+                    Consumer<KeriAttestationCeremonyEntity> mutator = inv.getArgument(4);
+                    mutator.accept(ceremonyEntity);
                     return true;
                 });
+        when(ceremonyService.get(CEREMONY_ID, USER_ID))
+                .thenReturn(Either.right(ceremonyView(CeremonyState.AUTH_BEGIN_CONFIRMED)));
+
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
+
+        assertTrue(result.isRight());
+        assertEquals(CeremonyState.AUTH_BEGIN_CONFIRMED, result.get().state());
+        // cip113 parity: no confirmation poll -- submitter.confirmations is never even a dependency any
+        // more (the CardanoMetadataTxSubmitter mock here only stubs submitMetadataTransaction /
+        // readCip170Metadata). completeStep is called directly off the tx-hash return, in this same call.
+        verify(ceremonyService).completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
+                eq(CeremonyState.AUTH_BEGIN_CONFIRMED), any());
+        verify(ceremonyService, never()).failStep(any(), anyInt(),
+                any(), any(), any());
+        assertEquals(TX_HASH, link.getAuthBeginTxHash());
+        verify(identityLinkRepository).save(link);
     }
 
     @Test
-    void submitAuthBeginOwnSubmissionHappyPathPersistsTxHashAndDispatchesConfirmationWait() throws Exception {
+    void submitAuthBeginOwnSubmissionStaleCompleteStepSkipsFailingTheStepAndReturnsCurrentView() throws Exception {
+        // A concurrent retry/sweep transition beat this attempt's completeStep CAS — the tx is already
+        // submitted on-chain, but this attempt is no longer the current one; report whatever the
+        // winning attempt's own state ended up being rather than clobbering it via failStep.
         KeriAttestationCeremonyEntity ceremonyEntity = ceremony();
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.CREDENTIAL_RECEIVED,
                 CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremonyEntity));
@@ -350,43 +390,16 @@ class KeriAuthBeginServiceTest {
         MetadataMap map = mock(MetadataMap.class);
         when(metadataFactory.authBeginMap(WALLET_AID, SCHEMA_SAID, reduced, null, List.of(1447L))).thenReturn(map);
         when(submitter.submitMetadataTransaction(170L, map)).thenReturn(Either.right(TX_HASH));
-        stubGuardedUpdateSuccess(ceremonyEntity);
+        when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
+                eq(CeremonyState.AUTH_BEGIN_CONFIRMED), any())).thenReturn(false);
+        when(ceremonyService.get(CEREMONY_ID, USER_ID))
+                .thenReturn(Either.right(ceremonyView(CeremonyState.ATTEST_REQUESTED)));
 
-        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
-
-        assertTrue(result.isRight());
-        assertEquals(TX_HASH, ceremonyEntity.getAuthBeginTxHash());
-        verify(ceremonyService).updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
-                eq(CeremonyState.AUTH_BEGIN_SUBMITTED), any());
-        verify(ceremonyRepository, never()).save(any());
-        verify(asyncRunner).awaitAuthBeginConfirmation(CEREMONY_ID, GENERATION);
-        verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
-    }
-
-    @Test
-    void submitAuthBeginOwnSubmissionStaleGuardedUpdateSkipsDispatchWithoutFailingTheStep() throws Exception {
-        // F2 fix: a concurrent retry/sweep transition beat this attempt's tx-hash write — the
-        // confirmation wait must never be dispatched for a step that has already moved on, and per this
-        // class's own return-value convention (see class javadoc) submitAuthBegin still reports right()
-        // since the request itself was accepted and processed.
-        KeriAttestationCeremonyEntity ceremonyEntity = ceremony();
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.CREDENTIAL_RECEIVED,
-                CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremonyEntity));
-        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
-        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR"));
-        byte[] reduced = "reduced".getBytes();
-        when(cesrChainReducer.reduceToVcpIssAcdc("FULL-CESR")).thenReturn(reduced);
-        MetadataMap map = mock(MetadataMap.class);
-        when(metadataFactory.authBeginMap(WALLET_AID, SCHEMA_SAID, reduced, null, List.of(1447L))).thenReturn(map);
-        when(submitter.submitMetadataTransaction(170L, map)).thenReturn(Either.right(TX_HASH));
-        when(ceremonyService.updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION),
-                eq(CeremonyState.AUTH_BEGIN_SUBMITTED), any())).thenReturn(false);
-
-        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
 
         assertTrue(result.isRight());
-        verifyNoInteractions(asyncRunner);
-        verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
+        verify(ceremonyService, never()).failStep(any(), anyInt(),
+                any(), any(), any());
     }
 
     @Test
@@ -397,13 +410,14 @@ class KeriAuthBeginServiceTest {
         link.setUserId(USER_ID);
         link.setAid(WALLET_AID);
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link));
+        when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
 
-        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
 
         assertTrue(result.isRight());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
                 eq(KeriAttestationProblems.IDENTITY_NOT_LINKED), any());
-        verifyNoInteractions(credentials, asyncRunner);
+        verifyNoInteractions(credentials);
     }
 
     @Test
@@ -412,13 +426,13 @@ class KeriAuthBeginServiceTest {
                 CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremony()));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
         when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.empty());
+        when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
 
-        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
 
         assertTrue(result.isRight());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
                 eq(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED), any());
-        verifyNoInteractions(asyncRunner);
     }
 
     @Test
@@ -433,14 +447,13 @@ class KeriAuthBeginServiceTest {
         when(metadataFactory.authBeginMap(WALLET_AID, SCHEMA_SAID, reduced, null, List.of(1447L))).thenReturn(map);
         ProblemDetail submitProblem = KeriAttestationProblems.unprocessable("TX_BUILD_FAILED", "insufficient funds");
         when(submitter.submitMetadataTransaction(170L, map)).thenReturn(Either.left(submitProblem));
+        when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
 
-        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
 
         assertTrue(result.isRight());
         verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.AUTH_BEGIN_SUBMITTED,
                 submitProblem.getTitle(), submitProblem.getDetail());
-        verifyNoInteractions(asyncRunner);
-        verify(ceremonyRepository, never()).save(any());
     }
 
     @Test
@@ -450,13 +463,13 @@ class KeriAuthBeginServiceTest {
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
         when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR"));
         when(cesrChainReducer.reduceToVcpIssAcdc("FULL-CESR")).thenThrow(new RuntimeException("malformed CESR"));
+        when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
 
-        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
 
         assertTrue(result.isRight());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
                 eq(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED), any());
-        verifyNoInteractions(asyncRunner);
     }
 
     @Test
@@ -467,157 +480,18 @@ class KeriAuthBeginServiceTest {
                 CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremony()));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
         when(submitterProvider.getIfAvailable()).thenReturn(null);
+        when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
 
-        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
 
         assertTrue(result.isRight());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
                 eq(KeriAttestationProblems.AUTH_BEGIN_SUBMISSION_UNAVAILABLE), any());
-        verifyNoInteractions(credentials, cesrChainReducer, asyncRunner, submitter);
-    }
-
-    // ==================== awaitAuthBeginConfirmation ====================
-
-    @Test
-    void awaitAuthBeginConfirmationCeremonyNotFoundNoOps() {
-        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.empty());
-
-        service.awaitAuthBeginConfirmation(CEREMONY_ID, GENERATION);
-
-        verifyNoInteractions(submitter, identityLinkRepository, ceremonyService);
+        verifyNoInteractions(credentials, cesrChainReducer, submitter);
     }
 
     @Test
-    void awaitAuthBeginConfirmationWithNoPendingTxHashFailsWithAuthBeginRolledBack() {
-        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremony()));
-
-        service.awaitAuthBeginConfirmation(CEREMONY_ID, GENERATION);
-
-        verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.AUTH_BEGIN_SUBMITTED,
-                KeriAttestationProblems.AUTH_BEGIN_ROLLED_BACK,
-                "No pending AUTH_BEGIN transaction hash was recorded to confirm.");
-        verifyNoInteractions(submitter);
-    }
-
-    @Test
-    void awaitAuthBeginConfirmationWithNoSubmitterAvailableFailsWithAuthBeginRolledBack() {
-        // F9 fix: defensive — the submitter existed at submit time but is gone by the time this poll
-        // runs (e.g. a redeploy removed blockchain_publisher mid-wait).
-        KeriAttestationCeremonyEntity ceremonyEntity = ceremony();
-        ceremonyEntity.setAuthBeginTxHash(TX_HASH);
-        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremonyEntity));
-        when(submitterProvider.getIfAvailable()).thenReturn(null);
-
-        service.awaitAuthBeginConfirmation(CEREMONY_ID, GENERATION);
-
-        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
-                eq(KeriAttestationProblems.AUTH_BEGIN_ROLLED_BACK), any());
-        verifyNoInteractions(submitter);
-    }
-
-    @Test
-    void awaitAuthBeginConfirmationReachesConfirmationsAndCompletes() {
-        KeriAttestationCeremonyEntity ceremonyEntity = ceremony();
-        ceremonyEntity.setAuthBeginTxHash(TX_HASH);
-        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremonyEntity));
-        when(submitter.confirmations(TX_HASH)).thenReturn(Optional.of(3L));
-        KeriIdentityLinkEntity link = linkedWithCredential();
-        // awaitAuthBeginConfirmation itself never touches identityLinkRepository — only the mutator
-        // (invoked manually below) does, via the row-locked findByUserIdForUpdate (F3 fix).
-        when(identityLinkRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(link));
-
-        service.awaitAuthBeginConfirmation(CEREMONY_ID, GENERATION);
-
-        verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
-        verify(identityLinkRepository, never()).save(any());
-
-        ArgumentCaptor<Consumer<KeriAttestationCeremonyEntity>> mutatorCaptor = ArgumentCaptor.forClass(Consumer.class);
-        verify(ceremonyService).completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
-                eq(CeremonyState.AUTH_BEGIN_CONFIRMED), mutatorCaptor.capture());
-        mutatorCaptor.getValue().accept(ceremonyEntity);
-
-        assertEquals(TX_HASH, link.getAuthBeginTxHash());
-        verify(identityLinkRepository).save(link);
-    }
-
-    @Test
-    void awaitAuthBeginConfirmationConfirmedButIdentityRelinkedMidFlightSkipsTheLinkWrite() {
-        KeriAttestationCeremonyEntity ceremonyEntity = ceremony();
-        ceremonyEntity.setAuthBeginTxHash(TX_HASH);
-        ceremonyEntity.setBindingVersion(1);
-        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremonyEntity));
-        when(submitter.confirmations(TX_HASH)).thenReturn(Optional.of(3L));
-        KeriIdentityLinkEntity relinkedLink = linkedWithCredential();
-        relinkedLink.setBindingVersion(2);
-        when(identityLinkRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(relinkedLink));
-
-        service.awaitAuthBeginConfirmation(CEREMONY_ID, GENERATION);
-
-        ArgumentCaptor<Consumer<KeriAttestationCeremonyEntity>> mutatorCaptor = ArgumentCaptor.forClass(Consumer.class);
-        verify(ceremonyService).completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
-                eq(CeremonyState.AUTH_BEGIN_CONFIRMED), mutatorCaptor.capture());
-        mutatorCaptor.getValue().accept(ceremonyEntity);
-
-        assertTrue(relinkedLink.getAuthBeginTxHash() == null);
-        verify(identityLinkRepository, never()).save(any());
-    }
-
-    @Test
-    void awaitAuthBeginConfirmationCompleteStepThrowsFailsWithAuthBeginRolledBackInsteadOfPropagating() {
-        // Same rationale as the external-verify path's equivalent test: this is an unsupervised async
-        // worker — an escaped exception from completeStep's mutator must not propagate out of
-        // awaitAuthBeginConfirmation, it must still resolve the ceremony via failStep.
-        KeriAttestationCeremonyEntity ceremonyEntity = ceremony();
-        ceremonyEntity.setAuthBeginTxHash(TX_HASH);
-        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremonyEntity));
-        when(submitter.confirmations(TX_HASH)).thenReturn(Optional.of(3L));
-        when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
-                eq(CeremonyState.AUTH_BEGIN_CONFIRMED), any())).thenThrow(new RuntimeException("db down"));
-
-        service.awaitAuthBeginConfirmation(CEREMONY_ID, GENERATION);
-
-        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
-                eq(KeriAttestationProblems.AUTH_BEGIN_ROLLED_BACK), any());
-    }
-
-    @Test
-    void awaitAuthBeginConfirmationTimesOutAfterRollbackWindowFailsWithAuthBeginRolledBack() {
-        KeriAttestationCeremonyEntity ceremonyEntity = ceremony();
-        ceremonyEntity.setAuthBeginTxHash(TX_HASH);
-        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremonyEntity));
-        when(submitter.confirmations(TX_HASH)).thenReturn(Optional.of(0L));
-
-        service.awaitAuthBeginConfirmation(CEREMONY_ID, GENERATION);
-
-        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
-                eq(KeriAttestationProblems.AUTH_BEGIN_ROLLED_BACK), any());
-        verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
-        verifyNoInteractions(identityLinkRepository);
-    }
-
-    @Test
-    void awaitAuthBeginConfirmationTreatsAConfirmationsCheckExceptionAsNotYetConfirmedAndKeepsPolling() {
-        KeriAttestationCeremonyEntity ceremonyEntity = ceremony();
-        ceremonyEntity.setAuthBeginTxHash(TX_HASH);
-        when(ceremonyRepository.findById(CEREMONY_ID)).thenReturn(Optional.of(ceremonyEntity));
-        when(submitter.confirmations(TX_HASH))
-                .thenThrow(new RuntimeException("transient"))
-                .thenReturn(Optional.of(3L));
-
-        service.awaitAuthBeginConfirmation(CEREMONY_ID, GENERATION);
-
-        verify(ceremonyService).completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
-                eq(CeremonyState.AUTH_BEGIN_CONFIRMED), any());
-    }
-
-    // ==================== dispatch-failure resilience ====================
-
-    @Test
-    void submitAuthBeginOwnSubmissionDispatchFailureFailsWithAuthBeginRolledBackInsteadOfPropagating()
-            throws Exception {
-        // If CeremonyAsyncRunner's executor rejects the dispatch (pool/queue saturated), the tx is
-        // already submitted on-chain — the ceremony must still land in a terminal, retryable state
-        // rather than letting the rejection exception escape submitAuthBegin uncaught.
+    void submitAuthBeginOwnSubmissionCompleteStepThrowsFailsWithAuthBeginRolledBackInsteadOfPropagating() throws Exception {
         KeriAttestationCeremonyEntity ceremonyEntity = ceremony();
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.CREDENTIAL_RECEIVED,
                 CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremonyEntity));
@@ -628,14 +502,13 @@ class KeriAuthBeginServiceTest {
         MetadataMap map = mock(MetadataMap.class);
         when(metadataFactory.authBeginMap(WALLET_AID, SCHEMA_SAID, reduced, null, List.of(1447L))).thenReturn(map);
         when(submitter.submitMetadataTransaction(170L, map)).thenReturn(Either.right(TX_HASH));
-        stubGuardedUpdateSuccess(ceremonyEntity);
-        org.mockito.Mockito.doThrow(new java.util.concurrent.RejectedExecutionException("pool saturated"))
-                .when(asyncRunner).awaitAuthBeginConfirmation(CEREMONY_ID, GENERATION);
+        when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
+                eq(CeremonyState.AUTH_BEGIN_CONFIRMED), any())).thenThrow(new RuntimeException("db down"));
+        when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
 
-        Either<ProblemDetail, Void> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
 
         assertTrue(result.isRight());
-        assertEquals(TX_HASH, ceremonyEntity.getAuthBeginTxHash());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
                 eq(KeriAttestationProblems.AUTH_BEGIN_ROLLED_BACK), any());
     }

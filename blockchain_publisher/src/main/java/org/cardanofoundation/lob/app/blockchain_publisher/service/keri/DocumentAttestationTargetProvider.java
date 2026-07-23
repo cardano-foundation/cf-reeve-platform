@@ -67,7 +67,7 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
  * DocumentAttestationFreezeRepository#save save} is check-then-act, not atomic. In today's only
  * caller this is serialized upstream: {@code keri_attestation}'s {@code CeremonyService#beginStep}
  * takes a {@code PESSIMISTIC_WRITE} lock on the ceremony row (via {@code
- * KeriAttestationCeremonyRepository#findByIdForUpdate}) before {@code KeriAttestService#startAttest}
+ * KeriAttestationCeremonyRepository#findByIdForUpdate}) before {@code KeriAttestService#attest}
  * ever calls {@link #prepareDigest}, so two concurrent attest requests for the SAME ceremony cannot
  * both reach this method at once. That is an undocumented cross-module invariant this class does not
  * itself enforce or control, so a local defense also exists: the unique constraint on {@code
@@ -131,7 +131,7 @@ public class DocumentAttestationTargetProvider implements AttestationTargetProvi
         }
 
         // authorize(targetId, userId) was already run synchronously by the caller (keri_attestation's
-        // CeremonyService#create / KeriAttestService#startAttest both call authorize immediately
+        // CeremonyService#create / KeriAttestService#attest both call authorize immediately
         // before prepareDigest, in the same request thread) - this re-derives the same current user
         // via the same SecurityContextHolder-backed helper loadForAttestation itself uses, rather than
         // fabricating a userId, since this port method carries no userId parameter of its own.

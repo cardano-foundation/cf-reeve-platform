@@ -16,9 +16,22 @@ public record KeriAttestationProperties(
         @DefaultValue("PT24H") Duration freezeMaxAge,
         @DefaultValue("PT3M") Duration remotesignTimeout,
         @DefaultValue("PT1.5S") Duration notificationPollInterval,
+        /** DEAD CONFIG (synchronous refactor, cip113 parity, design rev user-directed): no longer read
+         *  by any code. {@code KeriAuthBeginService#submitAuthBegin}'s own-chain path used to poll (the
+         *  now-removed {@code awaitAuthBeginConfirmation}) until this many confirmations were observed
+         *  before completing the step; it now completes the step synchronously the moment the tx is
+         *  submitted, mirroring cip113, which never waits for confirmation depth either. Left in the
+         *  binding (harmless if set) rather than removed, matching the "leave it, stop reading/writing
+         *  it" treatment given {@code KeriAttestationCeremonyEntity#stepPhase} et al. */
         @DefaultValue("3") int authBeginConfirmations,
         Limits limits,
+        /** DEAD CONFIG — see {@link #authBeginConfirmations()}'s javadoc: the poll cadence for the
+         *  same now-removed confirmation-wait loop. */
         @DefaultValue("PT15S") Duration authBeginPollInterval,
+        /** Still read — unlike its sibling AUTH_BEGIN properties above, NOT dead: {@code
+         *  CeremonyCleanupJob#stepTimeoutBudgets} still uses this as the stale-step sweep budget for a
+         *  ceremony stuck at {@code AUTH_BEGIN_SUBMITTED} (e.g. the process crashed mid-request, between
+         *  submitting the tx and completing the step). */
         @DefaultValue("PT30M") Duration authBeginRollbackWindow,
         @DefaultValue("PT2S") Duration keyStateRetryInitialDelay,
         @DefaultValue("PT3S") Duration keyStateRetryInterval,
@@ -68,11 +81,14 @@ public record KeriAttestationProperties(
     }
 
     /**
-     * Pool sizes for the module's two dedicated async executors (design §4.2, F3 fix): a burst of
-     * AUTH_BEGIN confirmation polls — each a blocking loop that can run for up to
-     * {@link #authBeginRollbackWindow()} (default 30 minutes) — must never be able to starve the
-     * much shorter (≤{@link #remotesignTimeout()}, default 3 minutes) wallet-approval waits for
-     * credential presentation and ATTEST anchoring by occupying every thread in a single shared pool.
+     * DEAD CONFIG (synchronous refactor, cip113 parity, design rev user-directed): pool sizes for the
+     * module's two dedicated async executors, {@code keriAttestationExecutor} and {@code
+     * keriAttestationConfirmationExecutor} — both defined by the now-deleted {@code
+     * KeriAttestationAsyncConfig}, dispatched to by the now-deleted {@code CeremonyAsyncRunner}. The
+     * wallet-interaction flow (credential presentation, ATTEST, AUTH_BEGIN) now runs entirely on the
+     * original request thread; there is no background executor left for either pool size to configure.
+     * Left in the binding (harmless if set) rather than removed — see {@link
+     * #authBeginConfirmations()}'s javadoc for the same treatment elsewhere in this record.
      */
     public record Executor(
             @DefaultValue("4") int walletPoolSize,

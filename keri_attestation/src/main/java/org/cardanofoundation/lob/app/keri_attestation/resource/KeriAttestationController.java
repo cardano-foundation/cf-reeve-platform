@@ -118,17 +118,17 @@ public class KeriAttestationController {
                 HttpStatus.CREATED);
     }
 
-    @Operation(description = "Begin (or retry) the credential-presentation step: sends an IPEX apply to the linked wallet and returns immediately. Poll GET /ceremonies/{id} for the outcome.")
+    @Operation(description = "Begin (or retry) the credential-presentation step: runs the IPEX apply/offer/agree/grant/admit exchange with the linked wallet synchronously and returns the final ceremony state.")
     @PostMapping(value = "/ceremonies/{id}/credential/request", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize(PUBLISH_ROLES)
     public ResponseEntity<Object> requestCredential(@PathVariable String id,
             @RequestBody(required = false) StepRetryRequest request) {
         String userId = securityHelper.getCurrentUserId();
         boolean retry = request != null && request.isRetry();
-        return Responses.respond(credentialService.startCredentialRequest(id, userId, retry), HttpStatus.ACCEPTED);
+        return Responses.respond(credentialService.presentCredential(id, userId, retry), HttpStatus.OK);
     }
 
-    @Operation(description = "Begin (or retry) the AUTH_BEGIN step: verifies a user-supplied external tx hash, or builds and submits a fresh AUTH_BEGIN transaction. Returns immediately; poll GET /ceremonies/{id} for the outcome.")
+    @Operation(description = "Begin (or retry) the AUTH_BEGIN step: verifies a user-supplied external tx hash, or builds and submits a fresh AUTH_BEGIN transaction, synchronously, and returns the final ceremony state.")
     @PostMapping(value = "/ceremonies/{id}/auth-begin", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize(PUBLISH_ROLES)
     public ResponseEntity<Object> submitAuthBegin(@PathVariable String id,
@@ -136,21 +136,20 @@ public class KeriAttestationController {
         String userId = securityHelper.getCurrentUserId();
         String externalTxHash = request != null ? request.getExternalTxHash() : null;
         boolean retry = request != null && request.isRetry();
-        return Responses.respond(authBeginService.submitAuthBegin(id, userId, externalTxHash, retry),
-                HttpStatus.ACCEPTED);
+        return Responses.respond(authBeginService.submitAuthBegin(id, userId, externalTxHash, retry), HttpStatus.OK);
     }
 
-    @Operation(description = "Begin (or retry) the ATTEST step: sends a remotesign anchoring request to the linked wallet for the ceremony's target. Returns immediately; poll GET /ceremonies/{id} for the outcome.")
+    @Operation(description = "Begin (or retry) the ATTEST step: sends a remotesign anchoring request to the linked wallet and waits, synchronously, for the wallet's confirmed anchor, returning the final ceremony state.")
     @PostMapping(value = "/ceremonies/{id}/attest", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize(PUBLISH_ROLES)
     public ResponseEntity<Object> attest(@PathVariable String id,
             @RequestBody(required = false) StepRetryRequest request) {
         String userId = securityHelper.getCurrentUserId();
         boolean retry = request != null && request.isRetry();
-        return Responses.respond(attestService.startAttest(id, userId, retry), HttpStatus.ACCEPTED);
+        return Responses.respond(attestService.attest(id, userId, retry), HttpStatus.OK);
     }
 
-    @Operation(description = "Fetch a ceremony's current state (design §4.2/§4.6). Poll this after any step POST — steps are async and return 202 immediately.")
+    @Operation(description = "Fetch a ceremony's current state (design §4.2/§4.6). Useful for the wizard's step derivation without re-driving a step.")
     @GetMapping(value = "/ceremonies/{id}", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize(PUBLISH_ROLES)
     public ResponseEntity<Object> getCeremony(@PathVariable String id) {

@@ -25,7 +25,7 @@ import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProp
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestationCeremonyEntity;
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentityLinkEntity;
-import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestationCeremonyRepository;
+import org.cardanofoundation.lob.app.keri_attestation.domain.view.CeremonyView;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
 import org.cardanofoundation.lob.app.keri_attestation.service.CredentialChainValidator.ValidatedCredential;
 import org.cardanofoundation.lob.app.keri_attestation.service.KeriNotificationCorrelator.CorrelatedNotification;
@@ -37,19 +37,24 @@ import org.cardanofoundation.signify.app.credentialing.ipex.IpexAgreeArgs;
 import org.cardanofoundation.signify.core.States.HabState;
 
 /**
- * Drives IPEX credential presentation (design §4.3): the platform's agent AID requests a credential
- * from the user's linked wallet AID (apply), the wallet offers it (offer), the agent agrees (agree),
- * the wallet grants it (grant), the agent admits it (admit), then fetches and validates the full CESR
- * chain before persisting it to the identity link.
+ * Drives IPEX credential presentation (design §4.3) SYNCHRONOUSLY, in the request thread — mirroring
+ * cip113's proven reference ({@code KeriService#presentCredential}, lines 234-325 of that class): the
+ * platform's agent AID requests a credential from the user's linked wallet AID (apply), waits in-thread
+ * for the wallet's offer, agrees, waits in-thread for the grant, admits, then fetches and validates the
+ * full CESR chain before persisting it to the identity link and returning the ceremony's final state.
  *
- * <p>Split in two per the design's async step model: {@link #startPresentation} is the synchronous
- * part of a step POST (build + send the apply, persist where to correlate the reply, return quickly);
- * {@link #awaitPresentation} is the async continuation (offer → agree → grant → admit → fetch → validate
- * → persist → complete/fail the ceremony step) that a background worker runs after the synchronous part
- * returns. {@link #startCredentialRequest} (Task 10) is the orchestrating entry point the controller
- * actually calls: {@link #ensureSchemasResolved} + {@code beginStep} + a retry pre-check +
- * {@link #startPresentation} + {@link CeremonyAsyncRunner} dispatch, mirroring
- * {@link KeriAttestService#startAttest}'s shape exactly.
+ * <p><b>Why synchronous (design rev, user-directed, live wallet testing):</b> the previous async model
+ * (a quick synchronous "send the apply" half returning 202, followed by a background-executor
+ * continuation that awaited the wallet's replies) was found, under live wallet testing, to never observe
+ * the wallet's offer/grant notifications reliably — the split introduced a race the cip113 reference
+ * simply doesn't have, since cip113 does the entire apply→offer→agree→grant→admit round trip on the
+ * original request thread with no handoff at all. This class now does the same: {@link
+ * #presentCredential} is the ONLY entry point, and it blocks the calling thread for the whole exchange
+ * (bounded by {@link KeriAttestationProperties#remotesignTimeout()} per wait). There is no longer a
+ * background runner to hand off to, and no cross-request "resume mid-step" phase to persist: a crash
+ * mid-flight simply abandons this one HTTP request, and the ceremony sits at {@code
+ * CREDENTIAL_REQUESTED} for a subsequent retry (or the cleanup sweep) to fail out — exactly the recovery
+ * story a single-threaded flow like cip113's already has.
  *
  * <p><b>Live-testing fix:</b> {@link #ensureSchemasResolved} resolves every configured schema SAID as
  * an OOBI on OUR OWN agent before the first apply that references it is ever sent — KERIA silently
@@ -82,12 +87,6 @@ public class KeriCredentialService {
     private static final DateTimeFormatter KERI_DATETIME =
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'+00:00'");
 
-    /** F8 fix: {@code step_phase} values marking which half of the two-phase CREDENTIAL_REQUESTED wait
-     *  (apply/offer, then agree/grant) an attempt last reached — see
-     *  {@link KeriAttestationCeremonyEntity#getStepPhase()}. */
-    static final String PHASE_APPLY_SENT = "APPLY_SENT";
-    static final String PHASE_AGREE_SENT = "AGREE_SENT";
-
     /** Short wait for the retry pre-check (design §4.2 "before re-sending... checks for a
      *  late-arriving matching notification") — mirrors {@link KeriAttestService}'s own retry-precheck
      *  timeout, applied here to the credential-presentation step instead of the ATTEST anchor. */
@@ -103,27 +102,30 @@ public class KeriCredentialService {
     private final KeriNotificationCorrelator correlator;
     private final CredentialChainValidator validator;
     private final CeremonyService ceremonyService;
-    private final KeriAttestationCeremonyRepository ceremonyRepository;
     private final KeriIdentityLinkRepository identityLinkRepository;
     private final KeriAttestationProperties properties;
-    private final CeremonyAsyncRunner asyncRunner;
 
     /** In-memory cache of schema SAIDs already resolved as an OOBI on our agent this process
      *  ({@link #ensureSchemasResolved}) — a schema, once resolved, stays resolved for the life of the
      *  agent, so this avoids re-resolving (and re-waiting on) the same SAID on every presentation. */
     private final Set<String> resolvedSchemaSaids = ConcurrentHashMap.newKeySet();
 
-    // --- orchestration (Task 10): begin the step, avoid a redundant apply if a reply already arrived,
-    //     dispatch the async continuation. The controller calls only this method. ---
-
     /**
-     * Orchestrates the CREDENTIAL_REQUEST step end-to-end for a controller call (design §4.2), mirroring
-     * {@link KeriAttestService#startAttest}: {@link CeremonyService#beginStep} from {@code OOBI_RESOLVED}
-     * to {@code CREDENTIAL_REQUESTED} (or, on retry, re-enters {@code CREDENTIAL_REQUESTED} with a
-     * bumped {@code attemptGeneration}), then a short retry pre-check for a reply that already arrived on
-     * the previous attempt's apply before resending one.
+     * Orchestrates the CREDENTIAL_REQUEST step end-to-end, SYNCHRONOUSLY, for a single controller call
+     * (design §4.2, cip113 parity): {@link #ensureSchemasResolved} → {@link CeremonyService#beginStep}
+     * from {@code OOBI_RESOLVED} to {@code CREDENTIAL_REQUESTED} → a short retry pre-check for a reply
+     * that already arrived on a previous attempt's apply → apply → wait for the offer, in-thread → agree
+     * → wait for the grant, in-thread → admit → fetch the full CESR chain → {@link
+     * CredentialChainValidator} → persist + complete the step. Every wire step logs at INFO so a stalled
+     * live run shows exactly where it stopped.
+     *
+     * @return {@link Either#right} with the ceremony's final view once the step completes (or, per the
+     *         retry pre-check, resumes and completes from a late-arriving offer); {@link Either#left}
+     *         with the problem on any failure — the ceremony itself is always left in a terminal
+     *         ({@code FAILED}) or successfully-advanced ({@code CREDENTIAL_RECEIVED}) state before this
+     *         method returns, never stuck at {@code CREDENTIAL_REQUESTED}.
      */
-    public Either<ProblemDetail, Void> startCredentialRequest(String ceremonyId, String userId, boolean retry) {
+    public Either<ProblemDetail, CeremonyView> presentCredential(String ceremonyId, String userId, boolean retry) {
         // Live-testing fix: resolved BEFORE beginStep, i.e. before any ceremony state is touched at
         // all — a resolution failure here must surface as a plain problem, not a failed/rolled-back
         // ceremony step. See ensureSchemasResolved's javadoc for why this has to happen at all.
@@ -146,41 +148,157 @@ public class KeriCredentialService {
             return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.IDENTITY_NOT_LINKED,
                     "User %s has no linked identity to request a credential presentation from.".formatted(userId));
         }
+        String linkedAid = linkOpt.get().getAid();
+        String agentName = agentService.agentName();
 
-        // F8 fix: a retry resuming at AGREE_SENT already has BOTH the apply and agree sent by a
-        // previous attempt (requestExnSaid now holds the agree's SAID, not the apply's) — never
-        // re-send either, and never re-run the offer precheck below (there is no offer left to claim;
-        // that phase is done). awaitPresentation's own phase-aware, full-timeout wait (await grant,
-        // admit, fetch, validate, complete) handles everything from here; a separate short precheck here
-        // would add nothing that wait doesn't already do, since there is nothing left to avoid resending.
-        if (retry && PHASE_AGREE_SENT.equals(ceremony.getStepPhase())) {
-            return dispatchAwaitPresentation(ceremonyId, generation);
-        }
-
-        // Retry pre-check (design §4.2, mirrors KeriAttestService#startAttest): before sending a fresh
-        // IPEX apply, look for a late-arriving offer. cip113 parity (design rev, user-directed
-        // 2026-07-22): route-only, like every other offer/grant/ref claim in this module now — see
-        // KeriNotificationCorrelator#awaitByRoute's javadoc. Found: skip straight to dispatching the
-        // async continuation — its own (non-destructive) correlator.awaitByRoute call will find the same
-        // offer again, so nothing needs re-sending. Not found (or this is the first attempt,
-        // requestExnSaid still null): fall through and build + send a fresh apply below. Only reached
-        // for phase APPLY_SENT or null (no phase recorded yet).
+        // Retry pre-check (design §4.2, mirrors KeriAttestService#attest): before sending a fresh IPEX
+        // apply, look for a late-arriving offer left over from a previous attempt. cip113 parity: route
+        // -only, like every claim in this module now — see KeriNotificationCorrelator#awaitByRoute's
+        // javadoc. Found: resume straight into the agree/grant/admit continuation below without
+        // resending the apply. Not found (or this is the first attempt, requestExnSaid still null): fall
+        // through and build + send a fresh apply.
+        CorrelatedNotification offerNotification = null;
         if (retry && ceremony.getRequestExnSaid() != null) {
-            Optional<CorrelatedNotification> lateOffer = correlator.awaitByRoute(OFFER_ROUTES,
-                    RETRY_PRECHECK_TIMEOUT);
-            if (lateOffer.isPresent()) {
-                return dispatchAwaitPresentation(ceremonyId, generation);
+            offerNotification = correlator.awaitByRoute(OFFER_ROUTES, RETRY_PRECHECK_TIMEOUT).orElse(null);
+        }
+
+        if (offerNotification == null) {
+            Either<ProblemDetail, Void> sent = sendApply(ceremony, linkedAid, agentName);
+            if (sent.isLeft()) {
+                ProblemDetail problem = sent.getLeft();
+                failCredentialStep(ceremonyId, generation, problem.getTitle(), problem.getDetail());
+                return Either.left(problem);
             }
+
+            log.info("waiting for offer (routes {})", OFFER_ROUTES);
+            Optional<CorrelatedNotification> offer =
+                    correlator.awaitByRoute(OFFER_ROUTES, properties.remotesignTimeout());
+            if (offer.isEmpty()) {
+                return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.KERI_WALLET_TIMEOUT,
+                        "Timed out waiting for /exn/ipex/offer.");
+            }
+            offerNotification = offer.get();
+        }
+        log.info("offer received {}", offerNotification.exnSaid());
+        // cip113 parity (KeriService#presentCredential): the offer notification is claimed (marked +
+        // deleted) immediately once its SAID has been read, before the agree is even built.
+        correlator.markAndDelete(offerNotification.notificationId());
+
+        ExchangeMessageResult agreeResult;
+        try {
+            agreeResult = client.client().ipex().agree(IpexAgreeArgs.builder()
+                    .senderName(agentName).recipient(linkedAid).message("")
+                    .offerSaid(offerNotification.exnSaid()).datetime(nowKeriTimestamp()).build());
+            Object agreeOp = client.client().ipex().submitAgree(agentName, agreeResult.exn(), agreeResult.sigs(),
+                    List.of(linkedAid));
+            client.client().operations().wait(Operation.fromObject(agreeOp));
+        } catch (Exception e) {
+            interruptIfNeeded(e);
+            return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
+                    "Failed to send IPEX agree: " + e.getMessage());
+        }
+        log.info("agree sent");
+
+        log.info("waiting for grant (routes {})", GRANT_ROUTES);
+        Optional<CorrelatedNotification> grant = correlator.awaitByRoute(GRANT_ROUTES, properties.remotesignTimeout());
+        if (grant.isEmpty()) {
+            return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.KERI_WALLET_TIMEOUT,
+                    "Timed out waiting for /exn/ipex/grant.");
+        }
+        CorrelatedNotification grantNotification = grant.get();
+        log.info("grant received {}", grantNotification.exnSaid());
+
+        String credentialSaid = extractCredentialSaid(grantNotification.exn());
+        if (credentialSaid == null) {
+            return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
+                    "IPEX grant exchange did not embed an ACDC (e.acdc.d missing).");
         }
 
-        Either<ProblemDetail, Void> sent = startPresentation(ceremony);
-        if (sent.isLeft()) {
-            ProblemDetail problem = sent.getLeft();
-            failCredentialStep(ceremonyId, generation, problem.getTitle(), problem.getDetail());
-            return Either.left(problem);
+        try {
+            ExchangeMessageResult admitResult = client.client().ipex().admit(IpexAdmitArgs.builder()
+                    .senderName(agentName).recipient(linkedAid).message("")
+                    .grantSaid(grantNotification.exnSaid()).datetime(nowKeriTimestamp()).build());
+            // cip113 parity (KeriService#presentCredential): submitAdmit is given the AGREE exchange's
+            // own atc, NOT the admit's own — a proven cip113 wallet-contract quirk this module matches.
+            Object admitOp = client.client().ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(),
+                    agreeResult.atc(), List.of(linkedAid));
+            client.client().operations().wait(Operation.fromObject(admitOp));
+        } catch (Exception e) {
+            interruptIfNeeded(e);
+            return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
+                    "Failed to admit IPEX grant: " + e.getMessage());
+        }
+        log.info("admit sent");
+
+        String fullCesr;
+        try {
+            Optional<String> cesrOpt = client.client().credentials().get(credentialSaid);
+            if (cesrOpt.isEmpty()) {
+                return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
+                        "Credential %s was not found in the store after admit.".formatted(credentialSaid));
+            }
+            fullCesr = cesrOpt.get();
+        } catch (Exception e) {
+            interruptIfNeeded(e);
+            return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
+                    "Failed to fetch credential %s: %s".formatted(credentialSaid, e.getMessage()));
         }
 
-        return dispatchAwaitPresentation(ceremonyId, generation);
+        // This is the only external-boundary call in this method not backed by a checked-exception
+        // contract, so it's easy to forget it can still throw (e.g. a malformed/hostile chain tripping
+        // an assumption CredentialChainValidator didn't explicitly guard) — wrapped the same as every
+        // other step so a defect here fails the ceremony instead of escaping this request thread.
+        Either<ProblemDetail, ValidatedCredential> validated;
+        try {
+            validated = validator.validate(fullCesr, linkedAid, properties.credentialPolicy().schemaSaids(),
+                    properties.credentialPolicy().trustedRootAids());
+        } catch (Exception e) {
+            interruptIfNeeded(e);
+            return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REJECTED,
+                    "Chain validation error: " + e.getMessage());
+        }
+        if (validated.isLeft()) {
+            return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REJECTED,
+                    validated.getLeft().getDetail());
+        }
+        ValidatedCredential vc = validated.get();
+
+        // Defense-in-depth: the validator finds its leaf by issuee match, independently of the SAID we
+        // fetched the stream for — they must agree. A mismatch would mean the presented stream's
+        // issuee-matching leaf isn't the credential the grant/admit round trip was actually about,
+        // which should be structurally impossible but is cheap to assert outright rather than trust.
+        if (!credentialSaid.equals(vc.credentialSaid())) {
+            return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REJECTED,
+                    "Validated leaf credential %s does not match the fetched credential %s."
+                            .formatted(vc.credentialSaid(), credentialSaid));
+        }
+        log.info("credential validated {}", vc.credentialSaid());
+
+        // Fold the link write into completeStep's mutator (mirrors
+        // KeriAuthBeginService#persistAuthBeginIfIdentityStillCurrent exactly): the credential write and
+        // the ceremony's CREDENTIAL_REQUESTED -> CREDENTIAL_RECEIVED transition commit atomically, in
+        // CeremonyService's one transaction.
+        String finalCredentialSaid = vc.credentialSaid();
+        String finalSchemaSaid = vc.schemaSaid();
+        int bindingVersion = ceremony.getBindingVersion();
+        boolean completed = ceremonyService.completeStep(ceremonyId, generation, CeremonyState.CREDENTIAL_REQUESTED,
+                CeremonyState.CREDENTIAL_RECEIVED,
+                c -> persistCredentialIfIdentityStillCurrent(userId, bindingVersion, finalCredentialSaid,
+                        finalSchemaSaid));
+        if (!completed) {
+            // Stale CAS (a concurrent retry superseded this attempt) — the link must not be written
+            // either (the mutator above never runs), and the grant notification must be left alone: the
+            // winning attempt's own wait is (or was) matching against the same request.
+            return Either.left(staleCeremonyProblem(ceremonyId));
+        }
+        log.info("credential step complete");
+
+        // Only after both the link and the ceremony transition are durably committed: an earlier
+        // mark-and-delete would let a crash between the two silently lose the wallet's reply, exactly the
+        // failure mode KeriNotificationCorrelator#markAndDelete's contract exists to prevent.
+        correlator.markAndDelete(grantNotification.notificationId());
+
+        return ceremonyService.get(ceremonyId, userId);
     }
 
     /**
@@ -199,8 +317,8 @@ public class KeriCredentialService {
      * {@code client.operations().wait(...)}); this mirrors that, but lazily — once per SAID per
      * process, cached in {@link #resolvedSchemaSaids} — rather than eagerly at startup.
      *
-     * <p>Called at the very top of {@link #startCredentialRequest}, before {@code beginStep} touches
-     * any ceremony state at all: a resolution failure must surface as a plain problem, never a
+     * <p>Called at the very top of {@link #presentCredential}, before {@code beginStep} touches any
+     * ceremony state at all: a resolution failure must surface as a plain problem, never a
      * failed/rolled-back ceremony step.
      */
     private Either<ProblemDetail, Void> ensureSchemasResolved(List<String> schemaSaids) {
@@ -231,50 +349,13 @@ public class KeriCredentialService {
         return Either.right(null);
     }
 
-    private Either<ProblemDetail, Void> dispatchAwaitPresentation(String ceremonyId, int generation) {
-        try {
-            asyncRunner.awaitPresentation(ceremonyId, generation);
-        } catch (Exception e) {
-            // The executor rejected the dispatch (pool/queue saturated) — the apply (if this attempt
-            // sent one) is already on its way to the wallet, but with no worker left to await its
-            // reply, the ceremony must not be left non-terminal with an unhandled exception as the only
-            // signal. A retry's pre-check (above) will pick up a late-arriving offer instead of
-            // resending. Mirrors KeriAttestService#startAttest's identical dispatch-failure handling.
-            log.warn("Failed to dispatch credential presentation wait for ceremony {}: {}", ceremonyId,
-                    e.getMessage());
-            return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
-                    "Failed to dispatch the presentation wait: " + e.getMessage());
-        }
-        return Either.right(null);
-    }
-
-    private Either<ProblemDetail, Void> failCredentialRequest(String ceremonyId, int generation, String title,
-            String detail) {
-        failCredentialStep(ceremonyId, generation, title, detail);
-        return Either.left(KeriAttestationProblems.unprocessable(title, detail));
-    }
-
-    /** F8 fix: fails the CREDENTIAL_REQUESTED step, first best-effort clearing {@code stepPhase} so a
-     *  terminal (FAILED) row never carries a stale phase marker. The clear is a separate guarded update
-     *  from the {@code failStep} CAS that follows it — both independently no-op if the ceremony has
-     *  since moved on, which is harmless: clearing a phase that is about to become moot changes nothing
-     *  observable. */
-    private void failCredentialStep(String ceremonyId, int expectedGeneration, String title, String detail) {
-        ceremonyService.updateWaitingStepData(ceremonyId, expectedGeneration, CeremonyState.CREDENTIAL_REQUESTED,
-                c -> c.setStepPhase(null));
-        ceremonyService.failStep(ceremonyId, expectedGeneration, CeremonyState.CREDENTIAL_REQUESTED, title, detail);
-    }
-
-    // --- synchronous: build + send the apply, persist requestExnSaid before the send completes ---
-
-    public Either<ProblemDetail, Void> startPresentation(KeriAttestationCeremonyEntity ceremony) {
-        Optional<KeriIdentityLinkEntity> linkOpt = identityLinkRepository.findById(ceremony.getUserId());
-        if (linkOpt.isEmpty() || linkOpt.get().getAid() == null) {
-            return Either.left(identityNotLinked(ceremony.getUserId()));
-        }
-        String linkedAid = linkOpt.get().getAid();
-        String agentName = agentService.agentName();
-
+    /** Builds and sends the IPEX apply, persisting {@code requestExnSaid} before the send completes
+     *  (the SAID is deterministic from the built, not-yet-sent exn — same persist-before-send idiom
+     *  {@link KeriAttestService} uses). {@code requestExnSaid} is read back by {@link #presentCredential}'s
+     *  own retry pre-check on a LATER, separate HTTP call — it is not used to resume mid-step within a
+     *  single synchronous call, since there is no such thing anymore. */
+    private Either<ProblemDetail, Void> sendApply(KeriAttestationCeremonyEntity ceremony, String linkedAid,
+            String agentName) {
         try {
             List<String> schemaSaids = properties.credentialPolicy().schemaSaids();
             if (schemaSaids == null || schemaSaids.isEmpty()) {
@@ -292,9 +373,7 @@ public class KeriCredentialService {
             // cip113 wallet contract (design §4.3/§4.4 rev 3, KeriService#presentCredential): build
             // /ipex/apply directly via createExchangeMessage, with oobiUrl at the TOP level of the
             // payload (exn.a.oobiUrl). IpexApplyArgs#attributes (the old approach) lands under exn.a.a
-            // instead: Ipex#apply puts args.getAttributes() at data["a"], and createExchangeMessage's
-            // payload becomes exn.a as a whole, so oobiUrl ends up doubly nested at exn.a.a.oobiUrl,
-            // which the wallet never finds.
+            // instead, which the wallet never finds.
             //
             // Live-testing fix: oobiUrl must be the CREDENTIAL SCHEMA SERVER's base URL (configured as
             // lob.keri-attestation.credential-policy.schema-base-url), NOT our agent's own OOBI — this
@@ -310,30 +389,18 @@ public class KeriCredentialService {
                     nowKeriTimestamp(), null);
             String exnSaid = (String) applyResult.exn().getKed().get("d");
 
-            // Persist BEFORE the send completes (design §4.6 pattern applied here too): the SAID is
-            // deterministic from the built (unsent) exn, so if the network call below fails partway
-            // through, the ceremony still records what was — or was about to be — sent, and a retry can
-            // check for a late-arriving correlated reply before re-sending. Routed through the guarded
-            // update (F2 fix) rather than a direct save of this detached entity: a concurrent retry/sweep
-            // transition landing between beginStep's row lock releasing and this write must never be
-            // silently overwritten. Also records the APPLY_SENT phase (F8 fix) so a later retry knows
-            // this attempt got at least this far.
             boolean persisted = ceremonyService.updateWaitingStepData(ceremony.getId(), ceremony.getAttemptGeneration(),
-                    CeremonyState.CREDENTIAL_REQUESTED, c -> {
-                        c.setRequestExnSaid(exnSaid);
-                        c.setStepPhase(PHASE_APPLY_SENT);
-                    });
+                    CeremonyState.CREDENTIAL_REQUESTED, c -> c.setRequestExnSaid(exnSaid));
             if (!persisted) {
                 return Either.left(staleCeremonyProblem(ceremony.getId()));
             }
 
             // cip113 parity (KeriService#presentCredential): every IPEX submit is followed by
-            // operations().wait, not just fire-and-forget — submitApply returns a raw operation
-            // descriptor that Operation.fromObject wraps for the typed wait() overload (same idiom
-            // ensureSchemasResolved already uses for oobis().resolve's own raw result).
+            // operations().wait, not just fire-and-forget.
             Object applyOp = client.client().ipex().submitApply(agentName, applyResult.exn(), applyResult.sigs(),
                     List.of(linkedAid));
             client.client().operations().wait(Operation.fromObject(applyOp));
+            log.info("IPEX apply sent to {}", linkedAid);
             return Either.right(null);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -344,240 +411,17 @@ public class KeriCredentialService {
         }
     }
 
-    // --- asynchronous continuation: offer -> agree -> grant -> admit -> fetch -> validate -> persist ---
+    // --- internals ---
 
-    /**
-     * Runs unsupervised on a background worker (Task 9) with no caller left to report a thrown
-     * exception to — an escaped exception here would leave the ceremony stuck at
-     * {@code CREDENTIAL_REQUESTED} forever instead of landing in a terminal, retryable state. Every
-     * external-boundary call (signify-java client calls, the correlator, the validator) is therefore
-     * deliberately wrapped in a catch broad enough to guarantee this method always resolves the
-     * ceremony via {@code completeStep} or {@code failStep} before returning, never by propagating.
-     *
-     * <p><b>Phase-aware (F8 fix):</b> when this attempt resumes at {@code stepPhase == AGREE_SENT}
-     * (persisted by a previous attempt that got at least that far), the offer wait and agree send are
-     * both skipped entirely — {@code requestExnSaid} already holds the agree's SAID from that persist,
-     * so this jumps straight to awaiting the grant. Otherwise (phase {@code APPLY_SENT} or {@code null})
-     * the normal offer-wait/agree-send happens, and its own persisted phase transition to
-     * {@code AGREE_SENT} is what a later retry would resume from.
-     */
-    public void awaitPresentation(String ceremonyId, int expectedGeneration) {
-        Optional<KeriAttestationCeremonyEntity> ceremonyOpt = ceremonyRepository.findById(ceremonyId);
-        if (ceremonyOpt.isEmpty()) {
-            return;
-        }
-        KeriAttestationCeremonyEntity ceremony = ceremonyOpt.get();
-
-        Optional<KeriIdentityLinkEntity> linkOpt = identityLinkRepository.findById(ceremony.getUserId());
-        if (linkOpt.isEmpty() || linkOpt.get().getAid() == null) {
-            failCredentialStep(ceremonyId, expectedGeneration, KeriAttestationProblems.IDENTITY_NOT_LINKED,
-                    "User %s has no linked identity to await a presentation from.".formatted(ceremony.getUserId()));
-            return;
-        }
-        String linkedAid = linkOpt.get().getAid();
-        String agentName = agentService.agentName();
-
-        String agreeSaid;
-        String agreeAtc;
-
-        if (PHASE_AGREE_SENT.equals(ceremony.getStepPhase())) {
-            // F8 fix: resuming after a retry that already sent the apply AND the agree — requestExnSaid
-            // was overwritten to the agree's SAID when that phase was persisted, and agreeAtc alongside
-            // it (cip113 parity, see below).
-            agreeSaid = ceremony.getRequestExnSaid();
-            agreeAtc = ceremony.getAgreeAtc();
-        } else {
-            // cip113 parity (KeriService#presentCredential, design rev, user-directed 2026-07-22):
-            // route-only claim — see KeriNotificationCorrelator#awaitByRoute's javadoc for why this
-            // module's own sender/thread-back correlation strictness yields here.
-            Optional<CorrelatedNotification> offer = correlator.awaitByRoute(OFFER_ROUTES,
-                    properties.remotesignTimeout());
-            if (offer.isEmpty()) {
-                failTimeout(ceremonyId, expectedGeneration, "Timed out waiting for /exn/ipex/offer.");
-                return;
-            }
-            CorrelatedNotification offerNotification = offer.get();
-
-            ExchangeMessageResult agreeResult;
-            try {
-                agreeResult = client.client().ipex().agree(IpexAgreeArgs.builder()
-                        .senderName(agentName).recipient(linkedAid).message("")
-                        .offerSaid(offerNotification.exnSaid()).datetime(nowKeriTimestamp()).build());
-            } catch (Exception e) {
-                interruptIfNeeded(e);
-                failRequest(ceremonyId, expectedGeneration, "Failed to build IPEX agree: " + e.getMessage());
-                return;
-            }
-            agreeSaid = (String) agreeResult.exn().getKed().get("d");
-            // cip113 parity: submitAdmit (below) must be given THIS agree's atc, not the admit's own —
-            // see agreeAtc's persistence just below for why it survives a worker restart.
-            agreeAtc = agreeResult.atc();
-
-            // F8 residual fix: persist phase=AGREE_SENT + requestExnSaid=agreeSaid (overwriting the
-            // apply's SAID — design: requestExnSaid always names whichever exn this ceremony is
-            // currently waiting on a correlated reply for) + agreeAtc BEFORE calling submitAgree, not
-            // after. The agree's SAID/atc are deterministic from the built (not-yet-sent) exn, matching
-            // startPresentation's/KeriAttestService#startAttest's persist-before-send idiom exactly. This
-            // guarded update also refreshes updatedAt — the F7 heartbeat that keeps a legitimately
-            // in-progress two-phase wait from looking stale to the cleanup sweep's budget for
-            // CREDENTIAL_REQUESTED.
-            //
-            // A crash between this persist committing and submitAgree actually reaching the wallet is
-            // safe: the agree was never sent, so no grant will ever arrive for it. A retry resuming at
-            // AGREE_SENT skips straight to awaiting a grant correlated to the persisted agreeSaid (never
-            // re-sending — see the class javadoc); finding none, it times out after remotesignTimeout
-            // and fails the step via KERI_WALLET_TIMEOUT, exactly the outcome a genuine dropped-agree
-            // would produce. No special-casing needed for the crash window.
-            boolean phasePersisted = ceremonyService.updateWaitingStepData(ceremonyId, expectedGeneration,
-                    CeremonyState.CREDENTIAL_REQUESTED, c -> {
-                        c.setStepPhase(PHASE_AGREE_SENT);
-                        c.setRequestExnSaid(agreeSaid);
-                        c.setAgreeAtc(agreeAtc);
-                    });
-            if (!phasePersisted) {
-                // Stale CAS (a retry superseded this attempt) — never send; the winning attempt's own
-                // wait handles everything from here, and the offer notification is left unread/undeleted
-                // for whichever attempt still needs it.
-                return;
-            }
-
-            // cip113 parity: the offer notification is claimed (marked + deleted) as soon as it's no
-            // longer needed — right after the phase transition proves this attempt is not superseded,
-            // and before the agree is even sent, mirroring KeriService#presentCredential's own
-            // fetch-then-immediately-markAndDelete ordering. Unlike the grant notification below (whose
-            // delete stays gated on this module's OWN post-admit CredentialChainValidator step — additive
-            // hardening cip113 has no equivalent of, kept per the design's instruction), nothing further
-            // ever re-examines the offer, so there's no reason to hold onto it any longer than cip113
-            // itself does.
-            correlator.markAndDelete(offerNotification.notificationId());
-
-            try {
-                Object agreeOp = client.client().ipex().submitAgree(agentName, agreeResult.exn(),
-                        agreeResult.sigs(), List.of(linkedAid));
-                client.client().operations().wait(Operation.fromObject(agreeOp));
-            } catch (Exception e) {
-                interruptIfNeeded(e);
-                failRequest(ceremonyId, expectedGeneration, "Failed to send IPEX agree: " + e.getMessage());
-                return;
-            }
-        }
-
-        // cip113 parity: route-only claim — see the offer wait above / awaitByRoute's javadoc.
-        Optional<CorrelatedNotification> grant = correlator.awaitByRoute(GRANT_ROUTES, properties.remotesignTimeout());
-        if (grant.isEmpty()) {
-            failTimeout(ceremonyId, expectedGeneration, "Timed out waiting for /exn/ipex/grant.");
-            return;
-        }
-
-        String credentialSaid = extractCredentialSaid(grant.get().exn());
-        if (credentialSaid == null) {
-            failRequest(ceremonyId, expectedGeneration,
-                    "IPEX grant exchange did not embed an ACDC (e.acdc.d missing).");
-            return;
-        }
-
-        try {
-            ExchangeMessageResult admitResult = client.client().ipex().admit(IpexAdmitArgs.builder()
-                    .senderName(agentName).recipient(linkedAid).message("")
-                    .grantSaid(grant.get().exnSaid()).datetime(nowKeriTimestamp()).build());
-            // cip113 parity (KeriService#presentCredential): submitAdmit is given the AGREE exchange's
-            // own atc, NOT the admit's own — a proven cip113 wallet-contract quirk this module now
-            // matches exactly (see agreeAtc above).
-            Object admitOp = client.client().ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(),
-                    agreeAtc, List.of(linkedAid));
-            client.client().operations().wait(Operation.fromObject(admitOp));
-        } catch (Exception e) {
-            interruptIfNeeded(e);
-            failRequest(ceremonyId, expectedGeneration, "Failed to admit IPEX grant: " + e.getMessage());
-            return;
-        }
-
-        String fullCesr;
-        try {
-            Optional<String> cesrOpt = client.client().credentials().get(credentialSaid);
-            if (cesrOpt.isEmpty()) {
-                failRequest(ceremonyId, expectedGeneration,
-                        "Credential %s was not found in the store after admit.".formatted(credentialSaid));
-                return;
-            }
-            fullCesr = cesrOpt.get();
-        } catch (Exception e) {
-            interruptIfNeeded(e);
-            failRequest(ceremonyId, expectedGeneration,
-                    "Failed to fetch credential %s: %s".formatted(credentialSaid, e.getMessage()));
-            return;
-        }
-
-        // This is the only external-boundary call in this method not backed by a checked-exception
-        // contract, so it's easy to forget it can still throw (e.g. a malformed/hostile chain tripping
-        // an assumption CredentialChainValidator didn't explicitly guard) — wrapped the same as every
-        // other step so a defect here fails the ceremony instead of the worker.
-        Either<ProblemDetail, ValidatedCredential> validated;
-        try {
-            validated = validator.validate(fullCesr, linkedAid, properties.credentialPolicy().schemaSaids(),
-                    properties.credentialPolicy().trustedRootAids());
-        } catch (Exception e) {
-            interruptIfNeeded(e);
-            failCredentialStep(ceremonyId, expectedGeneration, KeriAttestationProblems.CREDENTIAL_REJECTED,
-                    "Chain validation error: " + e.getMessage());
-            return;
-        }
-        if (validated.isLeft()) {
-            failCredentialStep(ceremonyId, expectedGeneration, KeriAttestationProblems.CREDENTIAL_REJECTED,
-                    validated.getLeft().getDetail());
-            return;
-        }
-        ValidatedCredential vc = validated.get();
-
-        // Defense-in-depth: the validator finds its leaf by issuee match, independently of the SAID we
-        // fetched the stream for — they must agree. A mismatch would mean the presented stream's
-        // issuee-matching leaf isn't the credential the grant/admit round trip was actually about,
-        // which should be structurally impossible but is cheap to assert outright rather than trust.
-        if (!credentialSaid.equals(vc.credentialSaid())) {
-            failCredentialStep(ceremonyId, expectedGeneration, KeriAttestationProblems.CREDENTIAL_REJECTED,
-                    "Validated leaf credential %s does not match the fetched credential %s."
-                            .formatted(vc.credentialSaid(), credentialSaid));
-            return;
-        }
-
-        // Fold the link write into completeStep's mutator (mirrors
-        // KeriAuthBeginService#persistAuthBeginIfIdentityStillCurrent exactly): the credential write and
-        // the ceremony's CREDENTIAL_REQUESTED -> CREDENTIAL_RECEIVED transition must commit atomically,
-        // in CeremonyService's one transaction. The old code saved the link in its own separate
-        // transaction before ever calling completeStep, so a stale CAS below (a retry superseded this
-        // attempt) still left the link durably written even though the ceremony transition it belongs
-        // with never happened. Also clears stepPhase (F8 fix) — the step is done, so no phase marker
-        // should linger on the row.
-        String userId = ceremony.getUserId();
-        int bindingVersion = ceremony.getBindingVersion();
-        String finalCredentialSaid = vc.credentialSaid();
-        String finalSchemaSaid = vc.schemaSaid();
-
-        boolean completed = ceremonyService.completeStep(ceremonyId, expectedGeneration,
-                CeremonyState.CREDENTIAL_REQUESTED, CeremonyState.CREDENTIAL_RECEIVED,
-                c -> {
-                    persistCredentialIfIdentityStillCurrent(userId, bindingVersion, finalCredentialSaid,
-                            finalSchemaSaid);
-                    c.setStepPhase(null);
-                });
-        if (!completed) {
-            // Stale CAS (a retry superseded this attempt) — the link must not be written either (the
-            // mutator above never runs), and the notifications must be left alone: the winning attempt's
-            // own correlator wait is (or will be) matching against the same requests and needs to find
-            // them still unread/undeleted.
-            return;
-        }
-
-        // Only after both the link and the ceremony transition are durably committed: an earlier
-        // mark-and-delete would let a crash between the two silently lose the wallet's reply, exactly the
-        // failure mode KeriNotificationCorrelator#markAndDelete's contract exists to prevent. The offer
-        // notification (if any was claimed by this attempt) was already marked+deleted above, right
-        // after it stopped being needed — see that call site's comment for why its ordering differs from
-        // the grant's own here.
-        correlator.markAndDelete(grant.get().notificationId());
+    private Either<ProblemDetail, CeremonyView> failCredentialRequest(String ceremonyId, int generation, String title,
+            String detail) {
+        failCredentialStep(ceremonyId, generation, title, detail);
+        return Either.left(KeriAttestationProblems.unprocessable(title, detail));
     }
 
-    // --- internals ---
+    private void failCredentialStep(String ceremonyId, int expectedGeneration, String title, String detail) {
+        ceremonyService.failStep(ceremonyId, expectedGeneration, CeremonyState.CREDENTIAL_REQUESTED, title, detail);
+    }
 
     /**
      * Persists the validated credential to the identity link. <b>Only ever called from inside a
@@ -627,20 +471,6 @@ public class KeriCredentialService {
         return said instanceof String s ? s : null;
     }
 
-    /** Item 5 (round 2) fix: routed through {@link #failCredentialStep} rather than calling
-     *  {@code ceremonyService.failStep} directly — every failure exit from this class must clear
-     *  {@code stepPhase} the same way, not just the ones that happened to be wired through the helper
-     *  already. */
-    private void failTimeout(String ceremonyId, int expectedGeneration, String detail) {
-        failCredentialStep(ceremonyId, expectedGeneration, KeriAttestationProblems.KERI_WALLET_TIMEOUT, detail);
-    }
-
-    /** Item 5 (round 2) fix: see {@link #failTimeout}'s javadoc — same reasoning. */
-    private void failRequest(String ceremonyId, int expectedGeneration, String detail) {
-        log.warn("Credential presentation failed for ceremony {}: {}", ceremonyId, detail);
-        failCredentialStep(ceremonyId, expectedGeneration, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED, detail);
-    }
-
     private static void interruptIfNeeded(Exception e) {
         if (e instanceof InterruptedException) {
             Thread.currentThread().interrupt();
@@ -664,11 +494,6 @@ public class KeriCredentialService {
      *  {@code schemaBaseUrl} was itself configured with a trailing one. */
     private static String withoutTrailingSlash(String url) {
         return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
-    }
-
-    private static ProblemDetail identityNotLinked(String userId) {
-        return KeriAttestationProblems.unprocessable(KeriAttestationProblems.IDENTITY_NOT_LINKED,
-                "User %s has no linked identity to request a credential presentation from.".formatted(userId));
     }
 
     private static ProblemDetail requestFailed(String detail) {

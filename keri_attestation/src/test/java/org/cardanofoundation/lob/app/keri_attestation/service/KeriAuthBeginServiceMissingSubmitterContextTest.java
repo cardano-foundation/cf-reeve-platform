@@ -11,7 +11,6 @@ import org.junit.jupiter.api.Test;
 
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
-import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestationCeremonyRepository;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
 
 /**
@@ -20,11 +19,9 @@ import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLin
  * is also enabled. Since it depends on this module (not the other way around), that hard dependency
  * broke {@code keri_attestation} startup whenever it was enabled without {@code blockchain_publisher}.
  *
- * <p>Proves the fix directly, the same way {@code CeremonyAsyncRunnerWiringTest} pins the
- * {@code KeriAttestService}/{@code CeremonyAsyncRunner}/{@code KeriAuthBeginService} wiring: every other
- * collaborator is registered as a bare Mockito mock, and — deliberately — no
- * {@link CardanoMetadataTxSubmitter} bean is registered at all. The context must still start and
- * {@code KeriAuthBeginService} must still exist as a bean, since it now depends on an
+ * <p>Proves the fix directly: every other collaborator is registered as a bare Mockito mock, and —
+ * deliberately — no {@link CardanoMetadataTxSubmitter} bean is registered at all. The context must
+ * still start and {@code KeriAuthBeginService} must still exist as a bean, since it now depends on an
  * {@code ObjectProvider<CardanoMetadataTxSubmitter>} rather than the port directly.
  */
 class KeriAuthBeginServiceMissingSubmitterContextTest {
@@ -39,9 +36,7 @@ class KeriAuthBeginServiceMissingSubmitterContextTest {
                 .withBean(CesrChainReducer.class, () -> mock(CesrChainReducer.class))
                 .withBean(Cip170MetadataFactory.class, () -> mock(Cip170MetadataFactory.class))
                 .withBean(CeremonyService.class, () -> mock(CeremonyService.class))
-                .withBean(KeriAttestationCeremonyRepository.class, () -> mock(KeriAttestationCeremonyRepository.class))
                 .withBean(KeriIdentityLinkRepository.class, () -> mock(KeriIdentityLinkRepository.class))
-                .withBean(CeremonyAsyncRunner.class, () -> mock(CeremonyAsyncRunner.class))
                 // Deliberately no CardanoMetadataTxSubmitter bean: this is the module-without-publisher
                 // deployment shape the F9 fix exists for.
                 .withBean(KeriAuthBeginService.class)

@@ -56,7 +56,7 @@ import org.cardanofoundation.lob.app.keri_attestation.service.AttestationConsump
  * <p>{@code lob.keri-attestation.keria.url} is deliberately left UNSET: every keri_attestation bean
  * that touches a real KERIA connection ({@code SignifyClientConfig}'s beans, {@code KeriAgentService},
  * {@code KeriOobiService}, {@code KeriAuthBeginService}, {@code KeriCredentialService},
- * {@code KeriAttestService}, {@code CeremonyAsyncRunner}, {@code KeriNotificationCorrelator},
+ * {@code KeriAttestService}, {@code KeriNotificationCorrelator},
  * {@code KeriAttestationController}) is gated on that narrower property (verified by reading each
  * class directly) and so stays off here — matching {@code CeremonyRepositoryTest}'s precedent inside
  * keri_attestation itself, which turns the module on the same way for its own repository tests.

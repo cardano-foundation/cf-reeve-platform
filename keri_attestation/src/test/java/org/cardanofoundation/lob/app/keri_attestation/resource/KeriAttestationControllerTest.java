@@ -8,7 +8,6 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -223,45 +222,49 @@ class KeriAttestationControllerTest {
     // ==================== POST /ceremonies/{id}/credential/request ====================
 
     @Test
-    void requestCredentialHappyPathReturns202WithEmptyBody() throws Exception {
-        when(credentialService.startCredentialRequest(CEREMONY_ID, USER_ID, false)).thenReturn(Either.right(null));
+    void requestCredentialHappyPathReturns200WithCeremonyView() throws Exception {
+        when(credentialService.presentCredential(CEREMONY_ID, USER_ID, false))
+                .thenReturn(Either.right(ceremonyView(CeremonyState.CREDENTIAL_RECEIVED)));
 
         mockMvc.perform(post("/api/v1/keri-attestation/ceremonies/{id}/credential/request", CEREMONY_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
-                .andExpect(status().isAccepted())
-                .andExpect(content().string(""));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(CEREMONY_ID))
+                .andExpect(jsonPath("$.state").value("CREDENTIAL_RECEIVED"));
     }
 
     @Test
     void requestCredentialWithNoBodyDefaultsRetryToFalse() throws Exception {
-        when(credentialService.startCredentialRequest(CEREMONY_ID, USER_ID, false)).thenReturn(Either.right(null));
+        when(credentialService.presentCredential(CEREMONY_ID, USER_ID, false))
+                .thenReturn(Either.right(ceremonyView(CeremonyState.CREDENTIAL_RECEIVED)));
 
         mockMvc.perform(post("/api/v1/keri-attestation/ceremonies/{id}/credential/request", CEREMONY_ID))
-                .andExpect(status().isAccepted());
+                .andExpect(status().isOk());
 
-        verify(credentialService).startCredentialRequest(CEREMONY_ID, USER_ID, false);
+        verify(credentialService).presentCredential(CEREMONY_ID, USER_ID, false);
     }
 
     @Test
     void requestCredentialWithRetryTruePassesItThrough() throws Exception {
-        when(credentialService.startCredentialRequest(CEREMONY_ID, USER_ID, true)).thenReturn(Either.right(null));
+        when(credentialService.presentCredential(CEREMONY_ID, USER_ID, true))
+                .thenReturn(Either.right(ceremonyView(CeremonyState.CREDENTIAL_RECEIVED)));
 
         mockMvc.perform(post("/api/v1/keri-attestation/ceremonies/{id}/credential/request", CEREMONY_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"retry":true}
                                 """))
-                .andExpect(status().isAccepted());
+                .andExpect(status().isOk());
 
-        verify(credentialService).startCredentialRequest(CEREMONY_ID, USER_ID, true);
+        verify(credentialService).presentCredential(CEREMONY_ID, USER_ID, true);
     }
 
     @Test
     void requestCredentialProblemIsMappedToItsStatus() throws Exception {
         ProblemDetail problem = KeriAttestationProblems.conflict(KeriAttestationProblems.CEREMONY_INVALID_STATE,
                 "wrong state");
-        when(credentialService.startCredentialRequest(CEREMONY_ID, USER_ID, false)).thenReturn(Either.left(problem));
+        when(credentialService.presentCredential(CEREMONY_ID, USER_ID, false)).thenReturn(Either.left(problem));
 
         mockMvc.perform(post("/api/v1/keri-attestation/ceremonies/{id}/credential/request", CEREMONY_ID))
                 .andExpect(status().isConflict())
@@ -271,26 +274,27 @@ class KeriAttestationControllerTest {
     // ==================== POST /ceremonies/{id}/auth-begin ====================
 
     @Test
-    void submitAuthBeginHappyPathReturns202AndPassesExternalTxHashThrough() throws Exception {
+    void submitAuthBeginHappyPathReturns200AndPassesExternalTxHashThrough() throws Exception {
         when(authBeginService.submitAuthBegin(CEREMONY_ID, USER_ID, "deadbeef", false))
-                .thenReturn(Either.right(null));
+                .thenReturn(Either.right(ceremonyView(CeremonyState.AUTH_BEGIN_CONFIRMED)));
 
         mockMvc.perform(post("/api/v1/keri-attestation/ceremonies/{id}/auth-begin", CEREMONY_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"externalTxHash":"deadbeef"}
                                 """))
-                .andExpect(status().isAccepted());
+                .andExpect(status().isOk());
 
         verify(authBeginService).submitAuthBegin(CEREMONY_ID, USER_ID, "deadbeef", false);
     }
 
     @Test
     void submitAuthBeginWithNoBodySubmitsAFreshTransaction() throws Exception {
-        when(authBeginService.submitAuthBegin(CEREMONY_ID, USER_ID, null, false)).thenReturn(Either.right(null));
+        when(authBeginService.submitAuthBegin(CEREMONY_ID, USER_ID, null, false))
+                .thenReturn(Either.right(ceremonyView(CeremonyState.AUTH_BEGIN_CONFIRMED)));
 
         mockMvc.perform(post("/api/v1/keri-attestation/ceremonies/{id}/auth-begin", CEREMONY_ID))
-                .andExpect(status().isAccepted());
+                .andExpect(status().isOk());
 
         verify(authBeginService).submitAuthBegin(CEREMONY_ID, USER_ID, null, false);
     }
@@ -298,25 +302,27 @@ class KeriAttestationControllerTest {
     // ==================== POST /ceremonies/{id}/attest ====================
 
     @Test
-    void attestHappyPathReturns202() throws Exception {
-        when(attestService.startAttest(CEREMONY_ID, USER_ID, false)).thenReturn(Either.right(null));
+    void attestHappyPathReturns200() throws Exception {
+        when(attestService.attest(CEREMONY_ID, USER_ID, false))
+                .thenReturn(Either.right(ceremonyView(CeremonyState.ATTEST_ANCHORED)));
 
         mockMvc.perform(post("/api/v1/keri-attestation/ceremonies/{id}/attest", CEREMONY_ID))
-                .andExpect(status().isAccepted());
+                .andExpect(status().isOk());
     }
 
     @Test
     void attestWithRetryTruePassesItThrough() throws Exception {
-        when(attestService.startAttest(CEREMONY_ID, USER_ID, true)).thenReturn(Either.right(null));
+        when(attestService.attest(CEREMONY_ID, USER_ID, true))
+                .thenReturn(Either.right(ceremonyView(CeremonyState.ATTEST_ANCHORED)));
 
         mockMvc.perform(post("/api/v1/keri-attestation/ceremonies/{id}/attest", CEREMONY_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"retry":true}
                                 """))
-                .andExpect(status().isAccepted());
+                .andExpect(status().isOk());
 
-        verify(attestService).startAttest(CEREMONY_ID, USER_ID, true);
+        verify(attestService).attest(CEREMONY_ID, USER_ID, true);
     }
 
     // ==================== GET /ceremonies/{id} ====================
