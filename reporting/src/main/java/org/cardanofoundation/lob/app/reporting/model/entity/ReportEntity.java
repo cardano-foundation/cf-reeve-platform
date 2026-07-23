@@ -34,6 +34,8 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import org.hibernate.annotations.JdbcType;
 import org.hibernate.annotations.SQLRestriction;
 import org.hibernate.dialect.PostgreSQLEnumJdbcType;
+import org.hibernate.envers.Audited;
+import org.hibernate.envers.NotAudited;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
@@ -47,6 +49,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
+@Audited
 @Getter
 @Setter
 @EntityListeners(AuditingEntityListener.class)
@@ -98,6 +101,7 @@ public class ReportEntity extends CommonEntity {
     private LocalDateTime ledgerDispatchDate;
     private String publishedBy;
 
+    @NotAudited
     @ManyToMany
     @JoinTable(
         name = "report_failed_validation_rule",
