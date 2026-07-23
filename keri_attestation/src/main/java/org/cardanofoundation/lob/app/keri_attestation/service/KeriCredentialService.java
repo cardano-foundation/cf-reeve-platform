@@ -35,6 +35,7 @@ import org.cardanofoundation.signify.app.coring.Operations;
 import org.cardanofoundation.signify.app.credentialing.ipex.IpexAdmitArgs;
 import org.cardanofoundation.signify.app.credentialing.ipex.IpexAgreeArgs;
 import org.cardanofoundation.signify.core.States.HabState;
+import org.cardanofoundation.signify.core.States.State;
 
 /**
  * Drives IPEX credential presentation (design §4.3) SYNCHRONOUSLY, in the request thread — mirroring
@@ -168,6 +169,13 @@ public class KeriCredentialService {
         }
         String linkedAid = linkOpt.get().getAid();
         String agentName = agentService.agentName();
+
+        // Cross-KERIA delivery investigation: the wallet (on a DIFFERENT, by-design KERIA) presents and
+        // shows success, but the resulting grant never appears in notifications().list() here — a
+        // delivery/topology question, not credential logic. Dumped once, up front, before anything else
+        // in this attempt touches the wire, so a stalled live run always has this on hand regardless of
+        // where the flow subsequently gets stuck.
+        logReceiveDiagnostics(linkedAid, agentName);
 
         // Retry pre-check (design §4.2, mirrors KeriAttestService#attest): before sending a fresh IPEX
         // apply, look for a late-arriving offer OR grant left over from a previous attempt. Dual-path
@@ -496,6 +504,66 @@ public class KeriCredentialService {
         } catch (Exception e) {
             log.warn("Failed to send IPEX apply for ceremony {}: {}", ceremony.getId(), e.getMessage());
             return Either.left(requestFailed("Failed to send IPEX apply: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * One-time "receive-side diagnostic" dump (cross-KERIA delivery investigation): the backend sends
+     * the IPEX apply and the wallet (on a DIFFERENT, by-design KERIA) presents and shows success, but
+     * the resulting grant never surfaces in {@code notifications().list()} here — a delivery/topology
+     * question, not credential logic. Logs every piece of receive-side state a live run needs to
+     * diagnose that: our own agent's identity and OOBI; our agent's own witness config (confirming the
+     * witness-less AID — see {@link org.cardanofoundation.lob.app.keri_attestation.config.SignifyClientConfig
+     * SignifyClientConfig}'s {@code createAid} — actually took effect, since a witnessed AID routes
+     * inbound exchanges through witness mailboxes the wallet's KERIA can't reach); whether the wallet AID
+     * is even a resolved contact our agent could address a reply to; and the RAW notification store
+     * (not just the parsed routes {@link KeriNotificationCorrelator} looks at), in case something is
+     * being mis-parsed. Called once, at the very top of {@link #presentCredential}, before the apply is
+     * ever (re)sent.
+     *
+     * <p>Diagnostics-only: wrapped in its own try/catch so any failure here (e.g. the agent being
+     * temporarily unreachable for one of these calls) can never break the actual presentation flow.
+     */
+    private void logReceiveDiagnostics(String linkedAid, String agentName) {
+        try {
+            log.info("agent identity: name={} prefix={} oobi={}", agentService.agentName(), agentService.agentPrefix(),
+                    agentService.agentOobi());
+
+            Optional<HabState> agentHab = client.client().identifiers().get(agentName);
+            if (agentHab.isPresent()) {
+                State state = agentHab.get().getState();
+                List<String> witnesses = state != null ? state.getB() : null;
+                String toad = state != null ? state.getBt() : null;
+                log.info("agent key-state: witnesses={} toad={}", witnesses, toad);
+            } else {
+                log.info("agent key-state: no HabState found for agent identifier {}", agentName);
+            }
+
+            // Told apart from the outer catch deliberately: a thrown/empty contact lookup is itself the
+            // diagnostic signal ("our agent can't even address this AID"), not a diagnostics failure —
+            // it must still log something actionable rather than falling through to the generic
+            // "receive diagnostics unavailable" message below.
+            try {
+                Optional<Object> contact = client.client().contacts().get(linkedAid);
+                if (contact.isPresent()) {
+                    log.info("wallet contact {}: {}", linkedAid, contact.get());
+                } else {
+                    log.info("wallet AID {} is NOT a resolved contact (empty response) -- our agent may not "
+                            + "be able to address it at all.", linkedAid);
+                }
+            } catch (Exception e) {
+                interruptIfNeeded(e);
+                log.info("wallet AID {} is NOT a resolved contact: {}", linkedAid, e.getMessage());
+            }
+
+            String rawNotes = client.client().notifications().list().notes();
+            String truncatedNotes = rawNotes != null && rawNotes.length() > 2000
+                    ? rawNotes.substring(0, 2000) + "...(truncated)"
+                    : rawNotes;
+            log.info("raw notifications: {}", truncatedNotes);
+        } catch (Exception e) {
+            interruptIfNeeded(e);
+            log.info("receive diagnostics unavailable: {}", e.getMessage());
         }
     }
 

@@ -140,6 +140,19 @@ public class SignifyClientConfig {
                 EventResult roleResult = client.identifiers().addEndRole(name, "agent", eid, null);
                 client.operations().wait(Operation.fromObject(roleResult.op()));
             }
+
+            // Cross-KERIA delivery diagnostic: confirms the witness-less creation above actually took
+            // effect on the freshly-created AID (0 witnesses expected now) rather than trusting the
+            // creation call silently did the right thing.
+            Optional<States.HabState> freshHab = client.identifiers().get(name);
+            if (freshHab.isPresent()) {
+                States.State freshState = freshHab.get().getState();
+                List<String> witnesses = freshState != null ? freshState.getB() : null;
+                String toad = freshState != null ? freshState.getBt() : null;
+                log.info("created agent AID {}: witnesses={} toad={}", id, witnesses, toad);
+            } else {
+                log.info("created agent AID {}: no HabState found immediately after creation", id);
+            }
         }
 
         return id != null ? id.toString() : null;

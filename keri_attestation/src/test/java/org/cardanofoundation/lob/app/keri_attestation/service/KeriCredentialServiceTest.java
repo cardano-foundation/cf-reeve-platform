@@ -46,8 +46,10 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.view.RequiredSteps;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
 import org.cardanofoundation.lob.app.keri_attestation.service.CredentialChainValidator.ValidatedCredential;
 import org.cardanofoundation.lob.app.keri_attestation.service.KeriNotificationCorrelator.CorrelatedNotification;
+import org.cardanofoundation.signify.app.Contacting;
 import org.cardanofoundation.signify.app.Exchanging;
 import org.cardanofoundation.signify.app.Exchanging.ExchangeMessageResult;
+import org.cardanofoundation.signify.app.Notifying;
 import org.cardanofoundation.signify.app.aiding.Identifier;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
 import org.cardanofoundation.signify.app.coring.Oobis;
@@ -113,6 +115,10 @@ class KeriCredentialServiceTest {
     @Mock
     private Operations operations;
     @Mock
+    private Contacting.Contacts contacts;
+    @Mock
+    private Notifying.Notifications notifications;
+    @Mock
     private KeriAgentService agentService;
     @Mock
     private KeriNotificationCorrelator correlator;
@@ -134,7 +140,18 @@ class KeriCredentialServiceTest {
         lenient().when(client.credentials()).thenReturn(credentials);
         lenient().when(client.oobis()).thenReturn(oobis);
         lenient().when(client.operations()).thenReturn(operations);
+        lenient().when(client.contacts()).thenReturn(contacts);
+        lenient().when(client.notifications()).thenReturn(notifications);
         lenient().when(agentService.agentName()).thenReturn(AGENT_NAME);
+        // Receive-side diagnostics (logReceiveDiagnostics): agentPrefix/agentOobi/contacts.get/
+        // notifications.list are all called once, up front, at the start of every presentCredential
+        // call — stubbed to succeed here so the diagnostics never hit their own outer catch (which would
+        // otherwise mask a real wiring mistake in the diagnostic code itself behind a caught exception).
+        lenient().when(agentService.agentPrefix()).thenReturn("EAGENTPREFIX000000000000000000000000000");
+        lenient().when(agentService.agentOobi()).thenReturn("http://keria.example/oobi/EAGENTPREFIX/agent");
+        lenient().when(contacts.get(any())).thenReturn(Optional.empty());
+        lenient().when(notifications.list())
+                .thenReturn(new Notifying.Notifications.NotificationListResponse(0, 0, 0, "[]"));
         // Live-testing fix: presentCredential resolves every configured schema SAID as an OOBI on our
         // own agent before beginStep. Defaulted here to succeed so every test not specifically about
         // schema resolution can still reach the rest of the flow; the schema-resolution tests themselves
