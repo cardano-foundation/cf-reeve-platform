@@ -687,6 +687,80 @@ class KeriNotificationCorrelatorTest {
         inOrder.verify(notifications).delete(NOTIFICATION_ID);
     }
 
+    // --- purgeUnclaimed (stale-notification-replay fix, live Veridian evidence) ---
+
+    @Test
+    void purgeUnclaimedMarksAndDeletesEachUnreadMatchingNotificationAndReturnsTheCount() throws Exception {
+        String otherUnreadId = "0AOTHERUNREADID00000000000000000";
+        String readMatchingId = "0AREADMATCHINGID0000000000000000";
+        String unreadNonMatchingId = "0AUNREADNONMATCHID00000000000000";
+        when(notifications.list()).thenReturn(responseOf(
+                note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID),
+                note(otherUnreadId, false, OTHER_ROUTE, OTHER_SAID),
+                note(readMatchingId, true, ROUTE, OTHER_SAID),
+                note(unreadNonMatchingId, false, "/exn/ipex/apply", OTHER_SAID)));
+
+        int purged = correlator.purgeUnclaimed(List.of(ROUTE, OTHER_ROUTE));
+
+        assertEquals(2, purged);
+        verify(notifications).mark(NOTIFICATION_ID);
+        verify(notifications).delete(NOTIFICATION_ID);
+        verify(notifications).mark(otherUnreadId);
+        verify(notifications).delete(otherUnreadId);
+        // Read notifications are already inert (can never be claimed by awaitByRoute in the first
+        // place), and a notification on a route that isn't being purged, left alone either way.
+        verify(notifications, never()).mark(readMatchingId);
+        verify(notifications, never()).delete(readMatchingId);
+        verify(notifications, never()).mark(unreadNonMatchingId);
+        verify(notifications, never()).delete(unreadNonMatchingId);
+        verifyNoInteractions(exchanges);
+    }
+
+    @Test
+    void purgeUnclaimedReturnsZeroAndTouchesNothingWhenNoUnreadMatchesExist() throws Exception {
+        when(notifications.list()).thenReturn(responseOf(
+                note(NOTIFICATION_ID, true, ROUTE, REFERENCED_EXN_SAID),
+                note("0ANONMATCHID000000000000000000000", false, "/exn/ipex/apply", OTHER_SAID)));
+
+        int purged = correlator.purgeUnclaimed(List.of(ROUTE, OTHER_ROUTE));
+
+        assertEquals(0, purged);
+        verify(notifications, never()).mark(anyString());
+        verify(notifications, never()).delete(anyString());
+    }
+
+    @Test
+    void purgeUnclaimedReturnsZeroWithoutThrowingWhenListingNotificationsFails() throws Exception {
+        when(notifications.list()).thenThrow(new RuntimeException("agent unreachable"));
+
+        int purged = correlator.purgeUnclaimed(List.of(ROUTE, OTHER_ROUTE));
+
+        assertEquals(0, purged);
+        verify(notifications, never()).mark(anyString());
+        verify(notifications, never()).delete(anyString());
+    }
+
+    @Test
+    void purgeUnclaimedSkipsAndKeepsGoingWhenOneNotificationsMarkAndDeleteFails() throws Exception {
+        // markAndDelete throws an unchecked IllegalStateException on an agent-side hiccup (its own
+        // contract) -- purgeUnclaimed must not let ONE such failure abort the rest of the purge or
+        // propagate out (its caller, presentCredential, has no try/catch of its own around this call,
+        // unlike every other agent interaction there).
+        String failingId = "0AFAILINGID0000000000000000000000";
+        when(notifications.list()).thenReturn(responseOf(
+                note(failingId, false, ROUTE, REFERENCED_EXN_SAID),
+                note(NOTIFICATION_ID, false, ROUTE, OTHER_SAID)));
+        when(notifications.mark(failingId)).thenThrow(new IOException("agent unreachable"));
+
+        int purged = correlator.purgeUnclaimed(List.of(ROUTE, OTHER_ROUTE));
+
+        assertEquals(1, purged);
+        verify(notifications).mark(failingId);
+        verify(notifications, never()).delete(failingId);
+        verify(notifications).mark(NOTIFICATION_ID);
+        verify(notifications).delete(NOTIFICATION_ID);
+    }
+
     // --- interruption: restore the flag, never swallow it ---
 
     @Test

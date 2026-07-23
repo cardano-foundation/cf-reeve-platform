@@ -72,6 +72,15 @@ import org.cardanofoundation.signify.core.States.HabState;
  * route and branches on which one actually arrived: a grant skips the offer/agree steps entirely and
  * admits directly (using the admit's own {@code atc} — there is no agree to borrow one from); an offer
  * falls through to the original negotiation, unchanged.
+ *
+ * <p><b>Stale-notification-replay fix (live Veridian evidence):</b> before every fresh apply this class
+ * sends, it first calls {@link KeriNotificationCorrelator#purgeUnclaimed} on the same offer/grant
+ * routes it is about to wait on — a live run was observed to claim and admit an unread grant that was
+ * only 300ms old but could not possibly have been a response to the apply that had just been sent
+ * (impossibly fast for a human to have tapped "present" in the wallet), left over from an earlier,
+ * abandoned presentation attempt; the wallet rejected the resulting duplicate/invalid admit, and the
+ * real reply to the actual apply was never processed. See {@code purgeUnclaimed}'s own javadoc for the
+ * full rationale and why no race is possible between the purge and the apply's own genuine reply.
  */
 @Service
 @RequiredArgsConstructor
@@ -183,6 +192,17 @@ public class KeriCredentialService {
         }
 
         if (claimedNotification == null) {
+            // Stale-notification-replay fix (live Veridian evidence): the apply about to be sent below
+            // is what PROMPTS the wallet to present at all, so any unread offer/grant already on the
+            // agent's queue right now cannot be a reply to it — it can only be debris from an earlier,
+            // abandoned attempt. Purging it here, immediately before the apply, guarantees the
+            // awaitByRoute wait below can only ever claim the reply THIS apply actually elicits (full
+            // rationale: KeriNotificationCorrelator#purgeUnclaimed's javadoc). No race is possible
+            // between this purge and a fresh, legitimate reply: the wallet only ever grants/offers in
+            // response to an apply we send, and the apply this purge guards is sent strictly AFTER it
+            // completes.
+            correlator.purgeUnclaimed(OFFER_OR_GRANT_ROUTES);
+
             Either<ProblemDetail, Void> sent = sendApply(ceremony, linkedAid, agentName);
             if (sent.isLeft()) {
                 ProblemDetail problem = sent.getLeft();
@@ -218,6 +238,7 @@ public class KeriCredentialService {
         if (isGrantRoute(claimedNotification)) {
             log.info("grant received directly (spontaneous presentation), admitting {}",
                     claimedNotification.exnSaid());
+            logGrantAcdc(claimedNotification.exn());
             String directCredentialSaid = extractCredentialSaid(claimedNotification.exn());
             if (directCredentialSaid == null) {
                 return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
@@ -235,6 +256,7 @@ public class KeriCredentialService {
                 Object admitOp = client.client().ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(),
                         admitResult.atc(), List.of(linkedAid));
                 client.client().operations().wait(Operation.fromObject(admitOp));
+                log.info("admit operation completed");
             } catch (Exception e) {
                 interruptIfNeeded(e);
                 return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
@@ -273,6 +295,7 @@ public class KeriCredentialService {
             }
             CorrelatedNotification grantNotification = grant.get();
             log.info("grant received {}", grantNotification.exnSaid());
+            logGrantAcdc(grantNotification.exn());
 
             String negotiatedCredentialSaid = extractCredentialSaid(grantNotification.exn());
             if (negotiatedCredentialSaid == null) {
@@ -289,6 +312,7 @@ public class KeriCredentialService {
                 Object admitOp = client.client().ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(),
                         agreeResult.atc(), List.of(linkedAid));
                 client.client().operations().wait(Operation.fromObject(admitOp));
+                log.info("admit operation completed");
             } catch (Exception e) {
                 interruptIfNeeded(e);
                 return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
@@ -301,12 +325,15 @@ public class KeriCredentialService {
 
         String fullCesr;
         try {
+            log.info("fetching credential CESR chain for {}", credentialSaid);
             Optional<String> cesrOpt = client.client().credentials().get(credentialSaid);
             if (cesrOpt.isEmpty()) {
+                log.warn("credential {} not retrievable from agent after admit", credentialSaid);
                 return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
                         "Credential %s was not found in the store after admit.".formatted(credentialSaid));
             }
             fullCesr = cesrOpt.get();
+            log.info("credential CESR chain fetched ({} chars)", fullCesr.length());
         } catch (Exception e) {
             interruptIfNeeded(e);
             return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
@@ -317,16 +344,21 @@ public class KeriCredentialService {
         // contract, so it's easy to forget it can still throw (e.g. a malformed/hostile chain tripping
         // an assumption CredentialChainValidator didn't explicitly guard) — wrapped the same as every
         // other step so a defect here fails the ceremony instead of escaping this request thread.
+        List<String> allowedSchemaSaids = properties.credentialPolicy().schemaSaids();
+        List<String> trustedRootAids = properties.credentialPolicy().trustedRootAids();
+        log.info("validating credential chain (issuee={}, allowed schemas={}, trusted roots={})", linkedAid,
+                allowedSchemaSaids, trustedRootAids);
         Either<ProblemDetail, ValidatedCredential> validated;
         try {
-            validated = validator.validate(fullCesr, linkedAid, properties.credentialPolicy().schemaSaids(),
-                    properties.credentialPolicy().trustedRootAids());
+            validated = validator.validate(fullCesr, linkedAid, allowedSchemaSaids, trustedRootAids);
         } catch (Exception e) {
             interruptIfNeeded(e);
+            log.warn("credential chain validation threw: {}", e.getMessage(), e);
             return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REJECTED,
                     "Chain validation error: " + e.getMessage());
         }
         if (validated.isLeft()) {
+            log.warn("credential chain validation rejected: {}", validated.getLeft().getDetail());
             return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REJECTED,
                     validated.getLeft().getDetail());
         }
@@ -337,6 +369,8 @@ public class KeriCredentialService {
         // issuee-matching leaf isn't the credential the grant/admit round trip was actually about,
         // which should be structurally impossible but is cheap to assert outright rather than trust.
         if (!credentialSaid.equals(vc.credentialSaid())) {
+            log.warn("validated leaf credential {} does not match the fetched credential {}", vc.credentialSaid(),
+                    credentialSaid);
             return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REJECTED,
                     "Validated leaf credential %s does not match the fetched credential %s."
                             .formatted(vc.credentialSaid(), credentialSaid));
@@ -360,7 +394,7 @@ public class KeriCredentialService {
             // winning attempt's own wait is (or was) matching against the same request.
             return Either.left(staleCeremonyProblem(ceremonyId));
         }
-        log.info("credential step complete");
+        log.info("credential step complete (schema {})", finalSchemaSaid);
 
         // Both branches above defer to here (see deferredGrantNotificationId's own comment): only after
         // both the link and the ceremony transition are durably committed — an earlier mark-and-delete
@@ -566,6 +600,30 @@ public class KeriCredentialService {
         }
         Object said = am.get("d");
         return said instanceof String s ? s : null;
+    }
+
+    /** Same {@code exn.e.acdc} embed as {@link #extractCredentialSaid}, reading the schema ({@code s})
+     *  instead of the SAID ({@code d}). {@code null} when the grant carries no ACDC at all — same
+     *  tolerance as {@link #extractCredentialSaid}, since the caller's own "did not embed an ACDC" check
+     *  runs immediately after {@link #logGrantAcdc} either way. */
+    private static String extractAcdcSchemaSaid(Map<String, Object> grantExn) {
+        Object e = grantExn.get("e");
+        if (!(e instanceof Map<?, ?> em)) {
+            return null;
+        }
+        Object acdc = em.get("acdc");
+        if (!(acdc instanceof Map<?, ?> am)) {
+            return null;
+        }
+        Object schemaSaid = am.get("s");
+        return schemaSaid instanceof String s ? s : null;
+    }
+
+    /** Through-validation logging (design fix): logs the grant's embedded ACDC identity and schema the
+     *  moment a grant is claimed — direct or negotiated, both branches call this — so a live run's log
+     *  always shows WHICH credential the wallet actually presented, before it is ever admitted. */
+    private static void logGrantAcdc(Map<String, Object> grantExn) {
+        log.info("grant carries ACDC {} of schema {}", extractCredentialSaid(grantExn), extractAcdcSchemaSaid(grantExn));
     }
 
     private static void interruptIfNeeded(Exception e) {
