@@ -1844,7 +1844,9 @@ class TransactionReconcilationServiceTest {
     }
 
     @Test
-    void testReconcileChunk_txWithDocumentMustBePresentViolation_shouldSetSinkOk() {
+    void testReconcileChunk_txWithDocumentMustBePresentViolation_shouldSetSinkNok() {
+        // DOCUMENT_MUST_BE_PRESENT is NOT an exclusion code (LOB-2252 fix) → falls through to the
+        // default path. With no pre-existing sink value, getSinkReconcilationStatus returns NOK.
         String reconcilationId = "reconcilation123";
         String organisationId = "org123";
         LocalDate fromDate = LocalDate.now().minusDays(5);
@@ -1865,6 +1867,131 @@ class TransactionReconcilationServiceTest {
         attachedTx.setOrganisation(organisation);
         attachedTx.setItems(Set.of());
         attachedTx.setViolations(new LinkedHashSet<>(Set.of(buildExclusionViolation(TransactionViolationCode.DOCUMENT_MUST_BE_PRESENT))));
+
+        val detachedTx = new TransactionEntity();
+        detachedTx.setId("tx1");
+        detachedTx.setInternalTransactionNumber("internal1");
+        detachedTx.setExtractorType(ExtractorType.NETSUITE.name());
+        detachedTx.setOrganisation(organisation);
+        detachedTx.setItems(Set.of());
+
+        when(transactionRepositoryGateway.findByAllId(Set.of("tx1"))).thenReturn(List.of(attachedTx));
+        when(blockchainReaderPublicApi.isOnChain(anySet())).thenReturn(Either.right(Map.of("tx1", false)));
+
+        transactionReconcilationService.reconcileChunk(reconcilationId, organisationId, fromDate, toDate, Set.of(detachedTx));
+
+        assertThat(attachedTx.getReconcilation()).isPresent();
+        assertThat(attachedTx.getReconcilation().get().getSink()).contains(ReconcilationCode.NOK);
+    }
+
+    @Test
+    void testReconcileChunk_txWithAccountCodeCreditIsEmptyViolation_shouldSetSinkNok() {
+        // ACCOUNT_CODE_CREDIT_IS_EMPTY is NOT an exclusion code (LOB-2252 fix)
+        String reconcilationId = "reconcilation123";
+        String organisationId = "org123";
+        LocalDate fromDate = LocalDate.now().minusDays(5);
+        LocalDate toDate = LocalDate.now();
+
+        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
+        when(transactionReconcilationRepository.findReconcilationEntityById(reconcilationId))
+                .thenReturn(Optional.of(reconcilationEntity));
+
+        val organisation = org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder()
+                .id(organisationId)
+                .build();
+
+        val attachedTx = new TransactionEntity();
+        attachedTx.setId("tx1");
+        attachedTx.setInternalTransactionNumber("internal1");
+        attachedTx.setExtractorType(ExtractorType.NETSUITE.name());
+        attachedTx.setOrganisation(organisation);
+        attachedTx.setItems(Set.of());
+        attachedTx.setViolations(new LinkedHashSet<>(Set.of(buildExclusionViolation(TransactionViolationCode.ACCOUNT_CODE_CREDIT_IS_EMPTY))));
+
+        val detachedTx = new TransactionEntity();
+        detachedTx.setId("tx1");
+        detachedTx.setInternalTransactionNumber("internal1");
+        detachedTx.setExtractorType(ExtractorType.NETSUITE.name());
+        detachedTx.setOrganisation(organisation);
+        detachedTx.setItems(Set.of());
+
+        when(transactionRepositoryGateway.findByAllId(Set.of("tx1"))).thenReturn(List.of(attachedTx));
+        when(blockchainReaderPublicApi.isOnChain(anySet())).thenReturn(Either.right(Map.of("tx1", false)));
+
+        transactionReconcilationService.reconcileChunk(reconcilationId, organisationId, fromDate, toDate, Set.of(detachedTx));
+
+        assertThat(attachedTx.getReconcilation()).isPresent();
+        assertThat(attachedTx.getReconcilation().get().getSink()).contains(ReconcilationCode.NOK);
+    }
+
+    @Test
+    void testReconcileChunk_txWithAccountCodeDebitIsEmptyViolation_shouldSetSinkNok() {
+        // ACCOUNT_CODE_DEBIT_IS_EMPTY is NOT an exclusion code (LOB-2252 fix)
+        String reconcilationId = "reconcilation123";
+        String organisationId = "org123";
+        LocalDate fromDate = LocalDate.now().minusDays(5);
+        LocalDate toDate = LocalDate.now();
+
+        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
+        when(transactionReconcilationRepository.findReconcilationEntityById(reconcilationId))
+                .thenReturn(Optional.of(reconcilationEntity));
+
+        val organisation = org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder()
+                .id(organisationId)
+                .build();
+
+        val attachedTx = new TransactionEntity();
+        attachedTx.setId("tx1");
+        attachedTx.setInternalTransactionNumber("internal1");
+        attachedTx.setExtractorType(ExtractorType.NETSUITE.name());
+        attachedTx.setOrganisation(organisation);
+        attachedTx.setItems(Set.of());
+        attachedTx.setViolations(new LinkedHashSet<>(Set.of(buildExclusionViolation(TransactionViolationCode.ACCOUNT_CODE_DEBIT_IS_EMPTY))));
+
+        val detachedTx = new TransactionEntity();
+        detachedTx.setId("tx1");
+        detachedTx.setInternalTransactionNumber("internal1");
+        detachedTx.setExtractorType(ExtractorType.NETSUITE.name());
+        detachedTx.setOrganisation(organisation);
+        detachedTx.setItems(Set.of());
+
+        when(transactionRepositoryGateway.findByAllId(Set.of("tx1"))).thenReturn(List.of(attachedTx));
+        when(blockchainReaderPublicApi.isOnChain(anySet())).thenReturn(Either.right(Map.of("tx1", false)));
+
+        transactionReconcilationService.reconcileChunk(reconcilationId, organisationId, fromDate, toDate, Set.of(detachedTx));
+
+        assertThat(attachedTx.getReconcilation()).isPresent();
+        assertThat(attachedTx.getReconcilation().get().getSink()).contains(ReconcilationCode.NOK);
+    }
+
+    @Test
+    void testReconcileChunk_txWithAccountCodeCreditIsEmptyViolation_preservesExistingSinkOk() {
+        // ACCOUNT_CODE_CREDIT_IS_EMPTY no longer forces OK, but an existing sink=OK value is
+        // still preserved by the fallback branch of getSinkReconcilationStatus.
+        String reconcilationId = "reconcilation123";
+        String organisationId = "org123";
+        LocalDate fromDate = LocalDate.now().minusDays(5);
+        LocalDate toDate = LocalDate.now();
+
+        ReconcilationEntity reconcilationEntity = new ReconcilationEntity();
+        when(transactionReconcilationRepository.findReconcilationEntityById(reconcilationId))
+                .thenReturn(Optional.of(reconcilationEntity));
+
+        val organisation = org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation.builder()
+                .id(organisationId)
+                .build();
+
+        val attachedTx = new TransactionEntity();
+        attachedTx.setId("tx1");
+        attachedTx.setInternalTransactionNumber("internal1");
+        attachedTx.setExtractorType(ExtractorType.NETSUITE.name());
+        attachedTx.setOrganisation(organisation);
+        attachedTx.setItems(Set.of());
+        attachedTx.setReconcilation(Optional.of(Reconcilation.builder()
+                .source(ReconcilationCode.OK)
+                .sink(ReconcilationCode.OK)
+                .build()));
+        attachedTx.setViolations(new LinkedHashSet<>(Set.of(buildExclusionViolation(TransactionViolationCode.ACCOUNT_CODE_CREDIT_IS_EMPTY))));
 
         val detachedTx = new TransactionEntity();
         detachedTx.setId("tx1");
