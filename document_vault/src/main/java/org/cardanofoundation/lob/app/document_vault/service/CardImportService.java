@@ -118,6 +118,17 @@ public class CardImportService {
             // Self-asserted on the card — the backend cannot check how a key was born and does not
             // pretend to. It stores the claim and shows it to everyone who picks the key.
             key.setAssurance(card.getKey().assurance());
+            // Attestation provenance (design doc "The card-format contract", Part B/B1): set once at
+            // creation, same as origin/assurance above. B2 will verify these against KERIA/on-chain;
+            // for now the card's claim is simply stored. Absent block -> all five stay NULL.
+            if (card.getAttestation() != null) {
+                KeyCardDto.CardAttestation attestation = card.getAttestation();
+                key.setAttestationOobi(attestation.oobi());
+                key.setAttestationAid(attestation.aid());
+                key.setAttestationCredentialSaid(attestation.credentialSaid());
+                key.setAttestationSchemaSaid(attestation.schemaSaid());
+                key.setAttestationTxHash(attestation.txHash());
+            }
         }
         return VaultKeyService.toView(keyRepository.save(key));
     }
@@ -152,6 +163,18 @@ public class CardImportService {
             // The holder's own organisation, free-form and unverified ("Privat"). Provenance shown to
             // senders, never matched against the organisation above.
             entry.setHomeOrganisationId(card.getSubject().organisationId());
+            // Attestation provenance (design doc "The card-format contract", Part B/B1): set once at
+            // creation, same as homeOrganisationId/assurance above. B2 will verify these against
+            // KERIA/on-chain; for now the card's claim is simply stored. Absent block -> all five stay
+            // NULL.
+            if (card.getAttestation() != null) {
+                KeyCardDto.CardAttestation attestation = card.getAttestation();
+                entry.setAttestationOobi(attestation.oobi());
+                entry.setAttestationAid(attestation.aid());
+                entry.setAttestationCredentialSaid(attestation.credentialSaid());
+                entry.setAttestationSchemaSaid(attestation.schemaSaid());
+                entry.setAttestationTxHash(attestation.txHash());
+            }
         }
         return AddressbookService.toView(entryRepository.save(entry));
     }

@@ -90,6 +90,34 @@ public class AddressbookEntryEntity extends VaultBaseEntity implements Persistab
     @Column(name = "home_organisation_id")
     private String homeOrganisationId;
 
+    /**
+     * Provenance of a Veridian attestation the importing card claimed (design doc "The card-format
+     * contract", Part B). Set once, from {@code KeyCardDto.CardAttestation}, when a card carrying an
+     * {@code attestation} block first creates this contact; NULL for the overwhelmingly common
+     * unattested card. Like {@link #homeOrganisationId} and {@link #assurance}, never rewritten by a
+     * later re-import — a later card claiming attestation for an already-known contact does not
+     * retroactively attest the entry a sender already trusted (or didn't) on first import.
+     */
+    @Nullable
+    @Column(name = "attestation_oobi")
+    private String attestationOobi;
+
+    @Nullable
+    @Column(name = "attestation_aid")
+    private String attestationAid;
+
+    @Nullable
+    @Column(name = "attestation_credential_said")
+    private String attestationCredentialSaid;
+
+    @Nullable
+    @Column(name = "attestation_schema_said")
+    private String attestationSchemaSaid;
+
+    @Nullable
+    @Column(name = "attestation_tx_hash")
+    private String attestationTxHash;
+
     @Override
     public boolean isNew() {
         return isNew;

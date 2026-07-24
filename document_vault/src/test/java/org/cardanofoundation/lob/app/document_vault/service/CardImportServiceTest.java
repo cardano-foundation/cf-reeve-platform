@@ -82,6 +82,10 @@ class CardImportServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
     }
 
+    private static final KeyCardDto.CardAttestation ATTESTATION = new KeyCardDto.CardAttestation(
+            "https://example.org/oobi/EWalletAid/agent/EAgentEid", "EWalletAid", "ECredentialSaid",
+            "ESchemaSaid", "deadbeef");
+
     private KeyCardDto card(CardSubjectType subjectType, String subjectId, String organisationId) {
         KeyCardDto card = new KeyCardDto();
         card.setV(1);
@@ -130,6 +134,59 @@ class CardImportServiceTest {
     }
 
     /**
+     * B1: a card carrying the indexer's attestation block persists it as provenance on the new
+     * contact. Storage only — nothing here verifies the claim (that's B2).
+     */
+    @Test
+    void importingACardWithAttestationPersistsItAsProvenanceOnTheNewContact() {
+        ImportCardRequest request = request(CardSubjectType.REEVE_ACCOUNT, "sub-bob");
+        request.getCard().setAttestation(ATTESTATION);
+
+        Either<ProblemDetail, ImportCardResultView> result = service.importCard(request);
+
+        assertTrue(result.isRight());
+        AddressbookEntryEntity entry = savedEntry();
+        assertEquals(ATTESTATION.oobi(), entry.getAttestationOobi());
+        assertEquals(ATTESTATION.aid(), entry.getAttestationAid());
+        assertEquals(ATTESTATION.credentialSaid(), entry.getAttestationCredentialSaid());
+        assertEquals(ATTESTATION.schemaSaid(), entry.getAttestationSchemaSaid());
+        assertEquals(ATTESTATION.txHash(), entry.getAttestationTxHash());
+    }
+
+    /** A card without the optional block leaves the provenance columns NULL, same as today. */
+    @Test
+    void importingACardWithoutAttestationLeavesTheContactsAttestationColumnsNull() {
+        Either<ProblemDetail, ImportCardResultView> result =
+                service.importCard(request(CardSubjectType.REEVE_ACCOUNT, "sub-bob"));
+
+        assertTrue(result.isRight());
+        assertNull(savedEntry().getAttestationAid());
+    }
+
+    /**
+     * Provenance-once, same rule as {@link #reimportingAContactRefreshesDetailsButNeverProvenance()}:
+     * an attestation claimed by a later re-import must never attach itself, after the fact, to a
+     * contact that was first imported without one.
+     */
+    @Test
+    void reimportingAnAlreadyKnownContactNeverAttachesALaterAttestationClaim() {
+        AddressbookEntryEntity existing = new AddressbookEntryEntity();
+        existing.setId("existing-entry");
+        existing.setOrganisationId("org1");
+        existing.setPublicKey(X25519_PUB);
+        existing.setDisplayName("stale name");
+        existing.setEmail("stale@example.org");
+        when(entryRepository.findByOrganisationIdAndPublicKey("org1", X25519_PUB))
+                .thenReturn(Optional.of(existing));
+        ImportCardRequest request = request(CardSubjectType.REEVE_ACCOUNT, "sub-bob");
+        request.getCard().setAttestation(ATTESTATION);
+
+        service.importCard(request);
+
+        assertNull(savedEntry().getAttestationAid());
+    }
+
+    /**
      * The key-substitution guard, now structural. The card claims a REEVE_ACCOUNT subject — Bob's real
      * Keycloak sub — but says nothing this backend can check: a card is unsigned, so subjectId is only
      * what the importer typed. It becomes a contact regardless, and a contact has no account id at all,
@@ -162,6 +219,48 @@ class CardImportServiceTest {
         // is the only part of an import that is not self-asserted
         assertEquals("Alice Adams", key.getAccountName());
         verify(entryRepository, never()).save(any());
+    }
+
+    /** B1, own-key branch: the same attestation provenance persists on a self-import too. */
+    @Test
+    void importingOwnCardWithAttestationPersistsItAsProvenanceOnTheKey() {
+        ImportCardRequest request = request(CardSubjectType.REEVE_ACCOUNT, "sub-alice");
+        request.getCard().setAttestation(ATTESTATION);
+
+        Either<ProblemDetail, ImportCardResultView> result = service.importCard(request);
+
+        assertTrue(result.isRight());
+        VaultKeyEntity key = savedKey();
+        assertEquals(ATTESTATION.oobi(), key.getAttestationOobi());
+        assertEquals(ATTESTATION.aid(), key.getAttestationAid());
+        assertEquals(ATTESTATION.credentialSaid(), key.getAttestationCredentialSaid());
+        assertEquals(ATTESTATION.schemaSaid(), key.getAttestationSchemaSaid());
+        assertEquals(ATTESTATION.txHash(), key.getAttestationTxHash());
+    }
+
+    /**
+     * Provenance-once on the key table too: re-importing a card that now claims an attestation must
+     * not attach it to a key row that already existed without one — origin/assurance already follow
+     * this rule (see the class javadoc and {@code CardImportService#importOwnKey}).
+     */
+    @Test
+    void reimportingAnAlreadyKnownKeyNeverAttachesALaterAttestationClaim() {
+        VaultKeyEntity existing = new VaultKeyEntity();
+        existing.setId("existing-key");
+        existing.setAccountId("sub-alice");
+        existing.setOrganisationId("org1");
+        existing.setPublicKey(X25519_PUB);
+        existing.setLabel("stale label");
+        existing.setOrigin(KeyOrigin.INDEXER_ISSUED);
+        existing.setAssurance(KeyAssurance.PORTABLE);
+        when(keyRepository.findByAccountIdAndOrganisationIdAndPublicKey("sub-alice", "org1", X25519_PUB))
+                .thenReturn(Optional.of(existing));
+        ImportCardRequest request = request(CardSubjectType.REEVE_ACCOUNT, "sub-alice");
+        request.getCard().setAttestation(ATTESTATION);
+
+        service.importCard(request);
+
+        assertNull(savedKey().getAttestationAid());
     }
 
     /**

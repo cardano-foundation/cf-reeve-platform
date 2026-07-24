@@ -90,6 +90,33 @@ public class VaultKeyEntity extends VaultBaseEntity implements Persistable<Strin
     @Column(name = "assurance", nullable = false, length = 20)
     private KeyAssurance assurance;
 
+    /**
+     * Provenance of a Veridian attestation the importing card claimed (design doc "The card-format
+     * contract", Part B). Set once, from {@code KeyCardDto.CardAttestation}, when a card carrying an
+     * {@code attestation} block is first imported; NULL for the overwhelmingly common unattested card
+     * and never populated after the fact. B2 is what will actually verify these against KERIA/on-chain
+     * — this is storage only.
+     */
+    @Nullable
+    @Column(name = "attestation_oobi")
+    private String attestationOobi;
+
+    @Nullable
+    @Column(name = "attestation_aid")
+    private String attestationAid;
+
+    @Nullable
+    @Column(name = "attestation_credential_said")
+    private String attestationCredentialSaid;
+
+    @Nullable
+    @Column(name = "attestation_schema_said")
+    private String attestationSchemaSaid;
+
+    @Nullable
+    @Column(name = "attestation_tx_hash")
+    private String attestationTxHash;
+
     @Override
     public boolean isNew() {
         return isNew;

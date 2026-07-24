@@ -52,6 +52,17 @@ public class KeyCardDto {
     @Valid
     private Key key;
 
+    /**
+     * Present only on a Veridian-attested card (indexer ceremony); absent = today's unattested card,
+     * still valid (trust-on-first-use). Carries what B2 needs to verify the attestation later: the
+     * wallet OOBI, the presenting AID, the presented credential/schema SAIDs, and the on-chain
+     * CIP-170 ATTEST tx hash. This task (B1) only carries the block through to storage — nothing here
+     * verifies it yet.
+     */
+    @Nullable
+    @Valid
+    private CardAttestation attestation;
+
     /** Everything we do not model — including a `privateKey` section, which must be rejected. */
     private final Map<String, Object> unknown = new HashMap<>();
 
@@ -86,5 +97,24 @@ public class KeyCardDto {
                       @NotBlank @Size(max = 255) String label,
                       @NotNull KeyAssurance assurance,
                       @NotBlank @Size(max = 64) String createdAt) {
+    }
+
+    /**
+     * The result of the indexer's Veridian attestation ceremony (design doc "The card-format
+     * contract"), bound to this card. Only ever set by the indexer at export time; the platform stores
+     * it as-is on import (provenance) and B2 is what will actually verify it against KERIA/on-chain.
+     *
+     * @param oobi            the attesting wallet's OOBI — how the platform resolves {@link #aid}.
+     * @param aid             the wallet AID that presented the credential and anchored the attestation.
+     * @param credentialSaid  SAID of the credential presented during the ceremony.
+     * @param schemaSaid      SAID of that credential's schema.
+     * @param txHash          Cardano tx hash of the on-chain CIP-170 ATTEST anchoring this card.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record CardAttestation(@NotBlank String oobi,
+                                  @NotBlank String aid,
+                                  @NotBlank String credentialSaid,
+                                  @NotBlank String schemaSaid,
+                                  @NotBlank String txHash) {
     }
 }
