@@ -118,6 +118,12 @@ public class AddressbookEntryEntity extends VaultBaseEntity implements Persistab
     @Column(name = "attestation_tx_hash")
     private String attestationTxHash;
 
+    /** The full CESR credential chain the wallet presented — carried so B2 can re-validate the
+     *  credential itself (it cannot be fetched via the OOBI alone). Nullable; TEXT (can be large). */
+    @Nullable
+    @Column(name = "attestation_credential_cesr", columnDefinition = "text")
+    private String attestationCredentialCesr;
+
     @Override
     public boolean isNew() {
         return isNew;

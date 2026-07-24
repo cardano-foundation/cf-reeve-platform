@@ -60,13 +60,24 @@ class CardImportServiceTest {
     private KeycloakSecurityHelper securityHelper;
     @Mock
     private OrganisationPublicApiIF organisationPublicApi;
+    @Mock
+    private CardAttestationDigestFactory attestationDigestFactory;
+    @Mock
+    private org.springframework.beans.factory.ObjectProvider<
+            org.cardanofoundation.lob.app.keri_attestation.service.AttestationImportVerifier> attestationVerifierProvider;
+    @Mock
+    private org.cardanofoundation.lob.app.keri_attestation.service.AttestationImportVerifier attestationVerifier;
 
     private CardImportService service;
 
     @BeforeEach
     void setUp() {
         service = new CardImportService(keyRepository, entryRepository, securityHelper, organisationPublicApi,
-                new KeyCardVerifier());
+                new KeyCardVerifier(), attestationDigestFactory, attestationVerifierProvider);
+        // Attested-card tests exercise B1 persistence, not B2's verifier internals: stub the verifier to pass.
+        when(attestationVerifierProvider.getIfAvailable()).thenReturn(attestationVerifier);
+        when(attestationDigestFactory.digestOf(any())).thenReturn("EcardDigest");
+        when(attestationVerifier.verify(any(), any())).thenReturn(io.vavr.control.Either.right(null));
         when(securityHelper.canUserAccessOrg("org1")).thenReturn(true);
         when(securityHelper.getCurrentUserId()).thenReturn("sub-alice");
         when(securityHelper.getCurrentUser()).thenReturn("Alice Adams");
@@ -84,7 +95,7 @@ class CardImportServiceTest {
 
     private static final KeyCardDto.CardAttestation ATTESTATION = new KeyCardDto.CardAttestation(
             "https://example.org/oobi/EWalletAid/agent/EAgentEid", "EWalletAid", "ECredentialSaid",
-            "ESchemaSaid", "deadbeef");
+            "ESchemaSaid", "deadbeef", "-CESR-credential-chain-");
 
     private KeyCardDto card(CardSubjectType subjectType, String subjectId, String organisationId) {
         KeyCardDto card = new KeyCardDto();

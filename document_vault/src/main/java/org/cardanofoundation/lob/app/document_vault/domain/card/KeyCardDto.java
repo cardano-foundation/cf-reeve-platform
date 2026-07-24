@@ -109,12 +109,17 @@ public class KeyCardDto {
      * @param credentialSaid  SAID of the credential presented during the ceremony.
      * @param schemaSaid      SAID of that credential's schema.
      * @param txHash          Cardano tx hash of the on-chain CIP-170 ATTEST anchoring this card.
+     * @param credentialCesr  the full CESR credential chain the wallet presented — carried so the
+     *                        platform can re-validate the credential itself (it cannot fetch it via
+     *                        the OOBI alone). Nullable: an older attested card may omit it, in which
+     *                        case the credential cannot be verified and B2 rejects the card.
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record CardAttestation(@NotBlank String oobi,
                                   @NotBlank String aid,
                                   @NotBlank String credentialSaid,
                                   @NotBlank String schemaSaid,
-                                  @NotBlank String txHash) {
+                                  @NotBlank String txHash,
+                                  @Nullable String credentialCesr) {
     }
 }

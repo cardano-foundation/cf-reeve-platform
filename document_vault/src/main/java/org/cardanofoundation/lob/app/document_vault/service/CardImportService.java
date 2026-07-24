@@ -5,11 +5,14 @@ import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
+
+import org.cardanofoundation.lob.app.keri_attestation.service.AttestationImportVerifier;
 
 import org.cardanofoundation.lob.app.document_vault.domain.card.KeyCardDto;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.AddressbookEntryEntity;
@@ -63,6 +66,11 @@ public class CardImportService {
     private final KeycloakSecurityHelper securityHelper;
     private final OrganisationPublicApiIF organisationPublicApi;
     private final KeyCardVerifier verifier;
+    private final CardAttestationDigestFactory attestationDigestFactory;
+    // Optional: the KERI verifier bean only exists when keri_attestation is enabled (its @ConditionalOnProperty).
+    // A card that CLAIMS an attestation but cannot be verified (module disabled / reader absent) is rejected,
+    // never silently imported as if unattested.
+    private final ObjectProvider<AttestationImportVerifier> attestationVerifierProvider;
 
     @Transactional
     public Either<ProblemDetail, ImportCardResultView> importCard(ImportCardRequest request) {
@@ -82,10 +90,37 @@ public class CardImportService {
         }
         KeyCardDto card = verified.get();
 
+        // Veridian attestation verification (WS2/B2): a card that carries an attestation block must
+        // cryptographically verify (OOBI resolves, credential chain valid, on-chain ATTEST binds this
+        // exact card) before we trust it. An unattested card imports as today (trust-on-first-use).
+        Either<ProblemDetail, Void> attestationVerified = verifyAttestationIfPresent(card);
+        if (attestationVerified.isLeft()) {
+            return Either.left(attestationVerified.getLeft());
+        }
+
         boolean isSelfImport = card.getSubject().subjectId().equals(securityHelper.getCurrentUserId());
         return Either.right(isSelfImport
                 ? ImportCardResultView.ofOrgKey(importOwnKey(card, organisationId))
                 : ImportCardResultView.ofAddressbookEntry(importContact(card, organisationId)));
+    }
+
+    /** Verifies a card's attestation block when present; a card with none is fine (trust-on-first-use). */
+    private Either<ProblemDetail, Void> verifyAttestationIfPresent(KeyCardDto card) {
+        KeyCardDto.CardAttestation attestation = card.getAttestation();
+        if (attestation == null) {
+            return Either.right(null);
+        }
+        AttestationImportVerifier attestationVerifier = attestationVerifierProvider.getIfAvailable();
+        if (attestationVerifier == null) {
+            return Either.left(VaultProblems.serviceUnavailable(AttestationImportVerifier.CARD_ATTESTATION_UNVERIFIABLE,
+                    "This card claims a Veridian attestation but attestation verification is not available "
+                            + "(keri_attestation module disabled)."));
+        }
+        String cardDigest = attestationDigestFactory.digestOf(card);
+        return attestationVerifier.verify(securityHelper.getCurrentUserId(),
+                new AttestationImportVerifier.CardAttestationClaim(attestation.oobi(), attestation.aid(),
+                        attestation.credentialSaid(), attestation.schemaSaid(), attestation.txHash(),
+                        attestation.credentialCesr(), cardDigest));
     }
 
     /**
@@ -128,6 +163,7 @@ public class CardImportService {
                 key.setAttestationCredentialSaid(attestation.credentialSaid());
                 key.setAttestationSchemaSaid(attestation.schemaSaid());
                 key.setAttestationTxHash(attestation.txHash());
+                key.setAttestationCredentialCesr(attestation.credentialCesr());
             }
         }
         return VaultKeyService.toView(keyRepository.save(key));
@@ -174,6 +210,7 @@ public class CardImportService {
                 entry.setAttestationCredentialSaid(attestation.credentialSaid());
                 entry.setAttestationSchemaSaid(attestation.schemaSaid());
                 entry.setAttestationTxHash(attestation.txHash());
+                entry.setAttestationCredentialCesr(attestation.credentialCesr());
             }
         }
         return AddressbookService.toView(entryRepository.save(entry));
