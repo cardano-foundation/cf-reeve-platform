@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.blockchain_common.config;
+package org.cardanofoundation.lob.app.config;
 
 import lombok.val;
 
