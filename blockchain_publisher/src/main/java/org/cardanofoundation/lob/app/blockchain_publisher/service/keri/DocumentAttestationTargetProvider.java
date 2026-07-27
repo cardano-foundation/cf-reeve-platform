@@ -21,6 +21,7 @@ import com.bloxbean.cardano.client.common.cbor.CborSerializationUtil;
 import com.bloxbean.cardano.client.metadata.MetadataMap;
 import io.vavr.control.Either;
 
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentAttestationFreezeEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.DocumentAttestationFreezeRepository;
@@ -35,7 +36,6 @@ import org.cardanofoundation.lob.app.document_vault.service.VaultDocumentService
 import org.cardanofoundation.lob.app.document_vault.service.VaultProblems;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.AttestationDigest;
 import org.cardanofoundation.lob.app.keri_attestation.service.AttestationTargetProvider;
-import org.cardanofoundation.lob.app.keri_attestation.service.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 /**

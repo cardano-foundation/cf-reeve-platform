@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.keri_attestation.service;
+package org.cardanofoundation.lob.app.blockchain_common.service_assistance;
 
 import java.math.BigInteger;
 import java.security.DigestException;
@@ -6,8 +6,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-
-import org.springframework.stereotype.Service;
 
 import co.nstant.in.cbor.CborException;
 import com.bloxbean.cardano.client.common.cbor.CborSerializationUtil;
@@ -34,7 +32,6 @@ import org.cardanofoundation.signify.cesr.args.RawArgs;
  * <p>Pure and stateless: every method is a deterministic function of its arguments, with no
  * dependency on the rest of this module (no repository, no KERI agent, no clock).
  */
-@Service
 public class Cip170MetadataFactory {
 
     /** Chunk size (bytes) for {@link #authBeginMap}'s {@code c} field. */

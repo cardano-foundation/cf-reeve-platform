@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.keri_attestation.service;
+package org.cardanofoundation.lob.app.blockchain_common.service_assistance;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;

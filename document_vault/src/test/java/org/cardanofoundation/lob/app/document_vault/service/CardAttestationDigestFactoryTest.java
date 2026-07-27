@@ -10,10 +10,10 @@ import org.springframework.beans.factory.ObjectProvider;
 
 import org.junit.jupiter.api.Test;
 
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.document_vault.domain.card.KeyCardDto;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.CardSubjectType;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyAssurance;
-import org.cardanofoundation.lob.app.keri_attestation.service.Cip170MetadataFactory;
 
 /**
  * The platform (B2) must recompute the SAME card-attestation digest the indexer anchored on-chain, or

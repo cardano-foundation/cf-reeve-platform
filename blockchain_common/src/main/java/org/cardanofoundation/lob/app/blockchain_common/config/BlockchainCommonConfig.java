@@ -9,6 +9,7 @@ import org.springframework.core.io.Resource;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.JsonSchemaMetadataChecker;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
 
@@ -17,6 +18,18 @@ public class BlockchainCommonConfig {
 
     @Value("${lob.l1.transaction.metadata.validation.enable:true}")
     private boolean enableChecker;
+
+    /**
+     * CIP-170 label metadata builder. Declared here rather than as a {@code @Service} because this
+     * module registers every bean explicitly and carries no component scan. It is deliberately
+     * ungated: {@code blockchain_publisher}, {@code keri_attestation} and {@code document_vault} each
+     * need it independently of the others' enablement flags, so gating on any one flag would break the
+     * rest. Stateless and dependency-free, so there is nothing to gate.
+     */
+    @Bean
+    public Cip170MetadataFactory cip170MetadataFactory() {
+        return new Cip170MetadataFactory();
+    }
 
     @Bean
     //@Qualifier("api1JsonSchemaMetadataChecker")

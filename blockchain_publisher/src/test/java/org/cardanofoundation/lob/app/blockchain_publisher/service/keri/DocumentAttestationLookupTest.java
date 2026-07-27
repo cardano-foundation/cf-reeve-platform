@@ -22,13 +22,13 @@ import io.vavr.control.Either;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentAttestationFreezeEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.DocumentAttestationFreezeRepository;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.DocumentAttestationLookup.AttestedDispatchData;
 import org.cardanofoundation.lob.app.document_vault.service.VaultProblems;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.ConsumedAttestation;
 import org.cardanofoundation.lob.app.keri_attestation.service.AttestationConsumptionApi;
-import org.cardanofoundation.lob.app.keri_attestation.service.Cip170MetadataFactory;
 
 /**
  * {@link DocumentAttestationLookup} is the dispatch-time gate of design §5.3: it must reject any

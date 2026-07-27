@@ -3,7 +3,6 @@ package org.cardanofoundation.lob.app.blockchain_publisher.service.publish.modul
 import java.math.BigInteger;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.format.DateTimeFormatter;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,6 +12,7 @@ import org.springframework.stereotype.Service;
 import com.bloxbean.cardano.client.metadata.MetadataBuilder;
 import com.bloxbean.cardano.client.metadata.MetadataMap;
 
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.L1MetadataSections;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Organisation;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
@@ -60,26 +60,16 @@ public class DocumentMetadataSerialiser {
     }
 
     private MetadataMap createMetadataSection(long creationSlot) {
-        MetadataMap metadataMap = MetadataBuilder.createMap();
-        Instant now = Instant.now(clock);
-
-        metadataMap.put("creation_slot", BigInteger.valueOf(creationSlot));
-        metadataMap.put("timestamp", DateTimeFormatter.ISO_INSTANT.format(now));
-        metadataMap.put("version", VERSION);
-
-        return metadataMap;
+        return L1MetadataSections.metadataSection(creationSlot, Instant.now(clock), VERSION);
     }
 
     private static MetadataMap serialiseOrganisation(Organisation organisation) {
-        MetadataMap orgMap = MetadataBuilder.createMap();
-
-        orgMap.put("id", organisation.getId());
-        orgMap.put("name", organisation.getName());
-        orgMap.put("tax_id_number", organisation.getTaxIdNumber());
-        orgMap.put("currency_id", organisation.getCurrencyId());
-        orgMap.put("country_code", organisation.getCountryCode());
-
-        return orgMap;
+        return L1MetadataSections.orgSection(
+                organisation.getId(),
+                organisation.getName(),
+                organisation.getTaxIdNumber(),
+                organisation.getCurrencyId(),
+                organisation.getCountryCode());
     }
 
 }

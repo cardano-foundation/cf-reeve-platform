@@ -10,8 +10,8 @@ import org.springframework.stereotype.Service;
 import com.bloxbean.cardano.client.metadata.MetadataBuilder;
 import com.bloxbean.cardano.client.metadata.MetadataMap;
 
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.document_vault.domain.card.KeyCardDto;
-import org.cardanofoundation.lob.app.keri_attestation.service.Cip170MetadataFactory;
 
 /**
  * Recomputes an imported card's CIP-170 attestation digest — the platform (B2) side of the contract
@@ -38,8 +38,12 @@ import org.cardanofoundation.lob.app.keri_attestation.service.Cip170MetadataFact
 @RequiredArgsConstructor
 public class CardAttestationDigestFactory {
 
-    // Lazy: Cip170MetadataFactory only exists when keri_attestation is enabled. digestOf is only ever
-    // called from the attestation-verification path, which already requires that module to be present.
+    // Lazily resolved. Cip170MetadataFactory now lives in blockchain_common, declared as an ungated
+    // @Bean in BlockchainCommonConfig, so it is no longer tied to lob.keri-attestation.enabled and is
+    // expected to be present. The ObjectProvider is kept anyway: digestOf is only ever reached from the
+    // attestation-verification path, which already requires keri_attestation, and CardImportService
+    // rejects an attested card when AttestationImportVerifier is absent before this is ever called. So
+    // failing lazily here remains the right behaviour, just no longer the expected one.
     private final ObjectProvider<Cip170MetadataFactory> cip170MetadataFactoryProvider;
 
     /** @return the imported card's canonical attestation digest (qb64, CESR-prefixed 'E'). */

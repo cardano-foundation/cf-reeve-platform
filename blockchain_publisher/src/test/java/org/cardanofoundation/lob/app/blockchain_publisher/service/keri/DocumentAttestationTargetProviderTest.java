@@ -34,6 +34,7 @@ import org.junit.jupiter.api.Test;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.CardanoNetwork;
 import org.cardanofoundation.lob.app.blockchain_common.domain.ChainTip;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentAttestationFreezeEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.DocumentAttestationFreezeRepository;
@@ -49,7 +50,6 @@ import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentPublis
 import org.cardanofoundation.lob.app.document_vault.service.VaultDocumentService;
 import org.cardanofoundation.lob.app.document_vault.service.VaultProblems;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.AttestationDigest;
-import org.cardanofoundation.lob.app.keri_attestation.service.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;

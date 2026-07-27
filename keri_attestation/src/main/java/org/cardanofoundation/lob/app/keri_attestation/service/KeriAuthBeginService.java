@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import com.bloxbean.cardano.client.metadata.MetadataMap;
 import io.vavr.control.Either;
 
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;

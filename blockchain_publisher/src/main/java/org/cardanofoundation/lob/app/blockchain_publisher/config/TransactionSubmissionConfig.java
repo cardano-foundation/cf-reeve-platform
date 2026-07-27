@@ -17,6 +17,7 @@ import com.bloxbean.cardano.client.backend.api.BackendService;
 import com.bloxbean.cardano.client.backend.api.DefaultUtxoSupplier;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
 import org.cardanofoundation.lob.app.blockchain_publisher.job.DocumentAttestationFreezeCleanupJob;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.DocumentAttestationFreezeRepository;
@@ -43,7 +44,6 @@ import org.cardanofoundation.lob.app.document_vault.service.VaultDocumentService
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.lob.app.keri_attestation.service.AttestationConsumptionApi;
 import org.cardanofoundation.lob.app.keri_attestation.service.CardanoMetadataTxSubmitter;
-import org.cardanofoundation.lob.app.keri_attestation.service.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @Configuration

@@ -12,8 +12,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
 
-import org.cardanofoundation.lob.app.keri_attestation.service.AttestationImportVerifier;
-
 import org.cardanofoundation.lob.app.document_vault.domain.card.KeyCardDto;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.AddressbookEntryEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultKeyEntity;
@@ -24,6 +22,7 @@ import org.cardanofoundation.lob.app.document_vault.domain.view.ImportCardResult
 import org.cardanofoundation.lob.app.document_vault.domain.view.VaultKeyView;
 import org.cardanofoundation.lob.app.document_vault.repository.AddressbookEntryRepository;
 import org.cardanofoundation.lob.app.document_vault.repository.VaultKeyRepository;
+import org.cardanofoundation.lob.app.keri_attestation.service.AttestationImportVerifier;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 

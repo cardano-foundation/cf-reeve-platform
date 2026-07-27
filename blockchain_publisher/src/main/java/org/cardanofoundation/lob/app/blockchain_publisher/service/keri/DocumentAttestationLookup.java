@@ -12,12 +12,12 @@ import com.bloxbean.cardano.client.metadata.MetadataMap;
 import com.bloxbean.cardano.client.metadata.cbor.CBORMetadataMap;
 import io.vavr.control.Either;
 
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentAttestationFreezeEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.DocumentAttestationFreezeRepository;
 import org.cardanofoundation.lob.app.document_vault.service.VaultProblems;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.ConsumedAttestation;
 import org.cardanofoundation.lob.app.keri_attestation.service.AttestationConsumptionApi;
-import org.cardanofoundation.lob.app.keri_attestation.service.Cip170MetadataFactory;
 
 /**
  * {@code DocumentL1TransactionCreator}'s dispatch-time attestation gate (design §5.3, Task 15): when
