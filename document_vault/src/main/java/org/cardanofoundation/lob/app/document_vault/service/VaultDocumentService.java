@@ -34,6 +34,7 @@ import org.hibernate.Hibernate;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
 import org.cardanofoundation.lob.app.blockchain_common.service.IpfsAvailability;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.RecipientKeyHasher;
 import org.cardanofoundation.lob.app.document_vault.domain.KeyRef;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.DocumentSlot;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultDocumentEntity;
@@ -167,9 +168,14 @@ public class VaultDocumentService {
         document.setSizeBytes(ciphertext.length);
         document.setCreatedByAccount(securityHelper.getCurrentUserId());
         document.setCreatedByName(securityHelper.getCurrentUser());
+        // recipientKeyHash is derived from the key we just authorised above, never taken from the
+        // request: a client-supplied hash would let an uploader stamp someone else's identifier onto a
+        // document and inject it into their Indexer filter. keysById is already loaded, and the loop
+        // above proved every getKeyId() is present and belongs to this organisation.
         document.setSlots(request.getSlots().stream()
                 .map(slot -> new DocumentSlot(slot.getKeyId(), slot.getRecipientRef(),
-                        slot.getEphemeralPub(), slot.getWrappedDek()))
+                        slot.getEphemeralPub(), slot.getWrappedDek(),
+                        RecipientKeyHasher.hash(keysById.get(slot.getKeyId()).publicKey())))
                 .toList());
 
         VaultDocumentEntity saved = documentRepository.save(document);

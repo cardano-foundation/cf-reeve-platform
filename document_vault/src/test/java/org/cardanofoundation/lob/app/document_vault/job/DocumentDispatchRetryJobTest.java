@@ -72,7 +72,7 @@ class DocumentDispatchRetryJobTest {
         doc.setPayloadNonce("f".repeat(24));
         doc.setSizeBytes(ciphertext.length);
         doc.setCreatedByAccount("sender");
-        doc.setSlots(List.of(new DocumentSlot("k1", "me", HEX64, HEX96)));
+        doc.setSlots(List.of(new DocumentSlot("k1", "me", HEX64, HEX96, "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae")));
         return doc;
     }
 

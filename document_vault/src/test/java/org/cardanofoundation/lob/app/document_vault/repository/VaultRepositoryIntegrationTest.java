@@ -175,7 +175,7 @@ class VaultRepositoryIntegrationTest {
         doc.setSizeBytes(3L);
         doc.setCreatedByAccount("sender");
         doc.setCreatedByName("Sender Name");
-        doc.setSlots(List.of(new DocumentSlot("k-used", "me", HEX64, HEX96)));
+        doc.setSlots(List.of(new DocumentSlot("k-used", "me", HEX64, HEX96, "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae")));
         documentRepository.save(doc);
         em.flush();
         // MUST clear before deleting. SimpleJpaRepository.delete() silently no-ops when the entity
@@ -238,8 +238,8 @@ class VaultRepositoryIntegrationTest {
         doc.setCreatedByAccount("sender");
         doc.setCreatedByName("Sender Name");
         doc.setSlots(List.of(
-                new DocumentSlot("k1", "me", HEX64, HEX96),
-                new DocumentSlot("k2", "recipient label", HEX64, HEX96)));
+                new DocumentSlot("k1", "me", HEX64, HEX96, "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae"),
+                new DocumentSlot("k2", "recipient label", HEX64, HEX96, "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae")));
         documentRepository.save(doc);
 
         // second document, authored by "recipient", shared with "sender" (slot -> k1)
@@ -255,7 +255,7 @@ class VaultRepositoryIntegrationTest {
         doc2.setSizeBytes(3L);
         doc2.setCreatedByAccount("recipient");
         doc2.setCreatedByName("Recipient Name");
-        doc2.setSlots(List.of(new DocumentSlot("k1", "back at you", HEX64, HEX96)));
+        doc2.setSlots(List.of(new DocumentSlot("k1", "back at you", HEX64, HEX96, "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae")));
         documentRepository.save(doc2);
 
         // force a genuine DB round-trip: without this, findById below would return the
@@ -311,7 +311,7 @@ class VaultRepositoryIntegrationTest {
         literalDoc.setFileName("100%_off.pdf"); // literal percent AND underscore in the filename
         literalDoc.setSizeBytes(1L);
         literalDoc.setCreatedByAccount("sender");
-        literalDoc.setSlots(List.of(new DocumentSlot("k1", "me", HEX64, HEX96)));
+        literalDoc.setSlots(List.of(new DocumentSlot("k1", "me", HEX64, HEX96, "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae")));
         documentRepository.save(literalDoc);
 
         VaultDocumentEntity plainDoc = new VaultDocumentEntity();
@@ -325,7 +325,7 @@ class VaultRepositoryIntegrationTest {
         plainDoc.setFileName("plain.pdf"); // no LIKE metacharacters at all
         plainDoc.setSizeBytes(1L);
         plainDoc.setCreatedByAccount("sender");
-        plainDoc.setSlots(List.of(new DocumentSlot("k1", "me", HEX64, HEX96)));
+        plainDoc.setSlots(List.of(new DocumentSlot("k1", "me", HEX64, HEX96, "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae")));
         documentRepository.save(plainDoc);
 
         em.flush();
@@ -376,7 +376,7 @@ class VaultRepositoryIntegrationTest {
         keyRepository.save(key("k1", "sender", HEX64, "org1"));
 
         VaultDocumentEntity oldDraft = minimalDocument("doc-old-draft", VaultDocumentStatus.DRAFT);
-        oldDraft.setSlots(List.of(new DocumentSlot("k1", "me", HEX64, HEX96)));
+        oldDraft.setSlots(List.of(new DocumentSlot("k1", "me", HEX64, HEX96, "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae")));
         documentRepository.save(oldDraft);
         documentRepository.save(minimalDocument("doc-old-published", VaultDocumentStatus.PUBLISHED));
         documentRepository.save(minimalDocument("doc-recent-draft", VaultDocumentStatus.DRAFT));

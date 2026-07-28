@@ -46,6 +46,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
 import org.cardanofoundation.lob.app.blockchain_common.service.IpfsAvailability;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.RecipientKeyHasher;
 import org.cardanofoundation.lob.app.document_vault.domain.KeyRef;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.DocumentSlot;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultDocumentEntity;
@@ -193,6 +194,30 @@ class VaultDocumentServiceTest {
         verify(eventPublisher).publishEvent(event.capture());
         assertEquals(Set.of("sender", "recipient"), event.getValue().recipientAccountIds());
         assertEquals("org1", event.getValue().organisationId());
+    }
+
+    /**
+     * The hash is DERIVED from the directory key we authorised, never taken from the request — a
+     * client-supplied value would let an uploader stamp someone else's identifier onto a document and
+     * inject it into their Indexer filter. Frozen here at upload so the attested publish path's
+     * wallet-signed manifest cannot drift if the key row later changes or is deleted.
+     */
+    @Test
+    void uploadDerivesTheRecipientKeyHashFromTheDirectoryKey() {
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(new Organisation()));
+        when(keyLookupService.findAllById(any())).thenReturn(keyRefs(
+                orgKey("k-s", "sender", "org1"),
+                orgKey("k-r", "recipient", "org1")));
+        when(documentRepository.save(any(VaultDocumentEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        assertTrue(service.upload(request()).isRight());
+
+        ArgumentCaptor<VaultDocumentEntity> saved = ArgumentCaptor.forClass(VaultDocumentEntity.class);
+        verify(documentRepository).save(saved.capture());
+        // orgKey(...) gives every fixture key the public key "e" * 64.
+        String expected = RecipientKeyHasher.hash("e".repeat(64));
+        assertEquals(List.of(expected, expected),
+                saved.getValue().getSlots().stream().map(DocumentSlot::getRecipientKeyHash).toList());
     }
 
     @Test
@@ -794,7 +819,7 @@ class VaultDocumentServiceTest {
         doc.setFileName("q3-report.pdf");
         doc.setSizeBytes(CIPHERTEXT.length);
         doc.setCreatedByAccount("sender");
-        doc.setSlots(List.of(new DocumentSlot("k-s", "canary-recipient-label", HEX64, HEX96)));
+        doc.setSlots(List.of(new DocumentSlot("k-s", "canary-recipient-label", HEX64, HEX96, "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae")));
         return doc;
     }
 }
