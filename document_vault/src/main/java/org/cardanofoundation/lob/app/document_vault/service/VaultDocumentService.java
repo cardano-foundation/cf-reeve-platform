@@ -256,11 +256,6 @@ public class VaultDocumentService {
             return Either.left(VaultProblems.conflict(VaultProblems.ALREADY_PUBLISHED,
                     "Document %s is already published.".formatted(documentId)));
         }
-        IpfsAvailability ipfs = ipfsAvailability.getIfAvailable();
-        if (ipfs == null || !ipfs.isAvailable()) {
-            return Either.left(VaultProblems.serviceUnavailable(VaultProblems.DOCUMENT_PUBLISHING_UNAVAILABLE,
-                    "Document publishing requires a configured IPFS publisher; none is available in this deployment."));
-        }
 
         if (attestationCeremonyId != null) {
             Either<ProblemDetail, ConsumedAttestation> attestation = consumeAttestation(document, attestationCeremonyId);
