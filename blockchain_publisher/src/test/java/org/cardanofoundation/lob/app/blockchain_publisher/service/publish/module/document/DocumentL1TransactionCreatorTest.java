@@ -33,6 +33,7 @@ import org.junit.jupiter.api.Test;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.CardanoNetwork;
 import org.cardanofoundation.lob.app.blockchain_common.domain.ChainTip;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
@@ -117,7 +118,7 @@ class DocumentL1TransactionCreatorTest {
                 organisationPublicApi,
                 organiserWallet,
                 ipfsPublisher,
-                Optional.empty(),
+                mock(Cip170MetadataFactory.class),
                 1447,
                 false);
     }

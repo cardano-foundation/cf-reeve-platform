@@ -33,6 +33,7 @@ import com.bloxbean.cardano.client.quicktx.Tx;
 import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
@@ -41,9 +42,7 @@ import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.Serialized
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Organisation;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.DocumentAttestationLookup;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
-import org.cardanofoundation.lob.app.document_vault.service.VaultProblems;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 
 /**
@@ -68,7 +67,7 @@ public class DocumentL1TransactionCreator {
     private final OrganisationPublicApi organisationPublicApi;
     private final Account organiserWallet;
     private final Optional<IpfsPublisher> ipfsPublisher;
-    private final Optional<DocumentAttestationLookup> attestationLookup;
+    private final Cip170MetadataFactory cip170MetadataFactory;
 
     private final int metadataTag;
     private final boolean debugStoreOutputTx;
@@ -90,17 +89,30 @@ public class DocumentL1TransactionCreator {
         log.info("DocumentL1TransactionCreator is initialised.");
     }
 
+    /**
+     * Builds the document's L1 transaction. Attested and plain publishes follow the SAME path and
+     * differ only in whether a CIP-170 ATTEST map is attached under label 170.
+     *
+     * <p>They used to diverge sharply: an attested publish replayed a 1447 map frozen by the ceremony,
+     * reusing its {@code ipfs_cid} verbatim and never re-pinning. That is gone, because the tier which
+     * runs ceremonies has neither IPFS credentials nor chain access and so cannot build a manifest at
+     * all — see the {@code api} service in cf-reeve-application's docker-compose.yml. The wallet now
+     * attests a content commitment instead ({@code DocumentAttestationCommitment}), and this tier —
+     * the one that actually holds those credentials — pins the envelope, reads the tip and assembles
+     * the manifest, for attested and plain publishes alike.
+     *
+     * <p>The attestation itself arrives ON the dispatch record, put there by document_vault when it
+     * consumed the ceremony. Nothing here calls back into {@code keri_attestation} or
+     * {@code document_vault}; this module no longer depends on either, which is what allows the two to
+     * run in separate processes.
+     */
     public Either<ProblemDetail, API3BlockchainTransaction> pullBlockchainTransaction(
             String organisationId, DocumentEntity document) {
-        String ceremonyId = document.getAttestationCeremonyId();
-        if (ceremonyId != null) {
-            return pullAttestedBlockchainTransaction(document, ceremonyId);
-        }
-
         if (ipfsPublisher.isEmpty()) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
                     "Document publishing requires IPFS; no IpfsPublisher is configured in this deployment.");
             problem.setTitle("DOCUMENT_PUBLISHING_UNAVAILABLE");
+
             return Either.left(problem);
         }
 
@@ -120,49 +132,34 @@ public class DocumentL1TransactionCreator {
                         organisation.getId(), organisation.getName(), organisation.getTaxIdNumber(),
                         organisation.getCurrencyId(), organisation.getCountryCode());
 
-                return handleTransactionCreation(metadataMap, creationSlot);
+                return handleTransactionCreation(metadataMap, attestMapOrNull(document), creationSlot);
             });
         });
     }
 
     /**
-     * KERI wallet-attestation dispatch (design §5.3): a dispatch record carrying a non-null
-     * {@code attestationCeremonyId} MUST publish the exact frozen metadata the user attested,
-     * alongside a CIP-170 {@code ATTEST} map (label 170) - and MUST fail closed, never falling back to
-     * the plain-publish path above, at every step. {@link DocumentAttestationLookup} does the actual
-     * gatekeeping (missing freeze / non-consumed ceremony / digest mismatch); this method's own extra
-     * responsibility is requiring the lookup collaborator to even be present - a {@code null} lookup
-     * (the {@code keri_attestation} module disabled while a document somehow still carries a ceremony
-     * id) is itself a fail-closed condition, not a silent skip to plain publish.
+     * The CIP-170 ATTEST map for an attested publish, or {@code null} for the plain path.
      *
-     * <p>Never touches IPFS (the frozen {@code ipfsCid} is reused verbatim - no re-upload) and never
-     * re-serialises the envelope (the frozen 1447 map is reused verbatim). The chain tip IS fetched
-     * fresh here, though: the frozen {@code metadata_creation_slot} lives only inside the 1447 map
-     * itself, while {@link API3BlockchainTransaction}'s own {@code creationSlot} drives the
-     * dispatcher's rollback-aging bookkeeping and must reflect a fresh tip per submission attempt, or
-     * retries would look immediately stale.
+     * <p>{@code 170.d} carries the payload SAID the wallet's KEL actually anchored, NOT the commitment
+     * digest — the two are distinct on purpose, and conflating them produced a design a real Veridian
+     * wallet never accepted.
+     *
+     * <p>Fails closed by construction: a document carrying a ceremony id but missing the attestation
+     * fields would have to have been written by a vault that skipped consumption, so treat it as an
+     * error rather than quietly publishing it unattested.
      */
-    private Either<ProblemDetail, API3BlockchainTransaction> pullAttestedBlockchainTransaction(
-            DocumentEntity document, String ceremonyId) {
-        if (attestationLookup.isEmpty()) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
-                    "Document %s carries attestation ceremony %s but keri_attestation is not enabled in this deployment."
-                            .formatted(document.getId(), ceremonyId));
-            problem.setTitle(VaultProblems.ATTESTATION_UNAVAILABLE);
-            return Either.left(problem);
+    private MetadataMap attestMapOrNull(DocumentEntity document) {
+        if (document.getAttestationCeremonyId() == null) {
+            return null;
+        }
+        if (document.getAttestationAid() == null || document.getAttestationPayloadSaid() == null) {
+            throw new IllegalStateException(
+                    "Document %s carries attestation ceremony %s but no consumed attestation; refusing to publish it as unattested."
+                            .formatted(document.getId(), document.getAttestationCeremonyId()));
         }
 
-        DocumentAttestationLookup lookup = attestationLookup.get();
-        return lookup.loadForDispatch(document.getId(), ceremonyId).flatMap(data -> {
-            document.setIpfsCid(data.ipfsCid());
-
-            return blockchainReaderPublicApi.getChainTip().flatMap(chainTip -> {
-                long creationSlot = chainTip.getAbsoluteSlot();
-                MetadataMap attestMap170 = lookup.attestMap(data.consumed());
-
-                return handleTransactionCreation(data.frozenMetadataMap(), attestMap170, creationSlot);
-            });
-        });
+        return cip170MetadataFactory.attestMap(document.getAttestationAid(),
+                document.getAttestationPayloadSaid(), document.getAttestationKelSequence());
     }
 
     private Either<ProblemDetail, API3BlockchainTransaction> handleTransactionCreation(MetadataMap metadataMap,

@@ -263,11 +263,15 @@ public class VaultDocumentService {
         }
 
         if (attestationCeremonyId != null) {
-            Either<ProblemDetail, Void> attestation = consumeAttestation(document, attestationCeremonyId);
+            Either<ProblemDetail, ConsumedAttestation> attestation = consumeAttestation(document, attestationCeremonyId);
             if (attestation.isLeft()) {
                 return Either.left(attestation.getLeft());
             }
+            ConsumedAttestation consumed = attestation.get();
             document.setAttestationCeremonyId(attestationCeremonyId);
+            document.setAttestationAid(consumed.aid());
+            document.setAttestationPayloadSaid(consumed.payloadSaid());
+            document.setAttestationKelSequence(consumed.kelSequence());
         }
 
         document.setStatus(VaultDocumentStatus.PUBLISHED);
@@ -304,7 +308,7 @@ public class VaultDocumentService {
      * The original title and detail are always preserved verbatim; only the status is ever
      * overwritten, and only within the 4xx range.
      */
-    private Either<ProblemDetail, Void> consumeAttestation(VaultDocumentEntity document, String attestationCeremonyId) {
+    private Either<ProblemDetail, ConsumedAttestation> consumeAttestation(VaultDocumentEntity document, String attestationCeremonyId) {
         AttestationFreezeGuard freezeGuard = attestationFreezeGuardProvider.getIfAvailable();
         AttestationConsumptionApi consumptionApi = attestationConsumptionApiProvider.getIfAvailable();
         if (freezeGuard == null || consumptionApi == null) {
@@ -323,7 +327,10 @@ public class VaultDocumentService {
             return Either.left(capClientErrorAt422(consumed.getLeft()));
         }
 
-        return Either.right(null);
+        // Returned rather than discarded: blockchain_publisher can no longer look this up (it has been
+        // decoupled from keri_attestation and runs in a different process), so the aid / payloadSaid /
+        // kelSequence ride along on the document and then on DocumentPublishCommand.
+        return Either.right(consumed.get());
     }
 
     /** F7 fix, guarded by R5 (Codex re-verification): only a client-range status (400-499) is rebuilt
@@ -418,7 +425,12 @@ public class VaultDocumentService {
                         .map(slot -> new DocumentPublishCommand.PublishSlot(
                                 slot.getEphemeralPub(), slot.getWrappedDek(), slot.getRecipientKeyHash()))
                         .toList(),
-                document.getAttestationCeremonyId());
+                document.getAttestationCeremonyId(),
+                document.getAttestationCeremonyId() == null ? null
+                        : new DocumentPublishCommand.ConsumedAttestationRef(
+                                document.getAttestationAid(),
+                                document.getAttestationPayloadSaid(),
+                                document.getAttestationKelSequence()));
     }
 
     /**

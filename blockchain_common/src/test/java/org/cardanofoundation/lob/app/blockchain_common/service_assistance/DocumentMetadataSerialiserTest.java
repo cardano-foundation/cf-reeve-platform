@@ -54,7 +54,7 @@ class DocumentMetadataSerialiserTest {
                 List.of(
                         new DocumentPublishCommand.PublishSlot("d".repeat(64), "e".repeat(96), HASH_A),
                         new DocumentPublishCommand.PublishSlot("f".repeat(64), "0".repeat(96), HASH_B)),
-                null);
+                null, null);
     }
 
     @Test

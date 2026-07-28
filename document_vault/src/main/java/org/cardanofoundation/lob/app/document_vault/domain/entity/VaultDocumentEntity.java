@@ -138,6 +138,25 @@ public class VaultDocumentEntity extends VaultBaseEntity implements Persistable<
     @Column(name = "attestation_ceremony_id", length = 64)
     private String attestationCeremonyId;
 
+    /**
+     * The consumed wallet attestation, captured at publish time so it can ride on
+     * {@code DocumentPublishCommand} to the publisher tier.
+     *
+     * <p>The publisher used to read this back out of keri_attestation itself. It no longer depends on
+     * that module — and in the split deployment it runs in a different process entirely — so the three
+     * values it needs to build the on-chain CIP-170 ATTEST map are recorded here instead. All NULL for
+     * a plain (unattested) publish, which is the default.
+     */
+    @Column(name = "attestation_aid", length = 128)
+    private String attestationAid;
+
+    /** SAID of the payload the wallet's KEL anchors; becomes the on-chain {@code 170.d}. */
+    @Column(name = "attestation_payload_said", length = 128)
+    private String attestationPayloadSaid;
+
+    @Column(name = "attestation_kel_sequence", length = 32)
+    private String attestationKelSequence;
+
     @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "document_vault_document_slot", joinColumns = @JoinColumn(name = "document_id"))
     @OrderColumn(name = "slot_index")

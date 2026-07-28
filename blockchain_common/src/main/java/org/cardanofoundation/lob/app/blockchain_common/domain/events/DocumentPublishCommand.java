@@ -31,7 +31,32 @@ public record DocumentPublishCommand(String organisationId,
                                      String payloadNonce,
                                      String ciphertextBase64,
                                      List<PublishSlot> slots,
-                                     String attestationCeremonyId) {
+                                     String attestationCeremonyId,
+                                     ConsumedAttestationRef attestation) {
+
+    /** Convenience for the overwhelmingly common plain (unattested) publish. */
+    public static DocumentPublishCommand plain(String organisationId, String documentId, int envelopeVersion,
+                                               String contentHash, String plaintextHash, String payloadNonce,
+                                               String ciphertextBase64, List<PublishSlot> slots) {
+        return new DocumentPublishCommand(organisationId, documentId, envelopeVersion, contentHash,
+                plaintextHash, payloadNonce, ciphertextBase64, slots, null, null);
+    }
+
+    /**
+     * The consumed wallet attestation, carried ON the command rather than looked up by the publisher.
+     *
+     * <p>This is what lets {@code blockchain_publisher} drop its dependency on {@code keri_attestation}
+     * and {@code document_vault} entirely. It used to reach back into both at dispatch time via
+     * {@code DocumentAttestationLookup} — which cannot work once the two modules run in different
+     * processes, as the split deployment runs them.
+     *
+     * @param aid         the wallet AID that attested.
+     * @param payloadSaid the SAID of the saidified remotesign payload the wallet's KEL actually
+     *                    anchors. This — NOT the commitment digest — becomes the on-chain {@code 170.d}.
+     * @param kelSequence KEL coordinates of the anchoring event.
+     */
+    public record ConsumedAttestationRef(String aid, String payloadSaid, String kelSequence) {
+    }
 
     /**
      * @param recipientKeyHash sha256 of the recipient's X25519 public key, lowercase hex. Exported to

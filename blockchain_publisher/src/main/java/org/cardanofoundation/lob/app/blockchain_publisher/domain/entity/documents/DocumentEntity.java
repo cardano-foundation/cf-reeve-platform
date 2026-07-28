@@ -100,6 +100,22 @@ public class DocumentEntity extends CommonDateOnlyLockableEntity implements Pers
     @Column(name = "attestation_ceremony_id", length = 64)
     private String attestationCeremonyId;
 
+    /**
+     * The consumed wallet attestation, carried here from {@code DocumentPublishCommand} rather than
+     * looked up. This module no longer depends on {@code keri_attestation} or {@code document_vault},
+     * and in the split deployment they run in a different process, so a lookup is impossible.
+     * All NULL for a plain (unattested) publish.
+     */
+    @Column(name = "attestation_aid", length = 128)
+    private String attestationAid;
+
+    /** SAID of the payload the wallet's KEL anchored; becomes the on-chain {@code 170.d}. */
+    @Column(name = "attestation_payload_said", length = 128)
+    private String attestationPayloadSaid;
+
+    @Column(name = "attestation_kel_sequence", length = 32)
+    private String attestationKelSequence;
+
     /** Recipient slots - crypto material only, no identifiers of any kind (spec B5 #3). */
     @Builder.Default
     @ElementCollection(fetch = FetchType.LAZY)

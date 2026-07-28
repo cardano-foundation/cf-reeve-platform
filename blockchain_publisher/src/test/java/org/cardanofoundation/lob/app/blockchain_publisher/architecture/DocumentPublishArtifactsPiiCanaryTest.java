@@ -32,7 +32,7 @@ class DocumentPublishArtifactsPiiCanaryTest {
                 "c".repeat(24),
                 "Y2lwaGVydGV4dA==",
                 List.of(new DocumentPublishCommand.PublishSlot("d".repeat(64), "e".repeat(96), "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae")),
-                null);
+                null, null);
 
         String ipfsJson = new DocumentIpfsSerialiser(new ObjectMapper()).serialise(command);
 

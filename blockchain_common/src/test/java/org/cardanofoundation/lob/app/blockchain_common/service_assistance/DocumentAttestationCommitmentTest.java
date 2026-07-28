@@ -31,7 +31,7 @@ class DocumentAttestationCommitmentTest {
                 List.of(
                         new DocumentPublishCommand.PublishSlot("d".repeat(64), "e".repeat(96), HASH_A),
                         new DocumentPublishCommand.PublishSlot("f".repeat(64), "0".repeat(96), HASH_B)),
-                null);
+                null, null);
     }
 
     @Test
@@ -82,7 +82,7 @@ class DocumentAttestationCommitmentTest {
                 List.of(
                         new DocumentPublishCommand.PublishSlot("d".repeat(64), "e".repeat(96), HASH_A),
                         new DocumentPublishCommand.PublishSlot("f".repeat(64), "0".repeat(96), "1".repeat(64))),
-                null);
+                null, null);
 
         assertThat(hex(DocumentAttestationCommitment.toMetadataMap(tampered, ENVELOPE_SHA)))
                 .isNotEqualTo(hex(DocumentAttestationCommitment.toMetadataMap(fixture(), ENVELOPE_SHA)));

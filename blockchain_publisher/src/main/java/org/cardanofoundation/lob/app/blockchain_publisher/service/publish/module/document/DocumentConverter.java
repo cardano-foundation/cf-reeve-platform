@@ -35,6 +35,11 @@ public class DocumentConverter {
         entity.setCiphertextBase64(command.ciphertextBase64());
         entity.setSlots(convertSlots(command.slots()));
         entity.setAttestationCeremonyId(command.attestationCeremonyId());
+        if (command.attestation() != null) {
+            entity.setAttestationAid(command.attestation().aid());
+            entity.setAttestationPayloadSaid(command.attestation().payloadSaid());
+            entity.setAttestationKelSequence(command.attestation().kelSequence());
+        }
         entity.setL1SubmissionData(Optional.of(L1SubmissionData.builder()
                 .publishStatus(BlockchainPublishStatus.STORED)
                 .build()));
@@ -69,7 +74,12 @@ public class DocumentConverter {
                 entity.getPayloadNonce(),
                 entity.getCiphertextBase64(),
                 convertSlotsToCommand(entity.getSlots()),
-                entity.getAttestationCeremonyId());
+                entity.getAttestationCeremonyId(),
+                entity.getAttestationCeremonyId() == null ? null
+                        : new DocumentPublishCommand.ConsumedAttestationRef(
+                                entity.getAttestationAid(),
+                                entity.getAttestationPayloadSaid(),
+                                entity.getAttestationKelSequence()));
     }
 
     private List<DocumentPublishCommand.PublishSlot> convertSlotsToCommand(List<DocumentEntity.Slot> slots) {

@@ -21,13 +21,8 @@ import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
-import org.cardanofoundation.lob.app.blockchain_publisher.job.DocumentAttestationFreezeCleanupJob;
-import org.cardanofoundation.lob.app.blockchain_publisher.repository.DocumentAttestationFreezeRepository;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.KeriService;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.DocumentAttestationFreezeGuard;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.DocumentAttestationLookup;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.DocumentAttestationTargetProvider;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.OrganiserWalletMetadataTxSubmitter;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.L1TransactionCreatorConfig;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentConverter;
@@ -40,12 +35,9 @@ import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction.API1MetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.transation_submit.*;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
-import org.cardanofoundation.lob.app.document_vault.service.VaultDocumentService;
-import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.lob.app.keri_attestation.service.AttestationConsumptionApi;
 import org.cardanofoundation.lob.app.keri_attestation.service.CardanoMetadataTxSubmitter;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
-import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @Configuration
 public class TransactionSubmissionConfig {
@@ -53,8 +45,8 @@ public class TransactionSubmissionConfig {
     /** CIP-170 attestation metadata itself is always published under label 170 ({@code
      *  Cip170MetadataFactory}) - reserved and never available for a document/API1/API3/spending-event
      *  metadata label (R3 fix, Codex re-verification). Mirrors {@code
-     *  DocumentAttestationLookup#RESERVED_CIP_170_LABEL}; duplicated as a literal here (not shared)
-     *  since this class must reject it even when {@code DocumentAttestationLookup} is never created
+     *  the CIP-170 reserved label; kept as a literal here so this class rejects a misconfigured
+     *  document metadata label in every deployment shape, attested or not
      *  (KERI disabled) - see {@link #documentL1TransactionCreator}'s guard for why. */
     private static final int RESERVED_CIP_170_LABEL = 170;
 
@@ -166,7 +158,7 @@ public class TransactionSubmissionConfig {
                                                                       OrganisationPublicApi organisationPublicApi,
                                                                       Account organiserAccount,
                                                                       Optional<IpfsPublisher> ipfsPublisher,
-                                                                      Optional<DocumentAttestationLookup> attestationLookup,
+                                                                      Cip170MetadataFactory cip170MetadataFactory,
                                                                       @Value("${lob.l1.transaction.metadata_label:1447}") int metadataLabel,
                                                                       @Value("${lob.l1.transaction.debug_store_output_tx:false}") boolean debugStoreOutputTx
     ) {
@@ -191,27 +183,10 @@ public class TransactionSubmissionConfig {
                 organisationPublicApi,
                 organiserAccount,
                 ipfsPublisher,
-                attestationLookup,
+                cip170MetadataFactory,
                 metadataLabel,
                 debugStoreOutputTx
         );
-    }
-
-    @Bean
-    @ConditionalOnProperty(name = "lob.keri-attestation.enabled", havingValue = "true", matchIfMissing = false)
-    public DocumentAttestationLookup documentAttestationLookup(
-            DocumentAttestationFreezeRepository documentAttestationFreezeRepository,
-            AttestationConsumptionApi attestationConsumptionApi,
-            Cip170MetadataFactory cip170MetadataFactory,
-            // Same property (and default) documentL1TransactionCreator/documentAttestationTargetProvider
-            // are wired with above - so loadForDispatch's label check (M3 cross-review F3 fix) compares
-            // against the label dispatch is ACTUALLY publishing under, not a value that could silently
-            // drift from it. DocumentAttestationLookup's own constructor fails fast if this is ever 170
-            // (reserved for the CIP-170 attestation map itself).
-            @Value("${lob.l1.transaction.metadata_label:1447}") int metadataLabel
-    ) {
-        return new DocumentAttestationLookup(documentAttestationFreezeRepository, attestationConsumptionApi,
-                cip170MetadataFactory, metadataLabel);
     }
 
     @Bean
@@ -221,74 +196,6 @@ public class TransactionSubmissionConfig {
                                                                   ObjectMapper objectMapper
     ) {
         return new OrganiserWalletMetadataTxSubmitter(backendService, organiserAccount, objectMapper);
-    }
-
-    @Bean
-    // Unlike its four sibling attestation beans below, this one takes a REQUIRED (non-Optional)
-    // VaultDocumentService - document-target ceremony creation genuinely cannot work without
-    // document_vault, so it needs both flags, not just keri's. With keri ON + document_vault OFF the
-    // attestation module itself still runs (future non-document targets); ceremony creation for
-    // DOCUMENT specifically then fails at the provider-registry lookup (TARGET_MISMATCH) rather than
-    // this bean failing context refresh entirely (Task 16 finding).
-    @ConditionalOnProperty(
-            name = {"lob.keri-attestation.enabled", "lob.document_vault.enabled"},
-            havingValue = "true",
-            matchIfMissing = false)
-    public DocumentAttestationTargetProvider documentAttestationTargetProvider(
-            VaultDocumentService vaultDocumentService,
-            DocumentIpfsSerialiser documentIpfsSerialiser,
-            DocumentMetadataSerialiser documentMetadataSerialiser,
-            BlockchainReaderPublicApiIF blockchainReaderPublicApi,
-            Optional<IpfsPublisher> ipfsPublisher,
-            Cip170MetadataFactory cip170MetadataFactory,
-            DocumentAttestationFreezeRepository documentAttestationFreezeRepository,
-            KeycloakSecurityHelper securityHelper,
-            OrganisationPublicApi organisationPublicApi,
-            Clock clock,
-            // Same property (and default) documentL1TransactionCreator's metadataTag is wired with
-            // above - so a freeze's ceremony.metadataLabel / ConsumedAttestation.metadataLabel can
-            // never disagree with the label dispatch actually publishes under (M3 finding).
-            @Value("${lob.l1.transaction.metadata_label:1447}") int metadataLabel
-    ) {
-        return new DocumentAttestationTargetProvider(
-                vaultDocumentService,
-                documentIpfsSerialiser,
-                documentMetadataSerialiser,
-                blockchainReaderPublicApi,
-                ipfsPublisher,
-                cip170MetadataFactory,
-                documentAttestationFreezeRepository,
-                securityHelper,
-                organisationPublicApi,
-                clock,
-                metadataLabel
-        );
-    }
-
-    @Bean
-    @ConditionalOnProperty(name = "lob.keri-attestation.enabled", havingValue = "true", matchIfMissing = false)
-    public DocumentAttestationFreezeGuard documentAttestationFreezeGuard(
-            DocumentAttestationFreezeRepository documentAttestationFreezeRepository,
-            DocumentIpfsSerialiser documentIpfsSerialiser,
-            KeriAttestationProperties keriAttestationProperties,
-            Clock clock
-    ) {
-        return new DocumentAttestationFreezeGuard(
-                documentAttestationFreezeRepository,
-                documentIpfsSerialiser,
-                keriAttestationProperties,
-                clock
-        );
-    }
-
-    @Bean
-    @ConditionalOnProperty(name = "lob.keri-attestation.enabled", havingValue = "true", matchIfMissing = false)
-    public DocumentAttestationFreezeCleanupJob documentAttestationFreezeCleanupJob(
-            DocumentAttestationFreezeRepository documentAttestationFreezeRepository,
-            AttestationConsumptionApi attestationConsumptionApi,
-            Clock clock
-    ) {
-        return new DocumentAttestationFreezeCleanupJob(documentAttestationFreezeRepository, attestationConsumptionApi, clock);
     }
 
 //    @Bean
