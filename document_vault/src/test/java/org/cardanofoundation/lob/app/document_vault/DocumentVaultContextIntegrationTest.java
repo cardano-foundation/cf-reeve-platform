@@ -66,8 +66,11 @@ public class DocumentVaultContextIntegrationTest {
         Integer tables = jdbcTemplate.queryForObject(
                 "select count(*) from information_schema.tables where table_name like 'document_vault_%'",
                 Integer.class);
-        assertEquals(5, tables,
-                "Expected the 5 document_vault_* tables (key, addressbook_entry, wrapped_record, "
-                        + "document, document_slot) created by V1.7_100_14__lob_service_app_document_vault_module.sql");
+        // document_vault_attestation_freeze (V1.7_100_14_5) is the sixth: the DOCUMENT attestation
+        // freeze store, which moved here from blockchain_publisher because the pod that runs ceremonies
+        // does not load that module at all.
+        assertEquals(6, tables,
+                "Expected the 6 document_vault_* tables (key, addressbook_entry, wrapped_record, "
+                        + "document, document_slot, attestation_freeze)");
     }
 }
