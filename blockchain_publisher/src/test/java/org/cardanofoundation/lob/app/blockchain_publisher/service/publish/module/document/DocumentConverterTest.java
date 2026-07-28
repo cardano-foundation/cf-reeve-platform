@@ -32,7 +32,7 @@ class DocumentConverterTest {
                 "b".repeat(64),
                 "c".repeat(24),
                 "ZGF0YQ==",
-                List.of(new DocumentPublishCommand.PublishSlot("d".repeat(64), "e".repeat(96))),
+                List.of(new DocumentPublishCommand.PublishSlot("d".repeat(64), "e".repeat(96), "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae")),
                 attestationCeremonyId);
     }
 

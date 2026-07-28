@@ -109,7 +109,7 @@ class DocumentL1TransactionCreatorAttestationTest {
         entity.setPlaintextHash("b".repeat(64));
         entity.setPayloadNonce("c".repeat(24));
         entity.setCiphertextBase64("Y2lwaGVydGV4dA==");
-        entity.setSlots(List.of(new DocumentEntity.Slot("d".repeat(64), "e".repeat(96))));
+        entity.setSlots(List.of(new DocumentEntity.Slot("d".repeat(64), "e".repeat(96), "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae")));
         entity.setAttestationCeremonyId(ceremonyId);
         return entity;
     }

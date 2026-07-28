@@ -415,7 +415,8 @@ public class VaultDocumentService {
                 document.getPayloadNonce(),
                 Base64.getEncoder().encodeToString(document.getCiphertext()),
                 document.getSlots().stream()
-                        .map(slot -> new DocumentPublishCommand.PublishSlot(slot.getEphemeralPub(), slot.getWrappedDek()))
+                        .map(slot -> new DocumentPublishCommand.PublishSlot(
+                                slot.getEphemeralPub(), slot.getWrappedDek(), slot.getRecipientKeyHash()))
                         .toList(),
                 document.getAttestationCeremonyId());
     }

@@ -13,6 +13,7 @@ import java.util.stream.Collectors;
 import org.springframework.core.io.ClassPathResource;
 
 import com.bloxbean.cardano.client.common.cbor.CborSerializationUtil;
+import com.bloxbean.cardano.client.metadata.MetadataList;
 import com.bloxbean.cardano.client.metadata.MetadataMap;
 import com.bloxbean.cardano.client.metadata.helper.MetadataToJsonNoSchemaConverter;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,6 +37,8 @@ class DocumentMetadataSerialiserTest {
 
     private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2024-06-01T10:15:30Z"), ZoneId.of("UTC"));
     private static final long CREATION_SLOT = 123456L;
+    private static final String HASH_A = "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae";
+    private static final String HASH_B = "f35e5616160a30bf3c6e79fa73c576d40205e8fc3ba4e1c6dcf93e6b98e857b4";
 
     private final DocumentMetadataSerialiser serialiser = new DocumentMetadataSerialiser(FIXED_CLOCK);
 
@@ -49,8 +52,8 @@ class DocumentMetadataSerialiserTest {
                 "c".repeat(24),
                 "Y2lwaGVydGV4dA==",
                 List.of(
-                        new DocumentPublishCommand.PublishSlot("d".repeat(64), "e".repeat(96)),
-                        new DocumentPublishCommand.PublishSlot("f".repeat(64), "0".repeat(96))),
+                        new DocumentPublishCommand.PublishSlot("d".repeat(64), "e".repeat(96), HASH_A),
+                        new DocumentPublishCommand.PublishSlot("f".repeat(64), "0".repeat(96), HASH_B)),
                 null);
     }
 
@@ -79,10 +82,40 @@ class DocumentMetadataSerialiserTest {
         assertThat(data.get("envelope_version")).isEqualTo(BigInteger.valueOf(1));
         assertThat(data.get("slot_count")).isEqualTo(BigInteger.valueOf(2));
 
-        // nothing else may be present in the data section (spec B5 #3 — no PII-capable field can sneak in)
+        // nothing else may be present in the data section — recipient_key_hashes is the ONE identifier
+        // this format publishes, and any further addition must be a deliberate decision, not a leak.
         Set<String> dataKeys = ((List<?>) data.keys()).stream().map(Object::toString).collect(Collectors.toSet());
         assertThat(dataKeys).containsExactlyInAnyOrder(
-                "id", "ipfs_cid", "content_hash", "plaintext_hash", "envelope_version", "slot_count");
+                "id", "ipfs_cid", "content_hash", "plaintext_hash", "envelope_version", "slot_count",
+                "recipient_key_hashes");
+    }
+
+    /**
+     * Order is load-bearing: recipient_key_hashes[i] must line up with slots[i] in the IPFS envelope,
+     * which is what lets a recipient address their own slot directly instead of trial-decrypting every
+     * one. Sorting or deduplicating the list would break that silently.
+     */
+    @Test
+    void emitsRecipientKeyHashesInSlotOrder() {
+        MetadataMap metadataMap = serialiser.serialiseToMetadataMap(fixture(), "bafy-cid-1", CREATION_SLOT,
+                "org-1", "Acme", "TAX-1", "ISO_4217:CHF", "CH");
+
+        MetadataMap data = (MetadataMap) metadataMap.get("data");
+        MetadataList hashes = (MetadataList) data.get("recipient_key_hashes");
+
+        assertThat(hashes.size()).isEqualTo(2);
+        assertThat(hashes.getValueAt(0)).isEqualTo(HASH_A);
+        assertThat(hashes.getValueAt(1)).isEqualTo(HASH_B);
+        assertThat(data.get("slot_count")).isEqualTo(BigInteger.valueOf(hashes.size()));
+    }
+
+    /**
+     * The version bump is what tells a reader whether absent recipient_key_hashes means "this producer
+     * predates the field" or "this manifest is malformed".
+     */
+    @Test
+    void declaresMetadataVersion11() {
+        assertThat(DocumentMetadataSerialiser.VERSION).isEqualTo("1.1");
     }
 
     /**

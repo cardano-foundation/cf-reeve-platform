@@ -13,5 +13,10 @@ class NoPiiOnDocumentPublishPathArchTest {
 
     @ArchTest
     static final ArchRule publishPathCarriesNoPii = ArchRuleDefinition.noFields()
-            .should().haveNameMatching("(?i).*(e?mail|recipient|account|label|file_?name|description|display).*");
+            .that().doNotHaveName("recipientKeyHash")
+            .should().haveNameMatching("(?i).*(e?mail|recipient|account|label|file_?name|description|display).*")
+            .because("recipientKeyHash is a sha256 of a PUBLIC key, deliberately published on-chain so the "
+                    + "Indexer can filter by recipient (docs/onChainFormat.md). It is exempted by name rather "
+                    + "than renamed, so the decision stays visible in review; every other matching field name "
+                    + "is still forbidden.");
 }

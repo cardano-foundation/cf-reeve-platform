@@ -27,8 +27,12 @@ class DocumentIpfsSerialiserTest {
                 "c".repeat(24),
                 "Y2lwaGVydGV4dA==",
                 List.of(
-                        new DocumentPublishCommand.PublishSlot("d".repeat(64), "e".repeat(96)),
-                        new DocumentPublishCommand.PublishSlot("f".repeat(64), "0".repeat(96))),
+                        // The recipient key hashes are deliberately populated here: the envelope
+                        // assertions below prove the serialiser drops them, so the hash reaches L1 only.
+                        new DocumentPublishCommand.PublishSlot("d".repeat(64), "e".repeat(96),
+                                "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae"),
+                        new DocumentPublishCommand.PublishSlot("f".repeat(64), "0".repeat(96),
+                                "f35e5616160a30bf3c6e79fa73c576d40205e8fc3ba4e1c6dcf93e6b98e857b4")),
                 null);
     }
 

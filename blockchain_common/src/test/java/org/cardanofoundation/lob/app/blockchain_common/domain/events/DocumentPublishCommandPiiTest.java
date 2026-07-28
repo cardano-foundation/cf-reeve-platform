@@ -22,7 +22,16 @@ class DocumentPublishCommandPiiTest {
                     "PII-looking field on the publish path: " + component.getName());
         }
         for (var component : DocumentPublishCommand.PublishSlot.class.getRecordComponents()) {
-            assertFalse(FORBIDDEN.matcher(component.getName()).matches());
+            if (component.getName().equals("recipientKeyHash")) {
+                // sha256 of a PUBLIC key - publishable on-chain data, like organisationId above, and the
+                // anchor the Indexer's recipient filter matches on. Exempted by name on purpose:
+                // renaming the field to dodge the pattern would hide a real format decision behind a
+                // euphemism. The guard still rejects recipientEmail, recipientLabel, recipientRef and
+                // every other variant.
+                continue;
+            }
+            assertFalse(FORBIDDEN.matcher(component.getName()).matches(),
+                    "PII-looking field on the publish path: " + component.getName());
         }
     }
 }

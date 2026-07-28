@@ -47,7 +47,7 @@ public class DocumentConverter {
             return List.of();
         }
         return slots.stream()
-                .map(slot -> new DocumentEntity.Slot(slot.ephemeralPub(), slot.wrappedDek()))
+                .map(slot -> new DocumentEntity.Slot(slot.ephemeralPub(), slot.wrappedDek(), slot.recipientKeyHash()))
                 .collect(Collectors.toList());
     }
 
@@ -77,7 +77,8 @@ public class DocumentConverter {
             return List.of();
         }
         return slots.stream()
-                .map(slot -> new DocumentPublishCommand.PublishSlot(slot.getEphemeralPub(), slot.getWrappedDek()))
+                .map(slot -> new DocumentPublishCommand.PublishSlot(slot.getEphemeralPub(), slot.getWrappedDek(),
+                        slot.getRecipientKeyHash()))
                 .collect(Collectors.toList());
     }
 

@@ -139,7 +139,7 @@ class DocumentAttestationTargetProviderTest {
         document.setCiphertext("not-really-encrypted".getBytes(StandardCharsets.UTF_8));
         document.setPayloadNonce("c".repeat(24));
         document.setCreatedByAccount("user-1");
-        document.setSlots(List.of(new DocumentSlot("k-s", "recipient-ref", "d".repeat(64), "e".repeat(96))));
+        document.setSlots(List.of(new DocumentSlot("k-s", "recipient-ref", "d".repeat(64), "e".repeat(96), "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae")));
         return document;
     }
 

@@ -172,6 +172,15 @@ public class DocumentEntity extends CommonDateOnlyLockableEntity implements Pers
         @Column(name = "wrapped_dek", nullable = false)
         private String wrappedDek;
 
+        /**
+         * sha256 of the recipient's X25519 public key, lowercase hex — the one identifier this class
+         * deliberately does carry, because the 1447 manifest publishes it (docs/onChainFormat.md).
+         * Derived in document_vault from the authorised directory key and frozen there; the publisher
+         * only relays it.
+         */
+        @Column(name = "recipient_key_hash", nullable = false)
+        private String recipientKeyHash;
+
     }
 
 }

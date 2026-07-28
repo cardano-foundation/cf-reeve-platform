@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "title": "Document Schema",
-  "description": "Validates the structure (shape) of a label-1447 metadata transaction of type DOCUMENT. The metadata/org sections mirror API3MetadataSerialiser byte-for-byte (see DocumentMetadataSerialiser), so their coverage matches api3_lob_blockchain_transaction_metadata_schema.json. The data section is the PII-free manifest body (spec B5 #3): exactly the six fields below, nothing else.",
+  "description": "Validates the structure (shape) of a label-1447 metadata transaction of type DOCUMENT. The metadata/org sections mirror API3MetadataSerialiser byte-for-byte (see DocumentMetadataSerialiser), so their coverage matches api3_lob_blockchain_transaction_metadata_schema.json. The data section is the manifest body: exactly the seven fields below, nothing else.",
   "definitions": {
     "countryCodePattern": {
       "type": "string",
@@ -24,6 +24,14 @@
     "ipfsCidPattern": {
       "type": "string",
       "pattern": "^(bafy[0-9a-z]+|baf[0-9a-z]+|Qm[1-9A-HJ-NP-Za-km-z]{44})$"
+    },
+    "recipientKeyHashArray": {
+      "description": "sha256 of each recipient's X25519 public key, lowercase hex. Index-aligned with the IPFS envelope's slots array, so its length must equal slot_count (enforced programmatically, not here).",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/hexHash64Pattern"
+      }
     }
   },
   "properties": {
@@ -70,7 +78,7 @@
     },
     "data": {
       "type": "object",
-      "description": "PII-free 1447 DOCUMENT manifest body (spec B5 #3): exactly these six fields, nothing else.",
+      "description": "1447 DOCUMENT manifest body: exactly these seven fields, nothing else. Six are PII-free; recipient_key_hashes deliberately identifies recipients by a hash of their public key (see docs/onChainFormat.md).",
       "properties": {
         "id": {
           "type": "string",
@@ -92,9 +100,12 @@
         "slot_count": {
           "type": "integer",
           "minimum": 1
+        },
+        "recipient_key_hashes": {
+          "$ref": "#/definitions/recipientKeyHashArray"
         }
       },
-      "required": ["id", "ipfs_cid", "content_hash", "plaintext_hash", "envelope_version", "slot_count"],
+      "required": ["id", "ipfs_cid", "content_hash", "plaintext_hash", "envelope_version", "slot_count", "recipient_key_hashes"],
       "additionalProperties": false
     }
   },
