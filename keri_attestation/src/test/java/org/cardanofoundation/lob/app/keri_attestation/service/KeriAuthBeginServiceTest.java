@@ -91,7 +91,7 @@ class KeriAuthBeginServiceTest {
     void setUp() {
         lenient().when(keriClient.client()).thenReturn(client);
         lenient().when(client.credentials()).thenReturn(credentials);
-        // Present by default (F9 fix) — the specific "submitter unavailable" tests override this to null.
+        // Present by default — the specific "submitter unavailable" tests override this to null.
         lenient().when(submitterProvider.getIfAvailable()).thenReturn(submitter);
         // Own-chain path validates the fetched chain before publishing (reusable-attestation design
         // rev) — accepted by default; the specific rejection test below overrides this to Left.
@@ -328,7 +328,7 @@ class KeriAuthBeginServiceTest {
 
     @Test
     void submitAuthBeginExternalWithNoSubmitterAvailableFailsWithAuthBeginUnverified() {
-        // F9 fix: module enabled without blockchain_publisher -> no CardanoMetadataTxSubmitter bean.
+        // module enabled without blockchain_publisher -> no CardanoMetadataTxSubmitter bean.
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.CREDENTIAL_RECEIVED,
                 CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremony()));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
@@ -505,7 +505,7 @@ class KeriAuthBeginServiceTest {
 
     @Test
     void submitAuthBeginOwnSubmissionWithNoSubmitterAvailableFailsWithAuthBeginSubmissionUnavailable() {
-        // F9 fix: module enabled without blockchain_publisher -> no CardanoMetadataTxSubmitter bean. The
+        // module enabled without blockchain_publisher -> no CardanoMetadataTxSubmitter bean. The
         // credential-presence guard already passed, so this is specifically about the submitter itself.
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.CREDENTIAL_RECEIVED,
                 CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremony()));

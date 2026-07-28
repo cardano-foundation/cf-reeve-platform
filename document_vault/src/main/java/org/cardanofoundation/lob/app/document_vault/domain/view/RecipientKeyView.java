@@ -7,9 +7,9 @@ import org.cardanofoundation.lob.app.document_vault.domain.enums.RecipientKind;
 /**
  * Somebody you can encrypt to: either a colleague with a Reeve account, or an addressbook contact. One
  * record for both, because the picker shows one list. E-mail is org-internal contact data — it never
- * reaches IPFS or L1 (spec B5 #3).
+ * reaches IPFS or L1.
  *
- * `assurance` MUST be rendered in the recipient picker (blueprint I2 as amended): encrypting to a
+ * {@code assurance} must be rendered in the recipient picker: encrypting to a
  * PORTABLE key is a weaker promise than encrypting to a PASSKEY key, and null is weaker still — it means
  * nobody ever claimed anything. `homeOrganisationId` should sit beside it. Trust here is the sender's
  * out-of-band judgement, and these are what they judge with.

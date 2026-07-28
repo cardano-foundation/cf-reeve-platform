@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdatedEvent;
 
 /**
- * Codex adversarial-review finding 2 of round 2 — the reverse direction of the durable publish
+ * the reverse direction of the durable publish
  * handoff pinned by {@code BlockchainPublisherEventHandlerDocumentPublishListenerPinTest}: why
  * reflection, not a live two-transaction race — a true integration test for "does the listener
  * really wait for commit" would need a real transactional caller (see

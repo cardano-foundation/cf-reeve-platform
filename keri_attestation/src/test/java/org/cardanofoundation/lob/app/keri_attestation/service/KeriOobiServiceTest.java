@@ -97,7 +97,7 @@ class KeriOobiServiceTest {
         return link;
     }
 
-    // --- validation runs before any client call (design §4.3) ---
+    // --- validation runs before any client call ---
 
     @Test
     void nonHttpsUrlIsOobiInvalidAndNeverTouchesTheClient() {
@@ -186,7 +186,7 @@ class KeriOobiServiceTest {
         assertEquals(1, saved.getBindingVersion());
         assertEquals(AID, saved.getAid());
         assertEquals(VALID_OOBI, saved.getOobiUrl());
-        // R2 fix: RelinkCompletedEvent is only for a genuine relink (a version bump on an EXISTING
+        // RelinkCompletedEvent is only for a genuine relink (a version bump on an EXISTING
         // link) - a first-ever link create is not one.
         verifyNoInteractions(eventPublisher);
     }
@@ -207,7 +207,7 @@ class KeriOobiServiceTest {
         assertEquals(VALID_OOBI, existing.getOobiUrl());
         verify(identityLinkRepository).save(existing);
         verifyNoInteractions(ceremonyRepository);
-        // R2 fix: a same-AID refresh never bumps bindingVersion, so it is not a relink either.
+        // a same-AID refresh never bumps bindingVersion, so it is not a relink either.
         verifyNoInteractions(eventPublisher);
     }
 
@@ -227,10 +227,10 @@ class KeriOobiServiceTest {
         assertEquals("EOLDAID000", existing.getAid());
         verify(identityLinkRepository, never()).save(any());
         verifyNoInteractions(ceremonyRepository);
-        // item 4 round-2 fix: rejected from the plain (unlocked) read alone -- the link row is never
+        // Rejected from the plain (unlocked) read alone -- the link row is never
         // even locked for a call that's going to be rejected anyway.
         verify(identityLinkRepository, never()).findByUserIdForUpdate(any());
-        // R2 fix: rejected, no write at all -> no RelinkCompletedEvent.
+        // rejected, no write at all -> no RelinkCompletedEvent.
         verifyNoInteractions(eventPublisher);
     }
 
@@ -277,14 +277,14 @@ class KeriOobiServiceTest {
         assertEquals(KeriAttestationProblems.IDENTITY_RELINKED, openCeremony.getErrorTitle());
         verify(ceremonyRepository).save(openCeremony);
 
-        // item 4 round-2 fix (lock-order inversion): the ceremony row lock (findByIdForUpdate, inside
+        // Lock-order inversion: the ceremony row lock (findByIdForUpdate, inside
         // invalidateOpenCeremonies) must be taken and released BEFORE the link row is ever locked
         // (findByUserIdForUpdate) -- the same order completion paths use (ceremony, then link).
         InOrder lockOrder = inOrder(ceremonyRepository, identityLinkRepository);
         lockOrder.verify(ceremonyRepository).findByIdForUpdate("cer-1");
         lockOrder.verify(identityLinkRepository).findByUserIdForUpdate(USER);
 
-        // R2 fix: a genuine relink publishes RelinkCompletedEvent with the NEW bindingVersion, closing
+        // a genuine relink publishes RelinkCompletedEvent with the NEW bindingVersion, closing
         // the phantom-insert window between the in-transaction sweep above and this write actually
         // landing - see RelinkInvalidationSweepHandler for the AFTER_COMMIT sweep this event drives.
         ArgumentCaptor<RelinkCompletedEvent> eventCaptor = ArgumentCaptor.forClass(RelinkCompletedEvent.class);
@@ -313,7 +313,7 @@ class KeriOobiServiceTest {
         assertEquals(OTHER_AID, lockedView.getAid());
         verify(identityLinkRepository, never()).save(any());
         verifyNoInteractions(ceremonyRepository);
-        // R2 fix: rejected, no write at all -> no RelinkCompletedEvent.
+        // rejected, no write at all -> no RelinkCompletedEvent.
         verifyNoInteractions(eventPublisher);
     }
 

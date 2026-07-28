@@ -5,22 +5,18 @@ import java.util.List;
 import org.jmolecules.event.annotation.DomainEvent;
 
 /**
- * Publish request handed to blockchain_publisher. PII-FREE BY DESIGN (spec B5 #3): the IPFS document
- * and L1 metadata are generated exclusively from these fields, so nothing here may ever carry e-mails,
- * recipient labels, key ids, file names, descriptions, or account ids. Enforced by tests in Task 12.
+ * Publish request handed to blockchain_publisher.
  *
- * <p>{@link PublishSlot#recipientKeyHash} is the single deliberate exception, and it is exempted BY NAME
- * in {@code DocumentPublishCommandPiiTest} and both {@code NoPiiOnDocumentPublishPathArchTest}s rather
- * than renamed to slip past their pattern. It is a SHA-256 digest of a public key — publishable in the
- * same sense {@code organisationId} is — and it exists so the public Indexer can filter documents by
- * recipient. It DOES make a published document permanently linkable to its recipients; see
- * docs/onChainFormat.md "Recipient key hashes".
+ * <p>PII-free by design: the IPFS document and the L1 metadata are generated exclusively from these
+ * fields, so nothing here may carry e-mails, recipient labels, key ids, file names, descriptions or
+ * account ids. {@link PublishSlot#recipientKeyHash} is the single deliberate exception — a SHA-256
+ * digest of a public key, published so the Indexer can filter documents by recipient. It makes a
+ * published document permanently linkable to its recipients; see docs/onChainFormat.md
+ * "Recipient key hashes".
  *
- * @param attestationCeremonyId The KERI wallet-attestation ceremony consumed by an attested publish
- *                              (design §5.1, Task 14) — null for a plain publish, which remains the
- *                              default. Carried into blockchain_publisher's dispatch record so the
- *                              binding survives a retry-sweep re-emission (same static factory,
- *                              {@code VaultDocumentService#toPublishCommand}).
+ * @param attestationCeremonyId KERI wallet-attestation ceremony consumed by an attested publish, or
+ *                              null for a plain publish. Carried on the command so the binding
+ *                              survives a retry-sweep re-emission.
  */
 @DomainEvent
 public record DocumentPublishCommand(String organisationId,
@@ -34,7 +30,7 @@ public record DocumentPublishCommand(String organisationId,
                                      String attestationCeremonyId,
                                      ConsumedAttestationRef attestation) {
 
-    /** Convenience for the overwhelmingly common plain (unattested) publish. */
+    /** Convenience factory for a plain (unattested) publish. */
     public static DocumentPublishCommand plain(String organisationId, String documentId, int envelopeVersion,
                                                String contentHash, String plaintextHash, String payloadNonce,
                                                String ciphertextBase64, List<PublishSlot> slots) {
@@ -43,16 +39,13 @@ public record DocumentPublishCommand(String organisationId,
     }
 
     /**
-     * The consumed wallet attestation, carried ON the command rather than looked up by the publisher.
-     *
-     * <p>This is what lets {@code blockchain_publisher} drop its dependency on {@code keri_attestation}
-     * and {@code document_vault} entirely. It used to reach back into both at dispatch time via
-     * {@code DocumentAttestationLookup} — which cannot work once the two modules run in different
-     * processes, as the split deployment runs them.
+     * The consumed wallet attestation, carried on the command rather than looked up by the publisher,
+     * so the publisher needs no access to {@code keri_attestation} or {@code document_vault} — they
+     * may run in a different process.
      *
      * @param aid         the wallet AID that attested.
-     * @param payloadSaid the SAID of the saidified remotesign payload the wallet's KEL actually
-     *                    anchors. This — NOT the commitment digest — becomes the on-chain {@code 170.d}.
+     * @param payloadSaid SAID of the saidified remotesign payload the wallet's KEL anchors. This, not
+     *                    the commitment digest, becomes the on-chain {@code 170.d}.
      * @param kelSequence KEL coordinates of the anchoring event.
      */
     public record ConsumedAttestationRef(String aid, String payloadSaid, String kelSequence) {

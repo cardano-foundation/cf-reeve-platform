@@ -31,17 +31,12 @@ import org.cardanofoundation.signify.core.States;
  * boot fallback, get-or-create the identifier, pick witnesses from the agent's own config — but is
  * reimplemented locally (no import from blockchain_publisher).
  *
- * <p><b>F1 fix:</b> the constructed {@link SignifyClient} is never itself exposed as a Spring bean —
- * legacy {@code blockchain_publisher} (its {@code KeriConfig}/{@code KeriService}/
- * {@code PublisherHealth}) injects an <em>unqualified</em> {@code SignifyClient}, and now depends on
- * this module; a second unqualified {@code SignifyClient} bean here would make an application context
- * wiring both modules together fail at startup with {@code NoUniqueBeanDefinitionException}, and this
- * module may not touch the legacy files to add a qualifier there. Instead, {@link #keriAttestationClient}
- * is the ONLY bean this class (or this module) exposes for KERIA access — a
- * {@link KeriAttestationClient} holder wrapping the connected {@code SignifyClient}. Every consumer in
- * this module injects {@code KeriAttestationClient} and calls {@link KeriAttestationClient#client()};
- * there is no by-type ambiguity for Spring to resolve, so no {@code @Qualifier} plumbing is needed
- * anywhere in this module.
+ * <p>The constructed {@link SignifyClient} is never exposed as a bean of its own.
+ * {@code blockchain_publisher} injects an unqualified {@code SignifyClient} and depends on this
+ * module, so a second unqualified bean here would fail a context wiring both together with
+ * {@code NoUniqueBeanDefinitionException}. {@link #keriAttestationClient} is therefore the only bean
+ * this module exposes for KERIA access: a {@link KeriAttestationClient} holder wrapping the connected
+ * client, which every consumer here injects instead.
  *
  * <p>Gated on {@code lob.keri-attestation.keria.url} being configured — deliberately a narrower
  * condition than the module's own {@code lob.keri-attestation.enabled} flag, which some
@@ -69,7 +64,7 @@ public class SignifyClientConfig {
 
     /**
      * The ONLY bean this class (or this module) exposes for KERIA access — see this class's javadoc
-     * (F1 fix) for why the underlying {@link SignifyClient} is never itself a bean.
+     * for why the underlying {@link SignifyClient} is never itself a bean.
      */
     @Bean
     public KeriAttestationClient keriAttestationClient(KeriAttestationProperties properties) throws Exception {

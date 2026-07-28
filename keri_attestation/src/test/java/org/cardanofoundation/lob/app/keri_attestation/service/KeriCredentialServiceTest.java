@@ -92,7 +92,7 @@ class KeriCredentialServiceTest {
     // Mirrors KeriCredentialService's constants: both the "/exn/"-prefixed and bare route forms, since
     // KERIA surfaces the notification route in either form.
     private static final List<String> GRANT_ROUTES = List.of("/exn/ipex/grant", "/ipex/grant");
-    // Dual-path presentation (design rev, live Veridian evidence): the initial post-apply wait (and the
+    // Dual-path presentation: the initial post-apply wait (and the
     // retry pre-check) awaits offer AND grant routes together, since a real Veridian build was observed
     // to send the grant directly with no offer at all.
     private static final List<String> OFFER_OR_GRANT_ROUTES =
@@ -244,7 +244,7 @@ class KeriCredentialServiceTest {
                 null, null);
     }
 
-    /** Stubs {@code ceremonyService.updateWaitingStepData} (F2 fix) to apply the mutator to
+    /** Stubs {@code ceremonyService.updateWaitingStepData} to apply the mutator to
      *  {@code ceremony} — the same object identity {@code presentCredential}'s caller holds — and report
      *  success, mirroring how {@code CeremonyService}'s real guarded update would behave when the row
      *  lock still matches. */
@@ -704,7 +704,7 @@ class KeriCredentialServiceTest {
 
         verify(ipex).submitApply(eq(AGENT_NAME), any(), eq(List.of("sig1")), eq(List.of(LINKED_AID)));
         // The admit's OWN atc ("directAdmitAtc"), never an agree's -- there is no agree in this branch
-        // at all to borrow one from (verified finding -- see the report for the evidence trail).
+        // at all to borrow one from.
         verify(ipex).submitAdmit(eq(AGENT_NAME), any(), eq(List.of("sig3")), eq("directAdmitAtc"),
                 eq(List.of(LINKED_AID)));
         verify(ipex, never()).agree(any());

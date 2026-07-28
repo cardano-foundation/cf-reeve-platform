@@ -9,11 +9,10 @@ import io.vavr.control.Either;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.AttestationDigest;
 
 /**
- * Port implemented once per attestable target type (design §3.3): {@code DOCUMENT} is implemented in
- * {@code blockchain_publisher} (design §5.2); a future report-path provider adds its own
+ * Port implemented once per attestable target type: {@code DOCUMENT} is implemented in
+ * {@code blockchain_publisher}; a future report-path provider adds its own
  * implementation without touching {@code keri_attestation}. {@link AttestationTargetProviderRegistry}
- * collects every bean implementing this interface, keyed by {@link #targetType()}. Copied verbatim
- * from spec §3.3 — this exact shape is the reuse seam later tasks implement against.
+ * collects every bean implementing this interface, keyed by {@link #targetType()}.
  */
 public interface AttestationTargetProvider {
 

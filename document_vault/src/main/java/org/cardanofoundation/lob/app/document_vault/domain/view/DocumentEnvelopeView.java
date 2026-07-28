@@ -8,8 +8,7 @@ import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyAssurance;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentStatus;
 
 /**
- * Document detail (blueprint D2) — the ONLY view allowed to carry ciphertext (spec B5 #2;
- * enforced by ArchUnit in Task 13).
+ * Document detail — the only view allowed to carry ciphertext, which an ArchUnit test enforces.
  *
  * Access is two-tier:
  *  - ANY member of the document's organisation gets the metadata and {@code recipients} (who can

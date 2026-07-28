@@ -283,7 +283,7 @@ class VaultRepositoryIntegrationTest {
         assertEquals(1, documentRepository.search("org1", "sender", "SENT", null, null, Pageable.unpaged()).getTotalElements());
         assertEquals(1, documentRepository.search("org1", "recipient", "RECEIVED", null, null, Pageable.unpaged()).getTotalElements());
         // sender's key k1 sits in BOTH docs' slots (doc1 self-slot + doc2 shared-back) -> 2;
-        // self-slots deliberately count as RECEIVED (sender self-access, blueprint §5)
+        // self-slots deliberately count as RECEIVED (sender self-access)
         assertEquals(2, documentRepository.search("org1", "sender", "RECEIVED", null, null, Pageable.unpaged()).getTotalElements());
         assertEquals(0, documentRepository.search("org1", "stranger", "RECEIVED", null, null, Pageable.unpaged()).getTotalElements());
         // status + q filters
@@ -292,7 +292,7 @@ class VaultRepositoryIntegrationTest {
     }
 
     /**
-     * Controller-mandated fix (Task 3 review): pins the JPQL {@code escape '\'} contract at the
+     * Controller-mandated fix: pins the JPQL {@code escape '\'} contract at the
      * real-database level. {@code q} arrives here PRE-ESCAPED (the service layer's job) — this test
      * simulates that by passing an already-escaped literal directly to the repository.
      */
@@ -387,7 +387,7 @@ class VaultRepositoryIntegrationTest {
         LocalDateTime old = LocalDateTime.now().minusDays(40);
         jdbcTemplate.update("update document_vault_document set created_at = ? where document_id in (?, ?)",
                 old, "doc-old-draft", "doc-old-published");
-        // established pattern (Task 8 review): entities created & purged within one @Transactional
+        // established pattern: entities created & purged within one @Transactional
         // method keep Persistable.isNew() true until @PostLoad fires on a fresh load — clear the
         // first-level cache so the bulk delete (which bypasses the persistence context entirely)
         // isn't followed by stale managed entities lingering from the saves above.
@@ -411,7 +411,7 @@ class VaultRepositoryIntegrationTest {
     }
 
     /**
-     * Codex adversarial-review finding 1: pins {@code findByStatusAndLedgerDispatchStatus} at the
+     * pins {@code findByStatusAndLedgerDispatchStatus} at the
      * real-database level — it must find ONLY documents stuck in PUBLISHED/MARK_DISPATCH (the durable
      * publish handoff's recovery sweep target), not a PUBLISHED document that has already progressed
      * past MARK_DISPATCH, and not a DRAFT document that happens to carry MARK_DISPATCH.

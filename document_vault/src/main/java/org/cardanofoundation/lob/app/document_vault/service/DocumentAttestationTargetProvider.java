@@ -34,25 +34,13 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 /**
  * The {@code DOCUMENT} implementation of {@link AttestationTargetProvider}.
  *
- * <h2>Why this lives in document_vault</h2>
+ * <p>It lives in document_vault because the ceremony endpoint runs in the user-facing tier, which may
+ * be deployed without blockchain_publisher — and without an {@code IpfsPublisher} or a chain reader.
+ * That is possible because the wallet attests a {@link DocumentAttestationCommitment} rather than the
+ * finished manifest, and every field of it is computable from the vault's own row with no network
+ * call. The publisher pins the envelope, reads the chain tip and assembles the manifest afterwards.
  *
- * It used to live in {@code blockchain_publisher}. In the split deployment the ceremony endpoint runs
- * on the {@code api} service, which sets {@code LOB_BLOCKCHAIN_PUBLISHER_ENABLED=false} — so that
- * module's package is never component-scanned there, the registry received an empty provider list, and
- * every ceremony failed with {@code 422 TARGET_MISMATCH}. Registering the bean from somewhere always
- * scanned would not have been enough: the old implementation also needed an {@code IpfsPublisher} and
- * a {@code BlockchainReaderPublicApiIF}, and that pod has neither.
- *
- * <h2>What changed to make that possible</h2>
- *
- * The wallet now attests a {@link DocumentAttestationCommitment} — org, document, envelope hash,
- * content hashes and recipient key hashes — instead of the finished 1447 manifest. Everything in it is
- * computable from the vault's own row with no network call at all. The publisher pins the envelope,
- * reads the chain tip and assembles the manifest afterwards, in the tier that actually holds those
- * credentials.
- *
- * <p>A side effect worth having: IPFS is no longer written during a ceremony, so an abandoned ceremony
- * no longer leaves pinned content behind — the leak recorded in docs/keri-document-flow.md §9.
+ * <p>Since nothing is pinned during a ceremony, an abandoned ceremony leaves no content behind.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -90,11 +78,9 @@ public class DocumentAttestationTargetProvider implements AttestationTargetProvi
             return Either.right(new AttestationDigest(existing.get().getDigestQb64(), String.valueOf(metadataLabel)));
         }
 
-        // authorize(targetId, userId) has already run synchronously in this same request thread
-        // (keri_attestation's CeremonyService#create and KeriAttestService#attest both call it
-        // immediately before this). This port method carries no userId parameter, so re-derive the same
-        // current user from the same SecurityContextHolder-backed helper loadForAttestation itself uses,
-        // rather than fabricating one.
+        // authorize(targetId, userId) has already run on this request thread. The port method carries
+        // no userId, so re-derive the current user from the same security helper rather than inventing
+        // one.
         String userId = securityHelper.getCurrentUserId();
 
         return vaultDocumentService.loadForAttestation(targetId, userId)
@@ -135,10 +121,10 @@ public class DocumentAttestationTargetProvider implements AttestationTargetProvi
     }
 
     /**
-     * The unique {@code (document_id, ceremony_id)} constraint is the actual source of truth, not the
-     * upstream ceremony-row lock. A {@link DataIntegrityViolationException} means a concurrent call
-     * already committed the freeze this one was about to insert — re-read and return THAT row's digest,
-     * so a caller never sees an exception for a condition this method's contract calls idempotent.
+     * The unique {@code (document_id, ceremony_id)} constraint is the source of truth, not the upstream
+     * ceremony-row lock. A {@link DataIntegrityViolationException} means a concurrent call already
+     * committed this freeze, so the winner's digest is re-read and returned rather than surfacing an
+     * exception for what the contract calls idempotent.
      */
     private Either<ProblemDetail, AttestationDigest> saveFreeze(DocumentAttestationFreezeEntity freeze, String digestQb64) {
         try {

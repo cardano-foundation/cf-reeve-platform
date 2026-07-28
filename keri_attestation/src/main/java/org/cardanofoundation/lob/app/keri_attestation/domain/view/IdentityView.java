@@ -3,7 +3,7 @@ package org.cardanofoundation.lob.app.keri_attestation.domain.view;
 import java.time.Instant;
 
 /**
- * The current platform user's KERI identity-link status (design §4.7/§4.8), assembled from their
+ * The current platform user's KERI identity-link status, assembled from their
  * {@code KeriIdentityLinkEntity} row, if any. {@code linked=false} (every other field {@code null}) is
  * the ordinary answer for a user who has never resolved an OOBI — this is a {@code 200}, not a
  * {@code 404}: the frontend polls this endpoint to decide whether to show the linking flow at all.
@@ -11,7 +11,7 @@ import java.time.Instant;
 public record IdentityView(boolean linked, String aid, IdentityCredentialView credential, AuthBeginView authBegin) {
 
     /**
-     * The validated leaf credential's SAID and schema SAID (design §4.5), set together once a
+     * The validated leaf credential's SAID and schema SAID, set together once a
      * successful IPEX presentation completes. {@code null} while the link has no credential yet.
      */
     public record IdentityCredentialView(String said, String schemaSaid) {

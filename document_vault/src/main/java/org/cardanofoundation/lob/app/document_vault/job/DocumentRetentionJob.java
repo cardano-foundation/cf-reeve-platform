@@ -14,10 +14,9 @@ import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentSt
 import org.cardanofoundation.lob.app.document_vault.repository.VaultDocumentRepository;
 
 /**
- * Blueprint B3 retention policy: hard-deletes DRAFT envelopes older than the configured window.
- * Disabled by default ({@code lob.document_vault.retention-days=0}). Requires the consuming
- * application to enable Spring scheduling ({@code @EnableScheduling}) — without it the job is
- * inert, matching how other module jobs (e.g. funding's EventPublishJob) behave.
+ * Hard-deletes DRAFT envelopes older than the configured window. Disabled by default
+ * ({@code lob.document_vault.retention-days=0}), and inert unless the consuming application enables
+ * Spring scheduling.
  */
 @Component
 @RequiredArgsConstructor
@@ -36,7 +35,7 @@ public class DocumentRetentionJob {
             return;
         }
         LocalDateTime cutoff = LocalDateTime.now().minusDays(retentionDays);
-        // DRAFT only: published documents are anchored on IPFS/L1 and are never purged (spec: published lock)
+        // DRAFT only: published documents are anchored on IPFS and L1 and are never purged.
         long deleted = documentRepository.deleteByStatusAndCreatedAtBefore(VaultDocumentStatus.DRAFT, cutoff);
         if (deleted > 0) {
             log.info("document_vault retention purged {} draft envelopes older than {} days", deleted, retentionDays);

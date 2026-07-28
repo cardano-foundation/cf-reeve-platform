@@ -14,12 +14,12 @@ import org.junit.jupiter.api.Test;
 import org.cardanofoundation.signify.cesr.Saider;
 
 /**
- * Golden-vector coverage for {@link RemotesignRequestFactory} (design §4.4 rev 3): this is the exact
+ * Golden-vector coverage for {@link RemotesignRequestFactory}: this is the exact
  * payload shape a real Veridian wallet is now known to require — a bare, unsaidified {@code {"d":
  * digest}} ("variant A") never produced a wallet notification in live testing. Every assertion here is
  * a direct, independently-reproduced check against {@link Saider#saidify}, not a mock of it — a
  * regression here (wrong field set, wrong insertion order, wrong dummy value, or skipping saidify
- * entirely) is exactly the class of defect design §4.4 rev 3 exists to prevent.
+ * entirely) is exactly the class of defect this pins against.
  */
 class RemotesignRequestFactoryTest {
 
@@ -47,7 +47,7 @@ class RemotesignRequestFactoryTest {
         assertTrue(said instanceof String, "d must be a String SAID");
         String saidStr = (String) said;
         assertTrue(saidStr.startsWith("E"), "Blake3-256 CESR qb64 SAIDs start with 'E', was: " + saidStr);
-        // The whole point of design §4.4 rev 3: the wallet anchors the SAID of the WHOLE payload
+        // The wallet anchors the SAID of the WHOLE payload
         // (i, d, metadataLabel, metadataDigest), not the caller-chosen metadataDigest passed straight
         // through unsaidified (that was the "variant A" shape a real wallet silently dropped).
         assertNotEquals(METADATA_DIGEST, saidStr);
@@ -92,7 +92,7 @@ class RemotesignRequestFactoryTest {
 
     /**
      * Independently reproduces the factory's SAID by calling {@link Saider#saidify} directly against a
-     * hand-built payload of the exact shape design §4.4 rev 3 specifies ({@code i} present before
+     * hand-built payload of the exact expected shape ({@code i} present before
      * saidifying). If this ever disagrees with the factory's own output, the factory has silently
      * drifted from the documented contract — this is the "golden vector" the class javadoc/design
      * doc's payload shape claims are checked against.

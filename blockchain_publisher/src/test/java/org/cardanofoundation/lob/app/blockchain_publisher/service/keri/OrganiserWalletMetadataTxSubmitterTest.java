@@ -40,13 +40,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * {@link OrganiserWalletMetadataTxSubmitter#submitTransaction(Metadata)} is deliberately not
- * exercised here: it is the same organiser-wallet QuickTx idiom already covered by
- * {@code DocumentL1TransactionCreator#serialiseTransaction} (build + sign) and by the
- * {@code docs/keri} reference scripts (build + sign + submit), so its correctness rests on parity
- * with those, with end-to-end submission verified in milestone 4. This test stubs that seam and
- * asserts only what {@code OrganiserWalletMetadataTxSubmitter} itself is responsible for: label
- * assembly, tx-hash pass-through, error mapping, confirmations arithmetic, and CIP-170 metadata
+ * {@link OrganiserWalletMetadataTxSubmitter#submitTransaction(Metadata)} is not exercised here: it
+ * is the same organiser-wallet QuickTx idiom already covered by
+ * {@code DocumentL1TransactionCreator#serialiseTransaction}, and submitting it needs a real network.
+ * This test stubs that seam and asserts only what the submitter itself is responsible for: label
+ * assembly, tx-hash pass-through, error mapping, confirmations arithmetic and CIP-170 metadata
  * extraction.
  */
 class OrganiserWalletMetadataTxSubmitterTest {

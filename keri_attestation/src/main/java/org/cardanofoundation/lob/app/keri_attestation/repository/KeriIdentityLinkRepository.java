@@ -14,7 +14,7 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentity
 public interface KeriIdentityLinkRepository extends JpaRepository<KeriIdentityLinkEntity, String> {
 
     /**
-     * Row-level {@code SELECT ... FOR UPDATE} on a user's identity link (F3 fix, design §4.7).
+     * Row-level {@code SELECT ... FOR UPDATE} on a user's identity link.
      * {@code KeriOobiService}'s relink path and the two async {@code persist*IfIdentityStillCurrent}
      * mutators ({@code KeriCredentialService}, {@code KeriAuthBeginService}) all read-then-write this
      * row — an async credential/auth-begin write racing an unlocked relink read could otherwise land in

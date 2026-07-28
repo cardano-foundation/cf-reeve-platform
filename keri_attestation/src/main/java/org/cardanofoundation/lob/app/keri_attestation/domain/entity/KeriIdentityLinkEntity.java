@@ -23,8 +23,8 @@ import org.springframework.data.domain.Persistable;
 import org.hibernate.annotations.DynamicUpdate;
 
 /**
- * One row per platform user (Keycloak subject, design §4.1). {@code bindingVersion} is incremented
- * on every relink (§4.7) so open ceremonies created under a stale binding can be invalidated. All
+ * One row per platform user, keyed by Keycloak subject. {@code bindingVersion} is incremented on
+ * every relink so open ceremonies created under a stale binding can be invalidated. All
  * columns beyond the key/version pair are set progressively as the user completes the one-time
  * identity-level steps (OOBI resolve, credential presentation, AUTH_BEGIN) and stay {@code null}
  * until then.
@@ -43,7 +43,7 @@ public class KeriIdentityLinkEntity implements Persistable<String> {
     @Column(name = "user_id", nullable = false)
     private String userId;
 
-    /** Incremented on every relink to a different AID (§4.7); a ceremony carries the version it was
+    /** Incremented on every relink to a different AID; a ceremony carries the version it was
      *  created under so a relink can invalidate ceremonies still open under the old identity. */
     @Column(name = "binding_version", nullable = false)
     private int bindingVersion;
@@ -53,7 +53,7 @@ public class KeriIdentityLinkEntity implements Persistable<String> {
     @Column(name = "aid")
     private String aid;
 
-    /** The wallet OOBI URL as pasted/resolved — kept for audit and future verifier discovery (§11). */
+    /** The wallet OOBI URL as pasted/resolved — kept for audit and future verifier discovery. */
     @Nullable
     @Column(name = "oobi_url", length = 2048)
     private String oobiUrl;
@@ -63,7 +63,7 @@ public class KeriIdentityLinkEntity implements Persistable<String> {
     @Column(name = "credential_said")
     private String credentialSaid;
 
-    /** Schema SAID of the validated leaf credential — identifies the credential type on-chain (§4.5). */
+    /** Schema SAID of the validated leaf credential — identifies the credential type on-chain. */
     @Nullable
     @Column(name = "credential_schema_said")
     private String credentialSchemaSaid;

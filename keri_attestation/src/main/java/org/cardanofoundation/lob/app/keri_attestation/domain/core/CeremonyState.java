@@ -1,7 +1,7 @@
 package org.cardanofoundation.lob.app.keri_attestation.domain.core;
 
 /**
- * A ceremony's progress through the KERI wallet-attestation flow (design §4.2). Terminal states are
+ * A ceremony's progress through the KERI wallet-attestation flow. Terminal states are
  * {@link #CONSUMED} (the happy path: bound into a publish transaction), {@link #FAILED} (retryable,
  * carries {@code errorTitle}/{@code errorDetail}) and {@link #EXPIRED} (TTL sweep or lazy check).
  *

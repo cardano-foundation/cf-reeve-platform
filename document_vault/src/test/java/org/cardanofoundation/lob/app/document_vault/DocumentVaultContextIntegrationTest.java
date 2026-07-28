@@ -31,9 +31,9 @@ public class DocumentVaultContextIntegrationTest {
     @EnableAutoConfiguration
     @EnableJpaRepositories("org.cardanofoundation.lob")
     @EntityScan("org.cardanofoundation.lob")
-    // Task 14: document_vault now depends on keri_attestation (compile-time, for the
+    // document_vault now depends on keri_attestation (compile-time, for the
     // AttestationConsumptionApi port) but must keep working with that module fully "disabled" (design
-    // §3.4) - this test context never sets lob.keri-attestation.enabled, so keri_attestation's own
+    //) - this test context never sets lob.keri-attestation.enabled, so keri_attestation's own
     // KeriAttestationModuleConfig stays inert (its @ConditionalOnProperty gate never opens). Excluding
     // the package here too keeps this broad, test-only scan from reaching directly into
     // keri_attestation's plain (unconditional) @Component classes (e.g. CeremonyCleanupJob) the way a

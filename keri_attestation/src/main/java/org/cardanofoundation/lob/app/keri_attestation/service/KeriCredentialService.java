@@ -38,12 +38,12 @@ import org.cardanofoundation.signify.core.States.HabState;
 import org.cardanofoundation.signify.core.States.State;
 
 /**
- * Drives IPEX credential presentation (design §4.3) SYNCHRONOUSLY, in the request thread: the
+ * Drives IPEX credential presentation SYNCHRONOUSLY, in the request thread: the
  * platform's agent AID requests a credential from the user's linked wallet AID (apply), waits in-thread
  * for the wallet's offer, agrees, waits in-thread for the grant, admits, then fetches and validates the
  * full CESR chain before persisting it to the identity link and returning the ceremony's final state.
  *
- * <p><b>Why synchronous (design rev, user-directed, live wallet testing):</b> the previous async model
+ * <p><b>Why synchronous:</b> the previous async model
  * (a quick synchronous "send the apply" half returning 202, followed by a background-executor
  * continuation that awaited the wallet's replies) was found, under live wallet testing, to never observe
  * the wallet's offer/grant notifications reliably — the split introduced a race that a single in-thread
@@ -62,7 +62,7 @@ import org.cardanofoundation.signify.core.States.State;
  * without this a real wallet's "present" action does nothing observable (no error, no notification).
  * See that method's javadoc for the full rationale.
  *
- * <p><b>Dual-path presentation (design rev, live Veridian wallet evidence):</b> the apply→offer→agree→
+ * <p><b>Dual-path presentation:</b> the apply→offer→agree→
  * grant→admit negotiation above is the negotiated contract, but a real Veridian wallet build was
  * observed, on the actual backend log, to present via a <em>spontaneous</em> IPEX grant instead —
  * apply→grant→admit, with NO offer and NO agree ever sent at all; the notification queue after a live
@@ -85,14 +85,14 @@ public class KeriCredentialService {
     private static final List<String> OFFER_ROUTES = List.of("/exn/ipex/offer", "/ipex/offer");
     private static final List<String> GRANT_ROUTES = List.of("/exn/ipex/grant", "/ipex/grant");
 
-    /** Dual-path presentation (design rev, live Veridian wallet evidence — see class javadoc): the
+    /** Dual-path presentation: the
      *  initial post-apply wait (and the retry pre-check) must watch for EITHER an offer or a spontaneous
      *  grant, since a real Veridian build was observed to send the grant directly with no offer at all.
      *  {@link #isGrantRoute} then tells the two apart on the notification that actually arrives. */
     private static final List<String> OFFER_OR_GRANT_ROUTES =
             List.of("/exn/ipex/offer", "/ipex/offer", "/exn/ipex/grant", "/ipex/grant");
 
-    /** The {@code KERI_DATETIME} pattern (design §4.4 rev 3, alignment item 6): passed explicitly to
+    /** The {@code KERI_DATETIME} pattern: passed explicitly to
      *  every exn this class builds rather than relying on the pinned signify jar's own
      *  null-datetime fallback ({@code Exchanging.exchange}), which derives its timestamp from
      *  {@code java.util.Date} and can render withOUT a fractional-seconds separator at all
@@ -102,9 +102,8 @@ public class KeriCredentialService {
     private static final DateTimeFormatter KERI_DATETIME =
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'+00:00'");
 
-    /** Short wait for the retry pre-check (design §4.2 "before re-sending... checks for a
-     *  late-arriving matching notification") — mirrors {@link KeriAttestService}'s own retry-precheck
-     *  timeout, applied here to the credential-presentation step instead of the ATTEST anchor. */
+    /** Short wait before re-sending, to catch a late-arriving matching notification. Mirrors
+     *  {@link KeriAttestService}'s retry pre-check, applied to the credential-presentation step. */
     private static final Duration RETRY_PRECHECK_TIMEOUT = Duration.ofSeconds(2);
 
     /** Bounded wait for a single schema-OOBI resolve ({@link #ensureSchemasResolved}) — mirrors
@@ -128,7 +127,7 @@ public class KeriCredentialService {
 
     /**
      * Orchestrates the CREDENTIAL_REQUEST step end-to-end, SYNCHRONOUSLY, for a single controller call
-     * (design §4.2): {@link #ensureSchemasResolved} → {@link CeremonyService#beginStep} from {@code
+     *: {@link #ensureSchemasResolved} → {@link CeremonyService#beginStep} from {@code
      * OOBI_RESOLVED} to {@code CREDENTIAL_REQUESTED} → a short retry pre-check for a reply that already
      * arrived on a previous attempt's apply → apply → wait, in-thread, for EITHER an offer or a
      * spontaneous grant (dual-path, class javadoc) → branch: a grant admits directly; an offer falls
@@ -193,9 +192,9 @@ public class KeriCredentialService {
         // where the flow subsequently gets stuck.
         logReceiveDiagnostics(linkedAid, agentName);
 
-        // Retry pre-check (design §4.2, mirrors KeriAttestService#attest): before sending a fresh IPEX
+        // Retry pre-check: before sending a fresh IPEX
         // apply, look for a late-arriving offer OR grant left over from a previous attempt. Dual-path
-        // (design rev, live Veridian evidence — class javadoc): the real wallet was observed to present
+        //: the real wallet was observed to present
         // via a spontaneous grant with no offer at all, so this pre-check — like the wait below — must
         // watch for either. Route-only, like every claim in this module — see
         // KeriNotificationCorrelator#awaitByRoute's javadoc. Found: resume straight into the matching
@@ -224,7 +223,7 @@ public class KeriCredentialService {
             claimedNotification = claimed.get();
         }
 
-        // Dual-path branch (design rev, live Veridian evidence — class javadoc): tell a spontaneous
+        // Dual-path branch: tell a spontaneous
         // grant apart from a negotiated offer by the CLAIMED notification's own route — see
         // isGrantRoute's javadoc for exactly how that route is determined.
         String credentialSaid;
@@ -253,10 +252,8 @@ public class KeriCredentialService {
                 ExchangeMessageResult admitResult = client.client().ipex().admit(IpexAdmitArgs.builder()
                         .senderName(agentName).recipient(linkedAid).message("")
                         .grantSaid(claimedNotification.exnSaid()).datetime(nowKeriTimestamp()).build());
-                // Verified finding (see the report for the full evidence trail — signify jar javap +
-                // signify-ts's admitGrantOnWallet, the same no-preceding-agree scenario): submitAdmit is
-                // given the ADMIT's OWN atc here, not an agree's — there is no agree in this branch at
-                // all to borrow one from.
+                // submitAdmit is given the ADMIT's own atc, not an agree's: this branch has no
+                // preceding agree to borrow one from.
                 logAdmitExn(admitResult, claimedNotification.exnSaid(), linkedAid, "admit-own");
                 Object admitOp = client.client().ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(),
                         admitResult.atc(), List.of(linkedAid));
@@ -481,7 +478,7 @@ public class KeriCredentialService {
                         "No local HabState found for agent identifier %s.".formatted(agentName)));
             }
 
-            // Wallet contract (design §4.3/§4.4 rev 3): build /ipex/apply directly via
+            // Wallet contract: build /ipex/apply directly via
             // createExchangeMessage, with oobiUrl at the TOP level of the payload (exn.a.oobiUrl).
             // IpexApplyArgs#attributes (the old approach) lands under exn.a.a instead, which the
             // wallet never finds.
@@ -608,7 +605,7 @@ public class KeriCredentialService {
      * way to know about the relink); {@link CeremonyService#validateAndConsume}'s own bindingVersion
      * check is the final safety net at consumption time.
      *
-     * <p>The re-fetch is row-locked (F3 fix) via
+     * <p>The re-fetch is row-locked via
      * {@link org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository#findByUserIdForUpdate}
      * rather than a plain {@code findById}: this write and {@code KeriOobiService}'s relink write race
      * the same row, and without the lock the two could interleave into a row that is a mix of the old
@@ -629,7 +626,7 @@ public class KeriCredentialService {
     }
 
     /**
-     * Dual-path branch decision (design rev, live Veridian evidence — class javadoc): {@code
+     * Dual-path branch decision: {@code
      * notification} was claimed off the combined {@link #OFFER_OR_GRANT_ROUTES} wait, so it is either an
      * offer or a spontaneous grant — this tells the two apart.
      *
@@ -759,9 +756,8 @@ public class KeriCredentialService {
         return KeriAttestationProblems.unprocessable(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED, detail);
     }
 
-    /** F2 fix: a sync-path guarded update ({@link CeremonyService#updateWaitingStepData}) found the
-     *  ceremony no longer waiting on the step it was called for — a concurrent retry/sweep transition
-     *  beat this attempt to it. Reported the same way any other stale-state conflict is. */
+    /** The guarded update found the ceremony no longer waiting on the step it was called for: a
+     *  concurrent retry or sweep transition beat this attempt to it. */
     private static ProblemDetail staleCeremonyProblem(String ceremonyId) {
         return KeriAttestationProblems.conflict(KeriAttestationProblems.CEREMONY_INVALID_STATE,
                 "Ceremony %s is no longer waiting on the expected step.".formatted(ceremonyId));

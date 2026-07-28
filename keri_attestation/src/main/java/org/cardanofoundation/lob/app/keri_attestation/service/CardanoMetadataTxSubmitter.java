@@ -10,10 +10,8 @@ import io.vavr.control.Either;
 
 /**
  * Port implemented by the host module that owns the Cardano wallet used to publish AUTH_BEGIN
- * transactions and to observe their confirmation (design §3.3/§3.4): {@code blockchain_publisher},
- * using the existing organiser {@code Account} + {@code QuickTxBuilder} + Blockfrost backend (design
- * §3.3). Copied verbatim from spec §3.3 — this exact shape is the reuse seam later tasks (and
- * blockchain_publisher itself) implement against, so it must not drift from the design document.
+ * transactions and to observe their confirmation. Implemented by {@code blockchain_publisher} using
+ * the organiser account and backend it already owns.
  */
 public interface CardanoMetadataTxSubmitter {
     /** Builds, signs and submits a tx carrying only the given metadata. Returns tx hash. */

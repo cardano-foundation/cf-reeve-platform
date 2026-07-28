@@ -16,6 +16,17 @@ CREATE TABLE IF NOT EXISTS document_vault_key (
     label VARCHAR(255) NOT NULL,
     origin VARCHAR(20) NOT NULL,
     assurance VARCHAR(20) NOT NULL,
+    -- Veridian attestation an imported card carried, stored as provenance. Set once at import and
+    -- never rewritten by a re-import; all NULL for an unattested card. The sizes match
+    -- keri_attestation's own columns for the same values, which is what verification reads them back
+    -- through. attestation_credential_cesr is TEXT because a credential chain can be large, and is
+    -- carried because the credential cannot be fetched through the OOBI alone.
+    attestation_oobi VARCHAR(2048),
+    attestation_aid VARCHAR(255),
+    attestation_credential_said VARCHAR(255),
+    attestation_schema_said VARCHAR(255),
+    attestation_tx_hash VARCHAR(255),
+    attestation_credential_cesr TEXT,
     created_by VARCHAR(255),
     updated_by VARCHAR(255),
     created_at TIMESTAMP WITHOUT TIME ZONE,
@@ -50,6 +61,13 @@ CREATE TABLE IF NOT EXISTS document_vault_addressbook_entry (
     -- senders; NEVER compared against organisation_id — doing so is what once made it impossible to
     -- import a card issued outside this platform.
     home_organisation_id VARCHAR(255),
+    -- Same card-attestation provenance as document_vault_key above, for a card about a contact.
+    attestation_oobi VARCHAR(2048),
+    attestation_aid VARCHAR(255),
+    attestation_credential_said VARCHAR(255),
+    attestation_schema_said VARCHAR(255),
+    attestation_tx_hash VARCHAR(255),
+    attestation_credential_cesr TEXT,
     created_by VARCHAR(255),
     updated_by VARCHAR(255),
     created_at TIMESTAMP WITHOUT TIME ZONE,
@@ -99,6 +117,13 @@ CREATE TABLE IF NOT EXISTS document_vault_document (
     ledger_dispatch_error VARCHAR(1024),
     tx_hash VARCHAR(255),
     ipfs_cid VARCHAR(255),
+    -- The KERI wallet-attestation ceremony consumed by VaultDocumentService.publish, together with
+    -- the attestation it yielded. Persisted so the binding survives the request and a crash, and so
+    -- it can be carried onto DocumentPublishCommand. All NULL for a plain, non-attested publish.
+    attestation_ceremony_id VARCHAR(64),
+    attestation_aid VARCHAR(128),
+    attestation_payload_said VARCHAR(128),
+    attestation_kel_sequence VARCHAR(32),
     created_by VARCHAR(255),
     updated_by VARCHAR(255),
     created_at TIMESTAMP WITHOUT TIME ZONE,
@@ -126,7 +151,42 @@ CREATE TABLE IF NOT EXISTS document_vault_document_slot (
     recipient_ref VARCHAR(255) NOT NULL,
     ephemeral_pub VARCHAR(64) NOT NULL,
     wrapped_dek VARCHAR(96) NOT NULL,
+    -- sha256 of the recipient's 32-byte X25519 public key, lowercase hex. Frozen here rather than
+    -- resolved at publish time: the attested path wallet-signs a commitment over these values, and
+    -- re-deriving them from mutable key rows on a retry sweep would invalidate that signature.
+    -- Unlike key_id and recipient_ref, this column IS exported to L1. See docs/onChainFormat.md.
+    recipient_key_hash VARCHAR(64) NOT NULL,
     CONSTRAINT pk_document_vault_document_slot PRIMARY KEY (document_id, slot_index)
 );
 
 CREATE INDEX IF NOT EXISTS idx_document_vault_document_slot_key ON document_vault_document_slot (key_id);
+
+-- DOCUMENT ATTESTATION FREEZE. What a ceremony committed the wallet to, so publish can verify the
+-- document has not changed since. The ceremony runs in the user-facing tier, which may be deployed
+-- without blockchain_publisher and can reach neither IPFS nor a chain tip — so it freezes a content
+-- commitment it can compute offline (see DocumentAttestationCommitment) rather than a finished
+-- manifest, and the publisher fills in the CID and chain tip afterwards.
+--
+-- Immutable per ceremony: re-attestation inserts a new row under a new ceremony id, so there is no
+-- updated_at column and no update path. No FK to document_vault_document: rows are ephemeral and a
+-- freeze outliving its document is purged by the cleanup sweep rather than cascaded away.
+CREATE TABLE IF NOT EXISTS document_vault_attestation_freeze (
+    id                     VARCHAR(36)  NOT NULL,
+    document_id            VARCHAR(36)  NOT NULL,
+    ceremony_id            VARCHAR(64)  NOT NULL,
+    -- CBOR of the DocumentAttestationCommitment map - the exact bytes the wallet's KEL anchors.
+    commitment_cbor        BYTEA        NOT NULL,
+    -- CESR Blake3-256 digest of commitment_cbor.
+    digest_qb64            VARCHAR(128) NOT NULL,
+    -- SHA-256 (hex) of the exact envelope bytes the publisher will pin verbatim; re-checked at publish
+    -- to detect the document changing between freeze and publish.
+    envelope_sha256        VARCHAR(64)  NOT NULL,
+    created_at             TIMESTAMP    NOT NULL,
+
+    CONSTRAINT pk_document_vault_attestation_freeze PRIMARY KEY (id),
+    CONSTRAINT uq_dv_attest_freeze_doc_ceremony UNIQUE (document_id, ceremony_id)
+);
+
+-- The cleanup job's discovery read.
+CREATE INDEX IF NOT EXISTS idx_dv_attest_freeze_created_at
+    ON document_vault_attestation_freeze (created_at);

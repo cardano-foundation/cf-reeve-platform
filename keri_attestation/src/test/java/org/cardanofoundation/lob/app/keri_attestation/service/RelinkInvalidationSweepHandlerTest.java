@@ -22,7 +22,7 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestat
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestationCeremonyRepository;
 
 /**
- * R2 fix (Codex re-verification): {@link RelinkInvalidationSweepHandler#onRelinkCompleted} is the
+ * {@link RelinkInvalidationSweepHandler#onRelinkCompleted} is the
  * AFTER_COMMIT second pass that closes the phantom-insert window {@code KeriOobiService}'s
  * in-transaction sweep cannot — see that class's javadoc for the full race. Exercised directly here
  * (not through a real transactional event) since the annotation shape itself only needs a real

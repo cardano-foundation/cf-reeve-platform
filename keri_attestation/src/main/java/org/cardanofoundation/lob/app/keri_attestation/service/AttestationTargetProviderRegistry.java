@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 
 /**
  * Collects every {@link AttestationTargetProvider} bean in the application context, keyed by
- * {@link AttestationTargetProvider#targetType()} (design §4.3). Has no dependency on
+ * {@link AttestationTargetProvider#targetType()}. Has no dependency on
  * {@code SignifyClient} or any other KERI-agent wiring, so — unlike most services in this module —
  * it is <em>not</em> gated on {@code lob.keri-attestation.keria.url}: it must construct cleanly even
  * when no host module contributes a provider (module enabled with no consumers yet, or a Spring

@@ -48,7 +48,7 @@ public class VaultDocumentEntity extends VaultBaseEntity implements Persistable<
     @Column(name = "status", nullable = false)
     private VaultDocumentStatus status = VaultDocumentStatus.DRAFT;
 
-    /** Envelope wire-format version (blueprint I7). Only version 1 is accepted today. */
+    /** Envelope wire-format version. Only version 1 is accepted today. */
     @Column(name = "envelope_version", nullable = false)
     private int envelopeVersion;
 
@@ -103,14 +103,10 @@ public class VaultDocumentEntity extends VaultBaseEntity implements Persistable<
     private LedgerDispatchStatus ledgerDispatchStatus = LedgerDispatchStatus.NOT_DISPATCHED;
 
     /**
-     * Retry-fairness cursor for {@code DocumentDispatchRetryJob}'s dispatch sweep (Codex
-     * adversarial-review finding, round 3: retry-sweep starvation). NULL until the job's sweep
-     * (re-)emits this document's publish command, at which point it is stamped with the sweep time
-     * BEFORE emission. {@code VaultDocumentRepository#findByStatusAndLedgerDispatchStatus} orders on
-     * this column ascending with NULLS FIRST ahead of {@code publishedAt}, so never-yet-attempted
-     * documents always sort first and attempted rows rotate to the back regardless of whether {@link
-     * #ledgerDispatchStatus} ever advances off {@code MARK_DISPATCH} — fairness comes from the
-     * cursor, not from status progress the job cannot observe.
+     * Fairness cursor for {@code DocumentDispatchRetryJob}'s sweep. Null until that job re-emits this
+     * document's publish command, at which point it is stamped with the sweep time. The sweep orders
+     * on this column with NULLS FIRST, so never-attempted documents sort first and attempted rows
+     * rotate to the back regardless of whether {@link #ledgerDispatchStatus} advances.
      */
     @Nullable
     @Column(name = "dispatch_retry_at")
@@ -129,10 +125,8 @@ public class VaultDocumentEntity extends VaultBaseEntity implements Persistable<
     private String ipfsCid;
 
     /**
-     * The KERI wallet-attestation ceremony consumed by {@code VaultDocumentService#publish} (design
-     * §5.1, Task 14) — set only when publish was called with an {@code attestationCeremonyId} and
-     * every check (freshness guard, {@code AttestationConsumptionApi#validateAndConsume}) passed.
-     * NULL for every plain publish, which remains the default and overwhelmingly common path.
+     * The KERI wallet-attestation ceremony consumed by {@code VaultDocumentService#publish}, set only
+     * once the freshness guard and ceremony consumption have both passed. Null for a plain publish.
      */
     @Nullable
     @Column(name = "attestation_ceremony_id", length = 64)

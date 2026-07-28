@@ -102,11 +102,11 @@ class CeremonyServiceTest {
         return link;
     }
 
-    // --- create: fast-forward from the identity link (design §4.2) ---
+    // --- create: fast-forward from the identity link ---
 
     @Test
     void createWithNoLinkStartsAtCreatedWithAllStepsRequired() {
-        // F5 fix: create() locks the link row (findByUserIdForUpdate), not a plain findById.
+        // create() locks the link row (findByUserIdForUpdate), not a plain findById.
         when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.empty());
         when(ceremonyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -187,7 +187,7 @@ class CeremonyServiceTest {
         assertEquals(KeriAttestationProblems.CEREMONY_LIMIT_REACHED, result.getLeft().getTitle());
     }
 
-    // --- create: target authorization (F2 fix, design §3.3) ---
+    // --- create: target authorization ---
 
     @Test
     void createRejectsAnUnknownTargetTypeWithNoRegisteredProvider() {
@@ -227,7 +227,7 @@ class CeremonyServiceTest {
 
     @Test
     void createLocksTheIdentityLinkRowInsteadOfPlainReadingIt() {
-        // F5 fix: create() must serialize against KeriOobiService's relink via the identity link's row
+        // create() must serialize against KeriOobiService's relink via the identity link's row
         // lock, not an unlocked read that a relink's own ceremony-invalidation-then-link-update window
         // could otherwise race. A genuine interleaving test would need real concurrent transactions,
         // which this Mockito-based unit test cannot exercise; a true race requires H2/testcontainers-level
@@ -359,7 +359,7 @@ class CeremonyServiceTest {
         assertEquals(CeremonyState.EXPIRED, ceremony.getState());
     }
 
-    // --- link-derived fast-forward floor (F1 fix, design §4.2) ---
+    // --- link-derived fast-forward floor ---
 
     @Test
     void getAdvancesARestingCeremonyToTheCurrentLinkDerivedFloor() {
@@ -379,7 +379,7 @@ class CeremonyServiceTest {
 
     @Test
     void beginStepAdvancesARestingCeremonyBeforeCheckingTheExpectedState() {
-        // Without the F1 fix this beginStep call 409s forever: the ceremony is stuck at CREATED even
+        // Without the link-derived fast-forward this beginStep call 409s forever: the ceremony is stuck at CREATED even
         // though the identity link already has an AID, so credential/request (which expects
         // OOBI_RESOLVED) would never be reachable.
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.CREATED);
@@ -451,7 +451,7 @@ class CeremonyServiceTest {
         verify(ceremonyRepository, never()).save(any());
     }
 
-    // --- initial-link adoption (F6 fix): a ceremony created before any link existed (bindingVersion=0)
+    // --- initial-link adoption: a ceremony created before any link existed (bindingVersion=0)
     //     must adopt the first-linked binding version rather than being permanently stuck at CREATED ---
 
     @Test
@@ -624,7 +624,7 @@ class CeremonyServiceTest {
         assertEquals(null, ceremony.getErrorDetail());
     }
 
-    // --- updateWaitingStepData: guarded step-data write (F2 fix) ---
+    // --- updateWaitingStepData: guarded step-data write ---
 
     @Test
     void updateWaitingStepDataHappyPathAppliesMutatorAndPersistsWithoutChangingState() {
@@ -688,7 +688,7 @@ class CeremonyServiceTest {
 
     @Test
     void updateWaitingStepDataConcurrentTransitionBetweenBeginStepAndUpdateIsRejected() {
-        // Simulates the exact race F2 fixes: beginStep returns a ceremony at generation 0 in
+        // Simulates the race updateWaitingStepData closes: beginStep returns a ceremony at generation 0 in
         // ATTEST_REQUESTED; before the service gets to persist requestExnSaid, a concurrent retry bumps
         // the generation (simulating a superseding beginStep(retry=true) call). The guarded update must
         // reject and must not resurrect/overwrite the now-current generation's data.
@@ -716,7 +716,7 @@ class CeremonyServiceTest {
     void validateAndConsumeHappyPathFlipsAttestAnchoredToConsumed() {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_ANCHORED);
         ceremony.setMetadataDigest("Edigest");
-        // Deliberately distinct from metadataDigest (design §4.4 rev 3): payloadSaid is the value the
+        // Deliberately distinct from metadataDigest: payloadSaid is the value the
         // wallet's KEL seal actually anchors / the on-chain 170.d, digestQb64 is the raw 1447/freeze
         // digest — a swap of the two in validateAndConsume's ConsumedAttestation construction must fail
         // this test.
@@ -743,7 +743,7 @@ class CeremonyServiceTest {
 
     @Test
     void validateAndConsumeFailsClosedWhenAttesterAidIsNull() {
-        // R1 fix (Codex re-verification): this module has never been deployed, so no CONSUMED row
+        // this module has never been deployed, so no CONSUMED row
         // anywhere can lack an attesterAid in practice - a null here on an ATTEST_ANCHORED ceremony
         // indicates data corruption and must be rejected rather than silently resurrecting the
         // CURRENT identity link's AID (the relink-misattribution hole the removed fallback reopened).
@@ -767,7 +767,7 @@ class CeremonyServiceTest {
 
     @Test
     void validateAndConsumeUsesThePersistedAttesterAidNotTheCurrentLinkAid() {
-        // F1 fix: ceremony.attesterAid (persisted by KeriAttestService#resolveAndComplete at
+        // ceremony.attesterAid (persisted by KeriAttestService#resolveAndComplete at
         // ATTEST_ANCHORED time) is authoritative whenever set - never re-derived from the identity
         // link's current aid, even though in this test they happen to differ only to prove which one
         // actually won.
@@ -841,7 +841,7 @@ class CeremonyServiceTest {
         // ceremony was created under binding_version=1 (see the ceremony() helper); the link has since
         // moved to binding_version=2, i.e. the user relinked to a different AID after this ceremony started.
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_ANCHORED);
-        // R1 fix: attesterAid must be set for this ceremony to reach the binding-version check at all -
+        // attesterAid must be set for this ceremony to reach the binding-version check at all -
         // a null attesterAid is now rejected earlier (CEREMONY_INVALID_STATE), see
         // validateAndConsumeFailsClosedWhenAttesterAidIsNull.
         ceremony.setAttesterAid("Eaid-old");
@@ -855,7 +855,7 @@ class CeremonyServiceTest {
         assertEquals(KeriAttestationProblems.IDENTITY_RELINKED, result.getLeft().getTitle());
     }
 
-    // --- findTerminalNonConsumedCeremonyIds (Task 13: blockchain_publisher's freeze cleanup) ---
+    // --- findTerminalNonConsumedCeremonyIds (freeze cleanup) ---
 
     @Test
     void findTerminalNonConsumedCeremonyIdsDelegatesToTheFailedOrExpiredQuery() {
@@ -876,11 +876,11 @@ class CeremonyServiceTest {
         verifyNoInteractions(ceremonyRepository, identityLinkRepository, targetProviderRegistry);
     }
 
-    // --- findConsumed (Task 15: blockchain_publisher's dispatch-time attestation lookup) ---
+    // --- findConsumed (dispatch-time attestation lookup) ---
 
     @Test
     void findConsumedIsEmptyWhenNoAttesterAidIsPersisted() {
-        // R1 fix (Codex re-verification): a CONSUMED row with no attesterAid ever persisted used to
+        // a CONSUMED row with no attesterAid ever persisted used to
         // fall back to the CURRENT identity link - this module has never been deployed, so no such row
         // can exist in a real database, and the fallback itself reopened the relink-misattribution
         // hole F1 exists to close. findConsumed now fails closed (empty) instead.
@@ -902,7 +902,7 @@ class CeremonyServiceTest {
 
     @Test
     void findConsumedReturnsTheOriginalAttesterAidEvenAfterARelinkChangedTheCurrentIdentityLink() {
-        // F1 fix, the core scenario this fix closes: consume -> relink -> a delayed dispatch retry
+        // The core scenario the immutable attester AID closes: consume -> relink -> a delayed dispatch retry
         // calling findConsumed must still see the ORIGINAL attesting aid (and the digest/kelSequence
         // that were actually anchored under it), never the identity's NEW (post-relink) aid. Simulated
         // here by simply never stubbing identityLinkRepository at all - proving the link is not even

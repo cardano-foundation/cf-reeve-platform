@@ -55,7 +55,7 @@ public class CeremonyRepositoryTest {
     @EnableAutoConfiguration
     @EnableJpaRepositories("org.cardanofoundation.lob.app.keri_attestation")
     @EntityScan("org.cardanofoundation.lob.app.keri_attestation")
-    // Task 3 added @Service/@Component classes (CeremonyService, CeremonyCleanupJob) to this package;
+    // This package holds @Service/@Component classes (CeremonyService, CeremonyCleanupJob) to this package;
     // they now get picked up by this scan too, so the properties they depend on must be bindable here
     // just like in the real KeriAttestationModuleConfig pairing of ComponentScan + EnableConfigurationProperties.
     @ComponentScan(basePackages = "org.cardanofoundation.lob.app.keri_attestation")
@@ -283,7 +283,7 @@ public class CeremonyRepositoryTest {
     }
 
     /**
-     * Proves the F3 fix's pessimistic lock actually serializes concurrent writers of the same
+     * Proves the pessimistic lock actually serializes concurrent writers of the same
      * identity-link row — the race F3 exists to close: {@code KeriOobiService}'s relink and the async
      * {@code persist*IfIdentityStillCurrent} mutators ({@code KeriCredentialService}/
      * {@code KeriAuthBeginService}) all read-then-write {@code keri_identity_link} unlocked before this
@@ -388,7 +388,7 @@ public class CeremonyRepositoryTest {
     }
 
     /**
-     * Item 4 (round 2) fix: proves the lock-order-inversion deadlock risk is closed. Before this fix,
+     * Item 4 fix: proves the lock-order-inversion deadlock risk is closed. Before this fix,
      * completion paths ({@code CeremonyService#completeStep} invoking a {@code persist*IfIdentityStillCurrent}
      * mutator) locked ceremony-then-link, while {@code KeriOobiService}'s relink locked link-then-ceremony
      * — two transactions taking the same two locks in opposite orders is a textbook Postgres deadlock.

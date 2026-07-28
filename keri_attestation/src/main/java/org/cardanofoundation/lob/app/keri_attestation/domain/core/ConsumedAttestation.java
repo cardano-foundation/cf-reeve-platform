@@ -1,13 +1,13 @@
 package org.cardanofoundation.lob.app.keri_attestation.domain.core;
 
 /**
- * The result of {@code AttestationConsumptionApi#validateAndConsume} (design §4.6) — everything a
+ * The result of {@code AttestationConsumptionApi#validateAndConsume} — everything a
  * target-owning module (e.g. document_vault) needs to bind an on-chain attestation to its own
  * record: the AID that attested (from the caller's {@code KeriIdentityLinkEntity}), the raw
  * metadata digest and the payload SAID the wallet actually anchored, and the KEL coordinates of the
  * anchoring event.
  *
- * <p><b>{@code digestQb64} vs {@code payloadSaid} (design §4.4 rev 3):</b> these are two distinct
+ * <p><b>{@code digestQb64} vs {@code payloadSaid}:</b> these are two distinct
  * values, kept separate on purpose. {@code digestQb64} is the raw CESR digest of the label-{@code
  * metadataLabel} metadata value (e.g. the 1447 document metadata) — used for freeze/digest matching
  * only ({@code DocumentAttestationLookup#loadForDispatch}). {@code payloadSaid} is the SAID of the

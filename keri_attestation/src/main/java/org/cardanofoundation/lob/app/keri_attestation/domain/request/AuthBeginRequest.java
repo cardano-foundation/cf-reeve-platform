@@ -8,7 +8,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * Body of {@code POST /ceremonies/{id}/auth-begin} (design §4.5). Not a {@code BaseRequest} subclass —
+ * Body of {@code POST /ceremonies/{id}/auth-begin}. Not a {@code BaseRequest} subclass —
  * see {@link ResolveOobiRequest}'s javadoc. All fields are optional and select one of three paths:
  * a present {@code externalTxHash} verifies the given tx already establishes on-chain signing authority
  * ("the skip"); an absent/blank hash with {@code assumePublished} true accepts AUTH_BEGIN as already

@@ -21,9 +21,9 @@ import org.cardanofoundation.lob.app.blockchain_publisher.service.event_publish.
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.CardanoPublishable;
 
 /**
- * Publishable module for documents: each document becomes its own Cardano transaction (mandatory IPFS - see
- * {@link DocumentL1TransactionCreator}), dispatched with a locking window like spending events so a slow
- * IPFS upload / L1 submission cannot be picked up twice by overlapping dispatcher ticks.
+ * Publishable module for documents: each document becomes its own Cardano transaction, dispatched
+ * under a lock so a slow IPFS upload or L1 submission cannot be picked up twice by overlapping
+ * dispatcher ticks.
  */
 @Service
 @RequiredArgsConstructor

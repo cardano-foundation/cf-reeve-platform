@@ -16,7 +16,7 @@ import org.cardanofoundation.signify.cesr.util.CESRStreamUtil;
  * bare ACDC payloads, concatenated in that canonical (vcp, then iss, then ACDC) order.
  *
  * <p>The reduced bytes are what eventually gets chunked onto Cardano under CIP-170 label 170's
- * {@code c} field (design §4.5), so a verifier reconstructing the chain from on-chain bytes must see
+ * {@code c} field, so a verifier reconstructing the chain from on-chain bytes must see
  * exactly what this reduction (and KERIA) agree constitutes "the chain": {@code icp}/{@code ixn}/
  * {@code rot} KEL events and {@code rev} TEL events are intentionally dropped — deep KEL signature
  * verification stays with KERIA (see {@link CredentialChainValidator}'s javadoc for the same

@@ -24,9 +24,9 @@ import org.junit.jupiter.api.Test;
 import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
 
 /**
- * Asserts the 1447 DOCUMENT manifest shape (spec: "Publishing — flow and formats"). The data section must
+ * Asserts the 1447 DOCUMENT manifest shape. The data section must
  * carry exactly the six fields below — nothing else — so any accidental addition of a PII-capable field is
- * caught here (spec B5 #3).
+ * caught here.
  *
  * <p>Organisation-not-found handling moved out of this class with WS3 step 1 (org resolution is now the
  * CALLER's responsibility - {@code blockchain_common} must not depend on {@code organisation}), so that

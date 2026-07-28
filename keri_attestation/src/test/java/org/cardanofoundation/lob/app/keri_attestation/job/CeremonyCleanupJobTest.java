@@ -124,7 +124,7 @@ class CeremonyCleanupJobTest {
                 "cutoff should be ~7 days before now, was " + cutoffCaptor.getValue());
     }
 
-    /** F10 fix: CONSUMED rows are the durable attestation record blockchain_publisher's dispatch retry
+    /** CONSUMED rows are the durable attestation record blockchain_publisher's dispatch retry
      *  reloads on every attempt, well past any reasonable ceremony-completion age -- purging them would
      *  make late dispatch impossible. Only FAILED/EXPIRED may be purged. */
     @Test
@@ -144,7 +144,7 @@ class CeremonyCleanupJobTest {
                 "CONSUMED must never be included in the purge -- it's the durable record dispatch retry reloads");
     }
 
-    // --- step-level stale detection (F4 fix, design §4.2/§7) ---
+    // --- step-level stale detection ---
 
     @Test
     void sweepFailsAnOverdueWaitingCeremonyWithKeriStepTimedOut() {
@@ -192,7 +192,7 @@ class CeremonyCleanupJobTest {
     }
 
     /**
-     * F7 fix: CREDENTIAL_REQUESTED legitimately spans up to TWO wallet-approval waits (offer, then
+     * CREDENTIAL_REQUESTED legitimately spans up to TWO wallet-approval waits (offer, then
      * grant), so its budget is {@code 2 x remotesignTimeout + grace} = {@code 2x3m+2m = 8m}, not the
      * single-wait {@code remotesignTimeout + grace} = 5m every other waiting state gets. 6 minutes old is
      * past the old (pre-F7) single-wait budget but still within the new doubled one.

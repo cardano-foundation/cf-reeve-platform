@@ -32,16 +32,16 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.organisation.repository.OrganisationRepository;
 
 /**
- * The payload-copy + in-transit scan (blueprint B5). Honest boundary (spec, B5 section): the
+ * The payload-copy + in-transit scan. Honest boundary: the
  * server cannot verify that bytes labeled ciphertext are actually encrypted — that check is
  * cryptographically impossible without key material and is the frontend's payload-capture gate in
- * the blueprint. What this test proves is the full backend half, through the real HTTP stack
+ * the client. What this test proves is the full backend half, through the real HTTP stack
  * (RANDOM_PORT + RestAssured, same as accounting_reporting_core's WebBaseIntegrationTest): the
  * request traverses servlet filters, the OrganisationCheckInterceptor (which reads the raw body),
  * Jackson, controller, service, and JPA — and the payload bytes end up in exactly one place (the
  * ciphertext column) and in no log line emitted anywhere along that path.
  *
- * The import is permissionless (contract §2.8, amended): there is no issuer and no signature, so
+ * The import is permissionless: there is no issuer and no signature, so
  * no issuer configuration is required for the card-import endpoint under test below.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)

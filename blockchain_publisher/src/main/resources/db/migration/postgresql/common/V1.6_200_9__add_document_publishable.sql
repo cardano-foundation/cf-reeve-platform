@@ -1,9 +1,9 @@
 -- Document publishing tables (blockchain_publisher module).
 -- Mirrors org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentEntity.
 --
--- Built exclusively from DocumentPublishCommand fields (spec B5 #3): no lookups back into
--- document_vault tables, so this table carries no e-mails, key ids, file names or account ids.
--- Deliberately has NO _aud counterpart - the ciphertext must never get an audit history copy.
+-- Built exclusively from DocumentPublishCommand: no lookups back into document_vault tables, so
+-- this table carries no e-mails, key ids, file names or account ids. Deliberately has no _aud
+-- counterpart - the ciphertext must never get an audit history copy.
 
 CREATE TABLE blockchain_publisher_document (
    document_id VARCHAR(36) NOT NULL,
@@ -14,6 +14,13 @@ CREATE TABLE blockchain_publisher_document (
    payload_nonce VARCHAR(24) NOT NULL,
    ciphertext_base64 TEXT NOT NULL,
    ipfs_cid VARCHAR(255),
+
+   -- The consumed KERI wallet attestation, carried here on DocumentPublishCommand rather than read
+   -- back from keri_attestation, which may run in a separate process. All NULL for a plain publish.
+   attestation_ceremony_id VARCHAR(64),
+   attestation_aid VARCHAR(128),
+   attestation_payload_said VARCHAR(128),
+   attestation_kel_sequence VARCHAR(32),
 
    l1_transaction_hash CHAR(64),
    l1_absolute_slot BIGINT,
@@ -35,6 +42,9 @@ CREATE TABLE blockchain_publisher_document_slot (
    slot_index INTEGER NOT NULL,
    ephemeral_pub VARCHAR(64) NOT NULL,
    wrapped_dek VARCHAR(96) NOT NULL,
+   -- sha256 of the recipient's X25519 public key, frozen in document_vault and relayed here so the
+   -- publisher can emit data.recipient_key_hashes without re-resolving mutable key rows.
+   recipient_key_hash VARCHAR(64) NOT NULL,
 
    PRIMARY KEY (document_id, slot_index),
    CONSTRAINT fk_bp_document_slot_document FOREIGN KEY (document_id)

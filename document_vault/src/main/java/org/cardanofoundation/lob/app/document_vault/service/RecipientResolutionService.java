@@ -25,15 +25,15 @@ import org.cardanofoundation.lob.app.document_vault.repository.VaultKeyRepositor
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 /**
- * Blueprint B1: resolve -> validate -> dedupe -> auto-include the sender's own keys. The client never
- * assembles the recipient set itself.
+ * Resolves, validates and dedupes the recipient set, auto-including the sender's own keys. The client
+ * never assembles this set itself.
  *
- * Recipients come from two stores. Colleagues are accounts and may hold several keys — every one gets a
- * slot, or they can only reopen the document on one device. Addressbook contacts are the other way
- * round: one entry, one key, no account.
+ * <p>Recipients come from two stores. Colleagues are accounts and may hold several keys, and each one
+ * gets a slot, or they could only reopen the document on a single device. Addressbook contacts are
+ * the other way round: one entry, one key, no account.
  *
- * Missing recipients are rejected, never silently dropped: a sender who asked for Bob and did not get him
- * would produce a document Bob cannot read, and would not find out until Bob said so.
+ * <p>Missing recipients are rejected rather than dropped — a sender who asked for Bob and silently
+ * did not get him would only find out when Bob said so.
  */
 @Service
 @RequiredArgsConstructor
@@ -94,9 +94,9 @@ public class RecipientResolutionService {
                             .formatted(organisationId, String.join(", ", missingEntries))));
         }
 
-        // The sender may narrow the wrap targets to a subset of their OWN keys (contract §5.4).
-        // Empty/absent = all of them. Foreign key ids are rejected, never silently dropped: silently
-        // dropping one would produce a document the sender cannot reopen on the device they chose.
+        // The sender may narrow the wrap targets to a subset of their own keys; empty or absent means
+        // all of them. Foreign key ids are rejected rather than dropped, which would produce a document
+        // the sender cannot reopen on the device they chose.
         List<String> senderKeyIds = request.getSenderKeyIds();
         List<VaultKeyEntity> effectiveOrgKeys = orgKeys;
         if (senderKeyIds != null && !senderKeyIds.isEmpty()) {
@@ -123,9 +123,8 @@ public class RecipientResolutionService {
                 .toList());
         entries.stream().map(VaultKeyService::toRecipientView).forEach(resolved::add);
 
-        // dedupe by public key, first occurrence wins (stable order for the client). A colleague and a
-        // contact can hold the same key — someone imported a card for a person who also has a login —
-        // and wrapping to it twice would just waste a slot.
+        // Dedupe by public key, first occurrence wins, keeping a stable order for the client. A
+        // colleague and a contact can hold the same key, and wrapping to it twice wastes a slot.
         Map<String, RecipientKeyView> byPublicKey = new LinkedHashMap<>();
         for (RecipientKeyView view : resolved) {
             byPublicKey.putIfAbsent(view.publicKey(), view);

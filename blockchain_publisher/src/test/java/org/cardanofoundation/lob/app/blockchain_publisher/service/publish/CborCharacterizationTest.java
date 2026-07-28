@@ -53,8 +53,7 @@ import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 
 /**
- * Byte-level safety net for the shared-metadata-section extraction (spec §10 / Plan
- * "2026-07-27-l1-metadata-extraction", Task 1). These assertions pin the exact CBOR emitted today by
+ * Byte-level safety net for the shared-metadata-section extraction. These assertions pin the exact CBOR emitted today by
  * the four 1447 serialisers for the fixtures below; any refactor that changes on-chain output for one
  * of these shapes must fail here first.
  *
@@ -98,7 +97,7 @@ import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
  *
  * <p>The expected hex literals below were produced by running this test against unmodified
  * production code and pasting the actual value from the assertion failure — that is the intended
- * workflow (see Task 1, Step 5 of the plan), not a shortcut.
+ * workflow, not a shortcut.
  */
 class CborCharacterizationTest {
 
@@ -417,7 +416,7 @@ class CborCharacterizationTest {
     /**
      * Non-collapsable branch: the dispatch organisationId differs from the (single) transaction's
      * organisation, so {@code org} is omitted at the top level and nested per-transaction instead —
-     * the branch most likely to be broken by a refactor (see plan Task 1 rationale).
+     * the branch most likely to be broken by a refactor.
      */
     @Test
     void transactionManifestCborIsUnchanged_organisationNotCollapsable() throws CborException {

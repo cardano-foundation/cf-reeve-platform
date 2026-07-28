@@ -22,7 +22,7 @@ import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestation
 import org.cardanofoundation.lob.app.keri_attestation.service.KeriAttestationProblems;
 
 /**
- * Ceremony-row housekeeping (design §4.2), same {@code @Scheduled(fixedDelayString = ...)} /
+ * Ceremony-row housekeeping, same {@code @Scheduled(fixedDelayString = ...)} /
  * {@code @Transactional} idiom as document_vault's {@code DocumentDispatchRetryJob}: component-scanned
  * only when {@code lob.keri-attestation.enabled=true}, and inert unless the consuming application also
  * enables Spring scheduling.
@@ -34,7 +34,7 @@ import org.cardanofoundation.lob.app.keri_attestation.service.KeriAttestationPro
  *       again (the user simply walked away mid-flow) would otherwise sit forever in a non-terminal
  *       state, still counting against that user's active-ceremony limit. This sweep is what actually
  *       frees the slot.</li>
- *   <li>{@code failStaleWaitingSteps()} (F4 fix, design §4.2/§7) — a ceremony can also get stuck
+ *   <li>{@code failStaleWaitingSteps()} — a ceremony can also get stuck
  *       <em>inside</em> a single waiting step (e.g. the backend restarts mid-wait and no worker is ever
  *       left to complete or fail it) well before its overall ceremony TTL is up. This sweep fails a
  *       WAITING-state ceremony (CREDENTIAL_REQUESTED, AUTH_BEGIN_SUBMITTED, ATTEST_REQUESTED) whose
@@ -43,12 +43,11 @@ import org.cardanofoundation.lob.app.keri_attestation.service.KeriAttestationPro
  *       {@code FAILED(KERI_STEP_TIMED_OUT)}. FAILED is terminal for this ceremony; recovery means the
  *       user creates a new ceremony, which fast-forwards past already-completed one-time steps via the
  *       identity link — so this sweep frees a stuck flow rather than dead-ending the user.</li>
- *   <li>{@code deleteOldTerminalCeremonies()} (F10 fix) — FAILED/EXPIRED rows are pure audit trail
+ *   <li>{@code deleteOldTerminalCeremonies()} — FAILED/EXPIRED rows are pure audit trail
  *       once the ceremony is done; this purges anything older than 7 days so the table does not grow
  *       unbounded. {@code CONSUMED} rows are deliberately excluded from this purge — see the method's
- *       own javadoc. This only ever deletes ceremony rows in this module —
- *       {@code blockchain_publisher}'s own freeze-row cleanup for terminal ceremonies is a separate job
- *       (Task 13), not cascaded from here.</li>
+ *       own javadoc. This only ever deletes ceremony rows in this module; freeze-row cleanup for
+ *       terminal ceremonies is a separate job, not cascaded from here.</li>
  * </ol>
  */
 @Component
@@ -58,7 +57,7 @@ public class CeremonyCleanupJob {
 
     private static final Set<CeremonyState> TERMINAL =
             EnumSet.of(CeremonyState.CONSUMED, CeremonyState.FAILED, CeremonyState.EXPIRED);
-    /** F10 fix: the subset of {@link #TERMINAL} eligible for {@link #deleteOldTerminalCeremonies}'s
+    /** The subset of {@link #TERMINAL} eligible for {@link #deleteOldTerminalCeremonies}'s
      *  purge — see that method's javadoc for why {@code CONSUMED} is excluded. */
     private static final Set<CeremonyState> PURGEABLE_TERMINAL =
             EnumSet.of(CeremonyState.FAILED, CeremonyState.EXPIRED);
@@ -111,11 +110,11 @@ public class CeremonyCleanupJob {
     }
 
     /**
-     * Step-level stale detection (design §4.2/§7) — see this class's javadoc.
+     * Step-level stale detection — see this class's javadoc.
      *
-     * <p><b>Per-state budget (F7 fix):</b> {@code CREDENTIAL_REQUESTED} legitimately spans up to
-     * <em>two</em> wallet-approval waits (offer, then grant — design §4.2/{@code KeriCredentialService}
-     * §4.6's two-phase IPEX flow), not one, so its budget is {@code 2 × remotesignTimeout + grace}
+     * <p><b>Per-state budget:</b> {@code CREDENTIAL_REQUESTED} legitimately spans up to
+     * <em>two</em> wallet-approval waits — offer, then grant, per {@code KeriCredentialService}'s
+     * two-phase IPEX flow — so its budget is {@code 2 × remotesignTimeout + grace}
      * rather than the single {@code remotesignTimeout + grace} every other waiting state gets. Without
      * this, a ceremony legitimately still waiting on the SECOND wallet approval (grant, after an already
      * -completed offer/agree round trip) could be swept as stale mid-flight.
@@ -174,7 +173,7 @@ public class CeremonyCleanupJob {
         }
     }
 
-    /** Per-state sweep budget (F7 fix): the maximum time a ceremony may legitimately sit in a given
+    /** Per-state sweep budget: the maximum time a ceremony may legitimately sit in a given
      *  {@link #WAITING} state before the sweep considers it stale (before {@link #properties}'
      *  {@code stepTimeoutGrace} is added on top). */
     private Map<CeremonyState, Duration> stepTimeoutBudgets() {
@@ -186,7 +185,7 @@ public class CeremonyCleanupJob {
     }
 
     /**
-     * Purges FAILED/EXPIRED rows older than the retention window (F10 fix). {@code CONSUMED} rows are
+     * Purges FAILED/EXPIRED rows older than the retention window. {@code CONSUMED} rows are
      * deliberately excluded: they are the durable attestation record that {@code blockchain_publisher}'s
      * dispatch (M3) reloads on every retry to build label-170 metadata — the dispatcher can legitimately
      * retry a stuck publish well past 7 days after the ceremony itself was consumed, and a purged row

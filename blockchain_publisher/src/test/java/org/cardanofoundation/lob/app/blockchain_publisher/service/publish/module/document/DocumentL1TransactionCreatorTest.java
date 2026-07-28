@@ -45,7 +45,7 @@ import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 
 /**
- * Documents require IPFS unconditionally (spec: mandatory IPFS — never inline the envelope into L1 metadata,
+ * Documents require IPFS unconditionally — the envelope is never inlined into L1 metadata,
  * never silently skip). This is the one genuinely new behaviour vs. the other (optional-IPFS) L1 transaction
  * creators, so it is the thing under test here — the tx assembly/signing tail is copied from
  * {@link org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report.API3L1TransactionCreator}

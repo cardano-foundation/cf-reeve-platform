@@ -35,13 +35,13 @@ import org.cardanofoundation.signify.app.coring.Operations;
 
 /**
  * Resolves a user's wallet OOBI into an AID and creates/updates their {@link KeriIdentityLinkEntity}
- * (design §4.3/§4.7).
+ *.
  *
  * <p>All syntactic validation ({@link #validate}) runs before any {@link SignifyClient} call — an
  * invalid OOBI URL never touches the KERI agent. Once validated, the URL is resolved against the
  * agent (alias = the caller's {@code userId}, stable per user) and the resulting AID is verified via
  * {@code contacts().get(aid)} before anything is persisted. Persistence then branches on the user's
- * existing {@link KeriIdentityLinkEntity} (design §4.7): no link creates one at
+ * existing {@link KeriIdentityLinkEntity}: no link creates one at
  * {@code bindingVersion=1}; the same AID just refreshes {@code oobiUrl}; a different AID requires
  * {@code relink=true} and, when granted, bumps {@code bindingVersion}, clears every field that only
  * makes sense under the old identity, and fails every one of the user's still-open ceremonies so a
@@ -106,7 +106,7 @@ public class KeriOobiService {
         return resolveAndVerify(userId, oobiUrl, aid);
     }
 
-    // --- validation (design §4.3): runs before any client call, so an invalid URL never touches
+    // --- validation: runs before any client call, so an invalid URL never touches
     //     the KERI agent. ---
 
     private static Either<ProblemDetail, String> validate(String oobiUrl) {
@@ -214,11 +214,11 @@ public class KeriOobiService {
         return status >= 500 && status < 600;
     }
 
-    // --- persist the identity link (design §4.7) ---
+    // --- persist the identity link ---
 
     /**
      * Decides whether this call is a create, a no-op-refresh, or a genuine relink, and dispatches
-     * accordingly (F3 fix / item 4 round-2 fix — lock-order inversion).
+     * accordingly.
      *
      * <p><b>Global lock order: ceremony before link</b> (see {@code CeremonyService#completeStep}'s
      * javadoc for the full statement of the rule and why it exists). Completion paths
@@ -282,7 +282,7 @@ public class KeriOobiService {
     }
 
     /**
-     * Full unlink (design §... reset-identity): deletes the caller's {@link KeriIdentityLinkEntity} row
+     * Full unlink: deletes the caller's {@link KeriIdentityLinkEntity} row
      * outright and fails every one of their still-open ceremonies with {@link
      * KeriAttestationProblems#IDENTITY_RESET} — a strictly bigger hammer than {@link #persistLink}'s
      * relink path (which only re-points the link at a new AID and bumps {@code bindingVersion}); here
@@ -362,7 +362,7 @@ public class KeriOobiService {
         link.setAid(aid);
         link.setOobiUrl(oobiUrl);
         identityLinkRepository.save(link);
-        // R2 fix (Codex re-verification): published from inside this same transaction, but only
+        // published from inside this same transaction, but only
         // DELIVERED to RelinkInvalidationSweepHandler after it commits (AFTER_COMMIT listener) - never
         // executed synchronously here, so this never risks taking a ceremony lock while the link lock
         // acquired above is still held. Closes the phantom-insert window between invalidateOpenCeremonies
@@ -372,10 +372,9 @@ public class KeriOobiService {
         return Either.right(aid);
     }
 
-    /** Fails every one of the user's non-terminal ceremonies (design §4.7 for the relink case; also
-     *  reused by {@link #resetIdentity} for a full unlink) with the given {@code errorTitle}/{@code
-     *  errorDetail} — each was created under an identity binding that just stopped existing (relinked to
-     *  a different AID, or the link deleted outright) and can never be legitimately consumed as a result.
+    /** Fails every one of the user's non-terminal ceremonies with the given title and detail. Used by
+     *  both relink and {@link #resetIdentity}: each ceremony was created under an identity binding that
+     *  has stopped existing and can never legitimately be consumed.
      *  Direct mutation + save rather than {@link CeremonyService}'s step-CAS methods: those exist for
      *  async workers racing a retry, not for this bulk invalidation. {@code findByUserIdAndStateNotIn} is
      *  an unlocked discovery read though (same as {@code CeremonyCleanupJob}'s sweep), so each candidate
@@ -384,12 +383,10 @@ public class KeriOobiService {
      *  #validateAndConsume} finishing the same ceremony between the discovery read and this write) could
      *  be silently clobbered back to FAILED.
      *
-     *  <p><b>Global lock order: ceremony before link</b> (item 4 round-2 fix — see
-     *  {@code CeremonyService#completeStep}'s javadoc for the full rule). Every caller ({@link
-     *  #persistLink}, {@link #resetIdentity}) invokes this method BEFORE ever locking the identity-link
-     *  row, precisely so the ceremony row locks taken here are never held at the same time as the link
-     *  lock — callers must preserve that ordering; do not call this method (or otherwise lock a ceremony
-     *  row) while the link row is already locked. */
+     *  <p><b>Global lock order: ceremony before link</b> — see {@code CeremonyService#completeStep}
+     *  for the full rule. Every caller invokes this before locking the identity-link row, so the
+     *  ceremony locks taken here are never held alongside the link lock. Do not call this, or
+     *  otherwise lock a ceremony row, while the link row is already locked. */
     private void invalidateOpenCeremonies(String userId, String errorTitle, String errorDetail) {
         List<KeriAttestationCeremonyEntity> candidates = ceremonyRepository.findByUserIdAndStateNotIn(userId, TERMINAL_STATES);
         for (KeriAttestationCeremonyEntity candidate : candidates) {

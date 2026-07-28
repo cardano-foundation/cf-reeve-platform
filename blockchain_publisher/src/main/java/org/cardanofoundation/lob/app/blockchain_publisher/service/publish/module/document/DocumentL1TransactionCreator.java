@@ -46,13 +46,13 @@ import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApi
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 
 /**
- * L1 transaction creator for documents. Standalone (NOT
- * {@link org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.AbstractL1TransactionCreator}):
- * that base treats IPFS as an optional offload and inlines the payload into L1 metadata when it is absent -
- * the exact opposite of the document requirement. Documents are one-per-tx (mirrors
- * {@link org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report.API3L1TransactionCreator}),
- * and IPFS is mandatory: no {@link IpfsPublisher} configured means dispatch fails, full stop - the envelope is
- * never inlined into L1 metadata and never silently skipped.
+ * L1 transaction creator for documents: one document per transaction.
+ *
+ * <p>Standalone rather than extending
+ * {@link org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.AbstractL1TransactionCreator},
+ * because that base treats IPFS as an optional offload and inlines the payload into L1 metadata when
+ * it is absent. For documents IPFS is mandatory: without an {@link IpfsPublisher} dispatch fails, and
+ * the envelope is never inlined into L1 metadata.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -72,8 +72,8 @@ public class DocumentL1TransactionCreator {
     private final int metadataTag;
     private final boolean debugStoreOutputTx;
 
-    /** CIP-170 metadata label the ATTEST map (design §4.4) is published under - fixed by the CIP, not
-     *  configurable (unlike {@link #metadataTag}, which is the document's own 1447-by-default label). */
+    /** Label the ATTEST map is published under. Fixed by CIP-170, unlike the configurable
+     *  {@link #metadataTag} the document's own manifest uses. */
     private static final long CIP170_ATTEST_METADATA_TAG = 170L;
 
     private String runId;
@@ -90,21 +90,13 @@ public class DocumentL1TransactionCreator {
     }
 
     /**
-     * Builds the document's L1 transaction. Attested and plain publishes follow the SAME path and
-     * differ only in whether a CIP-170 ATTEST map is attached under label 170.
+     * Builds the document's L1 transaction. Attested and plain publishes take the same path — pin the
+     * envelope, read the chain tip, assemble the manifest — and differ only in whether a CIP-170
+     * ATTEST map is attached under label 170.
      *
-     * <p>They used to diverge sharply: an attested publish replayed a 1447 map frozen by the ceremony,
-     * reusing its {@code ipfs_cid} verbatim and never re-pinning. That is gone, because the tier which
-     * runs ceremonies has neither IPFS credentials nor chain access and so cannot build a manifest at
-     * all — see the {@code api} service in cf-reeve-application's docker-compose.yml. The wallet now
-     * attests a content commitment instead ({@code DocumentAttestationCommitment}), and this tier —
-     * the one that actually holds those credentials — pins the envelope, reads the tip and assembles
-     * the manifest, for attested and plain publishes alike.
-     *
-     * <p>The attestation itself arrives ON the dispatch record, put there by document_vault when it
-     * consumed the ceremony. Nothing here calls back into {@code keri_attestation} or
-     * {@code document_vault}; this module no longer depends on either, which is what allows the two to
-     * run in separate processes.
+     * <p>The attestation arrives on the dispatch record, written by document_vault when it consumed
+     * the ceremony. Nothing here calls back into {@code keri_attestation} or {@code document_vault},
+     * which is what lets those modules run in a separate process.
      */
     public Either<ProblemDetail, API3BlockchainTransaction> pullBlockchainTransaction(
             String organisationId, DocumentEntity document) {
@@ -138,15 +130,11 @@ public class DocumentL1TransactionCreator {
     }
 
     /**
-     * The CIP-170 ATTEST map for an attested publish, or {@code null} for the plain path.
+     * The CIP-170 ATTEST map for an attested publish, or {@code null} for the plain path. {@code 170.d}
+     * carries the payload SAID the wallet's KEL anchored, not the commitment digest.
      *
-     * <p>{@code 170.d} carries the payload SAID the wallet's KEL actually anchored, NOT the commitment
-     * digest — the two are distinct on purpose, and conflating them produced a design a real Veridian
-     * wallet never accepted.
-     *
-     * <p>Fails closed by construction: a document carrying a ceremony id but missing the attestation
-     * fields would have to have been written by a vault that skipped consumption, so treat it as an
-     * error rather than quietly publishing it unattested.
+     * <p>Fails closed: a document with a ceremony id but no attestation fields could only come from a
+     * vault that skipped consumption, so it is rejected rather than published as unattested.
      */
     private MetadataMap attestMapOrNull(DocumentEntity document) {
         if (document.getAttestationCeremonyId() == null) {
@@ -162,17 +150,11 @@ public class DocumentL1TransactionCreator {
                 document.getAttestationPayloadSaid(), document.getAttestationKelSequence());
     }
 
-    private Either<ProblemDetail, API3BlockchainTransaction> handleTransactionCreation(MetadataMap metadataMap,
-                                                                                        long creationSlot) {
-        return handleTransactionCreation(metadataMap, null, creationSlot);
-    }
-
     /**
      * @param attestMap170OrNull the CIP-170 {@code ATTEST} map to attach under label 170 alongside the
-     *                            document's own {@code metadataTag} map, or {@code null} for a plain
-     *                            (non-attested) publish - the JSON-schema check below validates ONLY
-     *                            the {@code metadataMap} (label {@link #metadataTag}), exactly as it
-     *                            did before this parameter existed; label 170 is never schema-checked.
+     *                           document's own {@link #metadataTag} map, or {@code null} for a plain
+     *                           publish. Only the document manifest is schema-checked; label 170 is
+     *                           not.
      */
     private Either<ProblemDetail, API3BlockchainTransaction> handleTransactionCreation(MetadataMap metadataMap,
                                                                                         MetadataMap attestMap170OrNull,

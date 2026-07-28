@@ -49,7 +49,7 @@ class DocumentIpfsSerialiserTest {
         assertEquals("Y2lwaGVydGV4dA==", root.get("payload").get("ciphertext").asText());
         assertEquals("c".repeat(24), root.get("payload").get("nonce").asText());
         assertEquals(2, root.get("slots").size());
-        // slots carry ONLY crypto material — no identifiers of any kind (blueprint I6, spec B5 #3)
+        // slots carry ONLY crypto material — no identifiers of any kind
         root.get("slots").forEach(slot -> {
             List<String> fields = new ArrayList<>();
             slot.fieldNames().forEachRemaining(fields::add);

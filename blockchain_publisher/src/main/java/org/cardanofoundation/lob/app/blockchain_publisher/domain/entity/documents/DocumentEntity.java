@@ -40,12 +40,12 @@ import org.cardanofoundation.lob.app.blockchain_publisher.domain.publish.Publish
 import org.cardanofoundation.lob.app.support.spring_audit.CommonDateOnlyLockableEntity;
 
 /**
- * Publisher-side projection of a vault document. Built EXCLUSIVELY from
- * {@link org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand} fields (spec B5 #3):
- * no lookups back into vault tables, no e-mails, key ids, file names, account ids, or labels.
+ * Publisher-side projection of a vault document, built exclusively from
+ * {@link org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand}: no
+ * lookups back into vault tables, and no e-mails, key ids, file names, account ids or labels.
  *
- * <p>Deliberately NOT {@code @Audited} - unlike the other publishable entities, the ciphertext must never get
- * an {@code _aud} history copy.
+ * <p>Deliberately not {@code @Audited}, unlike the other publishable entities — the ciphertext must
+ * never get an {@code _aud} history copy.
  */
 @Getter
 @Setter
@@ -81,30 +81,28 @@ public class DocumentEntity extends CommonDateOnlyLockableEntity implements Pers
     @Column(name = "payload_nonce", nullable = false)
     private String payloadNonce;
 
-    /** Base64-encoded ciphertext. Excluded from {@code toString()} - never let it leak into logs. */
+    /** Base64-encoded ciphertext. Excluded from {@code toString()} so it cannot leak into logs. */
     @NotBlank
     @ToString.Exclude
     @Column(name = "ciphertext_base64", nullable = false, columnDefinition = "TEXT")
     private String ciphertextBase64;
 
-    /** Set once the envelope is published to IPFS at dispatch time. IPFS is mandatory, so this is null only
-     *  before the first (successful) dispatch attempt. */
+    /** Set once the envelope is pinned to IPFS at dispatch time; null until the first successful
+     *  dispatch attempt. */
     @Nullable
     @Column(name = "ipfs_cid")
     private String ipfsCid;
 
-    /** The KERI wallet-attestation ceremony consumed by document_vault's publish (design §5.1, Task
-     *  14), carried here via {@code DocumentPublishCommand#attestationCeremonyId}. NULL for every
-     *  plain (non-attested) publish, which remains the default and overwhelmingly common path. */
+    /** The KERI wallet-attestation ceremony document_vault consumed for this publish, or null for a
+     *  plain publish. */
     @Nullable
     @Column(name = "attestation_ceremony_id", length = 64)
     private String attestationCeremonyId;
 
     /**
-     * The consumed wallet attestation, carried here from {@code DocumentPublishCommand} rather than
-     * looked up. This module no longer depends on {@code keri_attestation} or {@code document_vault},
-     * and in the split deployment they run in a different process, so a lookup is impossible.
-     * All NULL for a plain (unattested) publish.
+     * The consumed wallet attestation, carried here on the publish command rather than looked up: this
+     * module depends on neither {@code keri_attestation} nor {@code document_vault}, which may run in
+     * a different process. Null for a plain publish, along with the two fields below.
      */
     @Column(name = "attestation_aid", length = 128)
     private String attestationAid;
@@ -116,7 +114,7 @@ public class DocumentEntity extends CommonDateOnlyLockableEntity implements Pers
     @Column(name = "attestation_kel_sequence", length = 32)
     private String attestationKelSequence;
 
-    /** Recipient slots - crypto material only, no identifiers of any kind (spec B5 #3). */
+    /** Recipient slots: crypto material only, no identifiers. */
     @Builder.Default
     @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "blockchain_publisher_document_slot", joinColumns = @JoinColumn(name = "document_id"))
@@ -174,7 +172,7 @@ public class DocumentEntity extends CommonDateOnlyLockableEntity implements Pers
         return organisationId;
     }
 
-    /** One recipient slot's crypto material only - no identifiers of any kind (spec B5 #3). */
+    /** One recipient slot's crypto material. */
     @Getter
     @Setter
     @Embeddable
@@ -190,9 +188,8 @@ public class DocumentEntity extends CommonDateOnlyLockableEntity implements Pers
 
         /**
          * sha256 of the recipient's X25519 public key, lowercase hex — the one identifier this class
-         * deliberately does carry, because the 1447 manifest publishes it (docs/onChainFormat.md).
-         * Derived in document_vault from the authorised directory key and frozen there; the publisher
-         * only relays it.
+         * carries, because the manifest publishes it (docs/onChainFormat.md). Derived and frozen in
+         * document_vault; the publisher only relays it.
          */
         @Column(name = "recipient_key_hash", nullable = false)
         private String recipientKeyHash;

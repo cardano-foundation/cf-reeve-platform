@@ -14,7 +14,7 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.core.ConsumedAttest
  * The only surface a target-owning module (e.g. document_vault) is allowed to depend on: exchanging
  * a completed ceremony for the attestation it produced. Deliberately narrow — everything else about
  * ceremony orchestration ({@link CeremonyService}'s full API) is an implementation detail of this
- * module (design §4.6).
+ * module.
  */
 public interface AttestationConsumptionApi {
 
@@ -40,7 +40,7 @@ public interface AttestationConsumptionApi {
 
     /**
      * Read-only re-lookup of a ceremony's {@link ConsumedAttestation} for a caller that already knows
-     * it was consumed (design §5.3): {@code blockchain_publisher}'s dispatch hook needs the AID /
+     * it was consumed: {@code blockchain_publisher}'s dispatch hook needs the AID /
      * digest / KEL sequence a document's frozen ceremony id attested, well after {@link
      * #validateAndConsume} already ran — that method returns its result once, at publish time, and
      * cannot be called again (it CASes the ceremony to {@code CONSUMED} and rejects any state other

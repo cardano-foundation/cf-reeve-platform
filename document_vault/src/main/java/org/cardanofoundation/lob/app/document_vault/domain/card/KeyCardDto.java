@@ -25,13 +25,12 @@ import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyAssurance;
 
 /**
  * A permissionless key card: "this X25519 public key belongs to this holder, in this organisation."
- * Assembled client-side from a locally generated passkey+PRF key (contract §2.8). There is no issuer
- * and no signature: the backend accepts any well-formed card and the SENDER verifies the recipient's
- * key out-of-band before encrypting to it (trust-on-first-use).
+ * Assembled client-side from a locally generated passkey+PRF key. There is no issuer and no
+ * signature: the backend accepts any well-formed card and the sender verifies the recipient's key
+ * out-of-band before encrypting to it (trust-on-first-use).
  *
- * NOTE: no `privateKey` field, on purpose (blueprint I5). If a card still carries one, the
- * unknown-field sink below catches it and the request is REJECTED (400 CARD_CONTAINS_PRIVATE_KEY)
- * rather than silently accepted minus the key.
+ * <p>There is deliberately no {@code privateKey} field. A card carrying one lands in the
+ * unknown-field sink below and the request is rejected rather than accepted minus the key.
  */
 @Getter
 @Setter
@@ -53,11 +52,9 @@ public class KeyCardDto {
     private Key key;
 
     /**
-     * Present only on a Veridian-attested card (indexer ceremony); absent = today's unattested card,
-     * still valid (trust-on-first-use). Carries what B2 needs to verify the attestation later: the
-     * wallet OOBI, the presenting AID, the presented credential/schema SAIDs, and the on-chain
-     * CIP-170 ATTEST tx hash. This task (B1) only carries the block through to storage — nothing here
-     * verifies it yet.
+     * Present only on a Veridian-attested card; absent on an unattested one, which remains valid
+     * under trust-on-first-use. Carries everything needed to verify the attestation at import: the
+     * wallet OOBI, the presenting AID, the credential and schema SAIDs, and the on-chain ATTEST tx.
      */
     @Nullable
     @Valid
@@ -100,19 +97,17 @@ public class KeyCardDto {
     }
 
     /**
-     * The result of the indexer's Veridian attestation ceremony (design doc "The card-format
-     * contract"), bound to this card. Only ever set by the indexer at export time; the platform stores
-     * it as-is on import (provenance) and B2 is what will actually verify it against KERIA/on-chain.
+     * The result of the indexer's Veridian attestation ceremony, bound to this card. Set by the
+     * indexer at export time and verified against KERIA and the chain on import.
      *
      * @param oobi            the attesting wallet's OOBI — how the platform resolves {@link #aid}.
      * @param aid             the wallet AID that presented the credential and anchored the attestation.
      * @param credentialSaid  SAID of the credential presented during the ceremony.
      * @param schemaSaid      SAID of that credential's schema.
      * @param txHash          Cardano tx hash of the on-chain CIP-170 ATTEST anchoring this card.
-     * @param credentialCesr  the full CESR credential chain the wallet presented — carried so the
-     *                        platform can re-validate the credential itself (it cannot fetch it via
-     *                        the OOBI alone). Nullable: an older attested card may omit it, in which
-     *                        case the credential cannot be verified and B2 rejects the card.
+     * @param credentialCesr  the full CESR credential chain the wallet presented, carried because the
+     *                        credential cannot be fetched through the OOBI alone. Nullable: an older
+     *                        attested card may omit it, and is then rejected as unverifiable.
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record CardAttestation(@NotBlank String oobi,

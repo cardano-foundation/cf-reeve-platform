@@ -45,7 +45,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
-import org.cardanofoundation.lob.app.blockchain_common.service.IpfsAvailability;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.RecipientKeyHasher;
 import org.cardanofoundation.lob.app.document_vault.domain.KeyRef;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.DocumentSlot;
@@ -76,9 +75,7 @@ class VaultDocumentServiceTest {
 
     @Mock
     private VaultDocumentRepository documentRepository;
-    // The service resolves slot/document keys via VaultKeyLookupService now, not VaultKeyRepository
-    // directly: a slot may name either an organisation key or an addressbook entry, and the lookup
-    // spans both stores behind one KeyRef result.
+    // A slot may name either an organisation key or an addressbook entry; the lookup spans both.
     @Mock
     private VaultKeyLookupService keyLookupService;
     @Mock
@@ -88,8 +85,6 @@ class VaultDocumentServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
     @Mock
-    private ObjectProvider<IpfsAvailability> ipfsAvailability;
-    @Mock
     private ObjectProvider<AttestationFreezeGuard> attestationFreezeGuardProvider;
     @Mock
     private ObjectProvider<AttestationConsumptionApi> attestationConsumptionApiProvider;
@@ -98,17 +93,14 @@ class VaultDocumentServiceTest {
     @Mock
     private AttestationConsumptionApi attestationConsumptionApi;
 
-    // Deliberately NOT @InjectMocks: three ObjectProvider<...> fields erase to the same raw
-    // ObjectProvider type, and letting Mockito's ambiguous same-type constructor matching pick which
-    // mock goes where is exactly the kind of "worked by accident" this codebase avoids elsewhere
-    // (see VaultDocumentService#loadForAttestation's javadoc on a similar theme). Explicit
-    // construction removes the ambiguity entirely.
+    // Not @InjectMocks: the ObjectProvider<...> fields erase to the same raw type, so Mockito's
+    // constructor matching could not tell which mock belongs where.
     private VaultDocumentService service;
 
     @BeforeEach
     void setUp() {
         service = new VaultDocumentService(documentRepository, keyLookupService, securityHelper,
-                organisationPublicApi, eventPublisher, ipfsAvailability,
+                organisationPublicApi, eventPublisher,
                 attestationFreezeGuardProvider, attestationConsumptionApiProvider);
         ReflectionTestUtils.setField(service, "maxDocumentBytes", 10_485_760L);
         ReflectionTestUtils.setField(service, "maxSlots", 64);
@@ -286,7 +278,7 @@ class VaultDocumentServiceTest {
     }
 
     /**
-     * Controller-mandated fix (Task 3 review): a filename/description containing a literal
+     * Controller-mandated fix: a filename/description containing a literal
      * {@code %} or {@code _} must be searchable, and a bare {@code %} query must NOT act as a
      * wildcard matching every document. The service escapes LIKE metacharacters before binding
      * {@code q} into {@code VaultDocumentRepository.search} — this pins that the escaped form,
@@ -470,7 +462,6 @@ class VaultDocumentServiceTest {
         VaultDocumentEntity doc = draftDoc();
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
         when(documentRepository.save(any(VaultDocumentEntity.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
 
         Either<ProblemDetail, DocumentView> result = service.publish("doc1");
 
@@ -487,21 +478,6 @@ class VaultDocumentServiceTest {
         assertFalse(command.getValue().toString().contains("canary-recipient-label"));
     }
 
-    /** Auth-first ordering (finding 2): org access and document/status checks now run before the
-     *  IPFS capability probe, so this test must supply a document (org member, DRAFT) to reach it. */
-    @Test
-    void publishRejectedWhenIpfsUnavailable() {
-        VaultDocumentEntity doc = draftDoc();
-        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
-        when(ipfsAvailability.getIfAvailable()).thenReturn(null);
-
-        Either<ProblemDetail, DocumentView> result = service.publish("doc1");
-
-        assertTrue(result.isLeft());
-        assertEquals(503, result.getLeft().getStatus());
-        assertEquals(VaultProblems.DOCUMENT_PUBLISHING_UNAVAILABLE, result.getLeft().getTitle());
-    }
-
     @Test
     void publishRejectedWhenAlreadyPublished() {
         VaultDocumentEntity doc = draftDoc();
@@ -514,32 +490,26 @@ class VaultDocumentServiceTest {
         assertEquals(VaultProblems.ALREADY_PUBLISHED, result.getLeft().getTitle());
     }
 
-    /** Finding 2: a non-member (or someone probing a random documentId) must not learn whether IPFS
-     *  is configured in this deployment. The org check must reject BEFORE the IPFS probe even runs. */
     @Test
-    void publishChecksOrgAccessBeforeProbingIpfsAvailability() {
+    void publishRejectedForNonMember() {
         VaultDocumentEntity doc = draftDoc();
         doc.setOrganisationId("org-not-mine");
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
-        // securityHelper.canUserAccessOrg("org-not-mine") is unstubbed -> defaults to false
 
         Either<ProblemDetail, DocumentView> result = service.publish("doc1");
 
         assertTrue(result.isLeft());
         assertEquals(403, result.getLeft().getStatus());
-        verify(ipfsAvailability, never()).getIfAvailable();
     }
 
-    // ==================== attested publish (design §5.1, Task 14) ====================
+    // ==================== attested publish ====================
 
-    /** Bodiless publish (the pre-Task-14 overload) must never even probe whether the attestation
-     *  providers are wired up — the ceremony branch is skipped entirely when the id is null. */
+    /** A bodiless publish must never probe whether the attestation providers are wired up. */
     @Test
     void publishWithoutCeremonyIdNeverTouchesAttestationProviders() {
         VaultDocumentEntity doc = draftDoc();
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
         when(documentRepository.save(any(VaultDocumentEntity.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
 
         Either<ProblemDetail, DocumentView> result = service.publish("doc1");
 
@@ -548,7 +518,7 @@ class VaultDocumentServiceTest {
         assertNull(doc.getAttestationCeremonyId());
     }
 
-    /** M3 cross-review F6 fix: a present-but-blank ceremony id (e.g. a client sending
+    /** A present-but-blank ceremony id (e.g. a client sending
      *  {"attestationCeremonyId": ""} or all-whitespace) is rejected outright with a 422 - it is no
      *  longer silently normalized to "no ceremony, plain publish". The document is never even looked
      *  up: this is pure request-shape validation. */
@@ -566,7 +536,6 @@ class VaultDocumentServiceTest {
     void publishWithCeremonyIdAndNoAttestationProvidersReturnsAttestationUnavailableAndStaysDraft() {
         VaultDocumentEntity doc = draftDoc();
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
-        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
         // attestationFreezeGuardProvider/attestationConsumptionApiProvider.getIfAvailable() unstubbed -> null
 
         Either<ProblemDetail, DocumentView> result = service.publish("doc1", "cer-1");
@@ -583,7 +552,6 @@ class VaultDocumentServiceTest {
     void publishWithCeremonyIdWhenOnlyFreezeGuardIsAvailableStillReturnsAttestationUnavailable() {
         VaultDocumentEntity doc = draftDoc();
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
-        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
         when(attestationFreezeGuardProvider.getIfAvailable()).thenReturn(attestationFreezeGuard);
         // attestationConsumptionApiProvider.getIfAvailable() unstubbed -> null
 
@@ -601,10 +569,9 @@ class VaultDocumentServiceTest {
     void publishWithCeremonyIdWhenFreezeGuardRejectsPropagatesProblemAndStaysDraft() {
         VaultDocumentEntity doc = draftDoc();
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
-        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
         when(attestationFreezeGuardProvider.getIfAvailable()).thenReturn(attestationFreezeGuard);
         when(attestationConsumptionApiProvider.getIfAvailable()).thenReturn(attestationConsumptionApi);
-        // F7 fix: verifyFreshness's own problem carries whatever native status fits its domain (here
+        // verifyFreshness's own problem carries whatever native status fits its domain (here
         // 409, e.g. a concurrent freeze-invalidating change) - VaultDocumentService must still force it
         // to 422 while preserving the title/detail verbatim.
         ProblemDetail contentChanged = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
@@ -629,12 +596,11 @@ class VaultDocumentServiceTest {
     void publishWithCeremonyIdWhenConsumptionFailsWrapsTheNativeStatusTo422PreservingTitleAndDetail() {
         VaultDocumentEntity doc = draftDoc();
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
-        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
         when(attestationFreezeGuardProvider.getIfAvailable()).thenReturn(attestationFreezeGuard);
         when(attestationConsumptionApiProvider.getIfAvailable()).thenReturn(attestationConsumptionApi);
         when(attestationFreezeGuard.verifyFreshness(doc, "cer-1")).thenReturn(Optional.empty());
-        // F7 fix: keri_attestation's validateAndConsume builds CEREMONY_EXPIRED as a 409 (its own
-        // domain's native status - see KeriAttestationProblems#conflict) - the §5.1 boundary this
+        // keri_attestation's validateAndConsume builds CEREMONY_EXPIRED as a 409 (its own
+        // domain's native status - see KeriAttestationProblems#conflict) - the boundary this
         // module owns must force it to 422 regardless, while the title/detail the frontend actually
         // switches on stay byte-for-byte the same.
         ProblemDetail ceremonyExpired = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Ceremony cer-1 has expired.");
@@ -656,12 +622,11 @@ class VaultDocumentServiceTest {
 
     @Test
     void publishWithCeremonyIdWhenConsumptionFailsWith404Or403AlsoWrapsToA422() {
-        // F7 fix: not just 409s - a 404 (CEREMONY_NOT_FOUND) or 403 (CEREMONY_FORBIDDEN) native status
+        // not just 409s - a 404 (CEREMONY_NOT_FOUND) or 403 (CEREMONY_FORBIDDEN) native status
         // must be forced to 422 too. Exercised here with a 404 to prove the wrapping is unconditional
         // on the original status, not special-cased to 409.
         VaultDocumentEntity doc = draftDoc();
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
-        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
         when(attestationFreezeGuardProvider.getIfAvailable()).thenReturn(attestationFreezeGuard);
         when(attestationConsumptionApiProvider.getIfAvailable()).thenReturn(attestationConsumptionApi);
         when(attestationFreezeGuard.verifyFreshness(doc, "cer-1")).thenReturn(Optional.empty());
@@ -680,13 +645,12 @@ class VaultDocumentServiceTest {
 
     @Test
     void publishWithCeremonyIdWhenFreezeGuardFailsWith503PropagatesThe503Unchanged() {
-        // R5 fix (Codex re-verification): a 5xx Left is NOT the caller's fault (e.g. a downstream KERI
+        // a 5xx Left is NOT the caller's fault (e.g. a downstream KERI
         // agent outage) - forcing it to 422 like every 4xx would mislead a retrying client into
         // treating a transient platform failure as "fix your request and resubmit". Must pass through
         // with its original status, title and detail untouched.
         VaultDocumentEntity doc = draftDoc();
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
-        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
         when(attestationFreezeGuardProvider.getIfAvailable()).thenReturn(attestationFreezeGuard);
         when(attestationConsumptionApiProvider.getIfAvailable()).thenReturn(attestationConsumptionApi);
         ProblemDetail agentUnavailable = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
@@ -708,11 +672,10 @@ class VaultDocumentServiceTest {
 
     @Test
     void publishWithCeremonyIdWhenConsumptionFailsWith503PropagatesThe503Unchanged() {
-        // R5 fix: same guard as the freeze-guard case above, exercised on the consumeAttestation
+        // same guard as the freeze-guard case above, exercised on the consumeAttestation
         // (validateAndConsume) call site instead.
         VaultDocumentEntity doc = draftDoc();
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
-        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
         when(attestationFreezeGuardProvider.getIfAvailable()).thenReturn(attestationFreezeGuard);
         when(attestationConsumptionApiProvider.getIfAvailable()).thenReturn(attestationConsumptionApi);
         when(attestationFreezeGuard.verifyFreshness(doc, "cer-1")).thenReturn(Optional.empty());
@@ -739,7 +702,6 @@ class VaultDocumentServiceTest {
         VaultDocumentEntity doc = draftDoc();
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
         when(documentRepository.save(any(VaultDocumentEntity.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(ipfsAvailability.getIfAvailable()).thenReturn(() -> true);
         when(attestationFreezeGuardProvider.getIfAvailable()).thenReturn(attestationFreezeGuard);
         when(attestationConsumptionApiProvider.getIfAvailable()).thenReturn(attestationConsumptionApi);
         when(attestationFreezeGuard.verifyFreshness(doc, "cer-1")).thenReturn(Optional.empty());

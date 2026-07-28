@@ -32,11 +32,11 @@ public final class KeriAttestationProblems {
     /** An IPEX exchange (apply/agree/admit) could not be built or sent to the linked AID — a
      *  transport/protocol failure talking to the KERI agent, distinct from {@link #KERI_WALLET_TIMEOUT}
      *  (no reply arrived in time) and {@link #CREDENTIAL_REJECTED} (a reply arrived but failed content
-     *  validation). Added for {@code KeriCredentialService} (design §4.3). */
+     *  validation). Added for {@code KeriCredentialService}. */
     public static final String CREDENTIAL_REQUEST_FAILED = "CREDENTIAL_REQUEST_FAILED";
     public static final String AUTH_BEGIN_ROLLED_BACK = "AUTH_BEGIN_ROLLED_BACK";
     public static final String AUTH_BEGIN_UNVERIFIED = "AUTH_BEGIN_UNVERIFIED";
-    /** F9 fix: {@code KeriAuthBeginService#submitOwn} could not build/submit a fresh AUTH_BEGIN
+    /** {@code KeriAuthBeginService#submitOwn} could not build/submit a fresh AUTH_BEGIN
      *  transaction because no {@code CardanoMetadataTxSubmitter} implementation is available in this
      *  deployment (the module is enabled without {@code blockchain_publisher}). Distinct from
      *  {@link #AUTH_BEGIN_UNVERIFIED}, which is the external-authority-verification path's equivalent
@@ -53,7 +53,7 @@ public final class KeriAttestationProblems {
     public static final String TARGET_MISMATCH = "TARGET_MISMATCH";
     /** A wallet-confirmed remotesign anchor could not be verified against the ceremony's
      *  {@code metadataDigest} — no matching interaction event was found on the AID's KEL, or the
-     *  event's seal list did not contain the expected digest (design §4.6 step 5). Also used for an
+     *  event's seal list did not contain the expected digest. Also used for an
      *  unexpected error while performing that verification, since an unsupervised async worker must
      *  always resolve the ceremony rather than propagate (mirrors {@code KeriCredentialService}'s
      *  reuse of {@link #CREDENTIAL_REJECTED} for its validator's thrown-exception case). */

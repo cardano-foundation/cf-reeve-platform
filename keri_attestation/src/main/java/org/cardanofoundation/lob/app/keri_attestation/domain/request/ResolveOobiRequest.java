@@ -10,7 +10,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * Body of {@code POST /identity/oobi/resolve} (design §4.7). Not a {@code BaseRequest} subclass: this
+ * Body of {@code POST /identity/oobi/resolve}. Not a {@code BaseRequest} subclass: this
  * module links a KERI identity to a Keycloak user, not to an organisation — there is no
  * {@code organisationId} in scope here.
  */

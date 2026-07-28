@@ -17,20 +17,14 @@ import org.cardanofoundation.signify.cesr.Diger;
 import org.cardanofoundation.signify.cesr.args.RawArgs;
 
 /**
- * Builds CIP-170 label-170 metadata maps: {@code ATTEST} and {@code AUTH_BEGIN}, with the exact
- * field names, {@code put()} call order and chunking that other AUTH_BEGIN/ATTEST publishers on
- * this chain use, so anything this factory produces is safe to anchor on-chain under metadata
- * label 170.
+ * Builds the CIP-170 label-170 {@code ATTEST} and {@code AUTH_BEGIN} metadata maps, matching the
+ * field names and chunking used by other label-170 publishers on this chain.
  *
- * <p><b>Note on insertion order:</b> {@link CborSerializationUtil}'s serialization defaults to
- * canonical CBOR (RFC 7049 §3.9), which sorts map keys deterministically regardless of
- * {@code put()} insertion order — so on-chain byte identity with another label-170 publisher comes
- * from matching its exact key/value <em>set</em>, not from mirroring its insertion order. The
- * {@code put()} calls below still follow a fixed order anyway, purely so this class reads as a
- * direct, diffable spec of the wire shape.
+ * <p>Byte identity with those publishers comes from matching their exact key/value set, not from
+ * insertion order: {@link CborSerializationUtil} emits canonical CBOR, which sorts map keys. The
+ * {@code put()} calls below still follow a fixed order so the wire shape reads top to bottom.
  *
- * <p>Pure and stateless: every method is a deterministic function of its arguments, with no
- * dependency on the rest of this module (no repository, no KERI agent, no clock).
+ * <p>Pure and stateless — every method is a deterministic function of its arguments.
  */
 public class Cip170MetadataFactory {
 
@@ -59,15 +53,12 @@ public class Cip170MetadataFactory {
      * Builds the label-170 {@code AUTH_BEGIN} map: {@code t="AUTH_BEGIN"}, {@code s=leafSchemaSaid},
      * {@code i=aid}, {@code c}=64-byte chunks of {@code reducedCesrChain} (last chunk shorter, or
      * an empty list if the chain is empty), {@code v={v:"1.0",k:"KERI10JSON",a:"ACDC10JSON"}}, and
-     * {@code m={l:[...authorizedLabels],...optionalM}}. {@code m} generalizes a hardcoded
-     * {@code l:[1447]}/{@code LEI} pair to caller-supplied labels and extra entries.
+     * {@code m={l:[...authorizedLabels],...optionalM}}.
      *
-     * <p>{@code optionalM} may be {@code null} or empty. Its values are written as-is if already a
-     * {@link String}, otherwise converted with {@link String#valueOf(Object)}. {@code "l"} is
-     * reserved for {@code authorizedLabels}: an {@code optionalM} entry keyed {@code "l"} would
-     * otherwise silently overwrite the authorization-labels list in the underlying CBOR map (repeated
-     * keys are same-slot overwrites), so it is rejected outright rather than allowed to corrupt
-     * on-chain data. {@code authorizedLabels} itself must not be {@code null}.
+     * <p>{@code optionalM} may be {@code null} or empty; its values are written as-is if already a
+     * {@link String}, otherwise via {@link String#valueOf(Object)}. The key {@code "l"} is reserved
+     * for {@code authorizedLabels} and rejected in {@code optionalM}, since a repeated key would
+     * overwrite the authorization-labels list rather than add to it.
      */
     public MetadataMap authBeginMap(String aid, String leafSchemaSaid, byte[] reducedCesrChain,
             Map<String, Object> optionalM, List<Long> authorizedLabels) {

@@ -9,16 +9,12 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
 
 /**
- * Serialises the encrypted envelope into the IPFS document (spec: "IPFS envelope document").
- * PII-free by construction: slots carry only ephemeral_pub + wrapped_dek; no e-mails, labels,
- * key ids, file names, or account ids exist in this format (spec B5 #3).
+ * Serialises the encrypted envelope into the IPFS document. PII-free by construction: a slot carries
+ * only {@code ephemeral_pub} and {@code wrapped_dek}, never e-mails, labels, key ids, file names or
+ * account ids.
  *
- * <p>Lives in {@code blockchain_common} (moved from {@code blockchain_publisher}, WS3 step 1) so both
- * {@code blockchain_publisher} and {@code document_vault} can call it without either module depending
- * on the other. Takes the tier-neutral {@link DocumentPublishCommand} rather than
- * {@code blockchain_publisher}'s persisted {@code DocumentEntity} for the same reason - not annotated
- * {@code @Service}: this module registers every bean explicitly in {@code BlockchainCommonConfig}
- * rather than component-scanning, matching {@code Cip170MetadataFactory}'s precedent.
+ * <p>Beans are registered explicitly in {@code BlockchainCommonConfig}, so this class is not
+ * annotated {@code @Service}.
  */
 @RequiredArgsConstructor
 public class DocumentIpfsSerialiser {

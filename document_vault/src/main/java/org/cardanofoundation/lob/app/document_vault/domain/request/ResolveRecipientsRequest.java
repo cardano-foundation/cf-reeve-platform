@@ -40,7 +40,7 @@ public class ResolveRecipientsRequest extends BaseRequest {
 
     /**
      * Optional: which of the CALLER'S OWN keys in this organisation get a slot — i.e. which of their
-     * devices can reopen the document later ("choose a key to encrypt with", contract §0 step 4.2).
+     * devices can reopen the document later.
      * Null or empty means all of them, which is the right default and the previous behaviour. It can
      * never mean "none": the sender is always a recipient of their own document.
      */

@@ -19,7 +19,7 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestat
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestationCeremonyRepository;
 
 /**
- * R2 fix (Codex re-verification): closes the phantom-insert window between {@code
+ * closes the phantom-insert window between {@code
  * KeriOobiService#persistLink}'s relink invalidation sweep (ceremony locks only, taken and released
  * BEFORE the link lock is ever acquired — see that method's javadoc) and {@code
  * KeriOobiService#lockAndUpsertLink}'s actual link-row write. A {@code CeremonyService#create} call

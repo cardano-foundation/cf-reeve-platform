@@ -35,22 +35,16 @@ public class DocumentLedgerUpdateHandler {
     private final VaultKeyLookupService keyLookupService;
     private final ApplicationEventPublisher eventPublisher;
 
-    // Codex adversarial-review finding 2 (pre-commit ledger updates, the reverse direction of the
-    // publish handoff in BlockchainPublisherEventHandler#handleDocumentPublishCommand):
-    // - AFTER_COMMIT, not the default BEFORE_COMMIT-ish immediate dispatch of @EventListener: this
-    //   handler persists DISPATCHED/FAILED/FINALIZED status, txHash and ipfsCid onto the vault
-    //   document. LedgerUpdatedEvent is published from inside blockchain_publisher's own transactional
-    //   dispatch flow (see LedgerUpdatedEventPublisher#send), so without AFTER_COMMIT the vault could
-    //   persist phantom ledger state read from a publisher transaction that later rolls back.
-    // - fallbackExecution = true is REQUIRED (not incidental): some emitters — including this module's
-    //   own tests — invoke the handler or publish this event with no active transaction synchronization
-    //   present. AFTER_COMMIT listeners are silently skipped in that case unless fallbackExecution is set.
-    // - propagation = REQUIRES_NEW: Spring refuses to start a @TransactionalEventListener method that
-    //   also carries a plain (REQUIRED) @Transactional — "must not be annotated with @Transactional
-    //   unless declared as REQUIRES_NEW or NOT_SUPPORTED" (fails fast at context startup). REQUIRES_NEW
-    //   is also the semantically correct choice regardless: this method runs on the @Async executor
-    //   thread, decoupled from the publishing transaction, so it always needs its own fresh transaction
-    //   rather than trying to join one.
+    // AFTER_COMMIT: LedgerUpdatedEvent is published from inside blockchain_publisher's dispatch
+    // transaction, so acting earlier could persist ledger state onto the vault document that the
+    // publisher then rolls back.
+    //
+    // fallbackExecution is required, not incidental: some emitters publish this event with no active
+    // transaction synchronization, and AFTER_COMMIT listeners are silently skipped in that case.
+    //
+    // REQUIRES_NEW because Spring rejects a @TransactionalEventListener carrying a plain REQUIRED
+    // @Transactional, and because this runs on the async executor, detached from any caller's
+    // transaction.
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     @Async
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -69,7 +63,7 @@ public class DocumentLedgerUpdateHandler {
     }
 
     private void apply(VaultDocumentEntity document, LedgerStatusUpdate update) {
-        // capture BEFORE overwriting: DocumentPublishedEvent must fire exactly once, on the FIRST finality
+        // Captured before the overwrite below: DocumentPublishedEvent fires once, on first finality.
         boolean firstFinality = update.getStatus() == LedgerDispatchStatus.FINALIZED
                 && document.getLedgerDispatchStatus() != LedgerDispatchStatus.FINALIZED;
 
@@ -87,9 +81,8 @@ public class DocumentLedgerUpdateHandler {
         if (firstFinality) {
             Set<String> keyIds = new HashSet<>();
             document.getSlots().forEach(slot -> keyIds.add(slot.getKeyId()));
-            // Addressbook contacts resolve to a null account and are filtered out: the event carries
-            // Reeve account ids for in-app notification, and a contact has no login to notify. They see
-            // the document as a published record in the Indexer, which is how they were always meant to.
+            // Addressbook contacts resolve to a null account and drop out: the event carries Reeve
+            // account ids for in-app notification, and a contact has no login to notify.
             Set<String> recipientAccountIds = keyLookupService.findAllById(keyIds).values().stream()
                     .map(KeyRef::accountId)
                     .filter(Objects::nonNull)

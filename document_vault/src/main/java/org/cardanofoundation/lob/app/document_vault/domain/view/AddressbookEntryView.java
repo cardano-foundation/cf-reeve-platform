@@ -6,7 +6,7 @@ import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyAssurance;
 
 /**
  * An addressbook contact, as managed at {@code /addressbook}. E-mail is org-internal contact data — it
- * never reaches IPFS or L1 (spec B5 #3).
+ * never reaches IPFS or L1.
  *
  * @param entryId            the only unique thing about an entry. Names, e-mails and descriptions may
  *                           repeat; a public key may not, within one organisation.

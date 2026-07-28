@@ -104,7 +104,7 @@ class KeriAttestationModuleFlagTest {
     }
 
     /**
-     * F1 fix: this module must never expose a bare {@link SignifyClient} bean — legacy
+     * this module must never expose a bare {@link SignifyClient} bean — legacy
      * {@code blockchain_publisher} (a module this now depends on it) injects an <em>unqualified</em>
      * {@code SignifyClient} of its own, and a second unqualified bean of the same type would make an
      * application context wiring both modules together fail at startup with

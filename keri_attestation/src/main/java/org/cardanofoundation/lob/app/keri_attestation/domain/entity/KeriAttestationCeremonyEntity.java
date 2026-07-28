@@ -27,7 +27,7 @@ import org.hibernate.annotations.DynamicUpdate;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
 
 /**
- * A single attestation ceremony: one user attesting one target (design §4.1/§4.2). {@code id} is a
+ * A single attestation ceremony: one user attesting one target. {@code id} is a
  * caller-assigned UUID. There is deliberately no {@code @Version} column — concurrent step
  * completions CAS on {@code (state, attemptGeneration)} explicitly at the service layer instead of
  * relying on JPA optimistic locking, since a retry legitimately re-enters the same state with a
@@ -51,7 +51,7 @@ public class KeriAttestationCeremonyEntity implements Persistable<String> {
     @Column(name = "user_id", nullable = false)
     private String userId;
 
-    /** The identity link version this ceremony was created under; a relink invalidates it (§4.7). */
+    /** The identity link version this ceremony was created under; a relink invalidates it. */
     @Column(name = "binding_version", nullable = false)
     private int bindingVersion;
 
@@ -89,11 +89,10 @@ public class KeriAttestationCeremonyEntity implements Persistable<String> {
     private String requestExnSaid;
 
     /** The CESR digest of the raw label-{@link #metadataLabel} metadata value (e.g. the 1447 document
-     *  metadata) — used for freeze/digest matching only ({@code DocumentAttestationLookup}). <b>No
-     *  longer equals the on-chain {@code 170.d}</b> (design §4.4 rev 3, user-directed 2026-07-22 after
-     *  live wallet testing): Veridian's remotesign flow anchors the SAID of the whole
-     *  {@link RemotesignRequestFactory}-built request payload, not this raw digest directly — see
-     *  {@link #payloadSaid}, which IS the on-chain {@code 170.d}. */
+     *  metadata) — used for freeze and digest matching only. <b>Not the on-chain {@code 170.d}</b>:
+     *  Veridian's remotesign flow anchors the SAID of the whole
+     *  {@link RemotesignRequestFactory}-built request payload rather than this raw digest. See
+     *  {@link #payloadSaid}, which is the on-chain {@code 170.d}. */
     @Nullable
     @Column(name = "metadata_digest")
     private String metadataDigest;
@@ -105,7 +104,7 @@ public class KeriAttestationCeremonyEntity implements Persistable<String> {
     /** SAID of the saidified remotesign request payload {@code {i, d, metadataLabel, metadataDigest}}
      *  sent to the wallet ({@link RemotesignRequestFactory#anchorRequestKed}) — the value the wallet's
      *  KEL interaction-event seal is expected to equal, and therefore the on-chain {@code 170.d} once
-     *  ATTEST_ANCHORED (design §4.4 rev 3). Persisted before the request is sent, alongside
+     *  ATTEST_ANCHORED. Persisted before the request is sent, alongside
      *  {@link #requestExnSaid}. Distinct from {@link #metadataDigest} (the raw 1447/freeze digest) and
      *  from {@link #kelEventSaid} (the anchoring KEL event's OWN SAID, i.e. its {@code d} — not the
      *  SAID inside its seal). */
@@ -123,7 +122,7 @@ public class KeriAttestationCeremonyEntity implements Persistable<String> {
     @Column(name = "kel_event_said")
     private String kelEventSaid;
 
-    /** F1 fix, hardened by R1 (Codex re-verification): the KERI AID that actually attested this
+    /** The KERI AID that actually attested this
      *  ceremony — the wallet AID the remotesign request was sent to and answered by, written
      *  immutably by {@code KeriAttestService#resolveAndComplete} alongside {@link #kelSequence}/{@link
      *  #kelEventSaid} at the moment this ceremony reaches {@code ATTEST_ANCHORED}, i.e. BEFORE it can
@@ -140,7 +139,7 @@ public class KeriAttestationCeremonyEntity implements Persistable<String> {
     @Column(name = "attester_aid")
     private String attesterAid;
 
-    /** F5 fix: the wallet's KEL sequence (hex) at ATTEST-request time, queried and persisted BEFORE the
+    /** The wallet's KEL sequence (hex) at ATTEST-request time, queried and persisted before the
      *  remotesign request is sent. Any candidate/fallback anchoring event {@code KeriAttestService
      *  #resolveAndComplete} accepts must have a sequence at or after this floor, so an old KEL event
      *  that happens to carry the same {@link #metadataDigest} (e.g. left over from a prior attestation

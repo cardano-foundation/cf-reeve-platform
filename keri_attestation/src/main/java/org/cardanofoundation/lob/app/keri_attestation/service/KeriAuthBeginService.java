@@ -26,13 +26,13 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.view.CeremonyView;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
 
 /**
- * Drives the AUTH_BEGIN step (design §4.5) SYNCHRONOUSLY, in the request thread: either verifies a
+ * Drives the AUTH_BEGIN step SYNCHRONOUSLY, in the request thread: either verifies a
  * user-supplied external tx hash already establishes on-chain signing authority for the linked AID ("I
  * already have authority" skip), or builds and submits a fresh AUTH_BEGIN transaction from the linked
  * credential chain — then, in BOTH cases, advances the ceremony to {@code AUTH_BEGIN_CONFIRMED}
  * immediately, in this same call.
  *
- * <p><b>"Fire the chain tx and move on" (design rev, user-directed):</b> the own-chain path used to
+ * <p><b>"Fire the chain tx and move on":</b> the own-chain path used to
  * persist the submitted tx hash and dispatch a background poll that waited for N block confirmations
  * before completing the step — the exact kind of background runner this refactor removes. On-chain
  * flows here never wait for confirmation depth at all; they submit and consider the step done. {@link
@@ -51,13 +51,10 @@ import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLin
  * returning {@link Either#right} with the resulting (FAILED) {@link CeremonyView}: the request was
  * accepted and processed, and its outcome is visible in the returned ceremony state.
  *
- * <p><b>F9 fix:</b> {@link CardanoMetadataTxSubmitter} is implemented by {@code blockchain_publisher}
- * (design §3.3) — a module that is not guaranteed to be enabled alongside this one. A hard
- * constructor-injected dependency on it would fail this service's bean creation (and therefore this
- * whole module's startup) whenever {@code keri_attestation} is enabled without
- * {@code blockchain_publisher}. It is instead injected as an {@link ObjectProvider} and resolved at
- * each use site ({@link #verifyExternal}, {@link #submitOwn}); when absent, the affected step fails
- * cleanly via {@code failStep} instead of throwing.
+ * <p>{@link CardanoMetadataTxSubmitter} is implemented by {@code blockchain_publisher}, which is not
+ * guaranteed to be enabled alongside this module, so a constructor-injected dependency would break
+ * startup whenever it is absent. It is injected as an {@link ObjectProvider} and resolved at each use
+ * site instead; when absent, the affected step fails cleanly via {@code failStep}.
  */
 @Service
 @RequiredArgsConstructor
@@ -152,7 +149,7 @@ public class KeriAuthBeginService {
         return ceremonyService.get(ceremonyId, userId);
     }
 
-    // --- external authority verification (design §4.5 "the skip") ---
+    // --- external authority verification ---
 
     private Either<ProblemDetail, CeremonyView> verifyExternal(String ceremonyId, String userId, int generation,
             KeriAttestationCeremonyEntity ceremony, KeriIdentityLinkEntity link, String txHash) {
@@ -331,7 +328,7 @@ public class KeriAuthBeginService {
      * against the version this attempt was authorized under — the same idiom
      * {@code KeriCredentialService#persistCredentialIfIdentityStillCurrent} uses for the identical race.
      *
-     * <p>The re-fetch is row-locked (F3 fix) via
+     * <p>The re-fetch is row-locked via
      * {@link org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository#findByUserIdForUpdate}
      * rather than a plain {@code findById}: this write and {@code KeriOobiService}'s relink write race
      * the same row, and without the lock the two could interleave into a row that is a mix of the old

@@ -23,7 +23,7 @@ public class WrappedRecordEntity extends VaultBaseEntity implements Persistable<
     @EmbeddedId
     private WrappedRecordId id;
 
-    /** Opaque, client-encrypted blob. The server must never parse or transform it (blueprint B2). */
+    /** Opaque, client-encrypted blob. The server must never parse or transform it. */
     @NotBlank
     @ToString.Exclude
     @Column(name = "record", nullable = false, columnDefinition = "text")

@@ -24,32 +24,22 @@ public class BlockchainCommonConfig {
     private boolean enableChecker;
 
     /**
-     * CIP-170 label metadata builder. Declared here rather than as a {@code @Service} because this
-     * module registers every bean explicitly and carries no component scan. It is deliberately
-     * ungated: {@code blockchain_publisher}, {@code keri_attestation} and {@code document_vault} each
-     * need it independently of the others' enablement flags, so gating on any one flag would break the
-     * rest. Stateless and dependency-free, so there is nothing to gate.
+     * Deliberately ungated: {@code blockchain_publisher}, {@code keri_attestation} and
+     * {@code document_vault} each need this independently of the others' enablement flags. Stateless,
+     * so there is nothing to gate.
      */
     @Bean
     public Cip170MetadataFactory cip170MetadataFactory() {
         return new Cip170MetadataFactory();
     }
 
-    /**
-     * IPFS envelope serialiser for the DOCUMENT publishable type (moved here from
-     * {@code blockchain_publisher}, WS3 step 1) - stateless and dependency-free besides the shared
-     * {@link ObjectMapper}, so ungated like {@link #cip170MetadataFactory()} above.
-     */
+    /** Ungated for the same reason as {@link #cip170MetadataFactory()}. */
     @Bean
     public DocumentIpfsSerialiser documentIpfsSerialiser(ObjectMapper objectMapper) {
         return new DocumentIpfsSerialiser(objectMapper);
     }
 
-    /**
-     * 1447 L1 metadata serialiser for the DOCUMENT publishable type (moved here from
-     * {@code blockchain_publisher}, WS3 step 1). No longer resolves the organisation itself (this
-     * module must not depend on {@code organisation}) - callers pass the already-resolved org fields.
-     */
+    /** Ungated for the same reason as {@link #cip170MetadataFactory()}. */
     @Bean
     public DocumentMetadataSerialiser documentMetadataSerialiser(Clock clock) {
         return new DocumentMetadataSerialiser(clock);

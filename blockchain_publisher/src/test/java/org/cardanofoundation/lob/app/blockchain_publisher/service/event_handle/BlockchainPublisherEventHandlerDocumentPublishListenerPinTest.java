@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
 
 /**
- * Codex adversarial-review finding 1: why reflection, not a live two-transaction race — a true
+ * why reflection, not a live two-transaction race — a true
  * integration test for "does the listener really wait for commit" would need a real transactional
  * caller and is out of proportion here. What CAN regress silently is someone "simplifying"
  * {@code handleDocumentPublishCommand} back to a plain {@code @EventListener}, which would quietly

@@ -19,19 +19,19 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestat
 public interface KeriAttestationCeremonyRepository extends JpaRepository<KeriAttestationCeremonyEntity, String> {
 
     /**
-     * Per-user active-ceremony count, used to enforce {@code limits.max-active-ceremonies-per-user}
-     * (design §3.2) — {@code terminal} is the set of states that no longer count against the limit
+     * Per-user active-ceremony count, used to enforce {@code limits.max-active-ceremonies-per-user}.
+     * {@code terminal} is the set of states that no longer count against the limit
      * ({@code CONSUMED}, {@code FAILED}, {@code EXPIRED}).
      */
     long countByUserIdAndStateNotIn(String userId, Collection<CeremonyState> terminal);
 
     /** Same scope as {@link #countByUserIdAndStateNotIn}, returning the rows themselves — e.g. to
-     *  invalidate a user's open ceremonies on relink (§4.7). */
+     *  invalidate a user's open ceremonies on relink. */
     List<KeriAttestationCeremonyEntity> findByUserIdAndStateNotIn(String userId, Collection<CeremonyState> terminal);
 
     /**
      * Row-level {@code SELECT ... FOR UPDATE}. Every step transition CASes on {@code (state,
-     * attemptGeneration)} (design §4.2) — the lock serializes a retry bumping the generation against
+     * attemptGeneration)} — the lock serializes a retry bumping the generation against
      * a late async completion reading and applying the pre-bump state, mirroring
      * {@code VaultDocumentRepository#findByIdForUpdate} in document_vault.
      */
@@ -49,8 +49,8 @@ public interface KeriAttestationCeremonyRepository extends JpaRepository<KeriAtt
             Collection<CeremonyState> terminal, LocalDateTime cutoff);
 
     /**
-     * Candidates for {@code CeremonyCleanupJob}'s step-level stale-detection sweep (design §4.2/§7,
-     * F4 fix): ceremonies sitting in one of the WAITING states whose {@code updatedAt} is older than a
+     * Candidates for {@code CeremonyCleanupJob}'s step-level stale-detection sweep: ceremonies
+     * sitting in one of the WAITING states whose {@code updatedAt} is older than a
      * broad discovery cutoff. Unlocked for the same reason as {@link #findByStateNotInAndExpiresAtBefore}
      * — the sweep re-verifies each candidate (including its precise, per-state timeout) under
      * {@link #findByIdForUpdate} before writing.
@@ -73,7 +73,7 @@ public interface KeriAttestationCeremonyRepository extends JpaRepository<KeriAtt
 
     /**
      * Backs {@link org.cardanofoundation.lob.app.keri_attestation.service.AttestationConsumptionApi
-     * #findTerminalNonConsumedCeremonyIds} (Task 13): of {@code ids}, the ones currently in one of
+     * #findTerminalNonConsumedCeremonyIds}: of {@code ids}, the ones currently in one of
      * {@code states} (the caller passes {@code FAILED}/{@code EXPIRED}). Selects only the id column —
      * a target provider's freeze-cleanup sweep needs nothing else from this row.
      */

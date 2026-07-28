@@ -39,7 +39,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 /**
- * The import is permissionless (contract §2.8, amended): there is no issuer and no signature, so
+ * The import is permissionless: there is no issuer and no signature, so
  * {@link KeyCardVerifier} is exercised for real here (it is trivial and dependency-free) rather than
  * mocked — these tests pin CardImportService's own behaviour, not a stubbed verifier.
  *

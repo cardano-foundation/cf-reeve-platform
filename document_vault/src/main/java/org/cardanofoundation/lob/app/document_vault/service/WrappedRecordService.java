@@ -21,8 +21,8 @@ import org.cardanofoundation.lob.app.document_vault.repository.WrappedRecordRepo
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 /**
- * Blueprint B2: opaque wrapped-record store keyed by (accountId, credentialId). Blobs are stored
- * and returned verbatim — the server must never parse, normalise or transform them.
+ * Opaque wrapped-record store keyed by (accountId, credentialId). Blobs are stored and returned
+ * verbatim — the server must never parse, normalise or transform them.
  */
 @Service
 @RequiredArgsConstructor

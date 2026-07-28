@@ -232,7 +232,7 @@ class KeriAttestServiceTest {
         when(operations.wait(any(), any(Operations.WaitOptions.class))).thenReturn(op);
     }
 
-    /** Stubs {@code ceremonyService.updateWaitingStepData} (F2 fix) to apply whichever mutator it is
+    /** Stubs {@code ceremonyService.updateWaitingStepData} to apply whichever mutator it is
      *  called with to {@code ceremony} and report success. {@code attest} calls this three times per
      *  attempt (digest, floor, requestExnSaid/payloadSaid) with the same
      *  {@code (ceremonyId, generation, ATTEST_REQUESTED)} arguments, so one stub serves all three. */
@@ -674,7 +674,7 @@ class KeriAttestServiceTest {
         verify(correlator).markAndDelete(NOTIF_ID);
     }
 
-    // --- F5 fix: floor sequence ---
+    // --- floor sequence ---
 
     @Test
     void attestRejectsAnOldEventWithTheSameDigestBelowTheFloor() throws Exception {

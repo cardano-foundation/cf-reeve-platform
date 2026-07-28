@@ -30,7 +30,6 @@ import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerStatusUpdate
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdateType;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdatedEvent;
 import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
-import org.cardanofoundation.lob.app.blockchain_common.service.IpfsAvailability;
 import org.cardanofoundation.lob.app.document_vault.DocumentVaultContextIntegrationTest;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.DocumentDirection;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentStatus;
@@ -55,11 +54,6 @@ class VaultPublishIntegrationTest {
     static class PublishTestConfig {
 
         static final List<DocumentPublishCommand> CAPTURED = new CopyOnWriteArrayList<>();
-
-        @Bean
-        public IpfsAvailability testIpfsAvailability() {
-            return () -> true;
-        }
 
         @Bean
         public PublishCommandCapture publishCommandCapture() {
@@ -161,7 +155,7 @@ class VaultPublishIntegrationTest {
         assertTrue(documentService.delete(documentId).isPresent());
 
         // commit for real before simulating the publisher's status-back: handleLedgerUpdatedEvent
-        // now runs in its own REQUIRES_NEW transaction (Codex adversarial-review finding 2 of round
+        // now runs in its own REQUIRES_NEW transaction (see
         // 2 — it must never join/see an in-flight caller transaction), which means it opens a
         // genuinely separate DB connection. That connection can only see the document row above if
         // it has actually been committed — exactly as in production, where the vault's publish()

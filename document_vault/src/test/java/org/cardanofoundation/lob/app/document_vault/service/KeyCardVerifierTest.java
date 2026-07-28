@@ -17,7 +17,7 @@ import org.cardanofoundation.lob.app.document_vault.domain.enums.CardSubjectType
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyAssurance;
 
 /**
- * The import is permissionless (contract §2.8, amended): there is no issuer and no signature.
+ * The import is permissionless: there is no issuer and no signature.
  * {@link KeyCardVerifier} checks only what the backend can guarantee on its own: a supported
  * version/type, and no private-key material (I5). The organisation a card names is the holder's own
  * and is never matched against the importing org — see {@link #acceptsACardFromAForeignOrganisation()}.

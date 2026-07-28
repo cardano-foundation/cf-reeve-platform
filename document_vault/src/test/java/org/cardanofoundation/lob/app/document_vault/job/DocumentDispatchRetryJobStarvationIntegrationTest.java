@@ -30,7 +30,7 @@ import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentSt
 import org.cardanofoundation.lob.app.document_vault.repository.VaultDocumentRepository;
 
 /**
- * Codex adversarial-review finding (round 3) — retry-sweep starvation regression test. Real
+ * retry-sweep starvation regression test. Real
  * Postgres, {@code batchSize=2}, four documents stuck in {@code PUBLISHED}/{@code MARK_DISPATCH}.
  * Before the retry-cursor fix, ordering purely by {@code publishedAt} meant every sweep reselected
  * the same two oldest rows forever, and the two younger documents — whose in-memory handoff may

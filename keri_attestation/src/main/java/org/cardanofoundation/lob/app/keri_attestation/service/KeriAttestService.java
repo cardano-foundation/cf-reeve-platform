@@ -34,7 +34,7 @@ import org.cardanofoundation.signify.app.coring.Operations;
 import org.cardanofoundation.signify.core.States.HabState;
 
 /**
- * Drives the ATTEST step (design §4.6) SYNCHRONOUSLY, in the request thread — the same treatment as
+ * Drives the ATTEST step SYNCHRONOUSLY, in the request thread — the same treatment as
  * {@link KeriCredentialService#presentCredential}: freezes the target's metadata via its
  * {@link AttestationTargetProvider}, sends a remotesign anchoring request to the linked wallet AID,
  * waits IN-THREAD for the wallet's confirmed KEL interaction event, verifies it actually anchors the
@@ -54,16 +54,15 @@ public class KeriAttestService {
     private static final String REMOTESIGN_TOPIC = "remotesign";
     private static final String REMOTESIGN_REQUEST_ROUTE = "/remotesign/ixn/req";
 
-    /** Short wait for the retry pre-check (design §4.2 "before re-sending... checks for a
-     *  late-arriving matching notification") — deliberately much shorter than
-     *  {@link KeriAttestationProperties#remotesignTimeout()}, since this only catches a reply that
-     *  arrived <em>after</em> a previous attempt gave up but <em>before</em> the user hit retry. */
+    /** Short wait before re-sending, to catch a late-arriving matching notification. Deliberately
+     *  much shorter than {@link KeriAttestationProperties#remotesignTimeout()}, since it only catches
+     *  a reply that arrived after a previous attempt gave up but before the user hit retry. */
     private static final Duration RETRY_PRECHECK_TIMEOUT = Duration.ofSeconds(2);
 
     private static final int KEY_STATE_QUERY_ATTEMPTS = 5;
     private static final long KEY_STATE_QUERY_WAIT_MILLIS = 10_000L;
 
-    /** The {@code KERI_DATETIME} pattern (design §4.4 rev 3, alignment item 6) — see
+    /** The {@code KERI_DATETIME} pattern — see
      *  {@link KeriCredentialService#KERI_DATETIME}'s javadoc for why this is passed explicitly rather
      *  than left to the pinned signify jar's own null-datetime fallback. */
     private static final DateTimeFormatter KERI_DATETIME =
@@ -119,7 +118,7 @@ public class KeriAttestService {
         String walletAid = linkOpt.get().getAid();
         String walletOobiUrl = linkOpt.get().getOobiUrl();
 
-        // Retry pre-check (design §4.2): before re-sending, look for a late-arriving ref for whatever was
+        // Retry pre-check: before re-sending, look for a late-arriving ref for whatever was
         // sent on a previous attempt. This wait is route-only (see KeriNotificationCorrelator#awaitByRoute)
         // and — unlike the main wait below — cannot be given an exclude snapshot, because the late ref it
         // is looking for is itself pre-existing. So a claimed ref here may be STALE DEBRIS rather than a
@@ -195,7 +194,7 @@ public class KeriAttestService {
             return Either.left(staleCeremonyProblem(ceremonyId));
         }
 
-        // F5 fix: query the wallet's CURRENT KEL sequence and persist it as a floor BEFORE the
+        // query the wallet's CURRENT KEL sequence and persist it as a floor BEFORE the
         // remotesign request is sent. resolveAndComplete requires any accepted anchoring event to be
         // strictly after this floor — without it, an old KEL event that happens to carry the same
         // metadata digest (e.g. left over from a prior attestation of identical content) could satisfy a
@@ -227,7 +226,7 @@ public class KeriAttestService {
                         "No local HabState found for agent identifier %s.".formatted(agentService.agentName()));
             }
 
-            // Wallet contract (design §4.4 rev 3): the payload itself is saidified before it is ever
+            // Wallet contract: the payload itself is saidified before it is ever
             // sent, and that payload SAID (not the raw metadataDigest) is what the wallet is expected to
             // anchor as the interaction-event seal — see RemotesignRequestFactory's javadoc.
             Map<String, Object> ked = kedFactory.anchorRequestKed(walletAid, digest.metadataLabel(), digest.digestQb64());
@@ -235,7 +234,7 @@ public class KeriAttestService {
             ExchangeMessageResult built = client.client().exchanges().createExchangeMessage(senderOpt.get(),
                     REMOTESIGN_REQUEST_ROUTE, ked, Map.of(), walletAid, nowKeriTimestamp(), null);
 
-            // Persist BEFORE the send completes (design §4.6 step 3): the SAID is deterministic from
+            // Persist BEFORE the send completes: the SAID is deterministic from
             // the built (not-yet-sent) exn, matching KeriCredentialService#sendApply's idiom.
             String requestExnSaid = (String) built.exn().getKed().get("d");
             boolean exnPersisted = ceremonyService.updateWaitingStepData(ceremonyId, generation,
@@ -276,8 +275,8 @@ public class KeriAttestService {
     // --- from a correlated ref, locate + verify the anchoring KEL event, then complete ---
 
     /**
-     * From the correlated ref (not from "latest key state" alone, design §4.6 step 5), verified against
-     * {@code floorSequence} (F5 fix — see {@link KeriAttestationCeremonyEntity#getKelFloorSequence()}):
+     * Locates and verifies the anchoring KEL event from the correlated ref rather than from the latest
+     * key state alone, checked against {@code floorSequence}:
      * <ol>
      *   <li>If the ref exn payload yields an explicit candidate ({@link #extractCandidate}), that
      *       candidate MUST resolve to a KEL event whose sequence is <b>strictly after</b>
@@ -289,10 +288,8 @@ public class KeriAttestService {
      *       of {@code ixn} events strictly after {@code floorSequence} and at or before the wallet's
      *       current key-state sequence, looking for one whose seal contains {@code payloadSaid}.</li>
      * </ol>
-     * <b>Null floor hard-fails, no candidate acceptance at all (F4 fix):</b> {@code floorSequence} is
-     * only ever {@code null} for a ceremony that reached {@code ATTEST_REQUESTED} before this column
-     * existed — a {@code null} floor now fails this ceremony outright, checked before ever looking at
-     * the ref exn's candidate or fetching the KEL.
+     * <p>A {@code null} floor hard-fails before the candidate or the KEL is even looked at; it can
+     * only occur for a ceremony that reached {@code ATTEST_REQUESTED} before the column existed.
      */
     private Either<ProblemDetail, CeremonyView> resolveAndComplete(String ceremonyId, String userId, int generation,
             String walletAid, String walletOobiUrl, String payloadSaid, String floorSequence,
@@ -372,11 +369,10 @@ public class KeriAttestService {
      * the attester AID, then — only on a successful, non-superseded transition — marks the ref
      * notification consumed.
      *
-     * <p>F1 fix: the persisted {@code attesterAid} is {@code walletAid}, resolved from the identity link
-     * BEFORE the wait began, which makes {@code ConsumedAttestation.aid} immutable once anchored — a
-     * relink of this same user afterwards changes the link's CURRENT aid but never this ceremony's
-     * persisted attester. On a stale CAS (a concurrent retry superseded this attempt) the notification is
-     * deliberately left unread/undeleted so the winning attempt's own wait can still claim it.
+     * <p>The persisted {@code attesterAid} is the {@code walletAid} resolved from the identity link
+     * before the wait began, which makes {@code ConsumedAttestation.aid} immutable once anchored: a
+     * later relink changes the link's current AID but never this ceremony's attester. On a stale
+     * compare-and-set the notification is left unread so the winning attempt can still claim it.
      */
     private Either<ProblemDetail, CeremonyView> completeAnchored(String ceremonyId, String userId, int generation,
             String walletAid, Map<String, Object> event, CorrelatedNotification ref) {
@@ -397,7 +393,7 @@ public class KeriAttestService {
         return ceremonyService.get(ceremonyId, userId);
     }
 
-    // --- candidate extraction from the ref exn payload (design §4.6 step 5) ---
+    // --- candidate extraction from the ref exn payload ---
 
     @SuppressWarnings("unchecked")
     private static AnchorCandidate extractCandidate(Map<String, Object> exn) {
@@ -411,7 +407,7 @@ public class KeriAttestService {
                 sequence != null ? String.valueOf(sequence) : null);
     }
 
-    // --- key-state fallback: bounded retries confirming KEL availability, design §4.6 step 5 ---
+    // --- key-state fallback: bounded retries confirming KEL availability ---
 
     private Optional<String> queryLatestSequenceWithRetries(String aid) {
         Duration delay = properties.keyStateRetryInitialDelay();
@@ -506,7 +502,7 @@ public class KeriAttestService {
         return null;
     }
 
-    /** Bounded scan (F5 fix) over {@code ixnEvents} whose sequence falls within
+    /** Bounded scan over {@code ixnEvents} whose sequence falls within
      *  ({@code floorSequence}, {@code currentSequence}] — <b>strictly</b> after the floor, at or before
      *  the current key-state sequence (hex-compared numerically) — returning the first whose seal
      *  contains {@code payloadSaid}, or {@code null} if none in that window match. */
@@ -574,9 +570,8 @@ public class KeriAttestService {
         return KERI_DATETIME.format(LocalDateTime.now(ZoneOffset.UTC));
     }
 
-    /** F2 fix: a sync-path guarded update ({@link CeremonyService#updateWaitingStepData}) found the
-     *  ceremony no longer waiting on {@code ATTEST_REQUESTED} — a concurrent retry/sweep transition beat
-     *  this attempt to it. Reported the same way any other stale-state conflict is. */
+    /** The guarded update found the ceremony no longer waiting on {@code ATTEST_REQUESTED}: a
+     *  concurrent retry or sweep transition beat this attempt to it. */
     private static ProblemDetail staleCeremonyProblem(String ceremonyId) {
         return KeriAttestationProblems.conflict(KeriAttestationProblems.CEREMONY_INVALID_STATE,
                 "Ceremony %s is no longer waiting on the expected step.".formatted(ceremonyId));

@@ -13,7 +13,7 @@ import com.tngtech.archunit.lang.SimpleConditionEvent;
 import com.tngtech.archunit.lang.syntax.ArchRuleDefinition;
 
 /**
- * Blueprint B5 / invariant I5: no API schema may accept or return plaintext content, DEKs, KEKs,
+ * No API schema may accept or return plaintext content, DEKs, KEKs,
  * PRF outputs, or private/unwrapped keys. These rules are a naming-discipline gate: any new DTO
  * field that even looks like secret material fails CI and forces an explicit review.
  * Allowed by design: plaintextHash (commitment), wrappedDek (encrypted), publicKey/ephemeralPub.
@@ -65,7 +65,7 @@ class NoSecretMaterialArchTest {
 
     /**
      * Ciphertext leaves the API through exactly ONE view: DocumentEnvelopeView (the authorized
-     * envelope-fetch endpoint, blueprint D2). Every other view stays ciphertext-free. Exact-name
+     * envelope-fetch endpoint). Every other view stays ciphertext-free. Exact-name
      * match (class or its nested records, "$"-separated) — a substring match could be bypassed
      * by naming a new view "...DocumentEnvelopeViewX".
      */

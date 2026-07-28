@@ -12,14 +12,10 @@ import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.document
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
 
 /**
- * Converts between a {@link DocumentPublishCommand} and a blockchain-publisher {@link DocumentEntity},
- * field-by-field, in both directions. {@link #convertToDbDetached} builds the entity stored in
- * {@code STORED} state for later IPFS/L1 dispatch; {@link #toPublishCommand} reverses that mapping so
- * a persisted entity loaded back for dispatch can be fed into the tier-neutral
- * {@code blockchain_common} serialisers ({@code DocumentIpfsSerialiser}, {@code
- * DocumentMetadataSerialiser}), which take a {@link DocumentPublishCommand}, not an entity. PII-free
- * by construction (spec B5 #3): the command carries no e-mails, key ids, file names or account ids, so
- * neither does the resulting entity, and the round trip introduces none either.
+ * Converts between a {@link DocumentPublishCommand} and a {@link DocumentEntity} in both directions:
+ * {@link #convertToDbDetached} builds the entity stored for later dispatch, {@link #toPublishCommand}
+ * rebuilds the command the {@code blockchain_common} serialisers expect. PII-free by construction,
+ * since the command carries none and the round trip introduces none.
  */
 @Service
 public class DocumentConverter {
@@ -57,12 +53,9 @@ public class DocumentConverter {
     }
 
     /**
-     * Reverses {@link #convertToDbDetached}: rebuilds the {@link DocumentPublishCommand} a persisted
-     * {@link DocumentEntity} (loaded back for dispatch) was originally derived from, so
-     * {@link DocumentL1TransactionCreator} can feed it into the {@code blockchain_common} serialisers.
-     * {@code ipfsCid} and {@code l1SubmissionData} deliberately have no command counterpart - the
-     * former is a separate parameter both serialisers already take, the latter is dispatch-status
-     * bookkeeping the command never carried in the first place.
+     * Reverses {@link #convertToDbDetached}. {@code ipfsCid} and {@code l1SubmissionData} have no
+     * command counterpart: the former is a separate serialiser parameter, the latter is dispatch
+     * bookkeeping the command never carried.
      */
     public DocumentPublishCommand toPublishCommand(DocumentEntity entity) {
         return new DocumentPublishCommand(

@@ -15,7 +15,7 @@ import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProp
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
 
 /**
- * F9 fix: {@code KeriAuthBeginService} constructor-required {@link CardanoMetadataTxSubmitter}, an
+ * {@code KeriAuthBeginService} constructor-required {@link CardanoMetadataTxSubmitter}, an
  * interface only {@code blockchain_publisher} implements — no implementation exists unless that module
  * is also enabled. Since it depends on this module (not the other way around), that hard dependency
  * broke {@code keri_attestation} startup whenever it was enabled without {@code blockchain_publisher}.
@@ -40,7 +40,7 @@ class KeriAuthBeginServiceMissingSubmitterContextTest {
                 .withBean(KeriIdentityLinkRepository.class, () -> mock(KeriIdentityLinkRepository.class))
                 .withBean(CredentialChainValidator.class, () -> mock(CredentialChainValidator.class))
                 // Deliberately no CardanoMetadataTxSubmitter bean: this is the module-without-publisher
-                // deployment shape the F9 fix exists for.
+                // deployment shape the ObjectProvider indirection exists for.
                 .withBean(KeriAuthBeginService.class)
                 .run(context -> {
                     assertThat(context).hasNotFailed();

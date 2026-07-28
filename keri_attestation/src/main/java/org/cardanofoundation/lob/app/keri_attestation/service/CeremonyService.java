@@ -28,15 +28,15 @@ import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestation
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
 
 /**
- * The ceremony state machine (design §4.2). Every transition takes the row lock via
- * {@link KeriAttestationCeremonyRepository#findByIdForUpdate(String)} so a retry bumping
- * {@code attemptGeneration} and a late async step-completion reading the pre-bump generation can
- * never interleave — the CAS in {@link #completeStep} and {@link #failStep} is only race-free because
- * the read-modify-write happens under that lock, inside this class's (default) {@code @Transactional}
- * boundary.
+ * The ceremony state machine. Every transition takes the row lock via
+ * {@link KeriAttestationCeremonyRepository#findByIdForUpdate(String)}, so a retry bumping
+ * {@code attemptGeneration} cannot interleave with a late step-completion reading the pre-bump
+ * generation: the compare-and-set in {@link #completeStep} and {@link #failStep} is only race-free
+ * because the read-modify-write happens under that lock.
  *
- * <p>This class is the only place that knows the full ceremony API; other modules are only handed
- * {@link AttestationConsumptionApi}, which exposes exactly {@link #validateAndConsume} (design §4.6).
+ * <p>This class holds the full ceremony API. Other modules see only
+ * {@link AttestationConsumptionApi}, which exposes {@link #validateAndConsume} and
+ * {@link #findConsumed}.
  */
 @Service
 @RequiredArgsConstructor
@@ -48,20 +48,16 @@ public class CeremonyService implements AttestationConsumptionApi {
             EnumSet.of(CeremonyState.CONSUMED, CeremonyState.FAILED, CeremonyState.EXPIRED);
 
     /**
-     * The "resting" states {@link #advanceToLinkDerivedFloor} is allowed to move a ceremony out of
-     * (F1 fix, design §4.2): exactly the states {@link #fastForwardState} can itself produce as a
-     * ceremony's initial state at {@link #create(String, String, String) create} time. A ceremony
-     * actively waiting on a step
-     * ({@code CREDENTIAL_REQUESTED}, {@code AUTH_BEGIN_SUBMITTED}, {@code ATTEST_REQUESTED}) must
-     * never be silently fast-forwarded out from under its own in-flight worker; terminal states and
-     * {@code ATTEST_ANCHORED} are not link-derived at all and must never move here either.
+     * The resting states {@link #advanceToLinkDerivedFloor} may move a ceremony out of: exactly the
+     * states {@link #fastForwardState} can produce as an initial state. A ceremony actively waiting on
+     * a step must never be fast-forwarded out from under its own in-flight worker, and terminal states
+     * and {@code ATTEST_ANCHORED} are not link-derived at all.
      */
     private static final Set<CeremonyState> LINK_ADVANCEABLE_STATES =
             EnumSet.of(CeremonyState.CREATED, CeremonyState.OOBI_RESOLVED, CeremonyState.CREDENTIAL_RECEIVED);
 
-    /** The subset of {@link #TERMINAL_STATES} {@link #findTerminalNonConsumedCeremonyIds} reports —
-     *  {@code CONSUMED} is terminal too, but must never be treated as "safe to delete" by a caller
-     *  (see that method's javadoc), so it is deliberately excluded here. */
+    /** The subset of {@link #TERMINAL_STATES} {@link #findTerminalNonConsumedCeremonyIds} reports.
+     *  {@code CONSUMED} is terminal too but must never be treated as safe to delete. */
     private static final Set<CeremonyState> TERMINAL_NON_CONSUMED_STATES =
             EnumSet.of(CeremonyState.FAILED, CeremonyState.EXPIRED);
 
@@ -71,40 +67,32 @@ public class CeremonyService implements AttestationConsumptionApi {
     private final AttestationTargetProviderRegistry targetProviderRegistry;
 
     /**
-     * Fast-forwards the initial state from the caller's identity link (design §4.2): a ceremony never
+     * Creates a ceremony, fast-forwarding its initial state from the caller's identity link so it never
      * re-asks for something the user has already done at the identity level. {@code bindingVersion} is
-     * captured from the link at creation time so a later relink can invalidate this ceremony
-     * ({@link #validateAndConsume} checks it — design §4.7).
+     * captured from the link so a later relink invalidates this ceremony, which
+     * {@link #validateAndConsume} checks.
      *
-     * <p><b>F5 fix — serialized against relink via the link lock.</b> The identity-link read below
-     * uses {@link KeriIdentityLinkRepository#findByUserIdForUpdate}, not a plain read: without it, a
-     * ceremony could be created between {@code KeriOobiService}'s relink invalidating this user's open
-     * ceremonies and that same relink updating the link row, and would then survive bound to a
-     * {@code bindingVersion} the link no longer carries — wasted freeze/anchor work that {@link
-     * #validateAndConsume} eventually rejects anyway, but only after the fact. Taking the link lock
-     * here serializes {@code create} against exactly that window.
+     * <p>The identity-link read takes {@link KeriIdentityLinkRepository#findByUserIdForUpdate} rather
+     * than a plain read. Without the lock, a ceremony could be created in the window between a relink
+     * invalidating this user's open ceremonies and that same relink updating the link row, and would
+     * survive bound to a {@code bindingVersion} the link no longer carries.
      *
-     * <p>Lock-order safety: this method holds ONLY the link lock, for the rest of this transaction, and
-     * never locks (or even reads) any ceremony row — it only inserts a brand-new one. It therefore
-     * cannot participate in the ceremony-before-link lock-order cycle {@link #completeStep}'s javadoc
-     * documents: completing that cycle would require this method to also take a ceremony lock while
-     * still holding the link lock, which it never does. Relink ({@code KeriOobiService#persistLink})
-     * takes ceremony locks first and the link lock last, so the two can never deadlock against each
-     * other either — relink can be blocked waiting on the link lock this method holds, but this method
-     * never waits on anything relink might be holding in return.
+     * <p>Lock-order safety: this method holds only the link lock and never locks a ceremony row — it
+     * only inserts a new one — so it cannot participate in the ceremony-before-link ordering
+     * {@link #completeStep} documents.
      */
     public Either<ProblemDetail, CeremonyView> create(String userId, String targetType, String targetId) {
-        // Unlocked read-then-write: two concurrent create() calls for the same user can both pass this
-        // check before either inserts, so the limit can be briefly exceeded by one. Accepted (design
-        // §4.2) — not worth a row lock on every create for a soft per-user cap.
+        // Unlocked read-then-write: two concurrent creates for the same user can both pass this check
+        // before either inserts, so the limit can be exceeded by one. Accepted — a soft per-user cap is
+        // not worth a row lock on every create.
         long activeCount = ceremonyRepository.countByUserIdAndStateNotIn(userId, TERMINAL_STATES);
         if (activeCount >= properties.limits().maxActiveCeremoniesPerUser()) {
             return Either.left(KeriAttestationProblems.conflict(KeriAttestationProblems.CEREMONY_LIMIT_REACHED,
                     "User %s already has %d active ceremonies, the maximum allowed.".formatted(userId, activeCount)));
         }
 
-        // Target authorization (F2 fix, design §3.3): a ceremony must never be created for a target the
-        // caller cannot publish, or a target type nothing in the application knows how to attest.
+        // A ceremony must never be created for a target the caller cannot publish, or for a target type
+        // nothing in the application knows how to attest.
         Optional<AttestationTargetProvider> providerOpt = targetProviderRegistry.forType(targetType);
         if (providerOpt.isEmpty()) {
             return Either.left(KeriAttestationProblems.unprocessable(KeriAttestationProblems.TARGET_MISMATCH,
@@ -115,8 +103,7 @@ public class CeremonyService implements AttestationConsumptionApi {
             return Either.left(authFailure.get());
         }
 
-        // F5 fix: the locked finder, not a plain findById — see this method's javadoc for why (and why
-        // it is lock-order safe).
+        // The locked finder, not a plain findById — see this method's javadoc.
         Optional<KeriIdentityLinkEntity> linkOpt = identityLinkRepository.findByUserIdForUpdate(userId);
         int bindingVersion = linkOpt.map(KeriIdentityLinkEntity::getBindingVersion).orElse(0);
         CeremonyState initialState = fastForwardState(linkOpt);
@@ -147,13 +134,11 @@ public class CeremonyService implements AttestationConsumptionApi {
             return Either.left(forbiddenProblem(ceremonyId));
         }
 
-        // Link-derived fast-forward (F1 fix, design §4.2 "completing an identity-level step advances
-        // any open ceremony automatically"): a ceremony resting at CREATED/OOBI_RESOLVED/
-        // CREDENTIAL_RECEIVED must reflect identity-level progress made after it was created.
+        // A resting ceremony must reflect identity-level progress made after it was created.
         advanceToLinkDerivedFloor(ceremony);
 
-        // Lazy expiry (design §4.2): a read reports/persists EXPIRED rather than erroring — the
-        // caller asked "what's the state of this ceremony" and EXPIRED is a perfectly good answer.
+        // Lazy expiry: a read persists and reports EXPIRED rather than erroring — the caller asked for
+        // the ceremony's state, and EXPIRED is a perfectly good answer.
         lazilyExpireIfNeeded(ceremony);
 
         String authBeginTxHash = identityLinkRepository.findById(userId)
@@ -184,11 +169,9 @@ public class CeremonyService implements AttestationConsumptionApi {
             return Either.left(expiredProblem(ceremonyId));
         }
 
-        // Link-derived fast-forward (F1 fix, design §4.2), under the row lock and before the
-        // expected-state check below: a ceremony created before an identity-level step (e.g. OOBI
-        // resolve) completed must not stay stuck at its stale initial state forever once that step
-        // finishes — this is what lets, e.g., credential/request succeed right after oobi/resolve
-        // without the caller having re-polled GET first.
+        // Under the row lock and before the expected-state check below, so a ceremony created before an
+        // identity-level step finished is not stuck at its stale initial state. This is what lets
+        // credential/request succeed right after oobi/resolve without the caller re-polling GET.
         advanceToLinkDerivedFloor(ceremony);
 
         LocalDateTime now = LocalDateTime.now();
@@ -219,17 +202,10 @@ public class CeremonyService implements AttestationConsumptionApi {
      * (its step was retried, or the ceremony moved on for some other reason) silently no-ops instead
      * of corrupting newer state — there is no way to report failure back to it, by design.
      *
-     * <p><b>Global lock order (item 4, round 2): ceremony before link.</b> This method row-locks the
-     * ceremony FIRST; {@code mutator} then commonly locks the identity-link row too (both
-     * {@code KeriCredentialService#persistCredentialIfIdentityStillCurrent} and
-     * {@code KeriAuthBeginService#persistAuthBeginIfIdentityStillCurrent} call
-     * {@code KeriIdentityLinkRepository#findByUserIdForUpdate} from inside their {@code completeStep}
-     * mutator). Every other code path in this module that needs both locks — chiefly
-     * {@code KeriOobiService}'s relink — MUST acquire them in this same order (ceremony rows, then the
-     * link row) to avoid a lock-order inversion: two transactions taking the same two locks in opposite
-     * orders is a textbook Postgres deadlock (one transaction locks A then waits on B while the other
-     * locks B then waits on A). See {@code KeriOobiService#persistLink}'s javadoc for how its relink path
-     * honors this.
+     * <p><b>Global lock order: ceremony before link.</b> This method row-locks the ceremony first, and
+     * {@code mutator} commonly locks the identity-link row as well. Every path in this module needing
+     * both locks — chiefly {@code KeriOobiService}'s relink — must acquire them in this same order, or
+     * two transactions taking them in opposite orders will deadlock.
      *
      * @return {@code true} if the CAS matched and the transition (and mutator) actually ran,
      *         {@code false} if this call was a stale no-op. Callers that do something <em>after</em>
@@ -256,31 +232,23 @@ public class CeremonyService implements AttestationConsumptionApi {
     }
 
     /**
-     * Guarded update of step-data fields on a ceremony that is still waiting on the same step (F2 fix):
-     * row-locks the ceremony, verifies it is still at generation {@code expectedGeneration} and state
-     * {@code expectedWaitingState}, applies {@code mutator}, persists, and reports {@code true}. A
-     * mismatch (a concurrent retry bumped the generation, or a concurrent completion/failure/sweep moved
-     * the ceremony out of {@code expectedWaitingState}) leaves the row untouched and reports
-     * {@code false} — exactly {@link #completeStep}/{@link #failStep}'s own CAS discipline, just without
-     * a state transition of its own.
+     * Guarded update of step-data fields on a ceremony still waiting on the same step: row-locks it,
+     * verifies generation and state, applies {@code mutator} and persists. A mismatch — a concurrent
+     * retry bumped the generation, or a completion or sweep moved the ceremony on — leaves the row
+     * untouched. The same compare-and-set discipline as {@link #completeStep} and {@link #failStep},
+     * without a state transition of its own.
      *
-     * <p>This exists because services were persisting intermediate step-data fields (e.g.
-     * {@code requestExnSaid}, {@code metadataDigest}/{@code metadataLabel}, {@code authBeginTxHash}) by
-     * saving the detached entity {@link #beginStep} returned, well after that call's own row lock was
-     * released — a concurrent retry or sweep transition landing in between could be silently overwritten
-     * by that later, unguarded save (state/generation resurrection). Routing every such write through
-     * this method instead means it can never observe or clobber a ceremony that has since moved on.
+     * <p>Every intermediate step-data write goes through this rather than saving the detached entity
+     * {@link #beginStep} returned, which happens after that call's row lock is released and could
+     * silently overwrite a concurrent transition.
      *
-     * <p>{@code mutator} must only touch step-data fields (never {@code state} or
-     * {@code attemptGeneration} — this method does not transition the ceremony, callers that need a
-     * transition use {@link #completeStep}/{@link #failStep} instead) and must not itself be the source
-     * of truth for whether the write happened: callers whose flow cannot proceed on a {@code false}
-     * return must treat it like a stale worker — abandon silently in async paths (mirrors
-     * {@link #completeStep}'s "no way to report failure back to it" contract), or return
-     * {@code Either.left(CEREMONY_INVALID_STATE)} in synchronous paths.
+     * <p>{@code mutator} must touch step-data fields only, never {@code state} or
+     * {@code attemptGeneration}. A caller that cannot proceed on {@code false} should treat itself as a
+     * stale worker: abandon silently in async paths, or return {@code CEREMONY_INVALID_STATE} in
+     * synchronous ones.
      *
-     * @return {@code true} if the guard matched and the mutator ran and was persisted, {@code false} if
-     *         this call was a stale no-op.
+     * @return {@code true} if the guard matched and the mutator was persisted, {@code false} if this
+     *         call was a stale no-op.
      */
     public boolean updateWaitingStepData(String ceremonyId, int expectedGeneration, CeremonyState expectedWaitingState,
             Consumer<KeriAttestationCeremonyEntity> mutator) {
@@ -323,9 +291,9 @@ public class CeremonyService implements AttestationConsumptionApi {
     }
 
     /**
-     * The sole entry point other modules use (design §4.6). Guard order matches the design exactly:
-     * existence, ownership, target match, ceremony state, expiry, attesterAid presence, then the
-     * binding-version check that catches a relink that happened after this ceremony was created.
+     * The entry point other modules use. Guards run in order: existence, ownership, target match,
+     * ceremony state, expiry, attester AID presence, then the binding-version check that catches a
+     * relink since this ceremony was created.
      */
     @Override
     public Either<ProblemDetail, ConsumedAttestation> validateAndConsume(String ceremonyId, String targetType,
@@ -346,21 +314,14 @@ public class CeremonyService implements AttestationConsumptionApi {
         if (ceremony.getState() != CeremonyState.ATTEST_ANCHORED) {
             return Either.left(invalidStateProblem(ceremonyId, CeremonyState.ATTEST_ANCHORED, ceremony.getState()));
         }
-        // ATTEST_ANCHORED is never a terminal state, so this always falls through to the same
-        // expiry-mutate-and-persist behavior the inline check used to spell out directly.
         if (lazilyExpireIfNeeded(ceremony)) {
             return Either.left(expiredProblem(ceremonyId));
         }
 
-        // R1 fix (Codex re-verification): attesterAid is written by KeriAttestService#resolveAndComplete
-        // the moment this ceremony reaches ATTEST_ANCHORED (see KeriAttestationCeremonyEntity
-        // #getAttesterAid()'s javadoc), so a null here on an otherwise-valid ATTEST_ANCHORED row is not
-        // a normal case to recover from — it indicates data corruption. This module has never been
-        // deployed, so no CONSUMED row anywhere can lack an attesterAid; still, fail closed rather than
-        // resurrect the CURRENT-identity-link fallback that used to sit here, which reopened exactly the
-        // relink-misattribution hole {@code KeriAttestationCeremonyEntity#getAttesterAid()} exists to
-        // close (a consume racing a relink of the same user must never emit the NEW aid alongside a
-        // digest/kelSequence anchored under the OLD one).
+        // attesterAid is written the moment a ceremony reaches ATTEST_ANCHORED, so a null here means
+        // corruption, not a case to recover from. Failing closed is deliberate: falling back to the
+        // current identity link would let a consume racing a relink emit the new AID alongside a digest
+        // anchored under the old one.
         if (ceremony.getAttesterAid() == null) {
             return Either.left(KeriAttestationProblems.conflict(KeriAttestationProblems.CEREMONY_INVALID_STATE,
                     "Ceremony %s has no recorded attester AID.".formatted(ceremonyId)));
@@ -372,13 +333,9 @@ public class CeremonyService implements AttestationConsumptionApi {
         // which is the same "you're no longer the identity this ceremony was created for" problem as an
         // outright relink, just without a binding_version left to compare against.
         //
-        // Deliberately a plain (unlocked) read, not KeriIdentityLinkRepository#findByUserIdForUpdate
-        // (F3 fix, design §4.7): this method never writes to the identity link, only reads its
-        // bindingVersion/aid to decide the CEREMONY's own transition — the ceremony row itself is
-        // already row-locked above, and the write this method performs is entirely on that ceremony row,
-        // never on the link. The lock exists to serialize concurrent WRITERS of the link row (relink vs.
-        // the async persist*IfIdentityStillCurrent mutators); a read-only consumer of the link's current
-        // value has nothing to serialize against and doesn't need it.
+        // A plain unlocked read: this method never writes the identity link, only reads its
+        // bindingVersion to decide the ceremony's own transition, and the ceremony row is already
+        // locked above. The link lock exists to serialize its writers, which this is not.
         Optional<KeriIdentityLinkEntity> linkOpt = identityLinkRepository.findById(userId);
         if (linkOpt.isEmpty() || linkOpt.get().getBindingVersion() != ceremony.getBindingVersion()) {
             return Either.left(KeriAttestationProblems.conflict(KeriAttestationProblems.IDENTITY_RELINKED,
@@ -403,21 +360,13 @@ public class CeremonyService implements AttestationConsumptionApi {
     }
 
     /**
-     * Deliberately a plain (unlocked) {@code findById}, not {@link
-     * KeriAttestationCeremonyRepository#findByIdForUpdate} — this never writes to the ceremony (or the
-     * link), it only re-derives the {@link ConsumedAttestation} a prior, already-committed {@link
-     * #validateAndConsume} call produced, so there is nothing here to serialize against a concurrent
-     * writer.
+     * Re-derives the {@link ConsumedAttestation} an already-committed {@link #validateAndConsume}
+     * produced. An unlocked {@code findById} is enough: nothing here writes.
      *
-     * <p>F1 fix, hardened by R1 (Codex re-verification): the returned {@code aid} comes from the
-     * ceremony's own persisted {@code KeriAttestationCeremonyEntity#getAttesterAid()} — never from the
-     * CURRENT identity link — so a consume that is followed by a relink of the same user cannot make a
-     * later (e.g. delayed dispatch retry) reader of this ceremony see the NEW aid alongside the digest/
-     * kelSequence that were actually anchored under the OLD one. A {@code CONSUMED} row with no
-     * {@code attesterAid} recorded is treated as fail-closed corruption rather than falling back to the
-     * current link's AID — this module has never been deployed, so no such row can exist in a real
-     * database (see {@code KeriAttestationCeremonyEntity#getAttesterAid()}'s javadoc); {@link
-     * #validateAndConsume} itself never lets a ceremony reach {@code CONSUMED} without one.
+     * <p>The returned {@code aid} comes from the ceremony's own persisted attester AID, never from the
+     * current identity link, so a relink after the consume cannot make a later reader see the new AID
+     * alongside a digest anchored under the old one. A {@code CONSUMED} row without one is treated as
+     * corruption rather than falling back to the link.
      */
     @Override
     public Optional<ConsumedAttestation> findConsumed(String ceremonyId) {
@@ -432,35 +381,20 @@ public class CeremonyService implements AttestationConsumptionApi {
     // --- internals ---
 
     /**
-     * Recomputes the fast-forward floor from the ceremony owner's CURRENT identity link and advances
-     * the ceremony in place if it is behind (F1 fix, design §4.2). Only ever moves a ceremony sitting
-     * in one of {@link #LINK_ADVANCEABLE_STATES} — a waiting step, a terminal state, or
-     * {@code ATTEST_ANCHORED} is left untouched. Guarded on {@code bindingVersion} matching the link's
-     * current value so a relinked ceremony (already being invalidated by {@code KeriOobiService}, or
-     * about to be) is never advanced using the new identity's progress either. Never touches
-     * {@code attemptGeneration} — this is not a step transition, just catching the ceremony's resting
-     * state up to what the identity link already reflects.
+     * Recomputes the fast-forward floor from the owner's current identity link and advances the
+     * ceremony in place if it is behind. Only moves a ceremony resting in one of
+     * {@link #LINK_ADVANCEABLE_STATES}, and never touches {@code attemptGeneration} — this catches a
+     * resting state up to the link, it is not a step transition. Guarded on {@code bindingVersion}
+     * matching the link, so a relinked ceremony is never advanced using the new identity's progress.
      *
-     * <p><b>Initial-link adoption (F6 fix):</b> {@code create}'s bindingVersion capture
-     * (({@link KeriIdentityLinkEntity#getBindingVersion()} of a lookup that came back empty) defaults
-     * to {@code 0} — the "created before any identity link existed" marker. A persisted link's own
-     * {@code bindingVersion} is never {@code 0} (it starts at {@code 1} on first persist and only ever
-     * increments on relink), so a ceremony still carrying {@code bindingVersion == 0} in {@code CREATED}
-     * has never been fast-forwarded against ANY link — the version-match guard below would otherwise
-     * reject the very first OOBI resolve after such a ceremony was created (link now at
-     * {@code bindingVersion == 1}, ceremony still at {@code 0}), leaving it stuck at {@code CREATED}
-     * forever. That specific combination — {@code CREATED} and {@code bindingVersion == 0} — instead
-     * adopts the link's current {@code bindingVersion} onto the ceremony while advancing. Every other
-     * mismatch (a ceremony created under a real, already-linked binding that has since moved to a
-     * <em>different</em> version) still rejects — that is a genuine relink, not an initial link, and
-     * {@code KeriOobiService} is already responsible for invalidating it.
+     * <p>Initial-link adoption is the one exception to that guard. {@code create} records
+     * {@code bindingVersion == 0} when no link existed yet, and a persisted link's version starts at 1,
+     * so a ceremony still at {@code CREATED} with version 0 has never been matched against any link and
+     * would otherwise be stuck there forever. That combination adopts the link's current version while
+     * advancing; every other mismatch is a genuine relink and still rejects.
      *
-     * <p>The link read below is deliberately a plain (unlocked) {@code findById}, not
-     * {@code KeriIdentityLinkRepository#findByUserIdForUpdate} (F3 fix, design §4.7): like
-     * {@link #validateAndConsume}, this method only ever reads the link to derive a floor for the
-     * CEREMONY row (already row-locked by every caller of this private method) — it never writes to the
-     * link, so it has nothing to serialize against the link row's actual writers (relink, and the async
-     * {@code persist*IfIdentityStillCurrent} mutators).
+     * <p>The link read is an unlocked {@code findById} for the same reason as
+     * {@link #validateAndConsume}: it only derives a floor for the already-locked ceremony row.
      */
     private void advanceToLinkDerivedFloor(KeriAttestationCeremonyEntity ceremony) {
         if (!LINK_ADVANCEABLE_STATES.contains(ceremony.getState())) {
@@ -525,8 +459,8 @@ public class CeremonyService implements AttestationConsumptionApi {
                 ceremony.getKelSequence(), ceremony.getKelEventSaid(), authBeginTxHash);
     }
 
-    /** Returns {@code true} if the ceremony is (now, or already was) EXPIRED. Mutates and persists
-     *  the transition the first time it is observed past due — see design §4.2 "expiry is lazy". */
+    /** Returns {@code true} if the ceremony is now, or already was, EXPIRED. Expiry is lazy: the
+     *  transition is persisted the first time the ceremony is observed past due. */
     private boolean lazilyExpireIfNeeded(KeriAttestationCeremonyEntity ceremony) {
         if (TERMINAL_STATES.contains(ceremony.getState())) {
             return ceremony.getState() == CeremonyState.EXPIRED;

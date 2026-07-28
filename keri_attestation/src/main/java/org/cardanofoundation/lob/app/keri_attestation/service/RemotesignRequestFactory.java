@@ -9,27 +9,18 @@ import org.springframework.stereotype.Service;
 import org.cardanofoundation.signify.cesr.Saider;
 
 /**
- * Builds the remotesign request KED sent to a linked wallet AID to anchor a metadata digest (design
- * §4.4/§4.6 step 3).
+ * Builds the remotesign request KED sent to a linked wallet AID to anchor a metadata digest.
  *
- * <p><b>Wallet-verified payload shape (design §4.4 rev 3, user-directed 2026-07-22 after live wallet
- * testing).</b> The direct-digest KED this class used to build (spike "variant A", a bare
- * insertion-ordered {@code {"d": <digestQb64>}} map) was never accepted by a real Veridian wallet —
- * sending it produced no notification in the wallet at all. The proven, wallet-verified shape instead
- * builds an insertion-ordered payload with {@code i} present <em>before</em> saidifying, then sends the
- * <em>saidified</em> payload (not the raw digest) as the exn's {@code a}. Veridian's
- * {@code processRemoteSignReq} apparently expects — and silently drops, with no UI surfaced, anything
- * that doesn't look like — a self-addressing payload: {@code i} present, {@code d} the SAID of the
- * whole payload (not a caller-chosen opaque digest), computed with {@code i} already in place so the
- * wallet's own SAID recomputation over the received payload (which always sees {@code i}) matches ours.
+ * <p>The payload must be self-addressing or a Veridian wallet silently drops it, surfacing no
+ * notification at all: {@code i} must be present before saidifying, and {@code d} must be the SAID of
+ * the whole payload rather than a caller-chosen digest, so the wallet's own SAID recomputation over
+ * what it received matches ours.
  *
- * <p>This class now returns that shape: an insertion-ordered map {@code {i: <walletAid>, d: "",
- * metadataLabel: <label>, metadataDigest: <digestQb64>}} run through {@link Saider#saidify(Map)},
- * which overwrites {@code d} with the SAID of the whole map. The returned map's own {@code d} is what
- * the wallet is expected to anchor as its interaction-event seal — see
- * {@link KeriAttestService}'s seal-verification javadoc (it now compares against this SAID, not the
- * raw {@code metadataDigest}, which is kept on the ceremony separately for 1447/freeze-digest
- * matching only — design §4.4 rev 3).
+ * <p>This returns an insertion-ordered map {@code {i: <walletAid>, d: "", metadataLabel: <label>,
+ * metadataDigest: <digestQb64>}} run through {@link Saider#saidify(Map)}, which overwrites {@code d}
+ * with the SAID of the whole map. That SAID is what the wallet anchors as its interaction-event seal,
+ * and what {@link KeriAttestService} verifies against — not the raw {@code metadataDigest}, which the
+ * ceremony keeps separately for freeze-digest matching.
  *
  * <p>{@link KeriAttestService} still consumes this as a single opaque KED-building step and never
  * constructs the request map itself, by design, so any further wallet-observed shape correction stays

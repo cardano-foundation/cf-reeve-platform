@@ -8,18 +8,15 @@ import io.vavr.control.Either;
 import org.cardanofoundation.lob.app.document_vault.domain.card.KeyCardDto;
 
 /**
- * Validates permissionless key cards (contract §2.8). There is no issuer and no signature — a card is
- * accepted on shape alone, so this checks only what the backend can actually guarantee by itself: a
- * supported version/type, and no private-key material (I5). Identity binding is out-of-band; the sender
- * verifies the recipient's key.
+ * Validates permissionless key cards. There is no issuer and no signature, so a card is accepted on
+ * shape alone and this checks only what the backend can guarantee by itself: a supported version and
+ * type, and no private-key material. Identity binding is out-of-band, by the sender.
  *
- * Deliberately NOT checked: which organisation the card names. {@code subject.organisationId} is the
- * HOLDER's own organisation — a free-form label like "Privat" on a card minted outside Reeve — and has
- * nothing to do with which addressbook the card is being imported into. That is decided by the request,
- * whose organisation is authorised against the caller's JWT in {@link CardImportService}. The two were
- * once compared, a leftover from the signed-card design where the field was issuer-attested; with no
- * signature it only ever compared client input against client input, and it made external cards
- * unimportable.
+ * <p>Deliberately not checked: which organisation the card names. {@code subject.organisationId} is
+ * the holder's own, free-form organisation and has nothing to do with the addressbook the card is
+ * imported into — that comes from the request, authorised against the caller's JWT in
+ * {@link CardImportService}. Comparing the two would only compare client input against client input,
+ * and would make externally minted cards unimportable.
  */
 @Component
 public class KeyCardVerifier {

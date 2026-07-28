@@ -35,19 +35,16 @@ import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction.API1MetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.transation_submit.*;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
-import org.cardanofoundation.lob.app.keri_attestation.service.AttestationConsumptionApi;
 import org.cardanofoundation.lob.app.keri_attestation.service.CardanoMetadataTxSubmitter;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 
 @Configuration
 public class TransactionSubmissionConfig {
 
-    /** CIP-170 attestation metadata itself is always published under label 170 ({@code
-     *  Cip170MetadataFactory}) - reserved and never available for a document/API1/API3/spending-event
-     *  metadata label (R3 fix, Codex re-verification). Mirrors {@code
-     *  the CIP-170 reserved label; kept as a literal here so this class rejects a misconfigured
-     *  document metadata label in every deployment shape, attested or not
-     *  (KERI disabled) - see {@link #documentL1TransactionCreator}'s guard for why. */
+    /**
+     * Label 170 carries CIP-170 attestation metadata, so no publishable type may be configured to use
+     * it. Enforced by {@link #documentL1TransactionCreator}.
+     */
     private static final int RESERVED_CIP_170_LABEL = 170;
 
     @Bean
@@ -162,15 +159,8 @@ public class TransactionSubmissionConfig {
                                                                       @Value("${lob.l1.transaction.metadata_label:1447}") int metadataLabel,
                                                                       @Value("${lob.l1.transaction.debug_store_output_tx:false}") boolean debugStoreOutputTx
     ) {
-        // R3 fix (Codex re-verification): this bean carries NO @ConditionalOnProperty, unlike
-        // documentAttestationLookup below (only created when lob.keri-attestation.enabled=true, whose
-        // OWN constructor carries the equivalent guard). With KERI disabled, documentAttestationLookup
-        // is never created and its guard never runs at all - a deployment configuring the document
-        // metadata label to the CIP-170-reserved 170 would then have nothing rejecting it, and a plain
-        // (unattested) document publish could collide with (or overwrite) label 170's CIP-170
-        // attestation map. Checked here too, unconditionally, so every deployment shape - KERI on or
-        // off - fails fast at context startup instead of silently corrupting on-chain metadata the
-        // first time a document is dispatched.
+        // Unconditional, so a misconfigured label fails at startup in every deployment shape rather
+        // than overwriting a CIP-170 attestation map the first time a document is dispatched.
         if (metadataLabel == RESERVED_CIP_170_LABEL) {
             throw new IllegalStateException("metadata label 170 is reserved for CIP-170 attestations");
         }

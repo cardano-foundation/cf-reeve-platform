@@ -79,7 +79,7 @@ public class VaultKeyEntity extends VaultBaseEntity implements Persistable<Strin
     private KeyOrigin origin;
 
     /**
-     * Custody tier (blueprint I2, amended). PASSKEY = the private half never left the owner's device.
+     * Custody tier. PASSKEY = the private half never left the owner's device.
      * PORTABLE = an Indexer operator minted it and handed it over on a card, so it has existed outside
      * that device. This is PROVENANCE, not storage: wrapping a portable key under a passkey later does
      * not un-see what the operator saw, so the value NEVER upgrades. The UI must show it wherever a key
@@ -91,11 +91,9 @@ public class VaultKeyEntity extends VaultBaseEntity implements Persistable<Strin
     private KeyAssurance assurance;
 
     /**
-     * Provenance of a Veridian attestation the importing card claimed (design doc "The card-format
-     * contract", Part B). Set once, from {@code KeyCardDto.CardAttestation}, when a card carrying an
-     * {@code attestation} block is first imported; NULL for the overwhelmingly common unattested card
-     * and never populated after the fact. B2 is what will actually verify these against KERIA/on-chain
-     * — this is storage only.
+     * Provenance of a Veridian attestation the importing card carried. Set once, from
+     * {@code KeyCardDto.CardAttestation}, when such a card is first imported, and never populated
+     * after the fact. Null for an unattested card.
      */
     @Nullable
     @Column(name = "attestation_oobi")
@@ -117,8 +115,8 @@ public class VaultKeyEntity extends VaultBaseEntity implements Persistable<Strin
     @Column(name = "attestation_tx_hash")
     private String attestationTxHash;
 
-    /** The full CESR credential chain the wallet presented — carried so B2 can re-validate the
-     *  credential itself (it cannot be fetched via the OOBI alone). Nullable; TEXT (can be large). */
+    /** The full CESR credential chain the wallet presented, carried because the credential cannot be
+     *  fetched through the OOBI alone. Nullable, and potentially large. */
     @Nullable
     @Column(name = "attestation_credential_cesr", columnDefinition = "text")
     private String attestationCredentialCesr;

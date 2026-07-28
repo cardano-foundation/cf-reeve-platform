@@ -8,26 +8,19 @@ import com.bloxbean.cardano.client.metadata.MetadataBuilder;
 import com.bloxbean.cardano.client.metadata.MetadataMap;
 
 /**
- * The two CIP-1447 manifest sections that every publishable type emits with an identical shape:
- * {@code metadata} and {@code org}. Previously copy-pasted across
- * {@code DocumentMetadataSerialiser}, {@code API3MetadataSerialiser}, {@code API1MetadataSerialiser}
- * and {@code SpendingEventMetadataSerialiser}.
+ * The two manifest sections every publishable type emits with an identical shape: {@code metadata}
+ * and {@code org}, shared by the document, transaction, report and spending-event serialisers.
  *
- * <p>Primitives in, {@link MetadataMap} out — deliberately no entity types. The four serialisers'
- * signatures take {@code blockchain_publisher} entities, so hosting the serialisers themselves here
- * would require this module to depend on {@code blockchain_publisher} while
- * {@code blockchain_publisher} already depends on this one. Passing scalars keeps the dependency
- * one-way and lets these helpers live in the module every publishable-owning module already has.
+ * <p>Primitives in, {@link MetadataMap} out, deliberately no entity types: the serialisers take
+ * {@code blockchain_publisher} entities, and that module already depends on this one, so passing
+ * scalars keeps the dependency one-way.
  *
- * <p>{@code version} is a PARAMETER, not a constant, and must stay one: each publishable type
- * carries its own ({@code 1.0} documents, {@code 1.1} transactions, {@code 1.2} reports, {@code 1.0}
- * spending events). Hardcoding any single value here would silently change on-chain bytes for the
- * other three.
+ * <p>{@code version} must stay a parameter — each publishable type carries its own, and hardcoding
+ * one value here would change on-chain bytes for the others.
  *
- * <p>Insertion order below mirrors the original serialisers for readability, but it is NOT what
- * determines the bytes: CBOR serialisation sorts map keys canonically (shortest-encoding first), so
- * {@code org} precedes {@code metadata} on the wire regardless of {@code put} order. The guard
- * against byte drift is {@code CborCharacterizationTest}, not this ordering.
+ * <p>Insertion order below mirrors the serialisers for readability but does not determine the bytes:
+ * CBOR serialisation sorts map keys canonically. {@code CborCharacterizationTest} is what guards
+ * against byte drift.
  */
 public final class L1MetadataSections {
 

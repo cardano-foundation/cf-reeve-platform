@@ -18,8 +18,8 @@ import io.vavr.control.Either;
 import org.cardanofoundation.signify.cesr.util.CESRStreamUtil;
 
 /**
- * Validates a presented full CESR credential chain's <em>contents</em> before it is accepted (design
- * §4.3): the leaf credential must be issued to the expected holder AID, and every credential from the
+ * Validates a presented full CESR credential chain's <em>contents</em> before it is accepted: the
+ * leaf credential must be issued to the expected holder AID, and every credential from the
  * leaf up to a root must be currently-issued (not revoked) and chain cryptographic authority correctly
  * — each credential's issuer must equal the AID that the credential it cites via its {@code e} edge was
  * itself issued <em>to</em>, all the way up to a root (a credential with no further edges).

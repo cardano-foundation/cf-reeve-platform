@@ -22,33 +22,23 @@ import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentSt
 public interface VaultDocumentRepository extends JpaRepository<VaultDocumentEntity, String> {
 
     /**
-     * Takes a row-level {@code SELECT ... FOR UPDATE}. Used by BOTH mutating paths on this
-     * aggregate — publish and delete — so they serialize against each other on the same row lock:
-     * <ul>
-     *   <li>publish: two concurrent publish calls cannot both observe {@code DRAFT} and both fire
-     *       the irreversible {@code DocumentPublishCommand}; the second blocks until the first
-     *       commits, then reads {@code PUBLISHED} and returns {@code ALREADY_PUBLISHED}.</li>
-     *   <li>delete: a concurrent delete cannot observe {@code DRAFT} while a publish is in flight
-     *       and then unconditionally delete the row after publish commits it to {@code PUBLISHED};
-     *       delete blocks until publish commits, re-reads {@code PUBLISHED}, and returns
-     *       {@code DOCUMENT_PUBLISHED_IMMUTABLE} instead.</li>
-     * </ul>
-     * fetch/list stay on the unlocked finder — they are read-only and never mutate status.
+     * Takes a row-level {@code SELECT ... FOR UPDATE}, used by both mutating paths on this aggregate
+     * so publish and delete serialize against each other: neither can observe {@code DRAFT} while the
+     * other holds the lock and then act on that stale read. The loser blocks, re-reads
+     * {@code PUBLISHED} and returns {@code ALREADY_PUBLISHED} or
+     * {@code DOCUMENT_PUBLISHED_IMMUTABLE}. Read-only fetch and list use the unlocked finder.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select d from document_vault.VaultDocumentEntity d where d.id = :documentId")
     Optional<VaultDocumentEntity> findByIdForUpdate(@Param("documentId") String documentId);
 
     /**
-     * Blueprint B3 retention: hard-deletes envelopes matching {@code status} created before
-     * {@code cutoff}. Callers must pass {@link VaultDocumentStatus#DRAFT} only — PUBLISHED
-     * envelopes are locked forever regardless of age (settled product decision).
+     * Retention sweep: hard-deletes envelopes matching {@code status} created before {@code cutoff}.
+     * Callers must pass {@link VaultDocumentStatus#DRAFT} only — published envelopes are locked
+     * forever regardless of age.
      *
-     * <p>Single bulk JPQL delete rather than a Spring Data derived delete — the derived form
-     * SELECTs every matching row into the persistence context and removes them one-by-one inside
-     * one long transaction, which is slow and lock-heavy against a real backlog.
-     *
-
+     * <p>A bulk JPQL delete rather than a derived one, which would load every matching row into the
+     * persistence context and remove them one by one.
      */
     @Modifying
     @Query("delete from document_vault.VaultDocumentEntity d where d.status = :status and d.createdAt < :cutoff")
@@ -56,23 +46,13 @@ public interface VaultDocumentRepository extends JpaRepository<VaultDocumentEnti
                                            @Param("cutoff") LocalDateTime cutoff);
 
     /**
-     * Documents whose {@code publish()} committed {@code PUBLISHED}/{@code MARK_DISPATCH} but whose
-     * {@code DocumentPublishCommand} may never have reached blockchain_publisher — a crash or async
-     * executor rejection between the vault commit and the in-memory event landing (Codex
-     * adversarial-review finding 1). Feeds {@code DocumentDispatchRetryJob}, which re-emits the
-     * command for each match on a schedule. Re-emitting for a document that is legitimately still
-     * mid-flight (the first command has not landed yet) is safe and a no-op downstream — see
-     * {@code DocumentEntityRepositoryGateway#storeOnlyNew}, which dedups by documentId.
+     * Documents whose publish committed but whose {@code DocumentPublishCommand} may never have
+     * reached blockchain_publisher. Feeds {@code DocumentDispatchRetryJob}; see that class for the
+     * cursor ordering below and why re-emitting is safe.
      *
-     * <p>Bounded by {@code pageable} (Codex adversarial-review finding 2 of round 2): an unbounded
-     * sweep would materialize every stuck document's ciphertext in one go against a large backlog.
-     * {@code DocumentDispatchRetryJob} passes a fixed-size page so a backlog is drained across ticks
-     * instead of all at once.
-     *
-     * <p>Explicit JPQL {@code order by} rather than a {@link org.springframework.data.domain.Sort}
-     * folded into {@code pageable}: NULLS FIRST must apply to exactly one of the two sort keys,
-     * which a derived Spring Data query method cannot express as cleanly. The caller passes an
-     * unsorted {@code Pageable} purely for the offset/limit bound.
+     * <p>{@code pageable} bounds the sweep so a backlog drains across ticks. It is passed unsorted:
+     * the {@code order by} is expressed in JPQL because NULLS FIRST must apply to only one of the two
+     * sort keys.
      */
     @Query("select d from document_vault.VaultDocumentEntity d "
             + "where d.status = :status and d.ledgerDispatchStatus = :ledgerDispatchStatus "
@@ -82,14 +62,12 @@ public interface VaultDocumentRepository extends JpaRepository<VaultDocumentEnti
             Pageable pageable);
 
     /**
-     * Org-wide listing with optional filters (all nullable) — direction is a String ('SENT'/'RECEIVED')
-     * to keep the null-check portable; status is typed. Sorting/paging via Pageable.
+     * Org-wide listing with optional (nullable) filters. {@code direction} is a String
+     * ('SENT'/'RECEIVED') to keep the null-check portable; {@code status} is typed.
      *
-     * {@code :q} arrives here PRE-ESCAPED by the service layer (LIKE metacharacters {@code \\}, {@code %}
-     * and {@code _} are backslash-escaped before binding) — {@code escape '\\'} tells the LIKE operator
-     * to treat a backslash-prefixed {@code %}/{@code _} as a literal character rather than a wildcard.
-     * Without this, a fileName/description containing a literal {@code %} or {@code _} would either fail
-     * to match, or — worse — a query of just {@code %} would match every document in the organisation.
+     * <p>{@code :q} arrives pre-escaped from the service layer, and {@code escape '\\'} makes the LIKE
+     * operator treat a backslash-prefixed {@code %} or {@code _} as a literal. Without it a query of
+     * just {@code %} would match every document in the organisation.
      */
     String SEARCH_WHERE = "where d.organisationId = :organisationId "
             + "and (:status is null or d.status = :status) "
@@ -101,7 +79,7 @@ public interface VaultDocumentRepository extends JpaRepository<VaultDocumentEnti
             + "         select 1 from document_vault.VaultKeyEntity k, in(d.slots) s "
             + "         where s.keyId = k.id and k.accountId = :accountId)))";
 
-    // explicit countQuery: don't rely on Spring Data deriving a count over the exists-subquery form
+    // Explicit countQuery: Spring Data cannot reliably derive a count over the exists-subquery form.
     @Query(value = "select d from document_vault.VaultDocumentEntity d " + SEARCH_WHERE,
            countQuery = "select count(d) from document_vault.VaultDocumentEntity d " + SEARCH_WHERE)
     Page<VaultDocumentEntity> search(@Param("organisationId") String organisationId,

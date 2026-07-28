@@ -84,7 +84,7 @@ class CesrChainReducerTest {
 
     @Test
     void reducedStreamStillValidatesAsAGenuineChain() throws IOException {
-        // Design acceptance criterion (spec §4.3): the reduced stream must round-trip through the
+        // Design acceptance criterion: the reduced stream must round-trip through the
         // validator, not just through the raw parser — a reduction that silently drops a field the
         // validator needs (e.g. an ACDC's "e" edge map) would pass the parse-only check above but
         // must still fail here.

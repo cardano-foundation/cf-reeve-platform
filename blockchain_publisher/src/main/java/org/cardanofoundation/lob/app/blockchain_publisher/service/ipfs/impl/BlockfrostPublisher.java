@@ -80,10 +80,9 @@ public class BlockfrostPublisher implements IpfsPublisher {
             return Either.left(problemDetail);
         }
 
-        // Blockfrost signals failure (invalid/again project_id, wrong endpoint, quota exceeded, ...) with a non-2xx
-        // status and a JSON error envelope: {"status_code":..,"error":..,"message":..}. Surface that body verbatim
-        // instead of feeding it to the success parser below, where the unknown "error" field would surface only as an
-        // opaque Jackson "Unrecognized field" message that hides the real cause.
+        // Blockfrost reports failures as a non-2xx status with a JSON error envelope. Surface that body
+        // verbatim; feeding it to the success parser below would hide the cause behind an opaque
+        // Jackson "Unrecognized field" message.
         int statusCode = response.statusCode();
         if (statusCode < 200 || statusCode >= 300) {
             ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
@@ -103,7 +102,7 @@ public class BlockfrostPublisher implements IpfsPublisher {
             return Either.left(problemDetail);
         }
 
-        // A 2xx with no ipfs_hash must never be reported as success - that would anchor an L1 manifest with a null CID.
+        // A 2xx with no ipfs_hash is not a success: it would anchor an L1 manifest with a null CID.
         if (responseObject.getIpfsHash() == null || responseObject.getIpfsHash().isBlank()) {
             ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Blockfrost IPFS response contained no ipfs_hash: %s".formatted(response.body()));

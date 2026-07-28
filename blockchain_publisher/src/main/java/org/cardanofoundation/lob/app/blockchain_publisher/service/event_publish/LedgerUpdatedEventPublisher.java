@@ -50,8 +50,8 @@ public class LedgerUpdatedEventPublisher {
     }
 
     /**
-     * Same as {@link #send(String, LedgerUpdateType, Set)}, but lets the caller add extra receipts per entity
-     * on top of the standard {@code CARDANO_L1} one (e.g. documents also carry an {@code IPFS} receipt).
+     * As {@link #send(String, LedgerUpdateType, Set)}, but adds per-entity receipts on top of the
+     * standard {@code CARDANO_L1} one — documents, for instance, also carry an {@code IPFS} receipt.
      */
     @Transactional
     public <E extends PublishableEntity> void send(String organisationId,

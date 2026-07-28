@@ -28,7 +28,7 @@ import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentSt
 import org.cardanofoundation.lob.app.document_vault.repository.VaultDocumentRepository;
 
 /**
- * Codex adversarial-review finding 2 of round 2: real-transaction proof (the reflective pin in
+ * real-transaction proof (the reflective pin in
  * {@code DocumentLedgerUpdateHandlerListenerPinTest} only covers "someone changed the annotation
  * back") that {@code handleLedgerUpdatedEvent} really only ever applies a ledger update AFTER the
  * publishing transaction has committed — never for one still in flight, and never for one that

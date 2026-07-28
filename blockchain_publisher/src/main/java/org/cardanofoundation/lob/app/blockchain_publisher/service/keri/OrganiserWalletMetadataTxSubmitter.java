@@ -31,33 +31,22 @@ import io.vavr.control.Either;
 import org.cardanofoundation.lob.app.keri_attestation.service.CardanoMetadataTxSubmitter;
 
 /**
- * {@code blockchain_publisher}'s implementation of the {@code keri_attestation} module's
- * {@link CardanoMetadataTxSubmitter} port (design §3.3/§3.4): reuses the existing organiser
- * {@link Account} + {@link BackendService} (the exact collaborators
- * {@code documentL1TransactionCreator} already receives — see {@code TransactionSubmissionConfig})
- * to build, sign and submit a tx carrying only the given metadata, and to read back its
- * confirmation depth / label-170 (CIP-170) content afterwards.
+ * Implements {@code keri_attestation}'s {@link CardanoMetadataTxSubmitter} port using the organiser
+ * {@link Account} and {@link BackendService} this module already owns: builds, signs and submits a
+ * transaction carrying only the given metadata, then reads back its confirmation depth and its
+ * label-170 (CIP-170) content.
  *
- * <p>Tx assembly/signing/submission mirrors the organiser-wallet QuickTx idiom used elsewhere in
- * this module (see {@code DocumentL1TransactionCreator#serialiseTransaction}) and in the reference
- * scripts under {@code docs/keri} ({@code PublishExistingCredential#buildTransaction},
- * {@code AttestTransaction}): {@code payToAddress} + {@code attachMetadata} + {@code from} the
- * organiser address, signed by the organiser wallet, and — unlike the read-only creators — actually
- * submitted via {@code completeAndWait()} rather than merely built-and-signed. The tx composition
- * itself is isolated behind the protected {@link #submitTransaction(Metadata)} seam so tests can
- * mock it directly instead of exercising real network I/O; that seam's correctness rests on parity
- * with the reference idioms above, with end-to-end verification deferred to milestone 4.
+ * <p>Transaction composition is isolated behind the protected {@link #submitTransaction(Metadata)}
+ * seam so tests can stub it instead of exercising real network I/O.
  */
 @Slf4j
 @RequiredArgsConstructor
 public class OrganiserWalletMetadataTxSubmitter implements CardanoMetadataTxSubmitter {
 
-    /** CIP-170 metadata label, as a Blockfrost metadata-service label string (see {@code AttestTransaction}). */
+    /** CIP-170 metadata label, as the backend's metadata-service label string. */
     private static final String CIP170_LABEL = "170";
 
-    /** Title for any failure while building, signing or submitting the AUTH_BEGIN tx. Kept local to
-     *  this class rather than added to {@code KeriAttestationProblems}, which belongs to the
-     *  {@code keri_attestation} module and is out of scope for this class. */
+    /** Problem title for any failure while building, signing or submitting the AUTH_BEGIN tx. */
     public static final String AUTH_BEGIN_SUBMISSION_FAILED = "AUTH_BEGIN_SUBMISSION_FAILED";
 
     private final BackendService backendService;
@@ -138,10 +127,9 @@ public class OrganiserWalletMetadataTxSubmitter implements CardanoMetadataTxSubm
 
     /**
      * Builds, signs and submits the AUTH_BEGIN tx: 2 ADA organiser-to-organiser, carrying only the
-     * given metadata (mirrors {@code DocumentL1TransactionCreator#serialiseTransaction}, but submits
-     * rather than merely serialising). Isolated as a protected seam so unit tests can stub the
-     * network-touching QuickTx composition and assert only the metadata/label assembly and error
-     * mapping in {@link #submitMetadataTransaction(long, MetadataMap)}.
+     * given metadata. Protected so tests can stub the network-touching QuickTx composition and assert
+     * only the metadata assembly and error mapping in
+     * {@link #submitMetadataTransaction(long, MetadataMap)}.
      */
     protected Result<String> submitTransaction(Metadata metadata) {
         QuickTxBuilder quickTxBuilder = new QuickTxBuilder(backendService);

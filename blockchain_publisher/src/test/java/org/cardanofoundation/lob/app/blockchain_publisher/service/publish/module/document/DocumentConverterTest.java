@@ -11,7 +11,7 @@ import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.document
 
 /**
  * {@link DocumentConverter#convertToDbDetached} must carry {@code attestationCeremonyId} from the
- * command into the publisher-side {@link DocumentEntity} column (design §5.1, Task 14) — this is
+ * command into the publisher-side {@link DocumentEntity} column — this is
  * the mapping {@code BlockchainPublisherService#storeDocumentForDispatchLater} relies on so a
  * document dispatched via an attested publish keeps its ceremony binding. {@link
  * DocumentConverter#toPublishCommand} is the reverse mapping (WS3 step 1) that lets

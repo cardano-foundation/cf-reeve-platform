@@ -11,39 +11,21 @@ import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPub
 /**
  * The canonical payload a KERI wallet attests when authorising a document publish.
  *
- * <h2>Why this exists rather than digesting the finished 1447 manifest</h2>
+ * <p>The wallet attests this rather than the finished DOCUMENT manifest, because the attestation
+ * ceremony runs in the user-facing tier, which has neither IPFS credentials nor chain access. The
+ * manifest's {@code ipfs_cid} needs a pin and its {@code creation_slot} needs a chain tip; both are
+ * the publisher tier's job and are filled in after the wallet has signed.
  *
- * The attestation ceremony runs in the USER-FACING tier (document_vault + keri_attestation), which in
- * the split deployment is a pod with no IPFS credentials and no chain access at all — see the {@code
- * api} service in cf-reeve-application's docker-compose.yml, where {@code
- * LOB_BLOCKCHAIN_PUBLISHER_ENABLED} and {@code LOB_BLOCKCHAIN_READER_ENABLED} are both false. The
- * finished manifest cannot be built there: {@code data.ipfs_cid} requires pinning to IPFS and
- * {@code metadata.creation_slot} requires a chain tip, and both are the hardened publisher tier's job.
+ * <p>Leaving those two out costs nothing: fetching the CID yields bytes whose SHA-256 must equal the
+ * attested {@code envelope_sha256}, so content cannot be substituted. What is bound covers the whole
+ * document — the envelope bytes, both content commitments, the organisation and document ids, and the
+ * recipient set, so recipients cannot be added or swapped after attestation. A verifier recomputes
+ * this map from the on-chain manifest plus the fetched envelope and checks the wallet's KEL anchored
+ * its digest.
  *
- * <p>So the wallet attests THIS instead: every field that identifies the document, and nothing that
- * depends on the network. The publisher pins, reads the tip and assembles the manifest afterwards.
- *
- * <h2>What it still binds</h2>
- *
- * <ul>
- *   <li>{@code envelope_sha256} — the exact IPFS envelope bytes, so ciphertext, nonce and every
- *       recipient slot are covered as one unit.</li>
- *   <li>{@code content_hash} / {@code plaintext_hash} — the ciphertext and the plaintext commitment,
- *       both of which also appear in the on-chain manifest.</li>
- *   <li>{@code slot_count} / {@code recipient_key_hashes} — who the document is addressed to, also
- *       on-chain, so recipients cannot be added or swapped after attestation.</li>
- *   <li>{@code org_id} / {@code doc_id} — which organisation published what.</li>
- * </ul>
- *
- * <p>A third party verifying an anchored document recomputes this from the on-chain manifest plus the
- * fetched envelope, and checks the wallet's KEL anchored its digest. The two fields deliberately NOT
- * covered — {@code ipfs_cid} and {@code creation_slot} — cannot be used to substitute content:
- * fetching the CID yields bytes whose SHA-256 must equal {@code envelope_sha256}, and whose ciphertext
- * must hash to the attested {@code content_hash}.
- *
- * <p>Key insertion order IS the wire format: {@link MetadataMap} preserves it and the digest is taken
- * over the serialised CBOR, so reordering these puts would silently invalidate every existing
- * attestation. Add new fields at the END only, and bump {@link #VERSION}.
+ * <p>Key insertion order is part of the wire format: {@link MetadataMap} preserves it and the digest
+ * is taken over the serialised CBOR, so reordering these puts invalidates every existing attestation.
+ * Append new fields at the end only, and bump {@link #VERSION}.
  */
 public final class DocumentAttestationCommitment {
 

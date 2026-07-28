@@ -10,8 +10,8 @@ import lombok.Setter;
 
 /**
  * One recipient slot of an envelope. {@code keyId}/{@code recipientRef} are labels and indexing
- * aids only — never trust anchors (blueprint I6). {@code wrappedDek} is AES-256-GCM-encrypted
- * under an ECDH-derived slot KEK; the server cannot unwrap it (blueprint I5).
+ * aids only, never trust anchors. {@code wrappedDek} is AES-256-GCM-encrypted under an
+ * ECDH-derived slot KEK, which the server cannot unwrap.
  *
  * <p>{@code recipientKeyHash} is the odd one out: it is DERIVED server-side from the recipient's
  * stored public key — never accepted from a client, which could otherwise stamp someone else's

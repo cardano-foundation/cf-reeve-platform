@@ -9,7 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 /**
- * The card-format contract (design doc "The card-format contract"): an indexer-attested
+ * The card-format contract: an indexer-attested
  * {@code REEVE_KEY_CARD} carries a top-level {@code attestation} block; an unattested card omits it
  * entirely and must still parse exactly as before. Because {@link KeyCardDto#attestation} is now a
  * named field, Jackson must bind it there rather than routing it through
@@ -65,7 +65,7 @@ class KeyCardDtoTest {
     }
 
     /**
-     * The precedence this task's spec calls out explicitly: a named field wins over
+     * Precedence: a named field wins over
      * {@code @JsonAnySetter} in Jackson, so simply modeling {@code attestation} is enough — no manual
      * dispatch needed. This test is the proof, not the assumption.
      */

@@ -11,7 +11,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * Body of {@code POST /ceremonies} (design §4.1/§4.2). Not a {@code BaseRequest} subclass — see
+ * Body of {@code POST /ceremonies}. Not a {@code BaseRequest} subclass — see
  * {@link ResolveOobiRequest}'s javadoc.
  */
 @Getter

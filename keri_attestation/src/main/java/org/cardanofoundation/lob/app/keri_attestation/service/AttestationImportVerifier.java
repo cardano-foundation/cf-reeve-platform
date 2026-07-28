@@ -17,8 +17,8 @@ import io.vavr.control.Either;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 
 /**
- * Synchronous, no-ceremony verification of a Veridian-attested card at IMPORT time (design doc
- * WS2/B2). A card produced by the indexer's card-attestation ceremony carries an {@code attestation}
+ * Synchronous, no-ceremony verification of a Veridian-attested card at import time.
+ * A card produced by the indexer's card-attestation ceremony carries an {@code attestation}
  * block ({@code oobi}, {@code aid}, {@code credentialSaid}, {@code schemaSaid}, {@code txHash},
  * {@code credentialCesr}); before the platform trusts such a card it re-verifies, from first
  * principles, that:

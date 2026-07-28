@@ -29,7 +29,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.organisation.repository.OrganisationRepository;
 
 /**
- * Coordinator review finding 1 (Task 13 fix round 1): {@code VaultDocumentService
+ * {@code VaultDocumentService
  * #loadForAttestation} is the read {@code blockchain_publisher}'s {@code
  * DocumentAttestationTargetProvider} uses to build the freeze envelope — but that mapping ({@code
  * VaultDocumentService#toPublishCommand}) runs in the CALLER, well after {@code

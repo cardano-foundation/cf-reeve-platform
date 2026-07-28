@@ -3,7 +3,7 @@ package org.cardanofoundation.lob.app.keri_attestation.config;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
 
 /**
- * Holder for this module's own KERIA {@link SignifyClient} (F1 fix).
+ * Holder for this module's own KERIA {@link SignifyClient}.
  *
  * <p>Legacy {@code blockchain_publisher} (its {@code KeriConfig}/{@code KeriService}/
  * {@code PublisherHealth}) injects an <em>unqualified</em> {@code SignifyClient} bean. If this module

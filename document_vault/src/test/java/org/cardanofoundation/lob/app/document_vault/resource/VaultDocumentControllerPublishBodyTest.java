@@ -26,7 +26,7 @@ import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentView;
 import org.cardanofoundation.lob.app.document_vault.service.VaultDocumentService;
 
 /**
- * MockMvc slice test for {@code publish}'s optional body (design §5.1, Task 14): the controller
+ * MockMvc slice test for {@code publish}'s optional body: the controller
  * wired against a bare Mockito mock of {@link VaultDocumentService} via
  * {@link MockMvcBuilders#standaloneSetup} — no Spring context, mirroring
  * {@code KeriAttestationControllerTest}'s precedent, since document_vault had no prior
@@ -52,7 +52,7 @@ class VaultDocumentControllerPublishBodyTest {
         // strict Jackson2ObjectMapperBuilder bean from support's JsonConfig (FAIL_ON_UNKNOWN_PROPERTIES
         // explicitly enabled). A plain `new ObjectMapper()` restores Jackson's own vanilla default
         // (FAIL_ON_UNKNOWN_PROPERTIES = true), matching production and letting PublishDocumentRequest's
-        // `@JsonIgnoreProperties(ignoreUnknown = false)` (M3 cross-review F6 fix) actually take effect:
+        // `@JsonIgnoreProperties(ignoreUnknown = false)` actually take effect:
         // that per-class annotation only participates in Jackson's unknown-property handling, it does
         // not by itself override a mapper where the FAIL_ON_UNKNOWN_PROPERTIES feature is off.
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
@@ -99,7 +99,7 @@ class VaultDocumentControllerPublishBodyTest {
         verify(documentService).publish("doc1", "cer-1");
     }
 
-    /** M3 cross-review F6 fix: {@code @JsonIgnoreProperties(ignoreUnknown = false)} means an unknown
+    /** {@code @JsonIgnoreProperties(ignoreUnknown = false)} means an unknown
      *  field is no longer silently dropped - it fails Jackson deserialization outright, so a typo'd
      *  {@code attestationCeremonyId} can never silently fall through to a plain, unattested publish. */
     @Test
@@ -112,7 +112,7 @@ class VaultDocumentControllerPublishBodyTest {
         verifyNoInteractions(documentService);
     }
 
-    /** R4 fix (Codex re-verification): a body that NAMES {@code attestationCeremonyId} but sets it to
+    /** A body that NAMES {@code attestationCeremonyId} but sets it to
      *  JSON {@code null} is ambiguous intent - the controller must not silently collapse it to a
      *  plain publish the way a genuinely absent field (bodiless, or {@code {}}) does. It is rejected
      *  by translating it into the SAME blank-ceremony-id guard the service already runs (title
@@ -134,7 +134,7 @@ class VaultDocumentControllerPublishBodyTest {
         verify(documentService).publish("doc1", "");
     }
 
-    /** M3 cross-review F6 fix: a present-but-blank ceremony id is rejected by the service (not
+    /** A present-but-blank ceremony id is rejected by the service (not
      *  normalized to null) - this only proves the controller propagates whatever status the service
      *  returns for it, unaffected by the request-shape change above. */
     @Test

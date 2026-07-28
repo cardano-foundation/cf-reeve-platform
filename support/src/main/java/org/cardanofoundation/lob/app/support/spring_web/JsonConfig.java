@@ -25,19 +25,15 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 /**
  * Jackson wiring for the REST layer.
  *
- * <p><b>Both beans below MUST disable {@link
- * com.fasterxml.jackson.databind.SerializationFeature#WRITE_DATES_AS_TIMESTAMPS} explicitly.</b>
- * Jackson's own default for that feature is ENABLED, which renders a {@code LocalDateTime} as a
- * numeric array like {@code [2026,7,27,14,9,33,1717000]} instead of an ISO-8601 string. Spring Boot
- * normally disables it for us, but only on the {@code ObjectMapper} / {@code
- * Jackson2ObjectMapperBuilder} that Boot itself creates — and both of those are
- * {@code @ConditionalOnMissingBean}. Because this class defines its own, Boot's customisers never
- * run and its defaults do not apply.
+ * <p>Both beans below must disable {@link
+ * com.fasterxml.jackson.databind.SerializationFeature#WRITE_DATES_AS_TIMESTAMPS} explicitly. Jackson
+ * enables it by default, rendering a {@code LocalDateTime} as a numeric array rather than an ISO-8601
+ * string. Spring Boot normally disables it, but only on the {@code ObjectMapper} and
+ * {@code Jackson2ObjectMapperBuilder} it creates itself, both of which are
+ * {@code @ConditionalOnMissingBean} — so defining our own here means Boot's customisers never run.
  *
- * <p>Getting this wrong is silent and app-wide: every {@code java.time} field in every REST response
- * degrades to a digit array, which a JSON client cannot parse as a date. It surfaced as a document
- * {@code createdAt} rendering in the UI as {@code 20267271493301717000} — the array's digits
- * concatenated.
+ * <p>Getting this wrong fails silently and application-wide: every {@code java.time} field in every
+ * REST response degrades to a digit array no JSON client can parse as a date.
  */
 @Configuration
 @Slf4j

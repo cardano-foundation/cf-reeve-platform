@@ -16,37 +16,31 @@ public record KeriAttestationProperties(
         @DefaultValue("PT24H") Duration freezeMaxAge,
         @DefaultValue("PT3M") Duration remotesignTimeout,
         @DefaultValue("PT1.5S") Duration notificationPollInterval,
-        /** DEAD CONFIG (synchronous refactor, design rev user-directed): no longer read by any code.
-         *  {@code KeriAuthBeginService#submitAuthBegin}'s own-chain path used to poll (the now-removed
-         *  {@code awaitAuthBeginConfirmation}) until this many confirmations were observed before
-         *  completing the step; it now completes the step synchronously the moment the tx is submitted,
-         *  never waiting for confirmation depth. Left in the binding (harmless if set) rather than
-         *  removed, matching the "leave it, stop reading/writing it" treatment given
-         *  {@code KeriAttestationCeremonyEntity#stepPhase} et al. */
+        /** Unused. AUTH_BEGIN completes the moment the tx is submitted and no longer waits for a
+         *  confirmation depth. Kept in the binding so existing configuration still loads. */
         @DefaultValue("3") int authBeginConfirmations,
         Limits limits,
-        /** DEAD CONFIG — see {@link #authBeginConfirmations()}'s javadoc: the poll cadence for the
-         *  same now-removed confirmation-wait loop. */
+        /** Unused: the poll cadence of the removed confirmation wait. See
+         *  {@link #authBeginConfirmations()}. */
         @DefaultValue("PT15S") Duration authBeginPollInterval,
-        /** Still read — unlike its sibling AUTH_BEGIN properties above, NOT dead: {@code
-         *  CeremonyCleanupJob#stepTimeoutBudgets} still uses this as the stale-step sweep budget for a
-         *  ceremony stuck at {@code AUTH_BEGIN_SUBMITTED} (e.g. the process crashed mid-request, between
-         *  submitting the tx and completing the step). */
+        /** Unlike the two AUTH_BEGIN properties above, this one is read: it is
+         *  {@code CeremonyCleanupJob}'s stale-step budget for a ceremony stuck at
+         *  {@code AUTH_BEGIN_SUBMITTED}, e.g. after a crash between submitting the tx and completing
+         *  the step. */
         @DefaultValue("PT30M") Duration authBeginRollbackWindow,
         @DefaultValue("PT2S") Duration keyStateRetryInitialDelay,
         @DefaultValue("PT3S") Duration keyStateRetryInterval,
         /** Grace period added on top of a waiting step's own timeout ({@link #remotesignTimeout()}
          *  for CREDENTIAL_REQUESTED/ATTEST_REQUESTED, {@link #authBeginRollbackWindow()} for
          *  AUTH_BEGIN_SUBMITTED) before {@code CeremonyCleanupJob}'s stale-step sweep fails a
-         *  ceremony stuck in that state with {@code KERI_STEP_TIMED_OUT} (design §4.2/§7). */
+         *  ceremony stuck in that state with {@code KERI_STEP_TIMED_OUT}. */
         @DefaultValue("PT2M") Duration stepTimeoutGrace,
         Executor executor) {
 
     // Spring's ValueObjectBinder only instantiates a nested record when at least one of its own
-    // properties is present in a property source; @DefaultValue alone won't trigger construction
-    // of `limits` (or `executor`) when the whole `lob.keri-attestation.limits.*` (or `.executor.*`)
-    // section is absent. Normalize here so callers always see the documented defaults instead of a
-    // null Limits/Executor.
+    // properties is present in a property source, so @DefaultValue alone does not construct `limits`
+    // or `executor` when their whole section is absent. Normalise here so callers always see the
+    // documented defaults rather than null.
     public KeriAttestationProperties {
         if (limits == null) {
             limits = new Limits(3, Duration.parse("PT10S"));
@@ -60,14 +54,11 @@ public record KeriAttestationProperties(
     }
 
     /**
-     * {@code schemaBaseUrl} (live-testing fix): the credential SCHEMA SERVER's base OOBI URL — e.g.
-     * {@code https://cred-issuance.demo.idw-sandboxes.cf-deployments.org/oobi}, no trailing slash. Two
-     * independent uses in {@code KeriCredentialService}: (1) the IPEX apply's top-level {@code oobiUrl}
-     * (with a trailing slash appended), which is where a Veridian-style wallet actually resolves the
-     * credential schema from — NOT our agent's own OOBI; (2) as the base for resolving each of
-     * {@link #schemaSaids()} as an OOBI on OUR OWN agent ({@code baseUrl + "/" + said}) before ever
-     * sending an apply — KERIA silently drops an exchange referencing a schema SAID the receiving
-     * agent has never itself resolved.
+     * {@code schemaBaseUrl} is the credential schema server's base OOBI URL, without a trailing slash.
+     * {@code KeriCredentialService} uses it twice: as the IPEX apply's top-level {@code oobiUrl}, which
+     * is where the wallet resolves the schema from — not our agent's own OOBI — and as the base for
+     * resolving each of {@link #schemaSaids()} on our own agent before sending an apply, since KERIA
+     * silently drops an exchange referencing a schema SAID the receiving agent has never resolved.
      */
     public record CredentialPolicy(
             List<String> schemaSaids,
@@ -81,14 +72,9 @@ public record KeriAttestationProperties(
     }
 
     /**
-     * DEAD CONFIG (synchronous refactor, design rev user-directed): pool sizes for the module's two
-     * dedicated async executors, {@code keriAttestationExecutor} and {@code
-     * keriAttestationConfirmationExecutor} — both defined by the now-deleted {@code
-     * KeriAttestationAsyncConfig}, dispatched to by the now-deleted {@code CeremonyAsyncRunner}. The
-     * wallet-interaction flow (credential presentation, ATTEST, AUTH_BEGIN) now runs entirely on the
-     * original request thread; there is no background executor left for either pool size to configure.
-     * Left in the binding (harmless if set) rather than removed — see {@link
-     * #authBeginConfirmations()}'s javadoc for the same treatment elsewhere in this record.
+     * Unused. The wallet-interaction flow — credential presentation, ATTEST, AUTH_BEGIN — runs on the
+     * request thread, so there is no background executor left for these pool sizes to configure. Kept
+     * in the binding so existing configuration still loads.
      */
     public record Executor(
             @DefaultValue("4") int walletPoolSize,

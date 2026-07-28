@@ -56,7 +56,7 @@ public class AddressbookEntryEntity extends VaultBaseEntity implements Persistab
 
     /**
      * The only contact detail there is for someone with no Reeve account. Nullable: a hand-entered
-     * contact may not have one. Internal only — must NEVER be exported to IPFS or L1 (spec B5 #3).
+     * contact may not have one. Internal only — must never be exported to IPFS or L1.
      */
     @Nullable
     @Column(name = "email", length = 320)
@@ -91,12 +91,10 @@ public class AddressbookEntryEntity extends VaultBaseEntity implements Persistab
     private String homeOrganisationId;
 
     /**
-     * Provenance of a Veridian attestation the importing card claimed (design doc "The card-format
-     * contract", Part B). Set once, from {@code KeyCardDto.CardAttestation}, when a card carrying an
-     * {@code attestation} block first creates this contact; NULL for the overwhelmingly common
-     * unattested card. Like {@link #homeOrganisationId} and {@link #assurance}, never rewritten by a
-     * later re-import — a later card claiming attestation for an already-known contact does not
-     * retroactively attest the entry a sender already trusted (or didn't) on first import.
+     * Provenance of a Veridian attestation the importing card carried. Set once, from
+     * {@code KeyCardDto.CardAttestation}, when such a card first creates this contact, and null for
+     * an unattested one. Like {@link #homeOrganisationId} and {@link #assurance}, never rewritten by
+     * a re-import: a later card must not retroactively attest a contact a sender already judged.
      */
     @Nullable
     @Column(name = "attestation_oobi")
@@ -118,8 +116,8 @@ public class AddressbookEntryEntity extends VaultBaseEntity implements Persistab
     @Column(name = "attestation_tx_hash")
     private String attestationTxHash;
 
-    /** The full CESR credential chain the wallet presented — carried so B2 can re-validate the
-     *  credential itself (it cannot be fetched via the OOBI alone). Nullable; TEXT (can be large). */
+    /** The full CESR credential chain the wallet presented, carried because the credential cannot be
+     *  fetched through the OOBI alone. Nullable, and potentially large. */
     @Nullable
     @Column(name = "attestation_credential_cesr", columnDefinition = "text")
     private String attestationCredentialCesr;

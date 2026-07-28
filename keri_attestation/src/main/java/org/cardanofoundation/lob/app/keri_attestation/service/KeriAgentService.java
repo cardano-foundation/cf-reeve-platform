@@ -15,7 +15,7 @@ import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClie
 import org.cardanofoundation.lob.app.keri_attestation.config.SignifyClientConfig.IdentifierRecord;
 
 /**
- * Exposes the platform's own KERI agent identity to the rest of the module (design §4.3). The
+ * Exposes the platform's own KERI agent identity to the rest of the module. The
  * agent AID itself is looked up/created eagerly by
  * {@link org.cardanofoundation.lob.app.keri_attestation.config.SignifyClientConfig}'s
  * {@code keriAttestationAgentIdentifier} bean — by the time this service exists, Spring has already

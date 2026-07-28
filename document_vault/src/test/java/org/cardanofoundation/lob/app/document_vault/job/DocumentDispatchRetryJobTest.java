@@ -39,9 +39,9 @@ import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentSt
 import org.cardanofoundation.lob.app.document_vault.repository.VaultDocumentRepository;
 
 /**
- * Codex adversarial-review finding 1: pins the recovery sweep that closes the "crash/async-rejection
+ * pins the recovery sweep that closes the "crash/async-rejection
  * after the vault TX commits but before the publisher row is stored" gap in
- * {@code VaultDocumentService#publish}. Also covers round 3's retry-cursor fairness fix (starvation
+ * {@code VaultDocumentService#publish}. Also covers the retry-cursor fairness rule (starvation
  * regression: real-Postgres coverage of the actual multi-sweep rotation lives in
  * {@code DocumentDispatchRetryJobStarvationIntegrationTest}).
  */
@@ -104,7 +104,7 @@ class DocumentDispatchRetryJobTest {
         assertEquals("org2", command2.organisationId());
         assertEquals(Base64.getEncoder().encodeToString(new byte[] {4, 5, 6}), command2.ciphertextBase64());
 
-        // retry-cursor fairness (round 3): every attempted document is stamped, not just re-emitted
+        // retry-cursor fairness: every attempted document is stamped, not just re-emitted
         assertNotNull(doc1.getDispatchRetryAt(), "attempted document must get a non-null retry cursor");
         assertNotNull(doc2.getDispatchRetryAt(), "attempted document must get a non-null retry cursor");
         verify(documentRepository).save(doc1);
@@ -120,7 +120,7 @@ class DocumentDispatchRetryJobTest {
 
         job.reemitStuckPublishes();
 
-        // "mark before emitting" (round 3 fix): by the time save() runs, dispatchRetryAt is already
+        // "mark before emitting": by the time save() runs, dispatchRetryAt is already
         // non-null, and save() happens-before the event is published for that same document.
         InOrder inOrder = Mockito.inOrder(documentRepository, eventPublisher);
         inOrder.verify(documentRepository).save(doc);
@@ -151,13 +151,13 @@ class DocumentDispatchRetryJobTest {
         verify(documentRepository).findByStatusAndLedgerDispatchStatus(
                 eq(VaultDocumentStatus.PUBLISHED), eq(LedgerDispatchStatus.MARK_DISPATCH), pageableCaptor.capture());
 
-        // unsorted (round 3): ordering — including the NULLS FIRST clause on dispatchRetryAt — now
+        // unsorted: ordering — including the NULLS FIRST clause on dispatchRetryAt — now
         // lives in the finder's JPQL, not in a Sort folded into the Pageable.
         assertEquals(PageRequest.of(0, 7), pageableCaptor.getValue());
     }
 
     /**
-     * Codex adversarial-review finding, round 3 (retry-sweep starvation): pins that the sweep stays
+     * sweep starvation): pins that the sweep stays
      * a genuine writable transaction. If this ever regressed back to {@code readOnly = true}, the
      * {@code dispatchRetryAt} stamp would either fail to persist or (worse) silently not participate
      * in the same commit as the emitted event, reopening the starvation the retry cursor exists to

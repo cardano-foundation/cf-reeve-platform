@@ -1,7 +1,7 @@
 package org.cardanofoundation.lob.app.document_vault.domain.enums;
 
 /**
- * Custody tier of a {@code VaultKeyEntity} (blueprint I2, amended). This is PROVENANCE, not
+ * Custody tier of a {@code VaultKeyEntity}. This is PROVENANCE, not
  * storage: the value never upgrades after registration. See
  * V1.7_100_14__lob_service_app_document_vault_module.sql for the authoritative column comment.
  */

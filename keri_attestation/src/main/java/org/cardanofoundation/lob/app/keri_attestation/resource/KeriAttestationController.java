@@ -39,7 +39,7 @@ import org.cardanofoundation.lob.app.keri_attestation.service.KeriOobiService;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 /**
- * REST surface for the KERI attestation module (design §4.8): identity linking, the platform agent's
+ * REST surface for the KERI attestation module: identity linking, the platform agent's
  * own OOBI, and the ceremony lifecycle (create, the three step POSTs, and polling).
  *
  * <p>Gated the same way its collaborator services are ({@code lob.keri-attestation.keria.url}

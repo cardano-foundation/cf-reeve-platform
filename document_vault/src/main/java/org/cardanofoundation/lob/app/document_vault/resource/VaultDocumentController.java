@@ -42,13 +42,9 @@ public class VaultDocumentController {
             + "or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole())";
 
     /**
-     * Anchoring on-chain is irreversible, so it is gated more narrowly than everything else — the
-     * platform's existing separation of duties. Verified precedents: funding's `publishEvent`
-     * ("Publish an event to the blockchain") is manager-or-admin; `ReportingController.publish` and
-     * `AccountingCoreResource.approveTransactionsPublish` are manager-only. Auditor is never allowed
-     * to publish anywhere in this platform, and neither is accountant on a dispatch action.
-     *
-     * Consequence, accepted: an accountant can upload a draft but needs a manager to publish it.
+     * Anchoring on-chain is irreversible, so publishing is gated more narrowly than the other
+     * endpoints, matching the platform's separation of duties: auditors and accountants never publish
+     * anywhere. An accountant can therefore upload a draft but needs a manager to publish it.
      */
     private static final String PUBLISH_ROLES =
             "hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())";
@@ -90,7 +86,7 @@ public class VaultDocumentController {
 
     @Operation(description = "Publish a draft document: encrypted envelope to IPFS, manifest to Cardano L1 (label 1447, type DOCUMENT). "
             + "Requires IPFS; locks the document forever. Manager or admin only. Optional body may carry a completed KERI "
-            + "wallet-attestation ceremony id to consume as part of the publish (design §5.1); omit the body (or the field) for a plain publish.")
+            + "wallet-attestation ceremony id to consume as part of the publish; omit the body (or the field) for a plain publish.")
     @PostMapping(value = "/documents/{documentId}/publish", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize(PUBLISH_ROLES)
     public ResponseEntity<Object> publish(@PathVariable String documentId,
@@ -99,17 +95,12 @@ public class VaultDocumentController {
     }
 
     /**
-     * R4 fix (Codex re-verification): {@code {"attestationCeremonyId": null}} NAMES the field but
-     * nulls it — ambiguous intent, distinct from simply omitting it (no body at all, or {@code {}}),
-     * which stays a plain publish exactly as before this fix. {@code
-     * PublishDocumentRequest#isAttestationCeremonyIdExplicitlySet()} is the only way to tell the two
-     * apart once both have collapsed to a null field value.
+     * {@code {"attestationCeremonyId": null}} names the field but nulls it, which is distinct from
+     * omitting it; both collapse to a null field value, so
+     * {@code PublishDocumentRequest#isAttestationCeremonyIdExplicitlySet()} is what tells them apart.
      *
-     * <p>An explicit null is translated to {@code ""} rather than duplicating a second 422 path:
-     * {@code ""} is itself blank, so it is rejected by exactly the same blank-ceremony-id guard
-     * {@code VaultDocumentService#publish} already runs for {@code {"attestationCeremonyId": "   "}}
-     * — same title ({@code ATTESTATION_CEREMONY_ID_BLANK}), same detail, same 422 status; no new
-     * problem type.
+     * <p>An explicit null becomes {@code ""} rather than getting its own error path: blank is already
+     * rejected by {@code VaultDocumentService#publish}'s guard, with the same title, detail and status.
      */
     private static String resolveAttestationCeremonyId(PublishDocumentRequest request) {
         if (request == null) {
