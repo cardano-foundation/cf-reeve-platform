@@ -32,14 +32,19 @@ import com.bloxbean.cardano.client.quicktx.QuickTxBuilder;
 import com.bloxbean.cardano.client.quicktx.Tx;
 import io.vavr.control.Either;
 
+import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API3BlockchainTransaction;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.SerializedCardanoL1Transaction;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Organisation;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.DocumentAttestationLookup;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
 import org.cardanofoundation.lob.app.document_vault.service.VaultProblems;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 
 /**
  * L1 transaction creator for documents. Standalone (NOT
@@ -55,10 +60,12 @@ import org.cardanofoundation.lob.app.document_vault.service.VaultProblems;
 public class DocumentL1TransactionCreator {
 
     private final BackendService backendService;
+    private final DocumentConverter documentConverter;
     private final DocumentIpfsSerialiser documentIpfsSerialiser;
     private final DocumentMetadataSerialiser documentMetadataSerialiser;
     private final BlockchainReaderPublicApiIF blockchainReaderPublicApi;
     private final MetadataChecker jsonSchemaMetadataChecker;
+    private final OrganisationPublicApi organisationPublicApi;
     private final Account organiserWallet;
     private final Optional<IpfsPublisher> ipfsPublisher;
     private final Optional<DocumentAttestationLookup> attestationLookup;
@@ -97,14 +104,21 @@ public class DocumentL1TransactionCreator {
             return Either.left(problem);
         }
 
-        String envelopeJson = documentIpfsSerialiser.serialise(document);
+        DocumentPublishCommand command = documentConverter.toPublishCommand(document);
+        String envelopeJson = documentIpfsSerialiser.serialise(command);
 
         return ipfsPublisher.get().publish(envelopeJson).flatMap(cid -> {
             document.setIpfsCid(cid);
 
             return blockchainReaderPublicApi.getChainTip().flatMap(chainTip -> {
                 long creationSlot = chainTip.getAbsoluteSlot();
-                MetadataMap metadataMap = documentMetadataSerialiser.serialiseToMetadataMap(document, cid, creationSlot);
+                var organisationEntity = organisationPublicApi.findByOrganisationId(command.organisationId())
+                        .orElseThrow(() -> new IllegalArgumentException(
+                                "Organisation not found for id: %s".formatted(command.organisationId())));
+                Organisation organisation = Organisation.fromOrganisationEntity(organisationEntity);
+                MetadataMap metadataMap = documentMetadataSerialiser.serialiseToMetadataMap(command, cid, creationSlot,
+                        organisation.getId(), organisation.getName(), organisation.getTaxIdNumber(),
+                        organisation.getCurrencyId(), organisation.getCountryCode());
 
                 return handleTransactionCreation(metadataMap, creationSlot);
             });

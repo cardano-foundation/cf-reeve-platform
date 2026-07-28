@@ -11,8 +11,8 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TransactionLedgerUpdateCommand;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TransactionStatusRequestEvent;
+import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.BlockchainPublisherService;
-import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentPublishCommand;
 import org.cardanofoundation.lob.app.funding.domain.events.SpendingEventsPublishCommand;
 import org.cardanofoundation.lob.app.reporting.dto.events.PublishReportEvent;
 

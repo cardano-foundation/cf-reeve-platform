@@ -41,7 +41,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonDateOnlyLockable
 
 /**
  * Publisher-side projection of a vault document. Built EXCLUSIVELY from
- * {@link org.cardanofoundation.lob.app.document_vault.domain.events.DocumentPublishCommand} fields (spec B5 #3):
+ * {@link org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand} fields (spec B5 #3):
  * no lookups back into vault tables, no e-mails, key ids, file names, account ids, or labels.
  *
  * <p>Deliberately NOT {@code @Audited} - unlike the other publishable entities, the ciphertext must never get

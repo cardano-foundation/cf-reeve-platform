@@ -23,10 +23,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
+import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
 import org.cardanofoundation.lob.app.document_vault.DocumentVaultContextIntegrationTest;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultDocumentEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentStatus;
-import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentPublishCommand;
 import org.cardanofoundation.lob.app.document_vault.repository.VaultDocumentRepository;
 
 /**

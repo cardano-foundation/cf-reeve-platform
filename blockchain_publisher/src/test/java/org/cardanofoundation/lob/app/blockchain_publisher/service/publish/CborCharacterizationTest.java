@@ -28,7 +28,8 @@ import com.bloxbean.cardano.client.metadata.cbor.CBORMetadataList;
 
 import org.junit.jupiter.api.Test;
 
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentEntity;
+import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.EventMilestoneAllocationEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.EventProjectAllocationEntity;
@@ -41,7 +42,6 @@ import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Proj
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionItemEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Vat;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report.API3MetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.spendingevent.SpendingEventMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction.API1MetadataSerialiser;
@@ -262,40 +262,27 @@ class CborCharacterizationTest {
 
     @Test
     void documentManifestCborIsUnchanged() throws CborException {
-        OrganisationPublicApi organisationPublicApi = mock(OrganisationPublicApi.class);
-        when(organisationPublicApi.findByOrganisationId("org-1")).thenReturn(Optional.of(documentOrganisationFixture()));
-        DocumentMetadataSerialiser serialiser = new DocumentMetadataSerialiser(organisationPublicApi, FIXED);
+        DocumentMetadataSerialiser serialiser = new DocumentMetadataSerialiser(FIXED);
 
-        MetadataMap map = serialiser.serialiseToMetadataMap(documentEntityFixture(), "QmFixedCidForTest", CREATION_SLOT);
+        MetadataMap map = serialiser.serialiseToMetadataMap(documentPublishCommandFixture(), "QmFixedCidForTest", CREATION_SLOT,
+                "org-1", "Acme", "TAX-1", "ISO_4217:CHF", "CH");
 
         assertThat(hex(map)).isEqualTo(DOCUMENT_EXPECTED_CBOR_HEX);
     }
 
-    private static DocumentEntity documentEntityFixture() {
-        DocumentEntity entity = new DocumentEntity();
-        entity.setId("doc-1");
-        entity.setOrganisationId("org-1");
-        entity.setEnvelopeVersion(1);
-        entity.setContentHash("a".repeat(64));
-        entity.setPlaintextHash("b".repeat(64));
-        entity.setPayloadNonce("c".repeat(24));
-        entity.setCiphertextBase64("Y2lwaGVydGV4dA==");
-        entity.setSlots(List.of(
-                new DocumentEntity.Slot("d".repeat(64), "e".repeat(96)),
-                new DocumentEntity.Slot("f".repeat(64), "0".repeat(96))));
-        return entity;
-    }
-
-    private static Organisation documentOrganisationFixture() {
-        return Organisation.builder()
-                .id("org-1")
-                .name("Acme")
-                .taxIdNumber("TAX-1")
-                .countryCode("CH")
-                .accountPeriodDays(365)
-                .currencyId("ISO_4217:CHF")
-                .reportCurrencyId("ISO_4217:CHF")
-                .build();
+    private static DocumentPublishCommand documentPublishCommandFixture() {
+        return new DocumentPublishCommand(
+                "org-1",
+                "doc-1",
+                1,
+                "a".repeat(64),
+                "b".repeat(64),
+                "c".repeat(24),
+                "Y2lwaGVydGV4dA==",
+                List.of(
+                        new DocumentPublishCommand.PublishSlot("d".repeat(64), "e".repeat(96)),
+                        new DocumentPublishCommand.PublishSlot("f".repeat(64), "0".repeat(96))),
+                null);
     }
 
     // ---------------------------------------------------------------------------------------

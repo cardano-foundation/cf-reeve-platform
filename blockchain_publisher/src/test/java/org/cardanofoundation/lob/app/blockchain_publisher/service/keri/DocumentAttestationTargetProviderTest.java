@@ -34,19 +34,17 @@ import org.junit.jupiter.api.Test;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.CardanoNetwork;
 import org.cardanofoundation.lob.app.blockchain_common.domain.ChainTip;
+import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentAttestationFreezeEntity;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.DocumentAttestationFreezeRepository;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentConverter;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentIpfsSerialiser;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.DocumentSlot;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultDocumentEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentStatus;
-import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentPublishCommand;
 import org.cardanofoundation.lob.app.document_vault.service.VaultDocumentService;
 import org.cardanofoundation.lob.app.document_vault.service.VaultProblems;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.AttestationDigest;
@@ -56,12 +54,11 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 /**
  * {@link DocumentAttestationTargetProvider#prepareDigest} builds its serialiser input via the same
- * {@code VaultDocumentService#toPublishCommand} + {@code DocumentConverter#convertToDbDetached} pair
- * the real publish/dispatch path uses (see the class javadoc's byte-identity argument), so this test
- * uses REAL {@link DocumentConverter}, {@link DocumentIpfsSerialiser} and {@link
- * DocumentMetadataSerialiser} instances (mirroring {@code DocumentL1TransactionCreatorTest}) rather
- * than mocking the mapping away — the whole point under test is that the frozen bytes are exactly
- * what dispatch would independently derive from the same {@link VaultDocumentEntity}.
+ * {@code VaultDocumentService#toPublishCommand} static call the real publish/dispatch path uses (see
+ * the class javadoc's byte-identity argument), so this test uses REAL {@link DocumentIpfsSerialiser}
+ * and {@link DocumentMetadataSerialiser} instances (mirroring {@code DocumentL1TransactionCreatorTest})
+ * rather than mocking the mapping away — the whole point under test is that the frozen bytes are
+ * exactly what dispatch would independently derive from the same {@link VaultDocumentEntity}.
  */
 class DocumentAttestationTargetProviderTest {
 
@@ -76,7 +73,6 @@ class DocumentAttestationTargetProviderTest {
     private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2024-06-01T10:15:30Z"), ZoneId.of("UTC"));
 
     private VaultDocumentService vaultDocumentService;
-    private DocumentConverter documentConverter;
     private DocumentIpfsSerialiser documentIpfsSerialiser;
     private DocumentMetadataSerialiser documentMetadataSerialiser;
     private BlockchainReaderPublicApiIF blockchainReaderPublicApi;
@@ -89,10 +85,9 @@ class DocumentAttestationTargetProviderTest {
     @BeforeEach
     void setUp() {
         vaultDocumentService = mock(VaultDocumentService.class);
-        documentConverter = new DocumentConverter();
         documentIpfsSerialiser = new DocumentIpfsSerialiser(new ObjectMapper());
         organisationPublicApi = mock(OrganisationPublicApi.class);
-        documentMetadataSerialiser = new DocumentMetadataSerialiser(organisationPublicApi, FIXED_CLOCK);
+        documentMetadataSerialiser = new DocumentMetadataSerialiser(FIXED_CLOCK);
         blockchainReaderPublicApi = mock(BlockchainReaderPublicApiIF.class);
         ipfsPublisher = mock(IpfsPublisher.class);
         cip170MetadataFactory = new Cip170MetadataFactory();
@@ -121,7 +116,6 @@ class DocumentAttestationTargetProviderTest {
     private DocumentAttestationTargetProvider provider(Optional<IpfsPublisher> ipfs, int metadataLabel) {
         return new DocumentAttestationTargetProvider(
                 vaultDocumentService,
-                documentConverter,
                 documentIpfsSerialiser,
                 documentMetadataSerialiser,
                 blockchainReaderPublicApi,
@@ -129,6 +123,7 @@ class DocumentAttestationTargetProviderTest {
                 cip170MetadataFactory,
                 freezeRepository,
                 securityHelper,
+                organisationPublicApi,
                 FIXED_CLOCK,
                 metadataLabel);
     }
@@ -146,13 +141,6 @@ class DocumentAttestationTargetProviderTest {
         document.setCreatedByAccount("user-1");
         document.setSlots(List.of(new DocumentSlot("k-s", "recipient-ref", "d".repeat(64), "e".repeat(96))));
         return document;
-    }
-
-    /** Independently rebuilds the publisher-side {@link DocumentEntity} the provider must produce,
-     *  via the exact same mapping the provider (and the real dispatch path) uses. */
-    private DocumentEntity expectedPublisherEntity(VaultDocumentEntity vaultDocument) {
-        DocumentPublishCommand command = VaultDocumentService.toPublishCommand(vaultDocument);
-        return new DocumentConverter().convertToDbDetached(command);
     }
 
     private static String sha256Hex(String content) {
@@ -223,13 +211,14 @@ class DocumentAttestationTargetProviderTest {
         assertThat(saved.getCreatedAt()).isEqualTo(LocalDateTime.now(FIXED_CLOCK));
         assertThat(saved.getDigestQb64()).isEqualTo(result.get().digestQb64());
 
-        // --- byte-identity: same mapping (VaultDocumentService.toPublishCommand + DocumentConverter),
-        // same envelope, same metadata map, same frozen bytes, same digest as dispatch would produce ---
-        DocumentEntity expectedEntity = expectedPublisherEntity(vaultDocument);
-        String expectedEnvelope = documentIpfsSerialiser.serialise(expectedEntity);
+        // --- byte-identity: same mapping (VaultDocumentService.toPublishCommand), same envelope, same
+        // metadata map, same frozen bytes, same digest as dispatch would produce ---
+        DocumentPublishCommand expectedCommand = VaultDocumentService.toPublishCommand(vaultDocument);
+        String expectedEnvelope = documentIpfsSerialiser.serialise(expectedCommand);
         assertThat(saved.getEnvelopeSha256()).isEqualTo(sha256Hex(expectedEnvelope));
 
-        MetadataMap expectedMap = documentMetadataSerialiser.serialiseToMetadataMap(expectedEntity, "bafy-cid-1", 12345L);
+        MetadataMap expectedMap = documentMetadataSerialiser.serialiseToMetadataMap(expectedCommand, "bafy-cid-1", 12345L,
+                "org-1", "Acme", "TAX-1", "ISO_4217:CHF", "CH");
         byte[] expectedFrozenBytes = CborSerializationUtil.serialize(expectedMap.getMap());
         assertThat(saved.getFrozenMetadataCbor()).isEqualTo(expectedFrozenBytes);
 

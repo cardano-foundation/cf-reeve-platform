@@ -30,6 +30,8 @@ import org.junit.jupiter.api.Test;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.CardanoNetwork;
 import org.cardanofoundation.lob.app.blockchain_common.domain.ChainTip;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API3BlockchainTransaction;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentEntity;
@@ -39,6 +41,8 @@ import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.DocumentA
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
 import org.cardanofoundation.lob.app.document_vault.service.VaultProblems;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.ConsumedAttestation;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 
 /**
  * The fail-closed attested-dispatch hook (design §5.3, Task 15): a {@link DocumentEntity} carrying a
@@ -61,7 +65,9 @@ class DocumentL1TransactionCreatorAttestationTest {
     private BackendService backendService;
     private BlockchainReaderPublicApiIF blockchainReaderPublicApi;
     private MetadataChecker jsonSchemaMetadataChecker;
+    private OrganisationPublicApi organisationPublicApi;
     private Account organiserWallet;
+    private DocumentConverter documentConverter;
     private DocumentIpfsSerialiser documentIpfsSerialiser;
     private DocumentMetadataSerialiser documentMetadataSerialiser;
     private IpfsPublisher ipfsPublisher;
@@ -72,11 +78,26 @@ class DocumentL1TransactionCreatorAttestationTest {
         backendService = mock(BackendService.class);
         blockchainReaderPublicApi = mock(BlockchainReaderPublicApiIF.class);
         jsonSchemaMetadataChecker = mock(MetadataChecker.class);
+        organisationPublicApi = mock(OrganisationPublicApi.class);
         organiserWallet = new Account();
+        documentConverter = new DocumentConverter();
         documentIpfsSerialiser = new DocumentIpfsSerialiser(new ObjectMapper());
         documentMetadataSerialiser = mock(DocumentMetadataSerialiser.class);
         ipfsPublisher = mock(IpfsPublisher.class);
         attestationLookup = mock(DocumentAttestationLookup.class);
+
+        // Only the plain-publish regression test below (nullCeremonyIdNeverTouchesTheAttestationLookup)
+        // reaches organisation resolution - every other test in this class exercises the attested path,
+        // which never calls organisationPublicApi at all.
+        when(organisationPublicApi.findByOrganisationId("org-1")).thenReturn(Optional.of(Organisation.builder()
+                .id("org-1")
+                .name("Acme")
+                .taxIdNumber("TAX-1")
+                .countryCode("CH")
+                .accountPeriodDays(365)
+                .currencyId("ISO_4217:CHF")
+                .reportCurrencyId("ISO_4217:CHF")
+                .build()));
     }
 
     private static DocumentEntity fixture(String ceremonyId) {
@@ -96,10 +117,12 @@ class DocumentL1TransactionCreatorAttestationTest {
     private DocumentL1TransactionCreator creator(Optional<DocumentAttestationLookup> lookup) {
         return new DocumentL1TransactionCreator(
                 backendService,
+                documentConverter,
                 documentIpfsSerialiser,
                 documentMetadataSerialiser,
                 blockchainReaderPublicApi,
                 jsonSchemaMetadataChecker,
+                organisationPublicApi,
                 organiserWallet,
                 Optional.of(ipfsPublisher),
                 lookup,
@@ -223,7 +246,9 @@ class DocumentL1TransactionCreatorAttestationTest {
         when(ipfsPublisher.publish(anyString())).thenReturn(Either.right("bafy-plain-cid"));
         when(blockchainReaderPublicApi.getChainTip()).thenReturn(Either.right(CHAIN_TIP));
         when(jsonSchemaMetadataChecker.checkTransactionMetadata(anyString())).thenReturn(true);
-        when(documentMetadataSerialiser.serialiseToMetadataMap(any(), anyString(), org.mockito.ArgumentMatchers.anyLong()))
+        when(documentMetadataSerialiser.serialiseToMetadataMap(
+                any(), anyString(), org.mockito.ArgumentMatchers.anyLong(),
+                anyString(), anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(MetadataBuilder.createMap());
 
         DocumentL1TransactionCreator creator = spy(creator(Optional.of(attestationLookup)));

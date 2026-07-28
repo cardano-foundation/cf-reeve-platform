@@ -18,6 +18,8 @@ import com.bloxbean.cardano.client.backend.api.DefaultUtxoSupplier;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
 import org.cardanofoundation.lob.app.blockchain_publisher.job.DocumentAttestationFreezeCleanupJob;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.DocumentAttestationFreezeRepository;
@@ -29,9 +31,7 @@ import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.DocumentA
 import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.OrganiserWalletMetadataTxSubmitter;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.L1TransactionCreatorConfig;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentConverter;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentIpfsSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentL1TransactionCreator;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report.API3L1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report.API3MetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.spendingevent.SpendingEventL1TransactionCreator;
@@ -44,6 +44,7 @@ import org.cardanofoundation.lob.app.document_vault.service.VaultDocumentService
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.lob.app.keri_attestation.service.AttestationConsumptionApi;
 import org.cardanofoundation.lob.app.keri_attestation.service.CardanoMetadataTxSubmitter;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @Configuration
@@ -157,10 +158,12 @@ public class TransactionSubmissionConfig {
 
     @Bean
     public DocumentL1TransactionCreator documentL1TransactionCreator(@Qualifier("yaci_blockfrost") BackendService backendService,
+                                                                      DocumentConverter documentConverter,
                                                                       DocumentIpfsSerialiser documentIpfsSerialiser,
                                                                       DocumentMetadataSerialiser documentMetadataSerialiser,
                                                                       BlockchainReaderPublicApiIF blockchainReaderPublicApi,
                                                                       @Qualifier("documentJsonSchemaMetadataChecker") MetadataChecker metadataChecker,
+                                                                      OrganisationPublicApi organisationPublicApi,
                                                                       Account organiserAccount,
                                                                       Optional<IpfsPublisher> ipfsPublisher,
                                                                       Optional<DocumentAttestationLookup> attestationLookup,
@@ -180,10 +183,12 @@ public class TransactionSubmissionConfig {
             throw new IllegalStateException("metadata label 170 is reserved for CIP-170 attestations");
         }
         return new DocumentL1TransactionCreator(backendService,
+                documentConverter,
                 documentIpfsSerialiser,
                 documentMetadataSerialiser,
                 blockchainReaderPublicApi,
                 metadataChecker,
+                organisationPublicApi,
                 organiserAccount,
                 ipfsPublisher,
                 attestationLookup,
@@ -231,7 +236,6 @@ public class TransactionSubmissionConfig {
             matchIfMissing = false)
     public DocumentAttestationTargetProvider documentAttestationTargetProvider(
             VaultDocumentService vaultDocumentService,
-            DocumentConverter documentConverter,
             DocumentIpfsSerialiser documentIpfsSerialiser,
             DocumentMetadataSerialiser documentMetadataSerialiser,
             BlockchainReaderPublicApiIF blockchainReaderPublicApi,
@@ -239,6 +243,7 @@ public class TransactionSubmissionConfig {
             Cip170MetadataFactory cip170MetadataFactory,
             DocumentAttestationFreezeRepository documentAttestationFreezeRepository,
             KeycloakSecurityHelper securityHelper,
+            OrganisationPublicApi organisationPublicApi,
             Clock clock,
             // Same property (and default) documentL1TransactionCreator's metadataTag is wired with
             // above - so a freeze's ceremony.metadataLabel / ConsumedAttestation.metadataLabel can
@@ -247,7 +252,6 @@ public class TransactionSubmissionConfig {
     ) {
         return new DocumentAttestationTargetProvider(
                 vaultDocumentService,
-                documentConverter,
                 documentIpfsSerialiser,
                 documentMetadataSerialiser,
                 blockchainReaderPublicApi,
@@ -255,6 +259,7 @@ public class TransactionSubmissionConfig {
                 cip170MetadataFactory,
                 documentAttestationFreezeRepository,
                 securityHelper,
+                organisationPublicApi,
                 clock,
                 metadataLabel
         );
@@ -264,14 +269,12 @@ public class TransactionSubmissionConfig {
     @ConditionalOnProperty(name = "lob.keri-attestation.enabled", havingValue = "true", matchIfMissing = false)
     public DocumentAttestationFreezeGuard documentAttestationFreezeGuard(
             DocumentAttestationFreezeRepository documentAttestationFreezeRepository,
-            DocumentConverter documentConverter,
             DocumentIpfsSerialiser documentIpfsSerialiser,
             KeriAttestationProperties keriAttestationProperties,
             Clock clock
     ) {
         return new DocumentAttestationFreezeGuard(
                 documentAttestationFreezeRepository,
-                documentConverter,
                 documentIpfsSerialiser,
                 keriAttestationProperties,
                 clock

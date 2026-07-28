@@ -12,7 +12,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 import org.junit.jupiter.api.Test;
 
-import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentPublishCommand;
+import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
 
 /**
  * Codex adversarial-review finding 1: why reflection, not a live two-transaction race — a true

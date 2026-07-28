@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.config;
 
+import java.time.Clock;
+
 import lombok.val;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -10,6 +12,8 @@ import org.springframework.core.io.Resource;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.JsonSchemaMetadataChecker;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
 
@@ -29,6 +33,26 @@ public class BlockchainCommonConfig {
     @Bean
     public Cip170MetadataFactory cip170MetadataFactory() {
         return new Cip170MetadataFactory();
+    }
+
+    /**
+     * IPFS envelope serialiser for the DOCUMENT publishable type (moved here from
+     * {@code blockchain_publisher}, WS3 step 1) - stateless and dependency-free besides the shared
+     * {@link ObjectMapper}, so ungated like {@link #cip170MetadataFactory()} above.
+     */
+    @Bean
+    public DocumentIpfsSerialiser documentIpfsSerialiser(ObjectMapper objectMapper) {
+        return new DocumentIpfsSerialiser(objectMapper);
+    }
+
+    /**
+     * 1447 L1 metadata serialiser for the DOCUMENT publishable type (moved here from
+     * {@code blockchain_publisher}, WS3 step 1). No longer resolves the organisation itself (this
+     * module must not depend on {@code organisation}) - callers pass the already-resolved org fields.
+     */
+    @Bean
+    public DocumentMetadataSerialiser documentMetadataSerialiser(Clock clock) {
+        return new DocumentMetadataSerialiser(clock);
     }
 
     @Bean

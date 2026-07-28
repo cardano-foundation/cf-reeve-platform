@@ -1,15 +1,12 @@
-package org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document;
+package org.cardanofoundation.lob.app.blockchain_common.service_assistance;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -21,65 +18,46 @@ import com.bloxbean.cardano.client.metadata.helper.MetadataToJsonNoSchemaConvert
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import org.cardanofoundation.lob.app.blockchain_common.service_assistance.JsonSchemaMetadataChecker;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentEntity;
-import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
-import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
 
 /**
  * Asserts the 1447 DOCUMENT manifest shape (spec: "Publishing — flow and formats"). The data section must
  * carry exactly the six fields below — nothing else — so any accidental addition of a PII-capable field is
  * caught here (spec B5 #3).
+ *
+ * <p>Organisation-not-found handling moved out of this class with WS3 step 1 (org resolution is now the
+ * CALLER's responsibility - {@code blockchain_common} must not depend on {@code organisation}), so that
+ * behaviour is covered where it now lives: {@code DocumentL1TransactionCreatorTest} /
+ * {@code DocumentAttestationTargetProviderTest} in {@code blockchain_publisher}.
  */
 class DocumentMetadataSerialiserTest {
 
     private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2024-06-01T10:15:30Z"), ZoneId.of("UTC"));
     private static final long CREATION_SLOT = 123456L;
 
-    private OrganisationPublicApi organisationPublicApi;
-    private DocumentMetadataSerialiser serialiser;
+    private final DocumentMetadataSerialiser serialiser = new DocumentMetadataSerialiser(FIXED_CLOCK);
 
-    @BeforeEach
-    void setUp() {
-        organisationPublicApi = mock(OrganisationPublicApi.class);
-        serialiser = new DocumentMetadataSerialiser(organisationPublicApi, FIXED_CLOCK);
-    }
-
-    private static DocumentEntity fixture() {
-        DocumentEntity entity = new DocumentEntity();
-        entity.setId("doc-1");
-        entity.setOrganisationId("org-1");
-        entity.setEnvelopeVersion(1);
-        entity.setContentHash("a".repeat(64));
-        entity.setPlaintextHash("b".repeat(64));
-        entity.setPayloadNonce("c".repeat(24));
-        entity.setCiphertextBase64("Y2lwaGVydGV4dA==");
-        entity.setSlots(List.of(
-                new DocumentEntity.Slot("d".repeat(64), "e".repeat(96)),
-                new DocumentEntity.Slot("f".repeat(64), "0".repeat(96))));
-        return entity;
-    }
-
-    private static Organisation organisationFixture() {
-        return Organisation.builder()
-                .id("org-1")
-                .name("Acme")
-                .taxIdNumber("TAX-1")
-                .countryCode("CH")
-                .accountPeriodDays(365)
-                .currencyId("ISO_4217:CHF")
-                .reportCurrencyId("ISO_4217:CHF")
-                .build();
+    private static DocumentPublishCommand fixture() {
+        return new DocumentPublishCommand(
+                "org-1",
+                "doc-1",
+                1,
+                "a".repeat(64),
+                "b".repeat(64),
+                "c".repeat(24),
+                "Y2lwaGVydGV4dA==",
+                List.of(
+                        new DocumentPublishCommand.PublishSlot("d".repeat(64), "e".repeat(96)),
+                        new DocumentPublishCommand.PublishSlot("f".repeat(64), "0".repeat(96))),
+                null);
     }
 
     @Test
     void serialisesTheNormativeDocumentManifest() {
-        when(organisationPublicApi.findByOrganisationId("org-1")).thenReturn(Optional.of(organisationFixture()));
-
-        MetadataMap metadataMap = serialiser.serialiseToMetadataMap(fixture(), "bafy-cid-1", CREATION_SLOT);
+        MetadataMap metadataMap = serialiser.serialiseToMetadataMap(fixture(), "bafy-cid-1", CREATION_SLOT,
+                "org-1", "Acme", "TAX-1", "ISO_4217:CHF", "CH");
 
         assertThat(metadataMap.get("type")).isEqualTo("DOCUMENT");
         assertThat(metadataMap.get("metadata")).isNotNull();
@@ -107,26 +85,17 @@ class DocumentMetadataSerialiserTest {
                 "id", "ipfs_cid", "content_hash", "plaintext_hash", "envelope_version", "slot_count");
     }
 
-    @Test
-    void unknownOrganisation_throwsInsteadOfPublishingWithoutOrgSection() {
-        when(organisationPublicApi.findByOrganisationId("org-1")).thenReturn(Optional.empty());
-
-        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
-                () -> serialiser.serialiseToMetadataMap(fixture(), "bafy-cid-1", CREATION_SLOT));
-    }
-
     /**
      * End-to-end guard that the serialiser output and the JSON schema agree: serialise a manifest exactly as
-     * {@link DocumentL1TransactionCreator} does (CBOR -> JSON) and validate it against
+     * {@code DocumentL1TransactionCreator} does (CBOR -> JSON) and validate it against
      * {@code document_lob_blockchain_transaction_metadata_schema.json} with the production checker. Mirrors
      * {@code SpendingEventMetadataSerialiserTest#serialisedBundleValidatesAgainstSchema}.
      */
     @Test
     void serialisedManifestValidatesAgainstSchema() throws Exception {
-        when(organisationPublicApi.findByOrganisationId("org-1")).thenReturn(Optional.of(organisationFixture()));
-
         MetadataMap metadataMap = serialiser.serialiseToMetadataMap(fixture(),
-                "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi", CREATION_SLOT);
+                "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi", CREATION_SLOT,
+                "org-1", "Acme", "TAX-1", "ISO_4217:CHF", "CH");
 
         byte[] bytes = CborSerializationUtil.serialize(metadataMap.getMap());
         String json = MetadataToJsonNoSchemaConverter.cborBytesToJson(bytes);
@@ -145,10 +114,9 @@ class DocumentMetadataSerialiserTest {
      */
     @Test
     void manifestWithExtraDataFieldFailsSchemaValidation() throws Exception {
-        when(organisationPublicApi.findByOrganisationId("org-1")).thenReturn(Optional.of(organisationFixture()));
-
         MetadataMap metadataMap = serialiser.serialiseToMetadataMap(fixture(),
-                "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi", CREATION_SLOT);
+                "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi", CREATION_SLOT,
+                "org-1", "Acme", "TAX-1", "ISO_4217:CHF", "CH");
 
         byte[] bytes = CborSerializationUtil.serialize(metadataMap.getMap());
         String json = MetadataToJsonNoSchemaConverter.cborBytesToJson(bytes);

@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.document_vault.domain.events;
+package org.cardanofoundation.lob.app.blockchain_common.domain.events;
 
 import java.util.List;
 

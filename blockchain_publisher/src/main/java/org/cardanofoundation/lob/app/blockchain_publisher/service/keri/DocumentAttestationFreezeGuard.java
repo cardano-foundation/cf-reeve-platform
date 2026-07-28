@@ -14,13 +14,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 
+import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentAttestationFreezeEntity;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.DocumentAttestationFreezeRepository;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentConverter;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentIpfsSerialiser;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultDocumentEntity;
-import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentPublishCommand;
 import org.cardanofoundation.lob.app.document_vault.service.AttestationFreezeGuard;
 import org.cardanofoundation.lob.app.document_vault.service.VaultDocumentService;
 import org.cardanofoundation.lob.app.document_vault.service.VaultProblems;
@@ -42,9 +40,9 @@ import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProp
  *   <li><b>content drift</b> — the envelope changed since the freeze was taken. Detected by
  *       re-serialising it via the EXACT same chain Task 13's {@code DocumentAttestationTargetProvider}
  *       used to produce the frozen {@code envelope_sha256} in the first place:
- *       {@code VaultDocumentService#toPublishCommand} -&gt; {@link DocumentConverter#convertToDbDetached}
- *       -&gt; {@link DocumentIpfsSerialiser#serialise} -&gt; SHA-256. No field mapping is re-derived
- *       here, so the two computations cannot drift apart independently of the data itself.</li>
+ *       {@code VaultDocumentService#toPublishCommand} -&gt; {@link DocumentIpfsSerialiser#serialise} -&gt;
+ *       SHA-256. No field mapping is re-derived here, so the two computations cannot drift apart
+ *       independently of the data itself.</li>
  * </ol>
  *
  * <p>Takes the {@link VaultDocumentEntity} directly (not a documentId re-lookup): the caller already
@@ -60,7 +58,6 @@ import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProp
 public class DocumentAttestationFreezeGuard implements AttestationFreezeGuard {
 
     private final DocumentAttestationFreezeRepository freezeRepository;
-    private final DocumentConverter documentConverter;
     private final DocumentIpfsSerialiser documentIpfsSerialiser;
     private final KeriAttestationProperties keriAttestationProperties;
     private final Clock clock;
@@ -97,8 +94,7 @@ public class DocumentAttestationFreezeGuard implements AttestationFreezeGuard {
      */
     private String recomputeEnvelopeSha256(VaultDocumentEntity document) {
         DocumentPublishCommand command = VaultDocumentService.toPublishCommand(document);
-        DocumentEntity entity = documentConverter.convertToDbDetached(command);
-        String envelopeJson = documentIpfsSerialiser.serialise(entity);
+        String envelopeJson = documentIpfsSerialiser.serialise(command);
         return sha256Hex(envelopeJson);
     }
 

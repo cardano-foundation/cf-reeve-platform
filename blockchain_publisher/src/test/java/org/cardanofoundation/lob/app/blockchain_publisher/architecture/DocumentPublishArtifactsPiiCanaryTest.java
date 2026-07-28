@@ -4,17 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.time.Clock;
 import java.util.List;
-import java.util.Optional;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.mockito.Mockito;
 
 import org.junit.jupiter.api.Test;
 
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentEntity;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentIpfsSerialiser;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentMetadataSerialiser;
-import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
+import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 
 class DocumentPublishArtifactsPiiCanaryTest {
@@ -26,28 +23,39 @@ class DocumentPublishArtifactsPiiCanaryTest {
     void neitherIpfsDocumentNorL1MetadataCanCarryPii() throws Exception {
         // toJson() declares a checked CborException — thrown up rather than caught (brief's snippet omits the
         // throws clause, which does not compile; this is the minimal fix, no assertion semantics changed)
-        DocumentEntity entity = new DocumentEntity();
-        entity.setId("doc-1");
-        entity.setOrganisationId("org-1");
-        entity.setEnvelopeVersion(1);
-        entity.setContentHash("a".repeat(64));
-        entity.setPlaintextHash("b".repeat(64));
-        entity.setPayloadNonce("c".repeat(24));
-        entity.setCiphertextBase64("Y2lwaGVydGV4dA==");
-        entity.setSlots(List.of(new DocumentEntity.Slot("d".repeat(64), "e".repeat(96))));
+        DocumentPublishCommand command = new DocumentPublishCommand(
+                "org-1",
+                "doc-1",
+                1,
+                "a".repeat(64),
+                "b".repeat(64),
+                "c".repeat(24),
+                "Y2lwaGVydGV4dA==",
+                List.of(new DocumentPublishCommand.PublishSlot("d".repeat(64), "e".repeat(96))),
+                null);
 
-        String ipfsJson = new DocumentIpfsSerialiser(new ObjectMapper()).serialise(entity);
+        String ipfsJson = new DocumentIpfsSerialiser(new ObjectMapper()).serialise(command);
 
-        OrganisationPublicApi organisationPublicApi = Mockito.mock(OrganisationPublicApi.class);
-        Mockito.when(organisationPublicApi.findByOrganisationId("org-1")).thenReturn(Optional.of(Organisation.builder()
+        // The org admin e-mail exists server-side, on the resolved organisation entity...
+        Organisation organisationEntity = Organisation.builder()
                 .id("org-1").name("Org").taxIdNumber("TAX").countryCode("CH")
                 .accountPeriodDays(365).currencyId("ISO_4217:CHF").reportCurrencyId("ISO_4217:CHF")
                 .phoneNumber("x").city("x").postCode("x").province("x").address("x")
-                .adminEmail("canary-mail@example.org") // the org admin e-mail exists server-side...
-                .build()));
+                .adminEmail("canary-mail@example.org")
+                .build();
+        // ...but blockchain_common must not depend on organisation, so callers (DocumentL1TransactionCreator,
+        // DocumentAttestationTargetProvider) resolve the organisation and extract only the five 1447
+        // org-section fields below — admin e-mail is never passed to the serialiser at all. Mirrored here via
+        // the same value-object extraction those callers use. (Local variable deliberately not named "org" -
+        // that would shadow the "org.cardanofoundation..." package prefix used inline below.)
+        org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Organisation publisherOrg =
+                org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Organisation.fromOrganisationEntity(organisationEntity);
+
         // CBORMetadataMap does NOT override toString() — toJson() is the scannable serialised form
-        String metadata = new DocumentMetadataSerialiser(organisationPublicApi, Clock.systemUTC())
-                .serialiseToMetadataMap(entity, "bafy-1", 1L)
+        String metadata = new DocumentMetadataSerialiser(Clock.systemUTC())
+                .serialiseToMetadataMap(command, "bafy-1", 1L,
+                        publisherOrg.getId(), publisherOrg.getName(), publisherOrg.getTaxIdNumber(),
+                        publisherOrg.getCurrencyId(), publisherOrg.getCountryCode())
                 .toJson();
 
         for (String canary : CANARIES) {

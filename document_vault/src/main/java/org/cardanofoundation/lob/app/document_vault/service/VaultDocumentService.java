@@ -32,13 +32,13 @@ import io.vavr.control.Either;
 import org.hibernate.Hibernate;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
+import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
 import org.cardanofoundation.lob.app.blockchain_common.service.IpfsAvailability;
 import org.cardanofoundation.lob.app.document_vault.domain.KeyRef;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.DocumentSlot;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultDocumentEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.DocumentDirection;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentStatus;
-import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentPublishCommand;
 import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentSharedEvent;
 import org.cardanofoundation.lob.app.document_vault.domain.request.UploadDocumentRequest;
 import org.cardanofoundation.lob.app.document_vault.domain.view.DocumentEnvelopeView;

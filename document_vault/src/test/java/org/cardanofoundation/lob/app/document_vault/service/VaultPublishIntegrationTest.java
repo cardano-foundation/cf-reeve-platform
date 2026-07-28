@@ -29,11 +29,11 @@ import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStat
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerStatusUpdate;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdateType;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdatedEvent;
+import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
 import org.cardanofoundation.lob.app.blockchain_common.service.IpfsAvailability;
 import org.cardanofoundation.lob.app.document_vault.DocumentVaultContextIntegrationTest;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.DocumentDirection;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentStatus;
-import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentPublishCommand;
 import org.cardanofoundation.lob.app.document_vault.domain.request.CreateAddressbookEntryRequest;
 import org.cardanofoundation.lob.app.document_vault.domain.request.RegisterKeyRequest;
 import org.cardanofoundation.lob.app.document_vault.domain.request.UploadDocumentRequest;

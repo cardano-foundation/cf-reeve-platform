@@ -26,6 +26,8 @@ import org.junit.jupiter.api.Test;
 
 import org.cardanofoundation.lob.app.blockchain_common.service.IpfsAvailability;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
 import org.cardanofoundation.lob.app.blockchain_publisher.job.DocumentAttestationFreezeCleanupJob;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.DocumentAttestationFreezeRepository;
@@ -34,9 +36,7 @@ import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.DocumentA
 import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.DocumentAttestationTargetProvider;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.OrganiserWalletMetadataTxSubmitter;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentConverter;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentIpfsSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentL1TransactionCreator;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report.API3MetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.spendingevent.SpendingEventMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction.API1MetadataSerialiser;
@@ -48,6 +48,7 @@ import org.cardanofoundation.lob.app.document_vault.service.VaultDocumentService
 import org.cardanofoundation.lob.app.document_vault.service.VaultKeyLookupService;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.lob.app.keri_attestation.service.AttestationConsumptionApi;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
@@ -427,6 +428,17 @@ class ModuleFlagCombinationsTest {
         @Bean
         DocumentConverter documentConverter() {
             return mock(DocumentConverter.class);
+        }
+
+        // documentL1TransactionCreator/documentAttestationTargetProvider resolve the organisation
+        // themselves now (WS3 step 1 - DocumentMetadataSerialiser no longer depends on organisation).
+        // Concrete class, not the OrganisationPublicApiIF bean below: production code depends on the
+        // concrete bean type, matching API3MetadataSerialiser's own precedent. Distinct method name
+        // from the IF bean below - both live in this same config class, and a same-named overload
+        // differing only by return type does not compile.
+        @Bean
+        OrganisationPublicApi concreteOrganisationPublicApi() {
+            return mock(OrganisationPublicApi.class);
         }
 
         @Bean

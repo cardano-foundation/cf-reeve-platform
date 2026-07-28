@@ -1,12 +1,10 @@
-package org.cardanofoundation.lob.app.blockchain_publisher.architecture;
+package org.cardanofoundation.lob.app.blockchain_common.domain.events;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
-
-import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentPublishCommand;
 
 /** Spec B5 #3: everything on the IPFS/L1 export path must be PII-free. */
 class DocumentPublishCommandPiiTest {

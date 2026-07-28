@@ -33,6 +33,8 @@ import org.junit.jupiter.api.Test;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.CardanoNetwork;
 import org.cardanofoundation.lob.app.blockchain_common.domain.ChainTip;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API3BlockchainTransaction;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentEntity;
@@ -65,6 +67,7 @@ class DocumentL1TransactionCreatorTest {
     private MetadataChecker jsonSchemaMetadataChecker;
     private OrganisationPublicApi organisationPublicApi;
     private Account organiserWallet;
+    private DocumentConverter documentConverter;
     private DocumentIpfsSerialiser documentIpfsSerialiser;
     private DocumentMetadataSerialiser documentMetadataSerialiser;
 
@@ -75,8 +78,9 @@ class DocumentL1TransactionCreatorTest {
         jsonSchemaMetadataChecker = mock(MetadataChecker.class);
         organisationPublicApi = mock(OrganisationPublicApi.class);
         organiserWallet = new Account();
+        documentConverter = new DocumentConverter();
         documentIpfsSerialiser = new DocumentIpfsSerialiser(new ObjectMapper());
-        documentMetadataSerialiser = spy(new DocumentMetadataSerialiser(organisationPublicApi, FIXED_CLOCK));
+        documentMetadataSerialiser = spy(new DocumentMetadataSerialiser(FIXED_CLOCK));
 
         when(organisationPublicApi.findByOrganisationId("org-1")).thenReturn(Optional.of(Organisation.builder()
                 .id("org-1")
@@ -105,10 +109,12 @@ class DocumentL1TransactionCreatorTest {
     private DocumentL1TransactionCreator creator(Optional<IpfsPublisher> ipfsPublisher) {
         return new DocumentL1TransactionCreator(
                 backendService,
+                documentConverter,
                 documentIpfsSerialiser,
                 documentMetadataSerialiser,
                 blockchainReaderPublicApi,
                 jsonSchemaMetadataChecker,
+                organisationPublicApi,
                 organiserWallet,
                 ipfsPublisher,
                 Optional.empty(),
@@ -140,7 +146,8 @@ class DocumentL1TransactionCreatorTest {
             MetadataMap result = (MetadataMap) invocation.callRealMethod();
             captured.set(result);
             return result;
-        }).when(documentMetadataSerialiser).serialiseToMetadataMap(any(), anyString(), anyLong());
+        }).when(documentMetadataSerialiser).serialiseToMetadataMap(
+                any(), anyString(), anyLong(), anyString(), anyString(), anyString(), anyString(), anyString());
 
         DocumentL1TransactionCreator creator = spy(creator(Optional.of(ipfsPublisher)));
         doReturn(new byte[]{1, 2, 3}).when(creator).serialiseTransaction(any(Metadata.class));
@@ -170,5 +177,22 @@ class DocumentL1TransactionCreatorTest {
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo("IPFS_UPLOAD_ERROR");
         verifyNoInteractions(blockchainReaderPublicApi, jsonSchemaMetadataChecker);
+    }
+
+    /**
+     * Organisation resolution moved into this class with WS3 step 1 ({@code DocumentMetadataSerialiser}
+     * no longer looks it up itself) - this pins the exact same fail-fast behaviour
+     * {@code DocumentMetadataSerialiserTest#unknownOrganisation_throwsInsteadOfPublishingWithoutOrgSection}
+     * used to cover before the move.
+     */
+    @Test
+    void unknownOrganisation_throwsInsteadOfPublishingWithoutOrgSection() {
+        IpfsPublisher ipfsPublisher = mock(IpfsPublisher.class);
+        when(ipfsPublisher.publish(anyString())).thenReturn(Either.right("bafy-cid-1"));
+        when(blockchainReaderPublicApi.getChainTip()).thenReturn(Either.right(CHAIN_TIP));
+        when(organisationPublicApi.findByOrganisationId("org-1")).thenReturn(Optional.empty());
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> creator(Optional.of(ipfsPublisher)).pullBlockchainTransaction("org-1", fixture()));
     }
 }

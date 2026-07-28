@@ -22,37 +22,33 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.junit.jupiter.api.Test;
 
+import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentAttestationFreezeEntity;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.DocumentAttestationFreezeRepository;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentConverter;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentIpfsSerialiser;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.DocumentSlot;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultDocumentEntity;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentStatus;
-import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentPublishCommand;
 import org.cardanofoundation.lob.app.document_vault.service.VaultDocumentService;
 import org.cardanofoundation.lob.app.document_vault.service.VaultProblems;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 
 /**
  * {@link DocumentAttestationFreezeGuard} is document_vault's {@code AttestationFreezeGuard} port,
- * implemented here (design §5.1 step 2 / §5.2, Task 14). Uses REAL {@link DocumentConverter} and
- * {@link DocumentIpfsSerialiser} instances (mirroring {@code DocumentAttestationTargetProviderTest},
- * Task 13) rather than mocking the mapping away — the whole point under test is that the recomputed
- * fingerprint is exactly what Task 13's provider would have frozen from the same
- * {@link VaultDocumentEntity}.
+ * implemented here (design §5.1 step 2 / §5.2, Task 14). Uses a REAL {@link DocumentIpfsSerialiser}
+ * instance (mirroring {@code DocumentAttestationTargetProviderTest}, Task 13) rather than mocking the
+ * mapping away — the whole point under test is that the recomputed fingerprint is exactly what
+ * Task 13's provider would have frozen from the same {@link VaultDocumentEntity}.
  */
 class DocumentAttestationFreezeGuardTest {
 
     private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2024-06-15T12:00:00Z"), ZoneId.of("UTC"));
 
     private final DocumentAttestationFreezeRepository freezeRepository = mock(DocumentAttestationFreezeRepository.class);
-    private final DocumentConverter documentConverter = new DocumentConverter();
     private final DocumentIpfsSerialiser documentIpfsSerialiser = new DocumentIpfsSerialiser(new ObjectMapper());
 
     private DocumentAttestationFreezeGuard guard(Duration freezeMaxAge) {
-        return new DocumentAttestationFreezeGuard(freezeRepository, documentConverter, documentIpfsSerialiser,
+        return new DocumentAttestationFreezeGuard(freezeRepository, documentIpfsSerialiser,
                 properties(freezeMaxAge), FIXED_CLOCK);
     }
 
@@ -95,8 +91,7 @@ class DocumentAttestationFreezeGuardTest {
      *  from the same document — the exact production chain, called a second time by the test. */
     private static String expectedEnvelopeSha256(VaultDocumentEntity vaultDocument) {
         DocumentPublishCommand command = VaultDocumentService.toPublishCommand(vaultDocument);
-        DocumentEntity entity = new DocumentConverter().convertToDbDetached(command);
-        String envelopeJson = new DocumentIpfsSerialiser(new ObjectMapper()).serialise(entity);
+        String envelopeJson = new DocumentIpfsSerialiser(new ObjectMapper()).serialise(command);
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(envelopeJson.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(digest);

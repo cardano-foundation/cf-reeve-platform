@@ -21,21 +21,21 @@ import com.bloxbean.cardano.client.common.cbor.CborSerializationUtil;
 import com.bloxbean.cardano.client.metadata.MetadataMap;
 import io.vavr.control.Either;
 
+import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentAttestationFreezeEntity;
-import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Organisation;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.DocumentAttestationFreezeRepository;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentConverter;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentIpfsSerialiser;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
 import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultDocumentEntity;
-import org.cardanofoundation.lob.app.document_vault.domain.events.DocumentPublishCommand;
 import org.cardanofoundation.lob.app.document_vault.service.VaultDocumentService;
 import org.cardanofoundation.lob.app.document_vault.service.VaultProblems;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.AttestationDigest;
 import org.cardanofoundation.lob.app.keri_attestation.service.AttestationTargetProvider;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 /**
@@ -44,15 +44,18 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
  *
  * <p><b>Byte-identity argument</b> — why the frozen bytes equal what dispatch will later produce:
  * {@link #prepareDigest} builds its serialiser input via {@code
- * DocumentConverter#convertToDbDetached(VaultDocumentService#toPublishCommand(document))} — the
- * EXACT SAME two static/bean calls the real publish path applies, in the same order, to the same
- * {@link VaultDocumentEntity} fields: {@code VaultDocumentService#publish} (and the retry job)
- * builds a {@code DocumentPublishCommand} via {@code toPublishCommand}, which {@code
- * BlockchainPublisherEventHandler#handleDocumentPublishCommand} hands to {@code
+ * VaultDocumentService#toPublishCommand(document)} — the EXACT SAME static call the real publish
+ * path applies to the same {@link VaultDocumentEntity} fields: {@code VaultDocumentService#publish}
+ * (and the retry job) builds a {@code DocumentPublishCommand} via {@code toPublishCommand}, which
+ * {@code BlockchainPublisherEventHandler#handleDocumentPublishCommand} hands to {@code
  * BlockchainPublisherService#storeDocumentForDispatchLater}, which calls {@code
- * DocumentConverter#convertToDbDetached} to build the persisted {@link DocumentEntity} that {@code
- * DocumentL1TransactionCreator#pullBlockchainTransaction} later serialises. No field mapping is
- * re-derived here — reusing the same mapper is what makes the two paths byte-identical by
+ * DocumentConverter#convertToDbDetached} to build the persisted entity that, once reloaded for
+ * dispatch, {@code DocumentConverter#toPublishCommand} maps back into an equal command before {@code
+ * DocumentL1TransactionCreator#pullBlockchainTransaction} serialises it. That round trip (command
+ * -&gt; entity -&gt; command) is a lossless 1:1 field mapping in both directions, so the command this
+ * method serialises directly and the command dispatch later re-derives from the persisted entity
+ * carry identical field values — no field mapping is re-derived here, reusing the same static
+ * factory and the same lossless entity mapping is what makes the two paths byte-identical by
  * construction rather than by two implementations happening to agree. From there, {@link
  * #prepareDigest} calls the identical collaborators {@code DocumentL1TransactionCreator} calls
  * ({@link DocumentIpfsSerialiser#serialise}, {@link IpfsPublisher#publish}, {@link
@@ -86,7 +89,6 @@ public class DocumentAttestationTargetProvider implements AttestationTargetProvi
     public static final String ERROR_FREEZING_DOCUMENT_METADATA = "ERROR_FREEZING_DOCUMENT_METADATA";
 
     private final VaultDocumentService vaultDocumentService;
-    private final DocumentConverter documentConverter;
     private final DocumentIpfsSerialiser documentIpfsSerialiser;
     private final DocumentMetadataSerialiser documentMetadataSerialiser;
     private final BlockchainReaderPublicApiIF blockchainReaderPublicApi;
@@ -94,6 +96,7 @@ public class DocumentAttestationTargetProvider implements AttestationTargetProvi
     private final Cip170MetadataFactory cip170MetadataFactory;
     private final DocumentAttestationFreezeRepository freezeRepository;
     private final KeycloakSecurityHelper securityHelper;
+    private final OrganisationPublicApi organisationPublicApi;
     private final Clock clock;
     /**
      * Cardano metadata label the frozen 1447 map is (later) published under — the SAME
@@ -142,15 +145,20 @@ public class DocumentAttestationTargetProvider implements AttestationTargetProvi
 
     private Either<ProblemDetail, AttestationDigest> freezeAndDigest(VaultDocumentEntity vaultDocument, String ceremonyId) {
         DocumentPublishCommand command = VaultDocumentService.toPublishCommand(vaultDocument);
-        DocumentEntity document = documentConverter.convertToDbDetached(command);
 
-        String envelopeJson = documentIpfsSerialiser.serialise(document);
+        String envelopeJson = documentIpfsSerialiser.serialise(command);
         String envelopeSha256 = sha256Hex(envelopeJson);
 
         return ipfsPublisher.get().publish(envelopeJson).flatMap(cid ->
                 blockchainReaderPublicApi.getChainTip().flatMap(chainTip -> {
                     long creationSlot = chainTip.getAbsoluteSlot();
-                    MetadataMap metadataMap = documentMetadataSerialiser.serialiseToMetadataMap(document, cid, creationSlot);
+                    var organisationEntity = organisationPublicApi.findByOrganisationId(command.organisationId())
+                            .orElseThrow(() -> new IllegalArgumentException(
+                                    "Organisation not found for id: %s".formatted(command.organisationId())));
+                    Organisation organisation = Organisation.fromOrganisationEntity(organisationEntity);
+                    MetadataMap metadataMap = documentMetadataSerialiser.serialiseToMetadataMap(command, cid, creationSlot,
+                            organisation.getId(), organisation.getName(), organisation.getTaxIdNumber(),
+                            organisation.getCurrencyId(), organisation.getCountryCode());
 
                     try {
                         byte[] frozenBytes = CborSerializationUtil.serialize(metadataMap.getMap());
