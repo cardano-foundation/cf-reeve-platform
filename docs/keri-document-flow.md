@@ -177,6 +177,8 @@ sequenceDiagram
 
 On the attested path the publisher **never re-pins IPFS and never re-serialises the manifest** — it reuses the frozen CID and frozen 1447 CBOR verbatim, fetching only a fresh chain tip for the transaction validity interval. That is required: the wallet's signature commits to those exact bytes.
 
+The frozen 1447 map includes `data.recipient_key_hashes`, read from immutable `document_vault_document_slot` columns written at upload. That is precisely why the hashes are stored rather than derived at publish: re-deriving them from key rows on a retry sweep could change the frozen bytes and invalidate the wallet's signature, and a dangling `keyId` is an expected, tolerated state.
+
 ---
 
 ## 6. Plain publish (no attestation) — the default
