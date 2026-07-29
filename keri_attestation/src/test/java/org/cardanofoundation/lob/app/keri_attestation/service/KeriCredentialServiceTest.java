@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.RETURNS_DEFAULTS;
 import static org.mockito.Mockito.inOrder;
@@ -484,8 +485,9 @@ class KeriCredentialServiceTest {
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.KERI_WALLET_TIMEOUT, result.getLeft().getTitle());
-        verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.CREDENTIAL_REQUESTED,
-                KeriAttestationProblems.KERI_WALLET_TIMEOUT, "Timed out waiting for /exn/ipex/offer or /exn/ipex/grant.");
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(KeriAttestationProblems.KERI_WALLET_TIMEOUT),
+                argThat(detail -> detail.startsWith("Timed out waiting for /exn/ipex/offer or /exn/ipex/grant.")));
         verify(ipex, never()).agree(any());
         verify(ipex, never()).admit(any());
         verify(correlator, never()).markAndDelete(any());
@@ -511,8 +513,9 @@ class KeriCredentialServiceTest {
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.KERI_WALLET_TIMEOUT, result.getLeft().getTitle());
-        verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.CREDENTIAL_REQUESTED,
-                KeriAttestationProblems.KERI_WALLET_TIMEOUT, "Timed out waiting for /exn/ipex/grant.");
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
+                eq(KeriAttestationProblems.KERI_WALLET_TIMEOUT),
+                argThat(detail -> detail.startsWith("Timed out waiting for /exn/ipex/grant.")));
         verify(ipex, never()).admit(any());
         // The offer was already claimed before the grant wait even started.
         verify(correlator).markAndDelete(OFFER_NOTIF_ID);

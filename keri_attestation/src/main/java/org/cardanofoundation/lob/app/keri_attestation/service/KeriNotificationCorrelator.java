@@ -2,6 +2,9 @@ package org.cardanofoundation.lob.app.keri_attestation.service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -59,6 +62,12 @@ public class KeriNotificationCorrelator {
      *  ({@code note.a.r}, populated by {@link #pollOnceByRoute}) — used by callers awaiting more than one
      *  route at once ({@link KeriCredentialService#presentCredential} awaits an offer AND a grant route
      *  together and must tell which one actually matched). */
+    /** KERIA's own page size for {@code Range: notes=start-end}. */
+    private static final int NOTIFICATION_PAGE_SIZE = 25;
+
+    /** Upper bound on how many notifications one poll will scan. */
+    private static final int MAX_NOTIFICATIONS = 500;
+
     public record CorrelatedNotification(String notificationId, String exnSaid, Map<String, Object> exn,
             String claimedRoute) {
         public CorrelatedNotification(String notificationId, String exnSaid, Map<String, Object> exn) {
@@ -157,25 +166,60 @@ public class KeriNotificationCorrelator {
     // --- one polling round ---
 
     /** Lists + parses the agent's notifications; empty list on any transport/parse failure (logged). */
+    /**
+     * Every notification on the agent, paged.
+     *
+     * <p>Pages deliberately, rather than calling signify's no-arg {@code notifications().list()}: that
+     * overload requests {@code Range: notes=0-24} and so only ever returns the OLDEST 25. Notifications
+     * are removed only on success ({@link #markAndDelete}), so every failed or timed-out step leaves one
+     * behind unread — and once 25 accumulate on an agent, the reply to the CURRENT request lands beyond
+     * that window and becomes permanently invisible. The symptom is a flow that works for a while and
+     * then times out forever, with the wallet reporting success. Notifications live on the KERIA
+     * account (the passcode), not the identifier, so minting a new agent AID does not clear them.
+     *
+     * <p>Bounded by {@link #MAX_NOTIFICATIONS} so a pathological queue cannot make a single poll
+     * unbounded; hitting the cap is logged, because at that point the queue needs pruning rather than a
+     * bigger scan.
+     */
     private List<Notification> listNotifications() {
-        Notifying.Notifications.NotificationListResponse response;
-        try {
-            response = client.client().notifications().list();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return List.of();
-        } catch (Exception e) {
-            log.warn("Failed to list KERI notifications, will retry: {}", e.getMessage());
-            return List.of();
+        List<Notification> all = new ArrayList<>();
+        int start = 0;
+        while (start < MAX_NOTIFICATIONS) {
+            Notifying.Notifications.NotificationListResponse response;
+            try {
+                response = client.client().notifications().list(start, start + NOTIFICATION_PAGE_SIZE - 1);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return all;
+            } catch (Exception e) {
+                log.warn("Failed to list KERI notifications from index {}, will retry: {}", start, e.getMessage());
+                return all;
+            }
+
+            List<Notification> page;
+            try {
+                page = Utils.fromJson(response.notes(), new TypeReference<List<Notification>>() {
+                });
+            } catch (SerializeException e) {
+                log.error("Failed to parse the KERI notification list while route-matching: {}", e.getMessage());
+                return all;
+            }
+            if (page == null || page.isEmpty()) {
+                return all;
+            }
+            all.addAll(page);
+
+            if (all.size() >= response.total()) {
+                return all;
+            }
+            start += NOTIFICATION_PAGE_SIZE;
         }
-        try {
-            List<Notification> notes = Utils.fromJson(response.notes(), new TypeReference<List<Notification>>() {
-            });
-            return notes != null ? notes : List.of();
-        } catch (SerializeException e) {
-            log.error("Failed to parse the KERI notification list while route-matching: {}", e.getMessage());
-            return List.of();
-        }
+
+        log.warn("Stopped listing KERI notifications at {} entries: the agent's queue is larger than this "
+                + "scan and unread debris may be hiding a reply. Prune it (notifications are only deleted "
+                + "on a successful step).", MAX_NOTIFICATIONS);
+
+        return all;
     }
 
     private Optional<CorrelatedNotification> pollOnceByRoute(List<String> routes, Set<String> excludeNoteIds)
@@ -272,6 +316,74 @@ public class KeriNotificationCorrelator {
                     "Interrupted while marking/deleting KERI notification " + notificationId, e);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to mark/delete KERI notification " + notificationId, e);
+        }
+    }
+
+    /**
+     * Deletes notifications older than {@code retention}, returning how many went.
+     *
+     * <p>Notifications are otherwise removed only by {@link #markAndDelete} on a SUCCESSFUL step, so
+     * every failed or abandoned attempt leaves one behind unread and the agent's queue grows without
+     * bound. That is not merely untidy: {@link #listNotifications()} pages the whole queue on every
+     * poll, so an unpruned agent makes each wait progressively more expensive.
+     *
+     * <p><b>Age is the only criterion, deliberately.</b> An earlier attempt at this deleted every
+     * unread notification on a route immediately before sending an apply, reasoning that the apply is
+     * what prompts the wallet so anything already queued had to be debris. That is false here: Veridian
+     * presents spontaneously — it grants without waiting for an offer round trip — so a genuine reply
+     * can legitimately already be sitting there. The purge ate real grants and was reverted. Nothing
+     * about "arrived before my request" is safe to delete on.
+     *
+     * <p>Age is safe because it is provable rather than inferred. Every ceremony expires after
+     * {@code ceremony-ttl}, so no live ceremony can still be waiting on a notification older than that;
+     * {@code retention} is expected to be a comfortable multiple of it. A notification whose
+     * {@code dt} cannot be parsed is never deleted — undatable means unprovable.
+     *
+     * <p>Runs only from the scheduled sweep, never from a request path, so it cannot race a send.
+     */
+    public int pruneOlderThan(Duration retention) {
+        Instant cutoff = Instant.now().minus(retention);
+        int pruned = 0;
+        int undatable = 0;
+
+        for (Notification note : listNotifications()) {
+            if (note.i == null) {
+                continue;
+            }
+            Optional<Instant> sentAt = parseNotificationTimestamp(note.dt);
+            if (sentAt.isEmpty()) {
+                undatable++;
+                continue;
+            }
+            if (sentAt.get().isAfter(cutoff)) {
+                continue;
+            }
+            try {
+                markAndDelete(note.i);
+                pruned++;
+            } catch (RuntimeException e) {
+                // One stubborn notification must not abort the sweep; the next run retries it.
+                log.warn("Failed to prune KERI notification {}: {}", note.i, e.getMessage());
+            }
+        }
+
+        if (pruned > 0 || undatable > 0) {
+            log.info("Pruned {} KERI notification(s) older than {} ({} skipped as undatable)",
+                    pruned, retention, undatable);
+        }
+
+        return pruned;
+    }
+
+    /** KERI timestamps are ISO-8601 with an explicit offset, e.g. {@code 2026-07-21T00:00:00.000000+00:00}. */
+    private static Optional<Instant> parseNotificationTimestamp(String dt) {
+        if (dt == null || dt.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(OffsetDateTime.parse(dt).toInstant());
+        } catch (DateTimeParseException e) {
+            return Optional.empty();
         }
     }
 

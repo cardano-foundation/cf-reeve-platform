@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.RETURNS_DEFAULTS;
 import static org.mockito.Mockito.inOrder;
@@ -131,6 +132,9 @@ class KeriAttestServiceTest {
         lenient().when(client.keyEvents()).thenReturn(keyEvents);
         lenient().when(client.operations()).thenReturn(operations);
         lenient().when(agentService.agentName()).thenReturn(AGENT_NAME);
+        // Named in the wallet-timeout detail so an operator can check the wallet resolved this AID.
+        lenient().when(agentService.agentPrefix()).thenReturn(AGENT_PREFIX);
+        lenient().when(agentService.agentOobi()).thenReturn("https://keria.example/oobi/" + AGENT_PREFIX + "/agent/EAG");
         // Default: no pre-existing remotesign-ref debris. The snapshot-and-exclude test overrides this.
         lenient().when(correlator.outstandingNoteIds(any())).thenReturn(Set.of());
 
@@ -627,8 +631,12 @@ class KeriAttestServiceTest {
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.KERI_WALLET_TIMEOUT, result.getLeft().getTitle());
-        verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.ATTEST_REQUESTED,
-                KeriAttestationProblems.KERI_WALLET_TIMEOUT, "Timed out waiting for the wallet's remotesign ref.");
+        // The detail also carries the agent AID the wallet must have resolved — a wallet timeout is
+        // usually undeliverable-reply, not user inaction.
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
+                eq(KeriAttestationProblems.KERI_WALLET_TIMEOUT),
+                argThat(detail -> detail.startsWith("Timed out waiting for the wallet's remotesign ref.")
+                        && detail.contains(AGENT_PREFIX)));
         verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
     }
 

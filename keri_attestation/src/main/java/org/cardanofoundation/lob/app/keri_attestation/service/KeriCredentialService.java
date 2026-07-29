@@ -218,7 +218,7 @@ public class KeriCredentialService {
                     correlator.awaitByRoute(OFFER_OR_GRANT_ROUTES, properties.remotesignTimeout());
             if (claimed.isEmpty()) {
                 return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.KERI_WALLET_TIMEOUT,
-                        "Timed out waiting for /exn/ipex/offer or /exn/ipex/grant.");
+                        "Timed out waiting for /exn/ipex/offer or /exn/ipex/grant." + walletDeliveryHint());
             }
             claimedNotification = claimed.get();
         }
@@ -293,7 +293,7 @@ public class KeriCredentialService {
                     correlator.awaitByRoute(GRANT_ROUTES, properties.remotesignTimeout());
             if (grant.isEmpty()) {
                 return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.KERI_WALLET_TIMEOUT,
-                        "Timed out waiting for /exn/ipex/grant.");
+                        "Timed out waiting for /exn/ipex/grant." + walletDeliveryHint());
             }
             CorrelatedNotification grantNotification = grant.get();
             log.info("grant received {}", grantNotification.exnSaid());
@@ -762,4 +762,22 @@ public class KeriCredentialService {
         return KeriAttestationProblems.conflict(KeriAttestationProblems.CEREMONY_INVALID_STATE,
                 "Ceremony %s is no longer waiting on the expected step.".formatted(ceremonyId));
     }
+
+    /**
+     * A wallet timeout almost always means the wallet could not deliver its reply back to us, not that
+     * the user did nothing. The wallet resolves our agent AID once, at pairing; if that AID has since
+     * changed — a new {@code identifier-name}, a new {@code bran}, or a recreated KERIA keystore — the
+     * wallet still displays our request (we resolve ITS OOBI to push) but its KERIA has no endpoints
+     * for the sender and silently drops the reply. Nothing in the IPEX apply tells the wallet our OOBI:
+     * {@code exn.a.oobiUrl} is deliberately the credential schema server.
+     *
+     * <p>So the timeout message names the AID the wallet must have resolved, turning a silent dead end
+     * into something an operator can check in one step.
+     */
+    private String walletDeliveryHint() {
+        return " The wallet may be unable to reach this backend: it must have resolved agent AID %s (OOBI %s). "
+                .formatted(agentService.agentPrefix(), agentService.agentOobi())
+                + "If that AID changed since the wallet was paired, re-resolve this OOBI in the wallet and retry.";
+    }
+
 }
