@@ -4,8 +4,24 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.util.List;
+import java.util.Optional;
+
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import org.slf4j.LoggerFactory;
 
 import org.junit.jupiter.api.Test;
+
+import org.cardanofoundation.signify.app.aiding.Identifier;
+import org.cardanofoundation.signify.app.clienting.SignifyClient;
+import org.cardanofoundation.signify.core.States;
 
 /**
  * Unit tests for {@link SignifyClientConfig#resolveBran}: a configured passcode must be honored
@@ -40,5 +56,55 @@ class SignifyClientConfigTest {
         // Two empty-bran resolutions yield DIFFERENT passcodes — i.e. a different agent identity each
         // time — which is exactly the restart-rotation that broke inbound wallet notifications.
         assertNotEquals(SignifyClientConfig.resolveBran(""), SignifyClientConfig.resolveBran(""));
+    }
+
+    // ==================== agent witness diagnostics ====================
+
+    private static ListAppender<ILoggingEvent> captureLogs() {
+        Logger logger = (Logger) LoggerFactory.getLogger(SignifyClientConfig.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        return appender;
+    }
+
+    private static SignifyClient clientWithWitnesses(List<String> witnesses) throws Exception {
+        States.State state = mock(States.State.class);
+        when(state.getB()).thenReturn(witnesses);
+        States.HabState hab = mock(States.HabState.class);
+        when(hab.getState()).thenReturn(state);
+
+        Identifier identifiers = mock(Identifier.class);
+        when(identifiers.get("agent")).thenReturn(Optional.of(hab));
+        SignifyClient client = mock(SignifyClient.class);
+        when(client.identifiers()).thenReturn(identifiers);
+
+        return client;
+    }
+
+    /**
+     * The failure this guards against: an identifier created before witnesses were configured is
+     * reused verbatim at startup, so it stays witness-less and inbound IPEX silently never arrives —
+     * the wallet reports success and the backend sees nothing. Nothing used to say so.
+     */
+    @Test
+    void warnsWhenTheReusedAgentAidHasNoWitnesses() throws Exception {
+        ListAppender<ILoggingEvent> logs = captureLogs();
+
+        SignifyClientConfig.warnIfNoWitnesses(clientWithWitnesses(List.of()), "agent", "EAGENTPREFIX");
+
+        assertTrue(logs.list.stream().anyMatch(e -> e.getLevel() == Level.WARN
+                && e.getFormattedMessage().contains("NO WITNESSES")));
+    }
+
+    @Test
+    void logsTheWitnessSetWhenTheAgentAidHasOne() throws Exception {
+        ListAppender<ILoggingEvent> logs = captureLogs();
+
+        SignifyClientConfig.warnIfNoWitnesses(clientWithWitnesses(List.of("BWITNESS1")), "agent", "EAGENTPREFIX");
+
+        assertTrue(logs.list.stream().noneMatch(e -> e.getLevel() == Level.WARN));
+        assertTrue(logs.list.stream().anyMatch(e -> e.getFormattedMessage().contains("BWITNESS1")));
     }
 }
