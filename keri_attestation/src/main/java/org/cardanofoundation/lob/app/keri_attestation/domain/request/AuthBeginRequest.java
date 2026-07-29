@@ -9,11 +9,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * Body of {@code POST /ceremonies/{id}/auth-begin}. Not a {@code BaseRequest} subclass —
- * see {@link ResolveOobiRequest}'s javadoc. All fields are optional and select one of three paths:
- * a present {@code externalTxHash} verifies the given tx already establishes on-chain signing authority
- * ("the skip"); an absent/blank hash with {@code assumePublished} true accepts AUTH_BEGIN as already
- * published WITHOUT any on-chain verification (trusts the caller); an absent/blank hash otherwise
- * submits a fresh AUTH_BEGIN transaction.
+ * see {@link ResolveOobiRequest}'s javadoc. Both fields are optional: {@code assumePublished} accepts
+ * AUTH_BEGIN as already published WITHOUT any on-chain verification (trusts the caller), and otherwise
+ * a fresh AUTH_BEGIN transaction is handed to {@code blockchain_publisher} for publication.
  */
 @Getter
 @Setter
@@ -21,11 +19,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class AuthBeginRequest {
 
-    @Schema(description = "An already-confirmed AUTH_BEGIN tx hash to verify instead of submitting a fresh one")
-    private String externalTxHash;
-
-    @Schema(description = "With no externalTxHash, assert AUTH_BEGIN is already published on-chain and accept it "
-            + "WITHOUT on-chain verification (trusts the caller — see server-side policy TODO)")
+    @Schema(description = "Assert AUTH_BEGIN is already published on-chain and accept it WITHOUT on-chain "
+            + "verification (trusts the caller — see server-side policy TODO)")
     private boolean assumePublished;
 
     @Schema(description = "Retry the step currently being waited on, after its cooldown has elapsed")

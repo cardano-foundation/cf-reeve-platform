@@ -138,7 +138,7 @@ public class KeriAttestService {
                 }
                 Optional<Map<String, Object>> anchor = Optional.empty();
                 try {
-                    refreshWalletKeyState(userId, walletAid, walletOobiUrl);
+                    refreshWalletContact(userId, walletAid, walletOobiUrl);
                     anchor = locateAnchoringEvent(walletAid, ceremony.getPayloadSaid(),
                             ceremony.getKelFloorSequence(), lateRef.get());
                 } catch (InterruptedException e) {
@@ -193,6 +193,13 @@ public class KeriAttestService {
         if (!digestPersisted) {
             return Either.left(staleCeremonyProblem(ceremonyId));
         }
+
+        // Re-resolve the wallet's OOBI before BOTH the floor query and the send below. A contact
+        // resolved once at pairing goes stale when the wallet rotates keys or its KERIA endpoints
+        // change; KERIA then accepts the exn but has nowhere to route it, so the wallet never shows
+        // the signing request and this step can only time out. Credential presentation already does
+        // this before its own send — the ATTEST send is the one path that did not.
+        refreshWalletContact(userId, walletAid, walletOobiUrl);
 
         // query the wallet's CURRENT KEL sequence and persist it as a floor BEFORE the
         // remotesign request is sent. resolveAndComplete requires any accepted anchoring event to be
@@ -299,7 +306,7 @@ public class KeriAttestService {
                 return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
                         "no sequence floor recorded — re-attest");
             }
-            refreshWalletKeyState(userId, walletAid, walletOobiUrl);
+            refreshWalletContact(userId, walletAid, walletOobiUrl);
             Optional<Map<String, Object>> event = locateAnchoringEvent(walletAid, payloadSaid, floorSequence, ref);
             if (event.isEmpty()) {
                 return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
@@ -322,21 +329,22 @@ public class KeriAttestService {
      * the wallet just anchored in response to the remotesign request — reading it without refreshing
      * would miss that event and fail ATTEST_SEAL_MISMATCH even though the wallet DID sign. Re-resolving
      * the OOBI refreshes the contact's key state / endpoints so the subsequent {@link #fetchKel} /
-     * key-state query sees the fresh interaction event. Best-effort and with no ceremony side effects: a
-     * resolve failure (or a link with no stored OOBI) is logged and the read proceeds on whatever state
-     * the agent already has — mirrors {@code KeriCredentialService}'s own pre-presentation re-resolve.
+     * key-state query sees the fresh interaction event, and so an outbound exn can actually be routed
+     * to the wallet's current mailbox. Best-effort and with no ceremony side effects: a resolve failure
+     * (or a link with no stored OOBI) is logged and the caller proceeds on whatever state the agent
+     * already has — mirrors {@code KeriCredentialService}'s own pre-presentation re-resolve.
      */
-    private void refreshWalletKeyState(String userId, String walletAid, String walletOobiUrl) {
+    private void refreshWalletContact(String userId, String walletAid, String walletOobiUrl) {
         if (walletOobiUrl == null || walletOobiUrl.isBlank()) {
             return;
         }
-        log.info("re-resolving wallet OOBI before reading its KEL (aid {})", walletAid);
+        log.info("re-resolving wallet OOBI (aid {})", walletAid);
         Either<ProblemDetail, Void> refreshed = oobiService.refreshResolve(userId, walletOobiUrl, walletAid);
         if (refreshed.isLeft()) {
-            log.warn("wallet OOBI re-resolve before KEL read failed (proceeding best-effort on current state): {}",
+            log.warn("wallet OOBI re-resolve failed (proceeding best-effort on current state): {}",
                     refreshed.getLeft().getDetail());
         } else {
-            log.info("wallet OOBI re-resolved before KEL read");
+            log.info("wallet OOBI re-resolved");
         }
     }
 

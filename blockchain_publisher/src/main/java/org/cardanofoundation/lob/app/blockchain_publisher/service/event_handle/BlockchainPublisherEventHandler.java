@@ -11,6 +11,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TransactionLedgerUpdateCommand;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TransactionStatusRequestEvent;
+import org.cardanofoundation.lob.app.blockchain_common.domain.events.AuthBeginPublishCommand;
 import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.BlockchainPublisherService;
 import org.cardanofoundation.lob.app.funding.domain.events.SpendingEventsPublishCommand;
@@ -71,6 +72,17 @@ public class BlockchainPublisherEventHandler {
         log.info("Received DocumentPublishCommand for organisation:{}, document:{}",
                 command.organisationId(), command.documentId());
         blockchainPublisherService.storeDocumentForDispatchLater(command);
+    }
+
+    // Same AFTER_COMMIT + fallbackExecution reasoning as the document handler above: queuing an
+    // AUTH_BEGIN row leads to an irreversible on-chain publication, so it must not act on a
+    // keri_attestation transaction that could still roll back.
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    @Async
+    public void handleAuthBeginPublishCommand(AuthBeginPublishCommand command) {
+        log.info("Received AuthBeginPublishCommand for organisation:{}, ceremony:{}",
+                command.organisationId(), command.ceremonyId());
+        blockchainPublisherService.storeAuthBeginForDispatchLater(command);
     }
 
 }

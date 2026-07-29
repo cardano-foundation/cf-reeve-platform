@@ -140,16 +140,17 @@ public class KeriAttestationController {
         return Responses.respond(credentialService.presentCredential(id, userId, retry), HttpStatus.OK);
     }
 
-    @Operation(description = "Begin (or retry) the AUTH_BEGIN step: verifies a user-supplied external tx hash, accepts an unverified 'already published' assertion, or builds and submits a fresh AUTH_BEGIN transaction, synchronously, and returns the final ceremony state.")
+    @Operation(description = "Begin (or retry) the AUTH_BEGIN step: either accepts an unverified 'already published' assertion, "
+            + "or hands a fresh AUTH_BEGIN transaction to blockchain_publisher. Publication is asynchronous — the ceremony rests in "
+            + "AUTH_BEGIN_SUBMITTED and reaches AUTH_BEGIN_CONFIRMED once the publisher reports the transaction dispatched.")
     @PostMapping(value = "/ceremonies/{id}/auth-begin", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize(PUBLISH_ROLES)
     public ResponseEntity<Object> submitAuthBegin(@PathVariable String id,
             @RequestBody(required = false) AuthBeginRequest request) {
         String userId = securityHelper.getCurrentUserId();
-        String externalTxHash = request != null ? request.getExternalTxHash() : null;
         boolean assumePublished = request != null && request.isAssumePublished();
         boolean retry = request != null && request.isRetry();
-        return Responses.respond(authBeginService.submitAuthBegin(id, userId, externalTxHash, assumePublished, retry), HttpStatus.OK);
+        return Responses.respond(authBeginService.submitAuthBegin(id, userId, assumePublished, retry), HttpStatus.OK);
     }
 
     @Operation(description = "Begin (or retry) the ATTEST step: sends a remotesign anchoring request to the linked wallet and waits, synchronously, for the wallet's confirmed anchor, returning the final ceremony state.")

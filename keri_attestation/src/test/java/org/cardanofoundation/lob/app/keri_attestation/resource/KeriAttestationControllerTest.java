@@ -317,30 +317,31 @@ class KeriAttestationControllerTest {
 
     // ==================== POST /ceremonies/{id}/auth-begin ====================
 
+    /** Publication is handed to blockchain_publisher, so the ceremony comes back still waiting. */
     @Test
-    void submitAuthBeginHappyPathReturns200AndPassesExternalTxHashThrough() throws Exception {
-        when(authBeginService.submitAuthBegin(CEREMONY_ID, USER_ID, "deadbeef", false, false))
+    void submitAuthBeginWithNoBodyRequestsAFreshPublication() throws Exception {
+        when(authBeginService.submitAuthBegin(CEREMONY_ID, USER_ID, false, false))
+                .thenReturn(Either.right(ceremonyView(CeremonyState.AUTH_BEGIN_SUBMITTED)));
+
+        mockMvc.perform(post("/api/v1/keri-attestation/ceremonies/{id}/auth-begin", CEREMONY_ID))
+                .andExpect(status().isOk());
+
+        verify(authBeginService).submitAuthBegin(CEREMONY_ID, USER_ID, false, false);
+    }
+
+    @Test
+    void submitAuthBeginPassesAssumePublishedThrough() throws Exception {
+        when(authBeginService.submitAuthBegin(CEREMONY_ID, USER_ID, true, false))
                 .thenReturn(Either.right(ceremonyView(CeremonyState.AUTH_BEGIN_CONFIRMED)));
 
         mockMvc.perform(post("/api/v1/keri-attestation/ceremonies/{id}/auth-begin", CEREMONY_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"externalTxHash":"deadbeef"}
+                                {"assumePublished":true}
                                 """))
                 .andExpect(status().isOk());
 
-        verify(authBeginService).submitAuthBegin(CEREMONY_ID, USER_ID, "deadbeef", false, false);
-    }
-
-    @Test
-    void submitAuthBeginWithNoBodySubmitsAFreshTransaction() throws Exception {
-        when(authBeginService.submitAuthBegin(CEREMONY_ID, USER_ID, null, false, false))
-                .thenReturn(Either.right(ceremonyView(CeremonyState.AUTH_BEGIN_CONFIRMED)));
-
-        mockMvc.perform(post("/api/v1/keri-attestation/ceremonies/{id}/auth-begin", CEREMONY_ID))
-                .andExpect(status().isOk());
-
-        verify(authBeginService).submitAuthBegin(CEREMONY_ID, USER_ID, null, false, false);
+        verify(authBeginService).submitAuthBegin(CEREMONY_ID, USER_ID, true, false);
     }
 
     // ==================== POST /ceremonies/{id}/attest ====================

@@ -1,10 +1,23 @@
 # keri_attestation
 
 Wallet-based KERI attestation module: links a platform user's Veridian wallet AID, walks them
-through IPEX credential presentation and AUTH_BEGIN authority, then anchors a document's CIP-170
-metadata digest via a Veridian **remotesign** request before the document is published on-chain.
+through IPEX credential presentation and AUTH_BEGIN authority, then anchors a target's CIP-170
+metadata digest via a Veridian **remotesign** request before that target is published on-chain.
 
-Design: `docs/superpowers/specs/2026-07-21-keri-wallet-attestation-design.md`.
+The module is target-agnostic. `DOCUMENT` (implemented by `document_vault`) is one target type;
+adding another — a report, say — means implementing one interface and touching nothing here.
+
+> **Adding a new target type? Read [REUSING.md](REUSING.md).** It is the checklist for humans and
+> agents, with the traps that have already cost debugging sessions.
+
+## This module never touches the chain
+
+There is no Cardano wallet and no transaction submitter here, by design: the API tier that runs
+ceremonies has neither chain nor IPFS access. AUTH_BEGIN is published by emitting an
+`AuthBeginPublishCommand`, which `blockchain_publisher` turns into a CIP-170 transaction through the
+same dispatcher every other publishable type uses; the resulting `LedgerUpdatedEvent` completes the
+ceremony step. The one remaining chain interaction is a read (`CardanoMetadataReader`, for verifying
+an imported card's existing ATTEST), which fails closed when the publisher is absent.
 
 ## CIP-170 reference
 

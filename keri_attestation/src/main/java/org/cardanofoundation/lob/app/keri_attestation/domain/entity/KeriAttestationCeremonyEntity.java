@@ -60,6 +60,11 @@ public class KeriAttestationCeremonyEntity implements Persistable<String> {
     @Column(name = "target_type", nullable = false, length = 64)
     private String targetType;
 
+    /** The target's organisation, resolved from the provider at creation time. AUTH_BEGIN is published
+     *  by blockchain_publisher's organisation-scoped dispatcher, which needs it. */
+    @Column(name = "organisation_id", length = 255)
+    private String organisationId;
+
     @NotBlank
     @Column(name = "target_id", nullable = false)
     private String targetId;

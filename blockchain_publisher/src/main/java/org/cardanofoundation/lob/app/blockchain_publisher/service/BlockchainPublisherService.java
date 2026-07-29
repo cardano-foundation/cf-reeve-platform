@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.blockchain_publisher.service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -15,11 +16,16 @@ import org.springframework.transaction.annotation.Transactional;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.ledger.TransactionStatusRequestEvent;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerUpdateType;
+import org.cardanofoundation.lob.app.blockchain_common.domain.events.AuthBeginPublishCommand;
 import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.authbegin.AuthBeginEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.reports.ReportEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.SpendingEventEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.repository.AuthBeginEntityRepositoryGateway;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.DocumentEntityRepositoryGateway;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.ReportEntityRepositoryGateway;
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.SpendingEventEntityRepositoryGateway;
@@ -41,6 +47,7 @@ public class BlockchainPublisherService {
     private final ReportEntityRepositoryGateway reportEntityRepositoryGateway;
     private final SpendingEventEntityRepositoryGateway spendingEventEntityRepositoryGateway;
     private final DocumentEntityRepositoryGateway documentEntityRepositoryGateway;
+    private final AuthBeginEntityRepositoryGateway authBeginEntityRepositoryGateway;
     private final LedgerUpdatedEventPublisher ledgerUpdatedEventPublisher;
     private final TransactionConverter transactionConverter;
     private final SpendingEventConverter spendingEventConverter;
@@ -101,5 +108,24 @@ public class BlockchainPublisherService {
         DocumentEntity documentEntity = documentConverter.convertToDbDetached(command);
 
         documentEntityRepositoryGateway.storeOnlyNew(Set.of(documentEntity));
+    }
+
+    @Transactional
+    public void storeAuthBeginForDispatchLater(AuthBeginPublishCommand command) {
+        log.info("storeAuthBeginForDispatchLater..., orgId:{}, ceremonyId:{}", command.organisationId(), command.ceremonyId());
+
+        AuthBeginEntity entity = AuthBeginEntity.builder()
+                .id(command.ceremonyId())
+                .organisationId(command.organisationId())
+                .aid(command.aid())
+                .leafSchemaSaid(command.leafSchemaSaid())
+                .reducedCesrChain(command.reducedCesrChain())
+                .authorizedLabels(AuthBeginEntity.encodeAuthorizedLabels(command.authorizedLabels()))
+                .build();
+        entity.setL1SubmissionData(Optional.of(L1SubmissionData.builder()
+                .publishStatus(BlockchainPublishStatus.STORED)
+                .build()));
+
+        authBeginEntityRepositoryGateway.storeIfAbsent(entity);
     }
 }

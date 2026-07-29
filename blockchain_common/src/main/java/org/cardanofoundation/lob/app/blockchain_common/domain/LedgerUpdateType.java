@@ -11,6 +11,8 @@ public enum LedgerUpdateType {
 
     SPENDING_EVENT,
 
-    DOCUMENT
+    DOCUMENT,
+
+    AUTH_BEGIN
 
 }

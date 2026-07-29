@@ -337,11 +337,21 @@ class KeriAttestServiceTest {
         inOrder.verify(correlator).awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), eq(Set.of(staleNoteId)));
     }
 
+    /**
+     * The wallet's OOBI is re-resolved twice, and both matter:
+     *
+     * <ul>
+     *   <li><b>Before the send</b> — a contact resolved once at pairing goes stale when the wallet
+     *       rotates keys or its KERIA endpoints change. KERIA then accepts the exn but has nowhere to
+     *       route it, so the wallet never surfaces the signing request and the step can only time out.
+     *       This was a live defect: credential presentation re-resolved before its send, the ATTEST
+     *       send did not, which is exactly why presentation worked and attestation did not.</li>
+     *   <li><b>Before the KEL read</b> — cross-KERIA, our view of the wallet's KEL can lag the ixn it
+     *       just anchored, and the fresh anchor would be missed as ATTEST_SEAL_MISMATCH.</li>
+     * </ul>
+     */
     @Test
-    void attestReResolvesTheWalletOobiBeforeReadingItsKel() throws Exception {
-        // Cross-KERIA: our view of the wallet's KEL can lag the ixn it just anchored. The wallet OOBI
-        // must be re-resolved (refreshing its key state) BEFORE the KEL is read, or the fresh anchor is
-        // missed and the attest wrongly fails ATTEST_SEAL_MISMATCH.
+    void attestReResolvesTheWalletOobiBeforeBothTheSendAndTheKelRead() throws Exception {
         String oobiUrl = "http://wallet.example/oobi/EWALLET/agent";
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, null);
         stubHappyPath(ceremony);
@@ -354,7 +364,9 @@ class KeriAttestServiceTest {
 
         assertTrue(result.isRight());
         assertEquals(CeremonyState.ATTEST_ANCHORED, result.get().state());
-        InOrder inOrder = inOrder(oobiService, keyEvents);
+        InOrder inOrder = inOrder(oobiService, exchanges, keyEvents);
+        inOrder.verify(oobiService).refreshResolve(USER_ID, oobiUrl, WALLET_AID);
+        inOrder.verify(exchanges).sendFromEvents(any(), any(), any(), any(), any(), any());
         inOrder.verify(oobiService).refreshResolve(USER_ID, oobiUrl, WALLET_AID);
         inOrder.verify(keyEvents).get(WALLET_AID);
     }

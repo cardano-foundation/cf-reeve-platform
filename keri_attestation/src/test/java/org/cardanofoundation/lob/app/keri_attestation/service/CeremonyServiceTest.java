@@ -46,6 +46,7 @@ class CeremonyServiceTest {
     private static final Set<CeremonyState> TERMINAL =
             EnumSet.of(CeremonyState.CONSUMED, CeremonyState.FAILED, CeremonyState.EXPIRED);
     private static final String USER = "user-1";
+    private static final String ORGANISATION_ID = "org-1";
     private static final String CEREMONY_ID = "cer-1";
 
     private final KeriAttestationProperties properties = new KeriAttestationProperties(
@@ -76,6 +77,9 @@ class CeremonyServiceTest {
         // exercising fast-forward/limit behavior without also having to stub target authorization (F2).
         lenient().when(targetProviderRegistry.forType(anyString())).thenReturn(Optional.of(targetProvider));
         lenient().when(targetProvider.authorize(anyString(), anyString())).thenReturn(Optional.empty());
+        // The ceremony records its target's organisation so blockchain_publisher's organisation-scoped
+        // dispatcher can pick up the AUTH_BEGIN transaction later.
+        lenient().when(targetProvider.organisationId(anyString())).thenReturn(Optional.of(ORGANISATION_ID));
     }
 
     private KeriAttestationCeremonyEntity ceremony(CeremonyState state) {

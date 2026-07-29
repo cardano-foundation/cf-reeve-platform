@@ -27,9 +27,12 @@ class NoPiiOnDocumentPublishPathArchTest {
     @ArchTest
     static final ArchRule publishPathCarriesNoPii = ArchRuleDefinition.noFields()
             .that().doNotHaveName("recipientKeyHash")
+            .and().doNotHaveName("authorizedLabels")
             .should().haveNameMatching("(?i).*(e?mail|recipient|account|label|file_?name|description|display).*")
-            .because("recipientKeyHash is a sha256 of a PUBLIC key, deliberately published on-chain so the "
-                    + "Indexer can filter by recipient (docs/onChainFormat.md). It is exempted by name rather "
-                    + "than renamed, so the decision stays visible in review; every other matching field name "
-                    + "is still forbidden.");
+            .because("Two fields are exempted BY NAME rather than renamed, so each decision stays visible in "
+                    + "review; every other matching field name is still forbidden. recipientKeyHash is a sha256 "
+                    + "of a PUBLIC key, deliberately published on-chain so the Indexer can filter by recipient "
+                    + "(docs/onChainFormat.md). authorizedLabels matches only on the word 'label' and carries no "
+                    + "human label at all: it is the list of CIP-170 metadata label NUMBERS an AUTH_BEGIN "
+                    + "authorises an AID for (e.g. 1447).");
 }

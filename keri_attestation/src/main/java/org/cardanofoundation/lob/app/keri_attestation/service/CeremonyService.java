@@ -103,6 +103,16 @@ public class CeremonyService implements AttestationConsumptionApi {
             return Either.left(authFailure.get());
         }
 
+        // Captured now, not at AUTH_BEGIN time: publishing runs in blockchain_publisher, whose
+        // dispatcher is organisation-scoped, and by then this module can no longer ask the provider
+        // (the ceremony may be resumed from another request). Refuse rather than create a ceremony
+        // whose AUTH_BEGIN could never be dispatched.
+        Optional<String> organisationId = providerOpt.get().organisationId(targetId);
+        if (organisationId.isEmpty()) {
+            return Either.left(KeriAttestationProblems.unprocessable(KeriAttestationProblems.TARGET_MISMATCH,
+                    "Target %s/%s has no resolvable organisation.".formatted(targetType, targetId)));
+        }
+
         // The locked finder, not a plain findById — see this method's javadoc.
         Optional<KeriIdentityLinkEntity> linkOpt = identityLinkRepository.findByUserIdForUpdate(userId);
         int bindingVersion = linkOpt.map(KeriIdentityLinkEntity::getBindingVersion).orElse(0);
@@ -115,6 +125,7 @@ public class CeremonyService implements AttestationConsumptionApi {
         ceremony.setBindingVersion(bindingVersion);
         ceremony.setTargetType(targetType);
         ceremony.setTargetId(targetId);
+        ceremony.setOrganisationId(organisationId.get());
         ceremony.setState(initialState);
         ceremony.setAttemptGeneration(0);
         ceremony.setExpiresAt(now.plus(properties.ceremonyTtl()));

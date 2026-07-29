@@ -68,6 +68,12 @@ public class DocumentAttestationTargetProvider implements AttestationTargetProvi
     }
 
     @Override
+    public Optional<String> organisationId(String targetId) {
+        return vaultDocumentService.loadForAttestation(targetId, securityHelper.getCurrentUserId())
+                .fold(problem -> Optional.empty(), document -> Optional.of(document.getOrganisationId()));
+    }
+
+    @Override
     @Transactional
     public Either<ProblemDetail, AttestationDigest> prepareDigest(String targetId, String ceremonyId) {
         // Idempotent per (documentId, ceremonyId): an existing row is authoritative and returned

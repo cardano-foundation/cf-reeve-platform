@@ -33,7 +33,7 @@ import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProp
  * </ol>
  * Read-only, no wallet interaction, no ceremony. Reuses the same primitives the ceremony uses.
  *
- * <p>The Cardano metadata reader ({@link CardanoMetadataTxSubmitter}) is an {@link ObjectProvider}
+ * <p>The Cardano metadata reader ({@link CardanoMetadataReader}) is an {@link ObjectProvider}
  * because {@code blockchain_publisher} may be disabled; without it the on-chain check cannot run and
  * verification returns {@code unverifiable} rather than silently passing.
  *
@@ -61,7 +61,7 @@ public class AttestationImportVerifier {
 
     private final KeriOobiService oobiService;
     private final CredentialChainValidator chainValidator;
-    private final ObjectProvider<CardanoMetadataTxSubmitter> submitterProvider;
+    private final ObjectProvider<CardanoMetadataReader> metadataReaderProvider;
     private final KeriAttestationProperties properties;
 
     /** The card-attestation fields carried on an imported card, plus the recomputed card digest. */
@@ -111,14 +111,14 @@ public class AttestationImportVerifier {
         // 3. The on-chain CIP-170 ATTEST binds this exact card (its digest) to this AID.
         //    NOTE(policy): trusts the metadata i/d as read; KEL-seal anchoring of d is not yet
         //    re-verified here (see class javadoc SECURITY note).
-        CardanoMetadataTxSubmitter submitter = submitterProvider.getIfAvailable();
-        if (submitter == null) {
+        CardanoMetadataReader metadataReader = metadataReaderProvider.getIfAvailable();
+        if (metadataReader == null) {
             return Either.left(KeriAttestationProblems.serviceUnavailable(CARD_ATTESTATION_UNVERIFIABLE,
                     "No Cardano metadata reader available to verify the on-chain attestation."));
         }
         Optional<Map<String, Object>> metadataOpt;
         try {
-            metadataOpt = submitter.readCip170Metadata(claim.txHash());
+            metadataOpt = metadataReader.readCip170Metadata(claim.txHash());
         } catch (Exception e) {
             return Either.left(KeriAttestationProblems.serviceUnavailable(CARD_ATTESTATION_UNVERIFIABLE,
                     "Failed to read CIP-170 metadata for tx %s: %s".formatted(claim.txHash(), e.getMessage())));

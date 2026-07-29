@@ -23,8 +23,9 @@ import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Docume
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.KeriService;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.OrganiserWalletMetadataTxSubmitter;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.OrganiserWalletMetadataReader;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.L1TransactionCreatorConfig;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.authbegin.AuthBeginL1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentConverter;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentL1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report.API3L1TransactionCreator;
@@ -35,7 +36,7 @@ import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction.API1MetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.transation_submit.*;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
-import org.cardanofoundation.lob.app.keri_attestation.service.CardanoMetadataTxSubmitter;
+import org.cardanofoundation.lob.app.keri_attestation.service.CardanoMetadataReader;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 
 @Configuration
@@ -179,13 +180,27 @@ public class TransactionSubmissionConfig {
         );
     }
 
+    /**
+     * Read-only chain access for {@code keri_attestation}'s card-import verifier. This module submits
+     * AUTH_BEGIN through {@link #authBeginL1TransactionCreator} and the normal dispatcher, so nothing
+     * here hands a submitter to another module.
+     */
     @Bean
     @ConditionalOnProperty(name = "lob.keri-attestation.enabled", havingValue = "true", matchIfMissing = false)
-    public CardanoMetadataTxSubmitter cardanoMetadataTxSubmitter(@Qualifier("yaci_blockfrost") BackendService backendService,
-                                                                  Account organiserAccount,
-                                                                  ObjectMapper objectMapper
+    public CardanoMetadataReader cardanoMetadataReader(@Qualifier("yaci_blockfrost") BackendService backendService,
+                                                       ObjectMapper objectMapper
     ) {
-        return new OrganiserWalletMetadataTxSubmitter(backendService, organiserAccount, objectMapper);
+        return new OrganiserWalletMetadataReader(backendService, objectMapper);
+    }
+
+    @Bean
+    public AuthBeginL1TransactionCreator authBeginL1TransactionCreator(@Qualifier("yaci_blockfrost") BackendService backendService,
+                                                                       BlockchainReaderPublicApiIF blockchainReaderPublicApi,
+                                                                       Cip170MetadataFactory cip170MetadataFactory,
+                                                                       Account organiserAccount
+    ) {
+        return new AuthBeginL1TransactionCreator(backendService, blockchainReaderPublicApi, cip170MetadataFactory,
+                organiserAccount);
     }
 
 //    @Bean
