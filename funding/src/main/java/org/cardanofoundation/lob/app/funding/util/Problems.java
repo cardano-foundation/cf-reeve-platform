@@ -49,4 +49,16 @@ public final class Problems {
         return badRequest("Organisation with id: %s not found".formatted(organisationId),
                 ErrorTitleConstants.ORGANISATION_NOT_FOUND);
     }
+
+    public static ProblemDetail projectReferenceNotFound(String externalProjectId) {
+        return notFound("Project not found for externalProjectId: %s".formatted(externalProjectId),
+                ErrorTitleConstants.PROJECT_REFERENCE_NOT_FOUND);
+    }
+
+    public static ProblemDetail ambiguousProjectReference(String externalProjectId) {
+        return badRequest(
+                "externalProjectId %s matches more than one project in this organisation; use the JSON API to disambiguate"
+                        .formatted(externalProjectId),
+                ErrorTitleConstants.AMBIGUOUS_PROJECT_REFERENCE);
+    }
 }

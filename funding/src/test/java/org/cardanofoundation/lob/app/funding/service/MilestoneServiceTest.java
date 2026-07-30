@@ -82,6 +82,21 @@ class MilestoneServiceTest {
     }
 
     @Test
+    void findByProjectIdAndExternalMilestoneId_returnsEntity_whenFound() {
+        MilestoneEntity milestone = milestoneEntity("m1");
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId("p1", "MS-1")).thenReturn(Optional.of(milestone));
+
+        assertThat(milestoneService.findByProjectIdAndExternalMilestoneId("p1", "MS-1")).contains(milestone);
+    }
+
+    @Test
+    void findByProjectIdAndExternalMilestoneId_returnsEmpty_whenNotFound() {
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId("p1", "MS-UNKNOWN")).thenReturn(Optional.empty());
+
+        assertThat(milestoneService.findByProjectIdAndExternalMilestoneId("p1", "MS-UNKNOWN")).isEmpty();
+    }
+
+    @Test
     void findByProjectId_withPageable_delegatesToRepository() {
         org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 5);
         MilestoneEntity m1 = milestoneEntity("m1");

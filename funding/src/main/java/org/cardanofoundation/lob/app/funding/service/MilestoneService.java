@@ -123,6 +123,11 @@ public class MilestoneService {
         return milestoneRepository.findByIdAndProjectId(milestoneId, projectId);
     }
 
+    /** Looks up a milestone by its user-defined external id within a project — used by the bulk CSV importer's upsert logic. */
+    public Optional<MilestoneEntity> findByProjectIdAndExternalMilestoneId(String projectId, String externalMilestoneId) {
+        return milestoneRepository.findByProjectIdAndExternalMilestoneId(projectId, externalMilestoneId);
+    }
+
     public List<MilestoneEntity> findByProjectId(String projectId) {
         return milestoneRepository.findByProjectId(projectId);
     }
