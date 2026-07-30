@@ -78,9 +78,9 @@ class ProjectControllerTest {
     @Test
     void getProject_returns200_withView() {
         ProjectView view = projectView();
-        when(projectService.getProject("p1")).thenReturn(view);
+        when(projectService.getProject("p1", "org1")).thenReturn(view);
 
-        ResponseEntity<?> response = projectController.getProject("p1");
+        ResponseEntity<?> response = projectController.getProject("p1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo(view);
@@ -88,10 +88,10 @@ class ProjectControllerTest {
 
     @Test
     void getProject_returns404_withProblem() {
-        when(projectService.getProject("p1"))
+        when(projectService.getProject("p1", "org1"))
                 .thenReturn(ProjectView.error(problem(HttpStatus.NOT_FOUND, ErrorTitleConstants.PROJECT_NOT_FOUND)));
 
-        ResponseEntity<?> response = projectController.getProject("p1");
+        ResponseEntity<?> response = projectController.getProject("p1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(((ProjectView) response.getBody()).getError().orElseThrow().getTitle())
@@ -103,9 +103,9 @@ class ProjectControllerTest {
     @Test
     void listSubProjects_returns200() {
         PagedResponse<ProjectView> paged = PagedResponse.<ProjectView>builder().content(List.of(projectView())).total(1).build();
-        when(projectService.listSubProjects("p1", PAGEABLE)).thenReturn(paged);
+        when(projectService.listSubProjects("p1", "org1", PAGEABLE)).thenReturn(paged);
 
-        ResponseEntity<?> response = projectController.listSubProjects("p1", PAGEABLE);
+        ResponseEntity<?> response = projectController.listSubProjects("p1", "org1", PAGEABLE);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((PagedResponse<?>) response.getBody()).getContent()).hasSize(1);
@@ -156,9 +156,9 @@ class ProjectControllerTest {
 
     @Test
     void delete_returns204_whenNoError() {
-        when(projectService.deleteProject("p1")).thenReturn(Optional.empty());
+        when(projectService.deleteProject("p1", "org1")).thenReturn(Optional.empty());
 
-        ResponseEntity<?> response = projectController.deleteProject("p1");
+        ResponseEntity<?> response = projectController.deleteProject("p1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     }
@@ -166,9 +166,9 @@ class ProjectControllerTest {
     @Test
     void delete_returns404_withProblem() {
         ProblemDetail p = problem(HttpStatus.NOT_FOUND, ErrorTitleConstants.PROJECT_NOT_FOUND);
-        when(projectService.deleteProject("p1")).thenReturn(Optional.of(p));
+        when(projectService.deleteProject("p1", "org1")).thenReturn(Optional.of(p));
 
-        ResponseEntity<?> response = projectController.deleteProject("p1");
+        ResponseEntity<?> response = projectController.deleteProject("p1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);

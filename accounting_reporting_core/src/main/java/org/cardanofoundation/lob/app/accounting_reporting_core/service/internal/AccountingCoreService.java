@@ -186,10 +186,10 @@ public class AccountingCoreService {
     }
 
     @Transactional
-    public Either<ProblemDetail, Void> scheduleReIngestionForFailed(String batchId) {
+    public Either<ProblemDetail, Void> scheduleReIngestionForFailed(String batchId, String organisationId) {
         log.info("scheduleReIngestion..., batchId: {}", batchId);
 
-        Optional<TransactionBatchEntity> txBatchM = transactionBatchRepository.findById(batchId);
+        Optional<TransactionBatchEntity> txBatchM = transactionBatchRepository.findByIdAndFilteringParametersOrganisationId(batchId, organisationId);
         if (txBatchM.isEmpty()) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(NOT_FOUND, "Transaction batch with id: %s not found".formatted(batchId));
             problem.setTitle("TX_BATCH_NOT_FOUND");

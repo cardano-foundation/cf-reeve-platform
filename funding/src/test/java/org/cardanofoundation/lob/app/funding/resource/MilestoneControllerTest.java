@@ -52,10 +52,10 @@ class MilestoneControllerTest {
 
     @Test
     void listMilestones_returns200() {
-        when(milestoneService.listMilestones("p1", PAGEABLE))
+        when(milestoneService.listMilestones("p1", "org1", PAGEABLE))
                 .thenReturn(PagedResponse.<MilestoneView>builder().content(List.of(milestoneView())).total(1).build());
 
-        ResponseEntity<?> response = milestoneController.listMilestones("p1", PAGEABLE);
+        ResponseEntity<?> response = milestoneController.listMilestones("p1", "org1", PAGEABLE);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((PagedResponse<?>) response.getBody()).getContent()).hasSize(1);
@@ -63,10 +63,10 @@ class MilestoneControllerTest {
 
     @Test
     void listMilestones_propagatesErrorStatus() {
-        when(milestoneService.listMilestones("p1", PAGEABLE))
+        when(milestoneService.listMilestones("p1", "org1", PAGEABLE))
                 .thenReturn(PagedResponse.error(problem(HttpStatus.NOT_FOUND, ErrorTitleConstants.PROJECT_NOT_FOUND)));
 
-        ResponseEntity<?> response = milestoneController.listMilestones("p1", PAGEABLE);
+        ResponseEntity<?> response = milestoneController.listMilestones("p1", "org1", PAGEABLE);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(((PagedResponse<?>) response.getBody()).getError().orElseThrow().getTitle())
@@ -76,9 +76,9 @@ class MilestoneControllerTest {
     @Test
     void getMilestone_returns200_withView() {
         MilestoneView view = milestoneView();
-        when(milestoneService.getMilestone("p1", "m1")).thenReturn(view);
+        when(milestoneService.getMilestone("p1", "m1", "org1")).thenReturn(view);
 
-        ResponseEntity<?> response = milestoneController.getMilestone("p1", "m1");
+        ResponseEntity<?> response = milestoneController.getMilestone("p1", "m1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo(view);
@@ -86,10 +86,10 @@ class MilestoneControllerTest {
 
     @Test
     void getMilestone_returns404_withProblem() {
-        when(milestoneService.getMilestone("p1", "m1"))
+        when(milestoneService.getMilestone("p1", "m1", "org1"))
                 .thenReturn(MilestoneView.error(problem(HttpStatus.NOT_FOUND, ErrorTitleConstants.MILESTONE_NOT_FOUND)));
 
-        ResponseEntity<?> response = milestoneController.getMilestone("p1", "m1");
+        ResponseEntity<?> response = milestoneController.getMilestone("p1", "m1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(((MilestoneView) response.getBody()).getError().orElseThrow().getTitle())
@@ -100,9 +100,9 @@ class MilestoneControllerTest {
     void createMilestone_returns201_withView() {
         MilestoneView view = milestoneView();
         MilestoneCreateRequest request = MilestoneCreateRequest.builder().build();
-        when(milestoneService.createMilestone("p1", request)).thenReturn(view);
+        when(milestoneService.createMilestone("p1", "org1", request)).thenReturn(view);
 
-        ResponseEntity<?> response = milestoneController.createMilestone("p1", request);
+        ResponseEntity<?> response = milestoneController.createMilestone("p1", "org1", request);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(response.getBody()).isEqualTo(view);
@@ -112,9 +112,9 @@ class MilestoneControllerTest {
     void updateMilestone_returns200_withView() {
         MilestoneView view = milestoneView();
         MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().milestoneTitle("New").build();
-        when(milestoneService.updateMilestone("p1", "m1", request)).thenReturn(view);
+        when(milestoneService.updateMilestone("p1", "m1", "org1", request)).thenReturn(view);
 
-        ResponseEntity<?> response = milestoneController.updateMilestone("p1", "m1", request);
+        ResponseEntity<?> response = milestoneController.updateMilestone("p1", "m1", "org1", request);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo(view);
@@ -122,19 +122,19 @@ class MilestoneControllerTest {
 
     @Test
     void deleteMilestone_returns204_whenNoError() {
-        when(milestoneService.deleteMilestone("p1", "m1")).thenReturn(Optional.empty());
+        when(milestoneService.deleteMilestone("p1", "m1", "org1")).thenReturn(Optional.empty());
 
-        ResponseEntity<?> response = milestoneController.deleteMilestone("p1", "m1");
+        ResponseEntity<?> response = milestoneController.deleteMilestone("p1", "m1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     }
 
     @Test
     void deleteMilestone_returns404_withProblem() {
-        when(milestoneService.deleteMilestone("p1", "m1"))
+        when(milestoneService.deleteMilestone("p1", "m1", "org1"))
                 .thenReturn(Optional.of(problem(HttpStatus.NOT_FOUND, ErrorTitleConstants.MILESTONE_NOT_FOUND)));
 
-        ResponseEntity<?> response = milestoneController.deleteMilestone("p1", "m1");
+        ResponseEntity<?> response = milestoneController.deleteMilestone("p1", "m1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_FOUND);

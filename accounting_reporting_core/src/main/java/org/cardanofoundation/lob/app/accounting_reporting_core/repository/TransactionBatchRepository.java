@@ -20,6 +20,9 @@ public interface TransactionBatchRepository extends JpaRepository<TransactionBat
         List<TransactionBatchEntity> findAllByFilteringParametersOrganisationId(
                         String organisationId);
 
+        Optional<TransactionBatchEntity> findByIdAndFilteringParametersOrganisationId(
+                        String id, String organisationId);
+
         @Query("""
                         SELECT new org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchStatisticsView(
                             tb.id,

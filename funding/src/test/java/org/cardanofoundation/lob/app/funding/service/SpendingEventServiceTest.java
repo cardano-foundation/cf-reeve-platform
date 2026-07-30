@@ -907,28 +907,28 @@ class SpendingEventServiceTest {
 
     @Test
     void getEvent_returns404_whenNotFound() {
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.empty());
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(fundingEventRepository.findByIdAndOrganisationId("e1", "org1")).thenReturn(Optional.empty());
 
-        assertThat(spendingEventService.getEvent("e1").getError().orElseThrow().getTitle())
+        assertThat(spendingEventService.getEvent("e1", "org1").getError().orElseThrow().getTitle())
                 .isEqualTo(ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
     }
 
     @Test
     void getEvent_returns401_whenUserCannotAccessOrg() {
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT)));
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
-        assertThat(spendingEventService.getEvent("e1").getError().orElseThrow().getStatus())
+        assertThat(spendingEventService.getEvent("e1", "org1").getError().orElseThrow().getStatus())
                 .isEqualTo(HttpStatus.UNAUTHORIZED.value());
     }
 
     @Test
     void getEvent_returnsView_whenAuthorised() {
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT)));
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(fundingEventRepository.findByIdAndOrganisationId("e1", "org1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT)));
         when(milestoneAllocationRepository.findById_EventId("e1")).thenReturn(List.of());
 
-        SpendingEventView result = spendingEventService.getEvent("e1");
+        SpendingEventView result = spendingEventService.getEvent("e1", "org1");
 
         assertThat(result.getError()).isEmpty();
         assertThat(result.getEventId()).isEqualTo("e1");
@@ -972,19 +972,17 @@ class SpendingEventServiceTest {
 
     @Test
     void publishEvent_returns401_whenUserCannotAccessOrg() {
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT)));
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
-        assertThat(spendingEventService.publishEvent("e1").getError().orElseThrow().getStatus())
+        assertThat(spendingEventService.publishEvent("e1", "org1").getError().orElseThrow().getStatus())
                 .isEqualTo(HttpStatus.UNAUTHORIZED.value());
     }
 
     @Test
     void deleteEvent_returns401_whenUserCannotAccessOrg() {
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT)));
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
-        Optional<ProblemDetail> result = spendingEventService.deleteEvent("e1");
+        Optional<ProblemDetail> result = spendingEventService.deleteEvent("e1", "org1");
 
         assertThat(result.orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
         verify(fundingEventRepository, never()).delete(any());
@@ -993,10 +991,11 @@ class SpendingEventServiceTest {
     @Test
     void deleteEvent_returnsEmpty_whenAuthorisedAndDeleted() {
         FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(fundingEventRepository.findByIdAndOrganisationId("e1", "org1")).thenReturn(Optional.of(event));
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
 
-        assertThat(spendingEventService.deleteEvent("e1")).isEmpty();
+        assertThat(spendingEventService.deleteEvent("e1", "org1")).isEmpty();
         verify(fundingEventRepository).delete(event);
     }
 

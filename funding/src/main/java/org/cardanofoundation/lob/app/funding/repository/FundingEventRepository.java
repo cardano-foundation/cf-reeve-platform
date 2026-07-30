@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.funding.repository;
 
+import java.util.Optional;
 import java.util.Set;
 
 import org.springframework.data.domain.Page;
@@ -15,6 +16,9 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 public interface FundingEventRepository extends JpaRepository<FundingEventEntity, String> {
 
     Page<FundingEventEntity> findByOrganisationId(String organisationId, Pageable pageable);
+
+    /** Resolves an event only when it actually belongs to the given organisation (ownership check). */
+    Optional<FundingEventEntity> findByIdAndOrganisationId(String id, String organisationId);
 
     @Query("""
             SELECT e FROM funding.FundingEventEntity e

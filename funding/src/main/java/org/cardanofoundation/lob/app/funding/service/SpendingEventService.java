@@ -73,13 +73,13 @@ public class SpendingEventService {
         return PagedResponse.of(findByProjectIdAndFilter(projectId, status, eventType, pageable), this::toView);
     }
 
-    public SpendingEventView getEvent(String eventId) {
-        Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);
+    public SpendingEventView getEvent(String eventId, String organisationId) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return SpendingEventView.error(Problems.unauthorized());
+        }
+        Optional<FundingEventEntity> eventM = fundingEventRepository.findByIdAndOrganisationId(eventId, organisationId);
         if (eventM.isEmpty()) {
             return SpendingEventView.error(Problems.eventNotFound(eventId));
-        }
-        if (!keycloakSecurityHelper.canUserAccessOrg(eventM.get().getOrganisationId())) {
-            return SpendingEventView.error(Problems.unauthorized());
         }
         return toView(eventM.get());
     }
@@ -91,7 +91,7 @@ public class SpendingEventService {
 
     @Transactional
     public SpendingEventView updateEvent(String eventId, SpendingEventCreateRequest request) {
-        Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId);
+        Optional<ProblemDetail> denied = denyIfCallerCannotAccessEvent(eventId);
         if (denied.isPresent()) {
             return SpendingEventView.error(denied.get());
         }
@@ -112,8 +112,8 @@ public class SpendingEventService {
     }
 
     @Transactional
-    public SpendingEventView publishEvent(String eventId) {
-        Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId);
+    public SpendingEventView publishEvent(String eventId, String organisationId) {
+        Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId, organisationId);
         if (denied.isPresent()) {
             return SpendingEventView.error(denied.get());
         }
@@ -121,16 +121,28 @@ public class SpendingEventService {
     }
 
     @Transactional
-    public Optional<ProblemDetail> deleteEvent(String eventId) {
-        Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId);
+    public Optional<ProblemDetail> deleteEvent(String eventId, String organisationId) {
+        Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId, organisationId);
         if (denied.isPresent()) {
             return denied;
         }
         return delete(eventId).fold(Optional::of, ignored -> Optional.empty());
     }
 
-    /** 401 when the event exists and the caller cannot access its organisation; empty otherwise. */
-    private Optional<ProblemDetail> denyIfNoEventAccess(String eventId) {
+    /** 401 when the caller cannot access the organisation, 404 when no event exists for that id within it. */
+    private Optional<ProblemDetail> denyIfNoEventAccess(String eventId, String organisationId) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return Optional.of(Problems.unauthorized());
+        }
+        if (fundingEventRepository.findByIdAndOrganisationId(eventId, organisationId).isEmpty()) {
+            return Optional.of(Problems.eventNotFound(eventId));
+        }
+        return Optional.empty();
+    }
+
+    /** 401 when the event exists and the caller cannot access its organisation; empty otherwise (used by update, whose
+     *  request body carries its own organisationId that is checked separately against the event's actual organisation). */
+    private Optional<ProblemDetail> denyIfCallerCannotAccessEvent(String eventId) {
         Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);
         if (eventM.isPresent() && !keycloakSecurityHelper.canUserAccessOrg(eventM.get().getOrganisationId())) {
             return Optional.of(Problems.unauthorized());

@@ -85,9 +85,11 @@ class AccountingCoreResourceTest {
     @Test
     void transactionDetailSpecific_error() {
         String id = "1234567890";
-        when(accountingCorePresentationViewService.transactionDetailSpecific(id)).thenReturn(Optional.empty());
+        String orgId = "org123";
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(true);
+        when(accountingCorePresentationViewService.transactionDetailSpecific(id, orgId)).thenReturn(Optional.empty());
 
-        ResponseEntity<?> responseEntity = accountingCoreResource.transactionDetailSpecific(id);
+        ResponseEntity<?> responseEntity = accountingCoreResource.transactionDetailSpecific(id, orgId);
         assertTrue(responseEntity.getStatusCode().is4xxClientError());
         assertNotNull(responseEntity.getBody());
     }
@@ -95,11 +97,24 @@ class AccountingCoreResourceTest {
     @Test
     void transactionDetailSpecific_success() {
         String id = "1234567890";
+        String orgId = "org123";
         TransactionView transactionView = mock(TransactionView.class);
-        when(accountingCorePresentationViewService.transactionDetailSpecific(id)).thenReturn(Optional.of(transactionView));
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(true);
+        when(accountingCorePresentationViewService.transactionDetailSpecific(id, orgId)).thenReturn(Optional.of(transactionView));
 
-        ResponseEntity<?> responseEntity = accountingCoreResource.transactionDetailSpecific(id);
+        ResponseEntity<?> responseEntity = accountingCoreResource.transactionDetailSpecific(id, orgId);
         assertTrue(responseEntity.getStatusCode().is2xxSuccessful());
+        assertNotNull(responseEntity.getBody());
+    }
+
+    @Test
+    void transactionDetailSpecific_noAccess() {
+        String id = "1234567890";
+        String orgId = "org123";
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(false);
+
+        ResponseEntity<?> responseEntity = accountingCoreResource.transactionDetailSpecific(id, orgId);
+        assertTrue(responseEntity.getStatusCode().is4xxClientError());
         assertNotNull(responseEntity.getBody());
     }
 
@@ -173,20 +188,34 @@ class AccountingCoreResourceTest {
     @Test
     void batchReprocess_test() {
         BatchReprocessView batchReprocessView = mock(BatchReprocessView.class);
+        String orgId = "org123";
 
-        when(accountingCorePresentationViewService.scheduleReIngestionForFailed("123")).thenReturn(batchReprocessView);
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(true);
+        when(accountingCorePresentationViewService.scheduleReIngestionForFailed("123", orgId)).thenReturn(batchReprocessView);
 
-        ResponseEntity<BatchReprocessView> batchReprocessViewResponseEntity = accountingCoreResource.batchReprocess("123");
+        ResponseEntity<BatchReprocessView> batchReprocessViewResponseEntity = accountingCoreResource.batchReprocess("123", orgId);
         assertTrue(batchReprocessViewResponseEntity.getStatusCode().is2xxSuccessful());
         assertNotNull(batchReprocessViewResponseEntity.getBody());
     }
 
     @Test
+    void batchReprocess_noAccess() {
+        String orgId = "org123";
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(false);
+
+        ResponseEntity<BatchReprocessView> responseEntity = accountingCoreResource.batchReprocess("123", orgId);
+        assertTrue(responseEntity.getStatusCode().is4xxClientError());
+        assertNotNull(responseEntity.getBody());
+    }
+
+    @Test
     void batchesDetailTest_error() {
         Pageable createdBy = Pageable.unpaged(Sort.by(Sort.Direction.DESC, "createdBy"));
+        String orgId = "org123";
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(true);
         when(accountingCorePresentationViewService.batchDetail(eq("123"), eq(List.of()), eq(createdBy), any(BatchFilterRequest.class))).thenReturn(Either.right(Optional.empty()));
 
-        ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", List.of(), createdBy);
+        ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", List.of(), orgId, createdBy);
         assertTrue(responseEntity.getStatusCode().is4xxClientError());
         assertNotNull(responseEntity.getBody());
     }
@@ -195,10 +224,23 @@ class AccountingCoreResourceTest {
     void batchesDetailTest_success() {
         BatchView mock = mock(BatchView.class);
         Pageable createdBy = Pageable.unpaged(Sort.by(Sort.Direction.DESC, "createdBy"));
+        String orgId = "org123";
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(true);
         when(accountingCorePresentationViewService.batchDetail(eq("123"), eq(List.of()), eq(createdBy), any(BatchFilterRequest.class))).thenReturn(Either.right(Optional.of(mock)));
 
-        ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", List.of(), createdBy);
+        ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", List.of(), orgId, createdBy);
         assertTrue(responseEntity.getStatusCode().is2xxSuccessful());
+        assertNotNull(responseEntity.getBody());
+    }
+
+    @Test
+    void batchesDetailTest_noAccess() {
+        Pageable createdBy = Pageable.unpaged(Sort.by(Sort.Direction.DESC, "createdBy"));
+        String orgId = "org123";
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(false);
+
+        ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", List.of(), orgId, createdBy);
+        assertTrue(responseEntity.getStatusCode().is4xxClientError());
         assertNotNull(responseEntity.getBody());
     }
 

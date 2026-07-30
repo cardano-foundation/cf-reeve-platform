@@ -126,28 +126,28 @@ class ProjectServiceTest {
 
     @Test
     void getProject_notFound() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.empty());
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.empty());
 
-        ProjectView result = projectService.getProject("p1");
+        ProjectView result = projectService.getProject("p1", "org1");
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
     }
 
     @Test
     void getProject_unauthorized() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
-        ProjectView result = projectService.getProject("p1");
+        ProjectView result = projectService.getProject("p1", "org1");
 
         assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(projectRepository, never()).findByIdAndOrganisationId(any(), any());
     }
 
     @Test
     void getProject_success() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(projectEntity()));
 
-        ProjectView result = projectService.getProject("p1");
+        ProjectView result = projectService.getProject("p1", "org1");
 
         assertThat(result.getError()).isEmpty();
         assertThat(result.getProjectId()).isEqualTo("p1");
@@ -155,14 +155,14 @@ class ProjectServiceTest {
 
     @Test
     void getProject_includesAssociatedEvents() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(projectEntity()));
         FundingEventEntity event = FundingEventEntity.builder().id("e1").organisationId("org1").build();
         SpendingEventView eventView = SpendingEventView.builder().eventId("e1").build();
         when(spendingEventService.findByProjectIdAndFilter(eq("p1"), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(event)));
         when(spendingEventService.toView(event)).thenReturn(eventView);
 
-        ProjectView result = projectService.getProject("p1");
+        ProjectView result = projectService.getProject("p1", "org1");
 
         assertThat(result.getError()).isEmpty();
         assertThat(result.getEvents()).hasSize(1);
@@ -451,19 +451,19 @@ class ProjectServiceTest {
 
     @Test
     void update_notFound() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.empty());
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.empty());
 
-        ProjectView result = projectService.updateProject("p1", ProjectUpdateRequest.builder().projectTitle("New").build());
+        ProjectView result = projectService.updateProject("p1", ProjectUpdateRequest.builder().organisationId("org1").projectTitle("New").build());
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
     }
 
     @Test
     void update_conflict_whenLinkedToPublishedEvent() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(projectEntity()));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(true);
 
-        ProjectView result = projectService.updateProject("p1", ProjectUpdateRequest.builder().projectTitle("New").build());
+        ProjectView result = projectService.updateProject("p1", ProjectUpdateRequest.builder().organisationId("org1").projectTitle("New").build());
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
     }
@@ -471,11 +471,11 @@ class ProjectServiceTest {
     @Test
     void update_success() {
         ProjectEntity project = projectEntity();
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(project));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(projectRepository.saveAndFlush(project)).thenReturn(project);
 
-        ProjectView result = projectService.updateProject("p1", ProjectUpdateRequest.builder().projectTitle("New").build());
+        ProjectView result = projectService.updateProject("p1", ProjectUpdateRequest.builder().organisationId("org1").projectTitle("New").build());
 
         assertThat(result.getError()).isEmpty();
         assertThat(result.getProjectId()).isEqualTo("p1");
@@ -486,13 +486,13 @@ class ProjectServiceTest {
         // p1 has a sub-project sub1 whose milestone is tied to a published event → editing p1 (an
         // ancestor) is locked even though p1 itself owns no published milestone.
         ProjectEntity sub = ProjectEntity.builder().id("sub1").organisationId("org1").build();
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(projectEntity()));
         when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of(sub));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(
                 argThat(ids -> ids.contains("sub1")), eq(EventStatus.PUBLISHED))).thenReturn(true);
 
         ProjectView result = projectService.updateProject("p1",
-                ProjectUpdateRequest.builder().projectTitle("New").build());
+                ProjectUpdateRequest.builder().organisationId("org1").projectTitle("New").build());
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
         verify(projectRepository, never()).saveAndFlush(any());
@@ -500,13 +500,13 @@ class ProjectServiceTest {
 
     @Test
     void update_conflict_whenProjectTitleAlreadyExists() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(projectEntity()));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNullAndIdNot("org1", "Existing", "p1"))
                 .thenReturn(true);
 
         ProjectView result = projectService.updateProject("p1",
-                ProjectUpdateRequest.builder().projectTitle("Existing").build());
+                ProjectUpdateRequest.builder().organisationId("org1").projectTitle("Existing").build());
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS);
         verify(projectRepository, never()).saveAndFlush(any());
@@ -516,33 +516,33 @@ class ProjectServiceTest {
 
     @Test
     void delete_notFound() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.empty());
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.empty());
 
-        Optional<ProblemDetail> result = projectService.deleteProject("p1");
+        Optional<ProblemDetail> result = projectService.deleteProject("p1", "org1");
 
         assertThat(result.orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
     }
 
     @Test
     void delete_returns401_whenUserCannotAccessOrg() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
-        Optional<ProblemDetail> result = projectService.deleteProject("p1");
+        Optional<ProblemDetail> result = projectService.deleteProject("p1", "org1");
 
         assertThat(result.orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
         verify(cascadeDeleteService, never()).deleteProjectSubtree(any());
+        verify(projectRepository, never()).findByIdAndOrganisationId(any(), any());
     }
 
     @Test
     void delete_propagatesConflict_fromCascade() {
         ProjectEntity project = projectEntity();
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(project));
         ProblemDetail conflict = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         conflict.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
         when(cascadeDeleteService.deleteProjectSubtree(project)).thenReturn(Optional.of(conflict));
 
-        Optional<ProblemDetail> result = projectService.deleteProject("p1");
+        Optional<ProblemDetail> result = projectService.deleteProject("p1", "org1");
 
         assertThat(result.orElseThrow().getStatus()).isEqualTo(HttpStatus.CONFLICT.value());
     }
@@ -550,10 +550,10 @@ class ProjectServiceTest {
     @Test
     void delete_delegatesToCascade_whenAuthorised() {
         ProjectEntity project = projectEntity();
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(project));
         when(cascadeDeleteService.deleteProjectSubtree(project)).thenReturn(Optional.empty());
 
-        Optional<ProblemDetail> result = projectService.deleteProject("p1");
+        Optional<ProblemDetail> result = projectService.deleteProject("p1", "org1");
 
         assertThat(result).isEmpty();
         verify(cascadeDeleteService).deleteProjectSubtree(project);
@@ -566,13 +566,13 @@ class ProjectServiceTest {
         ProjectEntity project = projectEntity();
         ProjectEntity parent = ProjectEntity.builder().id("parent1").organisationId("org1")
                 .externalProjectId("PROJ-PARENT").projectTitle("Parent").totalAmount(new BigDecimal("500000.00")).currency("USD").build();
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(project));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(projectRepository.findById("parent1")).thenReturn(Optional.of(parent));
         when(projectRepository.saveAndFlush(project)).thenReturn(project);
 
         ProjectView result = projectService.updateProject("p1",
-                ProjectUpdateRequest.builder().parentProjectId("parent1").build());
+                ProjectUpdateRequest.builder().organisationId("org1").parentProjectId("parent1").build());
 
         assertThat(result.getError()).isEmpty();
         assertThat(project.getParentProject()).isEqualTo(parent);
@@ -584,13 +584,13 @@ class ProjectServiceTest {
         ProjectEntity project = projectEntity(); // p1, title "Project AB"
         ProjectEntity parent = ProjectEntity.builder().id("parent1").organisationId("org1")
                 .externalProjectId("PROJ-PARENT").projectTitle("Parent").totalAmount(new BigDecimal("500000.00")).currency("USD").build();
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(project));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(projectRepository.findById("parent1")).thenReturn(Optional.of(parent));
         when(projectRepository.existsByParentProjectIdAndProjectTitleAndIdNot("parent1", "Project AB", "p1")).thenReturn(true);
 
         ProjectView result = projectService.updateProject("p1",
-                ProjectUpdateRequest.builder().parentProjectId("parent1").build());
+                ProjectUpdateRequest.builder().organisationId("org1").parentProjectId("parent1").build());
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS);
         verify(projectRepository, never()).saveAndFlush(any());
@@ -598,12 +598,12 @@ class ProjectServiceTest {
 
     @Test
     void update_returns404_whenParentNotFound() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(projectEntity()));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(projectRepository.findById("missing")).thenReturn(Optional.empty());
 
         ProjectView result = projectService.updateProject("p1",
-                ProjectUpdateRequest.builder().parentProjectId("missing").build());
+                ProjectUpdateRequest.builder().organisationId("org1").parentProjectId("missing").build());
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PARENT_PROJECT_NOT_FOUND);
         verify(projectRepository, never()).saveAndFlush(any());
@@ -613,12 +613,12 @@ class ProjectServiceTest {
     void update_returns400_whenParentInDifferentOrg() {
         ProjectEntity parent = ProjectEntity.builder().id("parent1").organisationId("org2")
                 .externalProjectId("PROJ-PARENT").projectTitle("Parent").build();
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(projectEntity()));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(projectRepository.findById("parent1")).thenReturn(Optional.of(parent));
 
         ProjectView result = projectService.updateProject("p1",
-                ProjectUpdateRequest.builder().parentProjectId("parent1").build());
+                ProjectUpdateRequest.builder().organisationId("org1").parentProjectId("parent1").build());
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PARENT_PROJECT_ORG_MISMATCH);
         verify(projectRepository, never()).saveAndFlush(any());
@@ -627,11 +627,12 @@ class ProjectServiceTest {
     @Test
     void update_returns400_whenParentIsSelf() {
         ProjectEntity project = projectEntity();
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(project));
         when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
 
         ProjectView result = projectService.updateProject("p1",
-                ProjectUpdateRequest.builder().parentProjectId("p1").build());
+                ProjectUpdateRequest.builder().organisationId("org1").parentProjectId("p1").build());
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_CIRCULAR_DEPENDENCY);
         verify(projectRepository, never()).saveAndFlush(any());
@@ -643,12 +644,12 @@ class ProjectServiceTest {
         // candidate parent is a child of p1 → attaching p1 under it would form a cycle
         ProjectEntity descendant = ProjectEntity.builder().id("child1").organisationId("org1")
                 .externalProjectId("PROJ-CHILD").projectTitle("Child").parentProject(project).build();
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(project));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(projectRepository.findById("child1")).thenReturn(Optional.of(descendant));
 
         ProjectView result = projectService.updateProject("p1",
-                ProjectUpdateRequest.builder().parentProjectId("child1").build());
+                ProjectUpdateRequest.builder().organisationId("org1").parentProjectId("child1").build());
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_CIRCULAR_DEPENDENCY);
         verify(projectRepository, never()).saveAndFlush(any());
@@ -660,12 +661,12 @@ class ProjectServiceTest {
                 .projectTitle("Child").totalAmount(new BigDecimal("600000.00")).currency("USD").build();
         ProjectEntity parent = ProjectEntity.builder().id("parent1").organisationId("org1").externalProjectId("PROJ-PARENT")
                 .projectTitle("Parent").totalAmount(new BigDecimal("500000.00")).currency("USD").build();
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(project));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(projectRepository.findById("parent1")).thenReturn(Optional.of(parent));
 
         ProjectView result = projectService.updateProject("p1",
-                ProjectUpdateRequest.builder().parentProjectId("parent1").build());
+                ProjectUpdateRequest.builder().organisationId("org1").parentProjectId("parent1").build());
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_AMOUNT_EXCEEDS_PARENT);
         verify(projectRepository, never()).saveAndFlush(any());
@@ -679,14 +680,14 @@ class ProjectServiceTest {
                 .projectTitle("Parent").totalAmount(new BigDecimal("500000.00")).currency("USD").build();
         ProjectEntity existingChild = ProjectEntity.builder().id("child-x").organisationId("org1").externalProjectId("PROJ-X")
                 .projectTitle("Existing").totalAmount(new BigDecimal("300000.00")).currency("USD").parentProject(parent).build();
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(project));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(projectRepository.findById("parent1")).thenReturn(Optional.of(parent));
         when(projectRepository.findByParentProjectId("parent1")).thenReturn(List.of(existingChild));
 
         // child 300000 fits under parent 500000, but 300000 existing + 300000 = 600000 exceeds it
         ProjectView result = projectService.updateProject("p1",
-                ProjectUpdateRequest.builder().parentProjectId("parent1").build());
+                ProjectUpdateRequest.builder().organisationId("org1").parentProjectId("parent1").build());
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_TOTAL_EXCEEDS_PARENT);
         verify(projectRepository, never()).saveAndFlush(any());
@@ -696,13 +697,13 @@ class ProjectServiceTest {
     void update_returns400_whenParentHasMilestones() {
         ProjectEntity parent = ProjectEntity.builder().id("parent1").organisationId("org1").externalProjectId("PROJ-PARENT")
                 .projectTitle("Parent").totalAmount(new BigDecimal("500000.00")).currency("USD").build();
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(projectEntity()));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(projectRepository.findById("parent1")).thenReturn(Optional.of(parent));
         when(milestoneService.hasMilestones("parent1")).thenReturn(true);
 
         ProjectView result = projectService.updateProject("p1",
-                ProjectUpdateRequest.builder().parentProjectId("parent1").build());
+                ProjectUpdateRequest.builder().organisationId("org1").parentProjectId("parent1").build());
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_NOT_ALLOWED_WITH_MILESTONES);
         verify(projectRepository, never()).saveAndFlush(any());
@@ -712,31 +713,31 @@ class ProjectServiceTest {
 
     @Test
     void listSubProjects_returns404_whenParentNotFound() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.empty());
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.empty());
 
-        PagedResponse<ProjectView> result = projectService.listSubProjects("p1", PAGEABLE);
+        PagedResponse<ProjectView> result = projectService.listSubProjects("p1", "org1", PAGEABLE);
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
     }
 
     @Test
     void listSubProjects_returns401_whenUserCannotAccessOrg() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
-        PagedResponse<ProjectView> result = projectService.listSubProjects("p1", PAGEABLE);
+        PagedResponse<ProjectView> result = projectService.listSubProjects("p1", "org1", PAGEABLE);
 
         assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
         verify(projectRepository, never()).findByParentProjectId("p1", PAGEABLE);
+        verify(projectRepository, never()).findByIdAndOrganisationId(any(), any());
     }
 
     @Test
     void listSubProjects_returnsPage_whenAuthorised() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(projectEntity()));
         when(projectRepository.findByParentProjectId("p1", PAGEABLE))
                 .thenReturn(new PageImpl<>(List.of(projectEntity())));
 
-        PagedResponse<ProjectView> result = projectService.listSubProjects("p1", PAGEABLE);
+        PagedResponse<ProjectView> result = projectService.listSubProjects("p1", "org1", PAGEABLE);
 
         assertThat(result.getError()).isEmpty();
         assertThat(result.getContent()).hasSize(1);
@@ -758,11 +759,11 @@ class ProjectServiceTest {
 
     @Test
     void update_returns400_whenTotalAmountNotPositive() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(projectEntity()));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
 
         ProjectView result = projectService.updateProject("p1",
-                ProjectUpdateRequest.builder().totalAmount(new BigDecimal("-1")).build());
+                ProjectUpdateRequest.builder().organisationId("org1").totalAmount(new BigDecimal("-1")).build());
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_AMOUNT_INVALID);
         verify(projectRepository, never()).saveAndFlush(any());
@@ -771,13 +772,13 @@ class ProjectServiceTest {
     @Test
     void update_returns400_whenNewTotalBelowMilestonesTotal() {
         // Milestones already claim 150000; shrinking the project to 100000 would leave them uncovered.
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(projectEntity()));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(milestoneService.findByProjectId("p1")).thenReturn(List.of(
                 MilestoneEntity.builder().id("m1").milestoneAmount(new BigDecimal("150000.00")).build()));
 
         ProjectView result = projectService.updateProject("p1",
-                ProjectUpdateRequest.builder().totalAmount(new BigDecimal("100000.00")).build());
+                ProjectUpdateRequest.builder().organisationId("org1").totalAmount(new BigDecimal("100000.00")).build());
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_AMOUNT_BELOW_MILESTONES);
         verify(projectRepository, never()).saveAndFlush(any());
@@ -788,12 +789,12 @@ class ProjectServiceTest {
         // Sub-projects already claim 150000; the parent cannot shrink below that.
         ProjectEntity subProject = ProjectEntity.builder().id("sub1").organisationId("org1")
                 .totalAmount(new BigDecimal("150000.00")).build();
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(projectEntity()));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of(subProject));
 
         ProjectView result = projectService.updateProject("p1",
-                ProjectUpdateRequest.builder().totalAmount(new BigDecimal("100000.00")).build());
+                ProjectUpdateRequest.builder().organisationId("org1").totalAmount(new BigDecimal("100000.00")).build());
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_AMOUNT_BELOW_SUBPROJECTS);
         verify(projectRepository, never()).saveAndFlush(any());
@@ -807,11 +808,11 @@ class ProjectServiceTest {
         ProjectEntity project = ProjectEntity.builder().id("p1").organisationId("org1").externalProjectId("PROJ-AB")
                 .projectTitle("Child").totalAmount(new BigDecimal("100000.00")).currency("USD")
                 .parentProject(parent).build();
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(Optional.of(project));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
 
         ProjectView result = projectService.updateProject("p1",
-                ProjectUpdateRequest.builder().totalAmount(new BigDecimal("250000.00")).build());
+                ProjectUpdateRequest.builder().organisationId("org1").totalAmount(new BigDecimal("250000.00")).build());
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_AMOUNT_EXCEEDS_PARENT);
         verify(projectRepository, never()).saveAndFlush(any());

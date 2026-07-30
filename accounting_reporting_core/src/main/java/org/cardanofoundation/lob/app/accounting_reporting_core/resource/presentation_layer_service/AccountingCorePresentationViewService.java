@@ -204,9 +204,9 @@ public class AccountingCorePresentationViewService {
                 .toList();
     }
 
-    public Optional<TransactionView> transactionDetailSpecific(String transactionId) {
+    public Optional<TransactionView> transactionDetailSpecific(String transactionId, String organisationId) {
         Optional<TransactionEntity> transactionEntity =
-                transactionRepositoryGateway.findById(transactionId);
+                transactionRepositoryGateway.findByIdAndOrganisationId(transactionId, organisationId);
 
         return transactionEntity.map(this::getTransactionView);
     }
@@ -221,7 +221,7 @@ public class AccountingCorePresentationViewService {
             return Either.left(pageableEither.getLeft());
         }
         Pageable finalPage = pageableEither.get();
-        return Either.right(transactionBatchRepositoryGateway.findById(batchId)
+        return Either.right(transactionBatchRepositoryGateway.findByIdAndOrganisationId(batchId, batchFilterRequest.getOrganisationId())
                 .map(transactionBatchEntity -> {
                     Page<TransactionEntity> transactions = this.getTransaction(
                             transactionBatchEntity, txStatus, finalPage,
@@ -387,9 +387,9 @@ public class AccountingCorePresentationViewService {
     }
 
     @Transactional
-    public BatchReprocessView scheduleReIngestionForFailed(String batchId) {
+    public BatchReprocessView scheduleReIngestionForFailed(String batchId, String organisationId) {
         Either<ProblemDetail, Void> txM =
-                accountingCoreService.scheduleReIngestionForFailed(batchId);
+                accountingCoreService.scheduleReIngestionForFailed(batchId, organisationId);
 
         if (txM.isEmpty()) {
             return BatchReprocessView.createFail(batchId, txM.getLeft());

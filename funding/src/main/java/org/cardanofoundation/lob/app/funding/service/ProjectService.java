@@ -64,25 +64,25 @@ public class ProjectService {
         return PagedResponse.of(projectRepository.findByOrganisationId(organisationId, pageable), this::toView);
     }
 
-    public ProjectView getProject(String projectId) {
-        Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
+    public ProjectView getProject(String projectId, String organisationId) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return ProjectView.error(Problems.unauthorized());
+        }
+        Optional<ProjectEntity> projectM = projectRepository.findByIdAndOrganisationId(projectId, organisationId);
         if (projectM.isEmpty()) {
             return ProjectView.error(Problems.projectNotFound(projectId));
-        }
-        if (!keycloakSecurityHelper.canUserAccessOrg(projectM.get().getOrganisationId())) {
-            return ProjectView.error(Problems.unauthorized());
         }
         // Get-by-id returns the full detail: milestones, sub-projects and the associated events.
         return toView(projectM.get(), true);
     }
 
-    public PagedResponse<ProjectView> listSubProjects(String parentProjectId, Pageable pageable) {
-        Optional<ProjectEntity> parentM = projectRepository.findById(parentProjectId);
+    public PagedResponse<ProjectView> listSubProjects(String parentProjectId, String organisationId, Pageable pageable) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return PagedResponse.error(Problems.unauthorized());
+        }
+        Optional<ProjectEntity> parentM = projectRepository.findByIdAndOrganisationId(parentProjectId, organisationId);
         if (parentM.isEmpty()) {
             return PagedResponse.error(Problems.projectNotFound(parentProjectId));
-        }
-        if (!keycloakSecurityHelper.canUserAccessOrg(parentM.get().getOrganisationId())) {
-            return PagedResponse.error(Problems.unauthorized());
         }
         return PagedResponse.of(projectRepository.findByParentProjectId(parentProjectId, pageable), this::toView);
     }
@@ -214,14 +214,14 @@ public class ProjectService {
 
     @Transactional
     public ProjectView updateProject(String projectId, ProjectUpdateRequest request) {
-        Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
+        if (!keycloakSecurityHelper.canUserAccessOrg(request.getOrganisationId())) {
+            return ProjectView.error(Problems.unauthorized());
+        }
+        Optional<ProjectEntity> projectM = projectRepository.findByIdAndOrganisationId(projectId, request.getOrganisationId());
         if (projectM.isEmpty()) {
             return ProjectView.error(Problems.projectNotFound(projectId));
         }
         ProjectEntity project = projectM.get();
-        if (!keycloakSecurityHelper.canUserAccessOrg(project.getOrganisationId())) {
-            return ProjectView.error(Problems.unauthorized());
-        }
         // Locked when the project or any descendant sub-project owns a milestone tied to a published event.
         if (allocationRepository.existsByMilestoneProjectIdInAndEventStatus(
                 ProjectTreeSupport.subtreeProjectIds(projectRepository, projectId), EventStatus.PUBLISHED)) {
@@ -352,13 +352,13 @@ public class ProjectService {
     }
 
     @Transactional
-    public Optional<ProblemDetail> deleteProject(String projectId) {
-        Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
+    public Optional<ProblemDetail> deleteProject(String projectId, String organisationId) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return Optional.of(Problems.unauthorized());
+        }
+        Optional<ProjectEntity> projectM = projectRepository.findByIdAndOrganisationId(projectId, organisationId);
         if (projectM.isEmpty()) {
             return Optional.of(Problems.projectNotFound(projectId));
-        }
-        if (!keycloakSecurityHelper.canUserAccessOrg(projectM.get().getOrganisationId())) {
-            return Optional.of(Problems.unauthorized());
         }
         // Cascade: fails when any published event is associated anywhere in the subtree; otherwise the
         // project, its sub-projects, milestones and the referencing draft-event allocations are removed.
