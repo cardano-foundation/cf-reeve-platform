@@ -179,7 +179,7 @@ class OrganisationResourceTest {
         when(keycloakSecurityHelper.canUserAccessOrg("123")).thenReturn(false);
 
         ResponseEntity<?> responseEntity = organisationResource.validateOrganisation("123");
-        assertEquals(403, responseEntity.getStatusCode().value());
+        assertEquals(401, responseEntity.getStatusCode().value());
     }
 
     @Test

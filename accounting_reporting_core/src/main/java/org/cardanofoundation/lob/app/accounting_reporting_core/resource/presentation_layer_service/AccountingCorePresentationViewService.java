@@ -206,7 +206,7 @@ public class AccountingCorePresentationViewService {
 
     public Optional<TransactionView> transactionDetailSpecific(String transactionId, String organisationId) {
         Optional<TransactionEntity> transactionEntity =
-                transactionRepositoryGateway.findByIdAndOrganisationId(transactionId, organisationId);
+                transactionRepositoryGateway.findByIdAndOrganisationId(transactionId, organisationId).stream().findFirst();
 
         return transactionEntity.map(this::getTransactionView);
     }
@@ -222,6 +222,7 @@ public class AccountingCorePresentationViewService {
         }
         Pageable finalPage = pageableEither.get();
         return Either.right(transactionBatchRepositoryGateway.findByIdAndOrganisationId(batchId, batchFilterRequest.getOrganisationId())
+                .stream().findFirst()
                 .map(transactionBatchEntity -> {
                     Page<TransactionEntity> transactions = this.getTransaction(
                             transactionBatchEntity, txStatus, finalPage,
@@ -359,7 +360,8 @@ public class AccountingCorePresentationViewService {
             TransactionItemsRejectionRequest transactionItemsRejectionRequest) {
         Optional<TransactionEntity> txM = transactionRepositoryGateway
                 .findByIdAndOrganisationId(transactionItemsRejectionRequest.getTransactionId(),
-                        transactionItemsRejectionRequest.getOrganisationId());
+                        transactionItemsRejectionRequest.getOrganisationId())
+                .stream().findFirst();
         if (txM.isEmpty()) {
             Either<IdentifiableProblem, TransactionEntity> errorE =
                     transactionNotFoundResponse(transactionItemsRejectionRequest

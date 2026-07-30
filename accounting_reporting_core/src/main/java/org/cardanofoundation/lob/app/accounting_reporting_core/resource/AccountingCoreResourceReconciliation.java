@@ -39,6 +39,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.
 import org.cardanofoundation.lob.app.accounting_reporting_core.utils.PageableFieldMappings;
 import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
+import org.cardanofoundation.lob.app.support.security.OrgAccessDenied;
 
 @RestController
 @CrossOrigin(origins = "http://localhost:3000")
@@ -62,10 +63,8 @@ public class AccountingCoreResourceReconciliation {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<ReconcileResponseView> reconcileTriggerAction(@Valid @RequestBody ReconciliationRequest body) {
         if (!keycloakSecurityHelper.canUserAccessOrg(body.getOrganisationId())) {
-            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(UNAUTHORIZED, "The user doesn't have access to this org");
-            problemDetail.setTitle("NO_ACCESS_TO_ORG");
             return ResponseEntity.status(UNAUTHORIZED.value())
-                    .body(ReconcileResponseView.createFail("NO_ACCESS_TO_ORG", body.getDateFrom(), body.getDateTo(), problemDetail));
+                    .body(ReconcileResponseView.createFail("NO_ACCESS_TO_ORG", body.getDateFrom(), body.getDateTo(), OrgAccessDenied.problem()));
         }
         return accountingCoreService.scheduleReconcilation(body.getOrganisationId(), body.getDateFrom(), body.getDateTo(), body.getExtractorType(), Optional.ofNullable(body.getFile()), body.getParameters()).fold(
                 problem -> ResponseEntity.status(problem.getStatus()).body(ReconcileResponseView.createFail(problem.getTitle(), body.getDateFrom(), body.getDateTo(), problem)),
@@ -89,9 +88,7 @@ public class AccountingCoreResourceReconciliation {
     public ResponseEntity<?> reconcileStart(@Valid @RequestBody ReconciliationFilterRequest body,
                                             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         if (!keycloakSecurityHelper.canUserAccessOrg(body.getOrganisationId())) {
-            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(UNAUTHORIZED, "The user doesn't have access to this org");
-            problemDetail.setTitle("NO_ACCESS_TO_ORG");
-            return ResponseEntity.status(UNAUTHORIZED.value()).body(problemDetail);
+            return OrgAccessDenied.response();
         }
         Either<ProblemDetail, Pageable> pageableEither = jpaSortFieldValidator.convertPageable(pageable,
                         PageableFieldMappings.RECONCILATION_FIELD_MAPPINGS, TransactionEntity.class);
@@ -123,11 +120,9 @@ public class AccountingCoreResourceReconciliation {
     })
     @PostMapping(value = "/reconciliation-statistic", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<?> reconciliationStatistic(@Valid @RequestBody ReconciliationStatisticRequest body) {
+    public ResponseEntity<Map<String, ReconciliationStatisticView>> reconciliationStatistic(@Valid @RequestBody ReconciliationStatisticRequest body) {
         if (!keycloakSecurityHelper.canUserAccessOrg(body.getOrganisationId())) {
-            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(UNAUTHORIZED, "The user doesn't have access to this org");
-            problemDetail.setTitle("NO_ACCESS_TO_ORG");
-            return ResponseEntity.status(UNAUTHORIZED.value()).body(problemDetail);
+            return OrgAccessDenied.response();
         }
         Map<String, ReconciliationStatisticView> result = accountingCorePresentationService.getReconciliationStatisticByDateRange(body);
         return ResponseEntity.ok().body(result);

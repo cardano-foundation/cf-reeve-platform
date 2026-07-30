@@ -198,7 +198,7 @@ class AccountingCorePresentationConverterTest {
         transactionEntity.setId(transactionId);
         transactionEntity.setExtractorType("NETSUITE");
 
-        when(transactionRepositoryGateway.findByIdAndOrganisationId(transactionId, "org-id")).thenReturn(Optional.of(transactionEntity));
+        when(transactionRepositoryGateway.findByIdAndOrganisationId(transactionId, "org-id")).thenReturn(Set.of(transactionEntity));
 
         Optional<TransactionView> result = accountingCorePresentationConverter.transactionDetailSpecific(transactionId, "org-id");
 
@@ -262,7 +262,7 @@ class AccountingCorePresentationConverterTest {
 
         BatchFilterRequest batchFilterRequest = new BatchFilterRequest();
         batchFilterRequest.setOrganisationId("123");
-        when(transactionBatchRepositoryGateway.findByIdAndOrganisationId(batchId, "123")).thenReturn(Optional.of(transactionBatchEntity));
+        when(transactionBatchRepositoryGateway.findByIdAndOrganisationId(batchId, "123")).thenReturn(List.of(transactionBatchEntity));
         when(transactionRepository.findAllByBatchId(batchId, null, null, null, null, null, null, null, null, null, null, null, null, LocalDate.of(1970, 1, 1).atStartOfDay(), LocalDate.now().atStartOfDay(), null, null, null, null, null, null, null, null, null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(transaction1, transaction2)));
 
         Either<ProblemDetail, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail(batchId, null, Pageable.unpaged(), batchFilterRequest);
@@ -315,7 +315,7 @@ class AccountingCorePresentationConverterTest {
     void testBatchDetail_batchNotFound() {
         when(jpaSortFieldValidator.convertPageable(any(Pageable.class), any(), eq(TransactionEntity.class)))
                 .thenReturn(Either.right(Pageable.unpaged()));
-        when(transactionBatchRepositoryGateway.findByIdAndOrganisationId("nonexistent-batch", null)).thenReturn(Optional.empty());
+        when(transactionBatchRepositoryGateway.findByIdAndOrganisationId("nonexistent-batch", null)).thenReturn(List.of());
 
         Either<ProblemDetail, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail("nonexistent-batch", null, Pageable.unpaged(), new BatchFilterRequest());
 
@@ -360,7 +360,7 @@ class AccountingCorePresentationConverterTest {
         txSet.add(transaction2);
         transactionBatchEntity.setTransactions(txSet);
 
-        when(transactionBatchRepositoryGateway.findByIdAndOrganisationId(eq(batchId), any())).thenReturn(Optional.of(transactionBatchEntity));
+        when(transactionBatchRepositoryGateway.findByIdAndOrganisationId(eq(batchId), any())).thenReturn(List.of(transactionBatchEntity));
         when(transactionRepository.findAllByBatchId(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transaction1, transaction2), sortedPageable, 2));
 
@@ -400,7 +400,7 @@ class AccountingCorePresentationConverterTest {
         transactionBatchEntity.setTransactions(Set.of(transaction1));
 
         List<TransactionProcessingStatus> txStatus = List.of(TransactionProcessingStatus.PUBLISH);
-        when(transactionBatchRepositoryGateway.findByIdAndOrganisationId(eq(batchId), any())).thenReturn(Optional.of(transactionBatchEntity));
+        when(transactionBatchRepositoryGateway.findByIdAndOrganisationId(eq(batchId), any())).thenReturn(List.of(transactionBatchEntity));
         when(transactionRepository.findAllByBatchId(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transaction1)));
 

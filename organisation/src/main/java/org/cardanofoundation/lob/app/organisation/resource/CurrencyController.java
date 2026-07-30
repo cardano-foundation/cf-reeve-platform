@@ -36,6 +36,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.CurrencyUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.CurrencyView;
 import org.cardanofoundation.lob.app.organisation.service.CurrencyService;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
+import org.cardanofoundation.lob.app.support.security.OrgAccessDenied;
 
 @RestController
 @RequestMapping("/api/v1/organisations")
@@ -58,7 +59,7 @@ public class CurrencyController {
                                               @RequestParam(value = "isoCode", required = false) List<String> isoCodes,
                                               @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+            return OrgAccessDenied.response();
         }
         return currencyService.getAllCurrencies(orgId, code, isoCodes, pageable).fold(
                 problem -> ResponseEntity.status(problem.getStatus()).body(problem),
@@ -71,9 +72,9 @@ public class CurrencyController {
             ),
     })
     @GetMapping(value = "/{orgId}/currencies/{customerCode}", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> getCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @PathVariable("customerCode") @Parameter(example = "CHF") String customerCode) {
+    public ResponseEntity<CurrencyView> getCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @PathVariable("customerCode") @Parameter(example = "CHF") String customerCode) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+            return OrgAccessDenied.response();
         }
         return currencyService.getCurrency(orgId, customerCode)
                 .map(ResponseEntity::ok)
@@ -87,9 +88,9 @@ public class CurrencyController {
     })
     @PostMapping(value = "/{orgId}/currencies", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<?> insertCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CurrencyUpdate currencyUpdate) {
+    public ResponseEntity<CurrencyView> insertCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CurrencyUpdate currencyUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+            return OrgAccessDenied.response();
         }
         CurrencyView currencyView = currencyService.insertCurrency(orgId, currencyUpdate, false);
         return currencyView.getError().map(error -> ResponseEntity.status(error.getStatus())
@@ -104,9 +105,9 @@ public class CurrencyController {
     })
     @PutMapping(value = "/{orgId}/currencies", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<?> updateCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CurrencyUpdate currencyUpdate) {
+    public ResponseEntity<CurrencyView> updateCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CurrencyUpdate currencyUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+            return OrgAccessDenied.response();
         }
         CurrencyView currencyView = currencyService.updateCurrency(orgId, currencyUpdate);
         return currencyView.getError().map(error -> ResponseEntity.status(error.getStatus())
@@ -123,7 +124,7 @@ public class CurrencyController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertCurrenciesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam(value = "file") MultipartFile file) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+            return OrgAccessDenied.response();
         }
         return currencyService.insertViaCsv(orgId, file).fold(
                 problem -> ResponseEntity.status(HttpStatus.BAD_REQUEST.value()).body(problem),
@@ -145,8 +146,7 @@ public class CurrencyController {
                                                                        @RequestParam(value = "code", required = false) String code,
                                                                        @RequestParam(value = "isoCode", required = false) List<String> isoCodes) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            StreamingResponseBody errorBody = outputStream -> outputStream.write("User is not allowed to access this organisation".getBytes());
-            return ResponseEntity.status(403).body(errorBody);
+            return OrgAccessDenied.response();
         }
         StreamingResponseBody responseBody = outputStream -> currencyService.downloadCsv(orgId, code, isoCodes, outputStream);
         return ResponseEntity.ok()

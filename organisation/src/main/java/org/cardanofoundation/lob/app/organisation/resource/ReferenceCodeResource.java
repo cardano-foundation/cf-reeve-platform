@@ -40,6 +40,7 @@ import org.cardanofoundation.lob.app.organisation.domain.view.ReferenceCodeView;
 import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
 import org.cardanofoundation.lob.app.organisation.service.ReferenceCodeService;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
+import org.cardanofoundation.lob.app.support.security.OrgAccessDenied;
 
 @RestController
 @RequestMapping("/api/v1/organisations")
@@ -65,7 +66,7 @@ public class ReferenceCodeResource {
                                                @RequestParam(value = "active", required = false) Boolean active,
                                                @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+            return OrgAccessDenied.response();
         }
         return referenceCodeService.getAllReferenceCodes(orgId, referenceCode, name, parentCodes, active, pageable).fold(
                 problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus())).body(problem),
@@ -82,8 +83,7 @@ public class ReferenceCodeResource {
                                                                      @RequestParam(value = "parentCodes", required = false) List<String> parentCodes,
                                                                      @RequestParam(value = "active", required = false) Boolean active) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            StreamingResponseBody errorBody = outputStream -> outputStream.write("User is not allowed to access this organisation".getBytes());
-            return ResponseEntity.status(403).body(errorBody);
+            return OrgAccessDenied.response();
         }
         StreamingResponseBody responseBody = outputStream -> referenceCodeService.downloadCsv(orgId, referenceCode, name, parentCodes, active,outputStream);
         return ResponseEntity.ok()
@@ -102,7 +102,7 @@ public class ReferenceCodeResource {
     public ResponseEntity<?> insertReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @Valid @RequestBody ReferenceCodeUpdate referenceCodeUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+            return OrgAccessDenied.response();
         }
         ReferenceCodeView referenceCode = referenceCodeService.insertReferenceCode(orgId, referenceCodeUpdate, false);
         if (referenceCode.getError().isPresent()) {
@@ -121,7 +121,7 @@ public class ReferenceCodeResource {
     public ResponseEntity<?> insertRefCodeByCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                        @RequestParam(value = "file") MultipartFile file) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+            return OrgAccessDenied.response();
         }
         Either<List<ProblemDetail>, List<ReferenceCodeView>> refCodeE = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
         if (refCodeE.isLeft()) {
@@ -141,7 +141,7 @@ public class ReferenceCodeResource {
     public ResponseEntity<?> updateReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @Valid @RequestBody ReferenceCodeUpdate referenceCodeUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+            return OrgAccessDenied.response();
         }
         ReferenceCodeView referenceCode = referenceCodeService.updateReferenceCode(orgId, referenceCodeUpdate);
         if (referenceCode.getError().isPresent()) {

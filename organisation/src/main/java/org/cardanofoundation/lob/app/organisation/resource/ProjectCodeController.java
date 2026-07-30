@@ -38,6 +38,7 @@ import org.cardanofoundation.lob.app.organisation.domain.view.CostCenterView;
 import org.cardanofoundation.lob.app.organisation.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.organisation.service.ProjectCodeService;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
+import org.cardanofoundation.lob.app.support.security.OrgAccessDenied;
 
 @RestController
 @RequestMapping("/api/v1/organisations")
@@ -62,7 +63,7 @@ public class ProjectCodeController {
                                             @RequestParam(value = "active", required = false) Boolean active,
                                             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+            return OrgAccessDenied.response();
         }
         return projectCodeService.getAllProjects(orgId, customerCode, name, parentCustomerCode, active, pageable).fold(
                 problem -> ResponseEntity.status(problem.getStatus()).body(problem),
@@ -78,8 +79,7 @@ public class ProjectCodeController {
                                                                      @RequestParam(value = "parentCustomerCodes", required = false) String parentCustomerCodes,
                                                                      @RequestParam(value = "active", required = false) Boolean active) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            StreamingResponseBody errorBody = outputStream -> outputStream.write("User is not allowed to access this organisation".getBytes());
-            return ResponseEntity.status(403).body(errorBody);
+            return OrgAccessDenied.response();
         }
         StreamingResponseBody responseBody = outputStream -> projectCodeService.downloadCsv(orgId, customerCode, name, parentCustomerCodes, active, outputStream);
         return ResponseEntity.ok()
@@ -95,9 +95,9 @@ public class ProjectCodeController {
     })
     @PostMapping(value = "/{orgId}/projects", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<?> insertProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
+    public ResponseEntity<ProjectView> insertProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+            return OrgAccessDenied.response();
         }
         ProjectView projectView = projectCodeService.insertProject(orgId, projectUpdate, false);
         return projectView.getError().map(error ->
@@ -113,9 +113,9 @@ public class ProjectCodeController {
     })
     @PutMapping(value = "/{orgId}/projects", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<?> updateProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
+    public ResponseEntity<ProjectView> updateProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+            return OrgAccessDenied.response();
         }
         ProjectView projectView = projectCodeService.updateProject(orgId, projectUpdate);
         return projectView.getError().map(error ->
@@ -133,7 +133,7 @@ public class ProjectCodeController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertProjectsCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam("file") MultipartFile file) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+            return OrgAccessDenied.response();
         }
         return projectCodeService.createProjectCodeFromCsv(orgId, file).fold(
                 problem -> ResponseEntity.status(BAD_REQUEST).body(problem),

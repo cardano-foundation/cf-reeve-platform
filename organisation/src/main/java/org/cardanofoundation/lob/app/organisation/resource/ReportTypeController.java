@@ -31,8 +31,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import org.cardanofoundation.lob.app.organisation.domain.request.ReportTypeFieldUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.AccountEventView;
+import org.cardanofoundation.lob.app.organisation.domain.view.ReportTypeView;
 import org.cardanofoundation.lob.app.organisation.service.ReportTypeService;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
+import org.cardanofoundation.lob.app.support.security.OrgAccessDenied;
 
 @RestController
 @RequestMapping("/api/v1/organisations/report-types")
@@ -50,9 +52,9 @@ public class ReportTypeController {
             ),
     })
     @GetMapping(value = "/{orgId}", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> getReferenceCodes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
+    public ResponseEntity<List<ReportTypeView>> getReferenceCodes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+            return OrgAccessDenied.response();
         }
         return ResponseEntity.ok().body(reportTypeService.getAllReportTypes(orgId));
     }
@@ -62,7 +64,7 @@ public class ReportTypeController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> addMappingToReportTypeField(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ReportTypeFieldUpdate reportTypeFieldUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+            return OrgAccessDenied.response();
         }
         if (reportTypeService.addMappingToReportTypeField(orgId, reportTypeFieldUpdate).isLeft()) {
             ProblemDetail problem = reportTypeService.addMappingToReportTypeField(orgId, reportTypeFieldUpdate).getLeft();
@@ -76,7 +78,7 @@ public class ReportTypeController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> addMappingToReportTypeField(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam(value = "file") MultipartFile file) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+            return OrgAccessDenied.response();
         }
         if (reportTypeService.addMappingToReportTypeFieldCsv(orgId, file).isLeft()) {
             List<ProblemDetail> left = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file).getLeft();
