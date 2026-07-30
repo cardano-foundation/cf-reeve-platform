@@ -405,7 +405,13 @@ public class AccountingCoreResource {
                     .status(issue.getStatus())
                     .body(issue);
         }
-
+        if(!keycloakSecurityHelper.canUserAccessOrg(txBatchO.get().getOrganisationId())) {
+            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(UNAUTHORIZED, "The user doesn't have access to this org");
+            problemDetail.setTitle("NO_ACCESS_TO_ORG");
+            return ResponseEntity.status(UNAUTHORIZED.value()).body(FilterOptionsResponse.builder()
+                    .error(problemDetail)
+                    .build());
+        }
         return ResponseEntity
                 .ok()
                 .body(txBatchO.orElseThrow());
