@@ -109,7 +109,7 @@ public class MilestoneService {
         if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
             return Optional.of(Problems.unauthorized());
         }
-        Optional<ProjectEntity> projectM = projectRepository.findByIdAndOrganisationId(projectId, organisationId);
+        Optional<ProjectEntity> projectM = projectRepository.findByIdAndOrganisationId(projectId, organisationId).stream().findFirst();
         if (projectM.isEmpty()) {
             return Optional.of(Problems.projectNotFound(projectId));
         }

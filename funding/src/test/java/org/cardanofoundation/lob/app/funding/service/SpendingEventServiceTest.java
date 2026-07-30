@@ -10,6 +10,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -908,7 +909,7 @@ class SpendingEventServiceTest {
     @Test
     void getEvent_returns404_whenNotFound() {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
-        when(fundingEventRepository.findByIdAndOrganisationId("e1", "org1")).thenReturn(Optional.empty());
+        when(fundingEventRepository.findByIdAndOrganisationId("e1", "org1")).thenReturn(Set.of());
 
         assertThat(spendingEventService.getEvent("e1", "org1").getError().orElseThrow().getTitle())
                 .isEqualTo(ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
@@ -925,7 +926,7 @@ class SpendingEventServiceTest {
     @Test
     void getEvent_returnsView_whenAuthorised() {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
-        when(fundingEventRepository.findByIdAndOrganisationId("e1", "org1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT)));
+        when(fundingEventRepository.findByIdAndOrganisationId("e1", "org1")).thenReturn(Set.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT)));
         when(milestoneAllocationRepository.findById_EventId("e1")).thenReturn(List.of());
 
         SpendingEventView result = spendingEventService.getEvent("e1", "org1");
@@ -992,7 +993,7 @@ class SpendingEventServiceTest {
     void deleteEvent_returnsEmpty_whenAuthorisedAndDeleted() {
         FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
-        when(fundingEventRepository.findByIdAndOrganisationId("e1", "org1")).thenReturn(Optional.of(event));
+        when(fundingEventRepository.findByIdAndOrganisationId("e1", "org1")).thenReturn(Set.of(event));
         when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
 
         assertThat(spendingEventService.deleteEvent("e1", "org1")).isEmpty();
