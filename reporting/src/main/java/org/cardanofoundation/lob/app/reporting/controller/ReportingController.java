@@ -97,6 +97,11 @@ public class ReportingController {
     ) {
         log.debug("POST /api/reports - Creating report: {}", report.getName());
 
+        if (!keycloakSecurityHelper.canUserAccessOrg(report.getOrganisationId())) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ReportResponseDto.builder().error(Optional.of(problem)).build());
+        }
+
         ReportResponseDto result = reportService.create(report);
 
         if (result.getError().isPresent()) {
@@ -114,6 +119,10 @@ public class ReportingController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<List<ReportResponseDto>> templateCreateCsv(
             @Valid @ModelAttribute CreateCsvReportRequest csvReportRequest) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(csvReportRequest.getOrganisationId())) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(List.of(ReportResponseDto.builder().error(Optional.of(problem)).build()));
+        }
         return csvReportService.createCsvReports(csvReportRequest)
                 .fold(
                         error -> ResponseEntity.status(error.getStatus()).body(List.of(ReportResponseDto.builder().error(Optional.of(error)).build())),
@@ -343,6 +352,11 @@ public class ReportingController {
                 "POST /api/reports/publish - Org: {}, Report ID: {}",
                 request.getOrganisationId(), request.getReportId());
 
+        if (!keycloakSecurityHelper.canUserAccessOrg(request.getOrganisationId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
+        }
+
         Either<ProblemDetail, ReportResponseDto> result = reportService.publish(request);
 
         if (result.isLeft()) {
@@ -453,6 +467,11 @@ public class ReportingController {
         log.info(
                 "POST /api/reports/reject - Org: {}, Report ID: {}",
                 request.getOrganisationId(), request.getReportId());
+
+        if (!keycloakSecurityHelper.canUserAccessOrg(request.getOrganisationId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
+        }
 
         Either<ProblemDetail, ReportResponseDto> result = reportService.reject(request);
 

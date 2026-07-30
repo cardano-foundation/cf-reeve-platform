@@ -30,6 +30,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.EventCodeUpdate
 import org.cardanofoundation.lob.app.organisation.domain.view.AccountEventView;
 import org.cardanofoundation.lob.app.organisation.service.AccountEventService;
 import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @RestController
 @RequestMapping("/api/v1/organisations")
@@ -40,6 +41,7 @@ public class AccountEventController {
 
     private final AccountEventService eventCodeService;
     private final OrganisationService organisationService;
+    private final KeycloakSecurityHelper keycloakSecurityHelper;
 
     @Operation(description = "Reference Codes", responses = {
             @ApiResponse(content =
@@ -55,6 +57,9 @@ public class AccountEventController {
                                                @RequestParam(value = "active", required = false) Boolean active,
                                                @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable
     ) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+        }
         return eventCodeService.getAllAccountEvent(orgId, customerCode, name, creditRefCodes, debitRefCodes, active, pageable).fold(
                 problem -> ResponseEntity.status(problem.getStatus()).body(problem),
                 ResponseEntity::ok);
@@ -70,6 +75,10 @@ public class AccountEventController {
                                                                        @RequestParam(value = "creditRefCodes", required = false) List<String> creditRefCodes,
                                                                        @RequestParam(value = "debitRefCodes", required = false) List<String> debitRefCodes,
                                                                        @RequestParam(value = "active", required = false) Boolean active) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            StreamingResponseBody errorBody = outputStream -> outputStream.write("User is not allowed to access this organisation".getBytes());
+            return ResponseEntity.status(403).body(errorBody);
+        }
         StreamingResponseBody responseBody = outputStream -> eventCodeService.downloadCsv(orgId, customerCode, name, creditRefCodes, debitRefCodes, active, outputStream);
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=\"event-codes_%s.csv\"".formatted(orgId))
@@ -86,6 +95,9 @@ public class AccountEventController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @Valid @RequestBody EventCodeUpdate eventCodeUpdate) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+        }
 
         AccountEventView eventCode = eventCodeService.insertAccountEvent(orgId, eventCodeUpdate, false);
         if (eventCode.getError().isPresent()) {
@@ -104,6 +116,9 @@ public class AccountEventController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertReferenceCodeByCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                       @RequestParam(value = "file") MultipartFile file) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+        }
 
         Either<List<ProblemDetail>, List<AccountEventView>> eventCodeE = eventCodeService.insertAccountEventByCsv(orgId, file);
         if (eventCodeE.isLeft()) {
@@ -122,6 +137,9 @@ public class AccountEventController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> updateReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @Valid @RequestBody EventCodeUpdate eventCodeUpdate) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+        }
         AccountEventView eventCode = eventCodeService.updateAccountEvent(orgId, eventCodeUpdate);
         if (eventCode.getError().isPresent()) {
             return ResponseEntity.status(eventCode.getError().get().getStatus()).body(eventCode);

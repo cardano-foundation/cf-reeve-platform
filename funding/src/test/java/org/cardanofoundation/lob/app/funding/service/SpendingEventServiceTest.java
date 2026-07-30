@@ -71,6 +71,7 @@ class SpendingEventServiceTest {
         spendingEventService = new SpendingEventService(fundingEventRepository, projectRepository,
                 milestoneAllocationRepository, milestoneService, projectStructureService,
                 keycloakSecurityHelper, organisationPublicApi);
+        lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
     }
 
     private static final Pageable PAGEABLE = PageRequest.of(0, 10);

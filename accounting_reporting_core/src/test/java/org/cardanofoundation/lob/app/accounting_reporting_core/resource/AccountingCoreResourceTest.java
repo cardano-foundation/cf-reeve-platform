@@ -43,7 +43,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Ba
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchsDetailView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionItemsProcessRejectView;
-import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionProcessView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
@@ -74,10 +73,12 @@ class AccountingCoreResourceTest {
     @Test
     void testListAllAction() {
         SearchRequest body = mock(SearchRequest.class);
+        when(body.getOrganisationId()).thenReturn("org1");
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
 
         when(accountingCorePresentationViewService.allTransactions(body)).thenReturn(List.of());
 
-        ResponseEntity<List<TransactionView>> listResponseEntity = accountingCoreResource.listAllAction(body);
+        ResponseEntity<?> listResponseEntity = accountingCoreResource.listAllAction(body);
         assertTrue(listResponseEntity.getStatusCode().is2xxSuccessful());
         assertNotNull(listResponseEntity.getBody());
     }
@@ -141,9 +142,11 @@ class AccountingCoreResourceTest {
     @Test
     void approveTransactions_test() {
         TransactionsRequest request = mock(TransactionsRequest.class);
+        when(request.getOrganisationId()).thenReturn("org1");
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
         when(accountingCorePresentationViewService.approveTransactions(request)).thenReturn(List.of());
 
-        ResponseEntity<List<TransactionProcessView>> listResponseEntity = accountingCoreResource.approveTransactions(request);
+        ResponseEntity<?> listResponseEntity = accountingCoreResource.approveTransactions(request);
 
         assertTrue(listResponseEntity.getStatusCode().is2xxSuccessful());
         assertNotNull(listResponseEntity.getBody());
@@ -152,9 +155,11 @@ class AccountingCoreResourceTest {
     @Test
     void publishTransactions_test() {
         TransactionsRequest request = mock(TransactionsRequest.class);
+        when(request.getOrganisationId()).thenReturn("org1");
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
         when(accountingCorePresentationViewService.approveTransactionsPublish(request)).thenReturn(List.of());
 
-        ResponseEntity<List<TransactionProcessView>> listResponseEntity = accountingCoreResource.approveTransactionsPublish(request);
+        ResponseEntity<?> listResponseEntity = accountingCoreResource.approveTransactionsPublish(request);
 
         assertTrue(listResponseEntity.getStatusCode().is2xxSuccessful());
         assertNotNull(listResponseEntity.getBody());
@@ -163,10 +168,12 @@ class AccountingCoreResourceTest {
     @Test
     void rejectTransactions_test() {
         TransactionItemsRejectionRequest request = mock(TransactionItemsRejectionRequest.class);
+        when(request.getOrganisationId()).thenReturn("org1");
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
         TransactionItemsProcessRejectView transactionItemsProcessRejectView = mock(TransactionItemsProcessRejectView.class);
         when(accountingCorePresentationViewService.rejectTransactionItems(request)).thenReturn(transactionItemsProcessRejectView);
 
-        ResponseEntity<TransactionItemsProcessRejectView> response = accountingCoreResource.rejectTransactionItems(request);
+        ResponseEntity<?> response = accountingCoreResource.rejectTransactionItems(request);
 
         assertTrue(response.getStatusCode().is2xxSuccessful());
         assertNotNull(response.getBody());
@@ -175,6 +182,8 @@ class AccountingCoreResourceTest {
     @Test
     void listAllBatches_test() {
         BatchSearchRequest body = mock(BatchSearchRequest.class);
+        when(body.getOrganisationId()).thenReturn("org1");
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
         BatchsDetailView batchsDetailView = mock(BatchsDetailView.class);
         Pageable pageable = Pageable.ofSize(10).withPage(0);
         when(jpaSortFieldValidator.convertPageable(pageable, Map.of(), TransactionBatchEntity.class)).thenReturn(Either.right(pageable));

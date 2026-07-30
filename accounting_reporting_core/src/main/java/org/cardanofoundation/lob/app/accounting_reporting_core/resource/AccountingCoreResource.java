@@ -77,7 +77,12 @@ public class AccountingCoreResource {
     })
     @PostMapping(value = "/transactions", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<List<TransactionView>> listAllAction(@Valid @RequestBody SearchRequest body) {
+    public ResponseEntity<?> listAllAction(@Valid @RequestBody SearchRequest body) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(body.getOrganisationId())) {
+            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(UNAUTHORIZED, "The user doesn't have access to this org");
+            problemDetail.setTitle("NO_ACCESS_TO_ORG");
+            return ResponseEntity.status(UNAUTHORIZED.value()).body(problemDetail);
+        }
         List<TransactionView> transactions = accountingCorePresentationService.allTransactions(body);
         return ResponseEntity.ok().body(transactions);
     }
@@ -230,6 +235,11 @@ public class AccountingCoreResource {
     }
 
     private ResponseEntity<?> handleExtraction(ExtractionRequest body) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(body.getOrganisationId())) {
+            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(UNAUTHORIZED, "The user doesn't have access to this org");
+            problemDetail.setTitle("NO_ACCESS_TO_ORG");
+            return ResponseEntity.status(UNAUTHORIZED.value()).body(problemDetail);
+        }
         Optional<Organisation> orgM = organisationPublicApi.findByOrganisationId(body.getOrganisationId());
 
         if (orgM.isEmpty()) {
@@ -275,7 +285,12 @@ public class AccountingCoreResource {
             }
     )
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<List<TransactionProcessView>> approveTransactions(@Valid @RequestBody TransactionsRequest transactionsRequest) {
+    public ResponseEntity<?> approveTransactions(@Valid @RequestBody TransactionsRequest transactionsRequest) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(transactionsRequest.getOrganisationId())) {
+            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(UNAUTHORIZED, "The user doesn't have access to this org");
+            problemDetail.setTitle("NO_ACCESS_TO_ORG");
+            return ResponseEntity.status(UNAUTHORIZED.value()).body(problemDetail);
+        }
         List<TransactionProcessView> transactionProcessViews = accountingCorePresentationService.approveTransactions(transactionsRequest);
 
         return ResponseEntity
@@ -293,7 +308,12 @@ public class AccountingCoreResource {
             }
     )
     @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
-    public ResponseEntity<List<TransactionProcessView>> approveTransactionsPublish(@Valid @RequestBody TransactionsRequest transactionsRequest) {
+    public ResponseEntity<?> approveTransactionsPublish(@Valid @RequestBody TransactionsRequest transactionsRequest) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(transactionsRequest.getOrganisationId())) {
+            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(UNAUTHORIZED, "The user doesn't have access to this org");
+            problemDetail.setTitle("NO_ACCESS_TO_ORG");
+            return ResponseEntity.status(UNAUTHORIZED.value()).body(problemDetail);
+        }
         List<TransactionProcessView> transactionProcessViewList = accountingCorePresentationService.approveTransactionsPublish(transactionsRequest);
 
         return ResponseEntity
@@ -311,7 +331,12 @@ public class AccountingCoreResource {
             }
     )
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<TransactionItemsProcessRejectView> rejectTransactionItems(@Valid @RequestBody TransactionItemsRejectionRequest transactionItemsRejectionRequest) {
+    public ResponseEntity<?> rejectTransactionItems(@Valid @RequestBody TransactionItemsRejectionRequest transactionItemsRejectionRequest) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(transactionItemsRejectionRequest.getOrganisationId())) {
+            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(UNAUTHORIZED, "The user doesn't have access to this org");
+            problemDetail.setTitle("NO_ACCESS_TO_ORG");
+            return ResponseEntity.status(UNAUTHORIZED.value()).body(problemDetail);
+        }
         TransactionItemsProcessRejectView transactionProcessViewsResult = accountingCorePresentationService.rejectTransactionItems(transactionItemsRejectionRequest);
 
         return ResponseEntity
@@ -331,7 +356,11 @@ public class AccountingCoreResource {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> listAllBatches(@Valid @RequestBody BatchSearchRequest body,
                                             @PageableDefault(page = 0, size = 10) Pageable pageable) {
-
+        if (!keycloakSecurityHelper.canUserAccessOrg(body.getOrganisationId())) {
+            ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(UNAUTHORIZED, "The user doesn't have access to this org");
+            problemDetail.setTitle("NO_ACCESS_TO_ORG");
+            return ResponseEntity.status(UNAUTHORIZED.value()).body(problemDetail);
+        }
 
         body.setLimit(pageable.getPageSize());
         body.setPage(pageable.getPageNumber());

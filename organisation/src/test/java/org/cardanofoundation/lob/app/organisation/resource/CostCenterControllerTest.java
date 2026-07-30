@@ -3,6 +3,8 @@ package org.cardanofoundation.lob.app.organisation.resource;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -19,21 +21,30 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.CostCenterUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.CostCenterView;
 import org.cardanofoundation.lob.app.organisation.service.CostCenterService;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
 class CostCenterControllerTest {
 
     @Mock
     private CostCenterService costCenterService;
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
 
     @InjectMocks
     private CostCenterController costCenterController;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
+    }
 
     @Test
     void getAllCostCenter() {

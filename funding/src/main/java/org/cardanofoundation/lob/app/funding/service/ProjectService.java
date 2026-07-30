@@ -94,6 +94,9 @@ public class ProjectService {
      */
     @Transactional
     public ProjectView createWithMilestones(ProjectWithMilestonesCreateRequest request) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(request.getOrganisationId())) {
+            return ProjectView.error(Problems.unauthorized());
+        }
         Optional<ProblemDetail> xor = FundingValidations.milestonesXorSubProjects(
                 !request.getMilestones().isEmpty(), !request.getSubProjects().isEmpty());
         if (xor.isPresent()) {

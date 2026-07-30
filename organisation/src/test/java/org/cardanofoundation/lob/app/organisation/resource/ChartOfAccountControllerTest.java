@@ -20,11 +20,15 @@ import org.junit.jupiter.api.Test;
 import org.cardanofoundation.lob.app.organisation.domain.request.ChartOfAccountUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.*;
 import org.cardanofoundation.lob.app.organisation.service.ChartOfAccountsService;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 class ChartOfAccountControllerTest {
 
     @Mock
     private ChartOfAccountsService chartOfAccountsService;
+
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
 
     @InjectMocks
     private ChartOfAccountController controller;
@@ -32,6 +36,7 @@ class ChartOfAccountControllerTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
+        lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
     }
 
     @Test

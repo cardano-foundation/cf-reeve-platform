@@ -358,7 +358,8 @@ public class AccountingCorePresentationViewService {
     public TransactionItemsProcessRejectView rejectTransactionItems(
             TransactionItemsRejectionRequest transactionItemsRejectionRequest) {
         Optional<TransactionEntity> txM = transactionRepositoryGateway
-                .findById(transactionItemsRejectionRequest.getTransactionId());
+                .findByIdAndOrganisationId(transactionItemsRejectionRequest.getTransactionId(),
+                        transactionItemsRejectionRequest.getOrganisationId());
         if (txM.isEmpty()) {
             Either<IdentifiableProblem, TransactionEntity> errorE =
                     transactionNotFoundResponse(transactionItemsRejectionRequest

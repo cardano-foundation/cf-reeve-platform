@@ -29,6 +29,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.cardanofoundation.lob.app.organisation.domain.request.VatUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.VatView;
 import org.cardanofoundation.lob.app.organisation.service.VatService;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @RestController
 @RequestMapping("/api/v1/organisations")
@@ -38,6 +39,7 @@ import org.cardanofoundation.lob.app.organisation.service.VatService;
 public class VatController {
 
     private final VatService vatService;
+    private final KeycloakSecurityHelper keycloakSecurityHelper;
 
     @Operation(description = "Vat Codes", responses = {
             @ApiResponse(content =
@@ -53,6 +55,9 @@ public class VatController {
                                                      @RequestParam(value = "countryCodes", required = false) List<String> countryCodes,
                                                      @RequestParam(value = "active", required = false) Boolean active,
                                                      @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+        }
         return vatService.findAllByOrganisationId(orgId, customerCode, minRate, maxRate, description, countryCodes, active, pageable).fold(
                 problem -> ResponseEntity.status(problem.getStatus()).body(problem),
                 ResponseEntity::ok);
@@ -69,6 +74,10 @@ public class VatController {
                                                                      @RequestParam(value = "description", required = false) String description,
                                                                      @RequestParam(value = "countryCodes", required = false) List<String> countryCodes,
                                                                      @RequestParam(value = "active", required = false) Boolean active) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            StreamingResponseBody errorBody = outputStream -> outputStream.write("User is not allowed to access this organisation".getBytes());
+            return ResponseEntity.status(403).body(errorBody);
+        }
         StreamingResponseBody responseBody = outputStream -> vatService.downloadCsv(orgId, customerCode, minRate, maxRate, description, countryCodes, active, outputStream);
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=\"vat-codes_%s.csv\"".formatted(orgId))
@@ -85,6 +94,9 @@ public class VatController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertVatCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                            @Valid @RequestBody VatUpdate vatUpdate) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+        }
 
         VatView vatView = vatService.insert(orgId, vatUpdate, false);
         return vatView.getError().map(error -> ResponseEntity.status(error.getStatus())
@@ -103,6 +115,9 @@ public class VatController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> updateReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @Valid @RequestBody VatUpdate vatUpdate) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+        }
 
         VatView vatView = vatService.update(orgId, vatUpdate);
         return vatView.getError().map(error -> ResponseEntity.status(error.getStatus())
@@ -119,6 +134,9 @@ public class VatController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertVatCodesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                @RequestParam(value = "file") MultipartFile file) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+        }
 
         return vatService.insertVatCodesCsv(orgId, file).fold(
                 problem -> ResponseEntity.status(BAD_REQUEST).body(problem),

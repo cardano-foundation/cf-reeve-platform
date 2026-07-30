@@ -39,6 +39,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.ReferenceCodeUp
 import org.cardanofoundation.lob.app.organisation.domain.view.ReferenceCodeView;
 import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
 import org.cardanofoundation.lob.app.organisation.service.ReferenceCodeService;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @RestController
 @RequestMapping("/api/v1/organisations")
@@ -49,6 +50,7 @@ public class ReferenceCodeResource {
 
     private final ReferenceCodeService referenceCodeService;
     private final OrganisationService organisationService;
+    private final KeycloakSecurityHelper keycloakSecurityHelper;
 
     @Operation(description = "Reference Codes list", responses = {
             @ApiResponse(content =
@@ -62,6 +64,9 @@ public class ReferenceCodeResource {
                                                @RequestParam(value = "parentCodes", required = false) List<String> parentCodes,
                                                @RequestParam(value = "active", required = false) Boolean active,
                                                @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+        }
         return referenceCodeService.getAllReferenceCodes(orgId, referenceCode, name, parentCodes, active, pageable).fold(
                 problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus())).body(problem),
                 ResponseEntity::ok
@@ -76,6 +81,10 @@ public class ReferenceCodeResource {
                                                                      @RequestParam(value = "name", required = false) String name,
                                                                      @RequestParam(value = "parentCodes", required = false) List<String> parentCodes,
                                                                      @RequestParam(value = "active", required = false) Boolean active) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            StreamingResponseBody errorBody = outputStream -> outputStream.write("User is not allowed to access this organisation".getBytes());
+            return ResponseEntity.status(403).body(errorBody);
+        }
         StreamingResponseBody responseBody = outputStream -> referenceCodeService.downloadCsv(orgId, referenceCode, name, parentCodes, active,outputStream);
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=\"ref-codes_%s.csv\"".formatted(orgId))
@@ -92,6 +101,9 @@ public class ReferenceCodeResource {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @Valid @RequestBody ReferenceCodeUpdate referenceCodeUpdate) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+        }
         ReferenceCodeView referenceCode = referenceCodeService.insertReferenceCode(orgId, referenceCodeUpdate, false);
         if (referenceCode.getError().isPresent()) {
             return ResponseEntity.status(referenceCode.getError().get().getStatus()).body(referenceCode);
@@ -108,6 +120,9 @@ public class ReferenceCodeResource {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> insertRefCodeByCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                        @RequestParam(value = "file") MultipartFile file) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+        }
         Either<List<ProblemDetail>, List<ReferenceCodeView>> refCodeE = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
         if (refCodeE.isLeft()) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(refCodeE.getLeft());
@@ -125,6 +140,9 @@ public class ReferenceCodeResource {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> updateReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @Valid @RequestBody ReferenceCodeUpdate referenceCodeUpdate) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return ResponseEntity.status(403).body("User is not allowed to access this organisation");
+        }
         ReferenceCodeView referenceCode = referenceCodeService.updateReferenceCode(orgId, referenceCodeUpdate);
         if (referenceCode.getError().isPresent()) {
             return ResponseEntity.status(referenceCode.getError().get().getStatus()).body(referenceCode);

@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.reporting.controller;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -65,6 +66,8 @@ class ReportTemplateControllerTest {
         templateResponseDto.setId("abc");
         templateResponseDto.setName("Test Template");
         templateResponseDto.setOrganisationId("org123");
+
+        lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
     }
 
     @Test

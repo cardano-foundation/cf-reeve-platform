@@ -22,6 +22,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.EventCodeUpdate
 import org.cardanofoundation.lob.app.organisation.domain.view.AccountEventView;
 import org.cardanofoundation.lob.app.organisation.service.AccountEventService;
 import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 class AccountEventControllerTest {
 
@@ -31,6 +32,9 @@ class AccountEventControllerTest {
     @Mock
     private OrganisationService organisationService;
 
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
+
     @InjectMocks
     private AccountEventController controller;
 
@@ -39,6 +43,7 @@ class AccountEventControllerTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
+        lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
     }
 
     @Test

@@ -180,6 +180,9 @@ public class SpendingEventService {
 
     @Transactional
     public Either<ProblemDetail, FundingEventEntity> create(SpendingEventCreateRequest request) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(request.getOrganisationId())) {
+            return Either.left(Problems.unauthorized());
+        }
         FundingEventEntity event = toEntity(request);
         if (fundingEventRepository.existsById(event.getId())) {
             return Either.left(Problems.conflict("Event already exists: %s".formatted(event.getId()),

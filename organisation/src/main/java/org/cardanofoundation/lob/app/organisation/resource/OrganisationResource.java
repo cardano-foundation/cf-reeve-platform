@@ -62,6 +62,7 @@ public class OrganisationResource {
     public ResponseEntity<List<OrganisationView>> organisationList(@RequestParam(value = "orgIds", required = false) Optional<String[]> orgIds) {
         return ResponseEntity.ok().body(
                 orgIds.map(orgs -> Arrays.stream(orgs)
+                        .filter(keycloakSecurityHelper::canUserAccessOrg)
                         .map(organisationService::findById)
                         .filter(Optional::isPresent)
                         .map(Optional::get)
@@ -86,6 +87,9 @@ public class OrganisationResource {
     })
     @GetMapping(value = "/organisations/{orgId}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> organisationDetailSpecific(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return ResponseEntity.status(HttpStatusCode.valueOf(403)).body("User is not allowed to access this organisation");
+        }
         Optional<OrganisationView> organisation = organisationService.findById(orgId).map(organisationService::getOrganisationView);
         if (organisation.isEmpty()) {
             ProblemDetail issue = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ErrorTitleConstants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId));
@@ -103,7 +107,10 @@ public class OrganisationResource {
             ),
     })
     @GetMapping(value = "/organisations/{orgId}/events", produces = "application/json")
-    public ResponseEntity<List<EventView>> organisationEvent(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
+    public ResponseEntity<?> organisationEvent(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return ResponseEntity.status(HttpStatusCode.valueOf(403)).body("User is not allowed to access this organisation");
+        }
         return ResponseEntity.ok().body(
                 organisationService.getOrganisationEventCode(orgId).stream().map(accountEvent -> {
                     return new EventView(
@@ -182,6 +189,9 @@ public class OrganisationResource {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     @PutMapping(value = "/organisations/{orgId}", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     public ResponseEntity<?> organisationUpdate(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody OrganisationUpdate organisationUpdate) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return ResponseEntity.status(HttpStatusCode.valueOf(403)).body("User is not allowed to access this organisation");
+        }
         Optional<Organisation> organisationChe = organisationService.findById(orgId);
         if (organisationChe.isEmpty()) {
             ProblemDetail issue = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ErrorTitleConstants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId));

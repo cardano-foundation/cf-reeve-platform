@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -21,6 +22,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -33,6 +35,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReconciliationStatisticView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
 class AccountingCoreResourceReconciliationTest {
@@ -43,9 +46,16 @@ class AccountingCoreResourceReconciliationTest {
     private AccountingCoreService accountingCoreService;
     @Mock
     private JpaSortFieldValidator jpaSortFieldValidator;
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
 
     @InjectMocks
     private AccountingCoreResourceReconciliation accountingCoreResourceReconciliation;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
+    }
 
     @Test
     void testReconcileTriggerAction_successfull() {
@@ -97,14 +107,16 @@ class AccountingCoreResourceReconciliationTest {
         when(accountingCorePresentationViewService.getReconciliationStatisticByDateRange(any(ReconciliationStatisticRequest.class))).thenReturn(expected);
 
         ReconciliationStatisticRequest request = new ReconciliationStatisticRequest();
-        ResponseEntity<Map<String, ReconciliationStatisticView>> responseEntity = accountingCoreResourceReconciliation.reconciliationStatistic(request);
+        ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconciliationStatistic(request);
 
         Assertions.assertEquals(200, responseEntity.getStatusCode().value());
         Assertions.assertNotNull(responseEntity.getBody());
-        Assertions.assertEquals(1, responseEntity.getBody().size());
-        Assertions.assertTrue(responseEntity.getBody().containsKey("STATISTICS"));
-        Assertions.assertEquals(10L, responseEntity.getBody().get("STATISTICS").getReconciledCount());
-        Assertions.assertEquals(5L, responseEntity.getBody().get("STATISTICS").getUnreconciledCount());
+        @SuppressWarnings("unchecked")
+        Map<String, ReconciliationStatisticView> body = (Map<String, ReconciliationStatisticView>) responseEntity.getBody();
+        Assertions.assertEquals(1, body.size());
+        Assertions.assertTrue(body.containsKey("STATISTICS"));
+        Assertions.assertEquals(10L, body.get("STATISTICS").getReconciledCount());
+        Assertions.assertEquals(5L, body.get("STATISTICS").getUnreconciledCount());
         verify(accountingCorePresentationViewService).getReconciliationStatisticByDateRange(any(ReconciliationStatisticRequest.class));
         verifyNoMoreInteractions(accountingCorePresentationViewService);
         verifyNoInteractions(accountingCoreService);
@@ -117,12 +129,14 @@ class AccountingCoreResourceReconciliationTest {
         when(accountingCorePresentationViewService.getReconciliationStatisticByDateRange(any(ReconciliationStatisticRequest.class))).thenReturn(expected);
 
         ReconciliationStatisticRequest request = new ReconciliationStatisticRequest();
-        ResponseEntity<Map<String, ReconciliationStatisticView>> responseEntity = accountingCoreResourceReconciliation.reconciliationStatistic(request);
+        ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconciliationStatistic(request);
 
         Assertions.assertEquals(200, responseEntity.getStatusCode().value());
         Assertions.assertNotNull(responseEntity.getBody());
-        Assertions.assertEquals(0L, responseEntity.getBody().get("STATISTICS").getReconciledCount());
-        Assertions.assertEquals(0L, responseEntity.getBody().get("STATISTICS").getUnreconciledCount());
+        @SuppressWarnings("unchecked")
+        Map<String, ReconciliationStatisticView> body = (Map<String, ReconciliationStatisticView>) responseEntity.getBody();
+        Assertions.assertEquals(0L, body.get("STATISTICS").getReconciledCount());
+        Assertions.assertEquals(0L, body.get("STATISTICS").getUnreconciledCount());
         verify(accountingCorePresentationViewService).getReconciliationStatisticByDateRange(any(ReconciliationStatisticRequest.class));
         verifyNoMoreInteractions(accountingCorePresentationViewService);
         verifyNoInteractions(accountingCoreService);
