@@ -68,7 +68,7 @@ public class ProjectService {
         if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
             return ProjectView.error(Problems.unauthorized());
         }
-        Optional<ProjectEntity> projectM = projectRepository.findByIdAndOrganisationId(projectId, organisationId);
+        Optional<ProjectEntity> projectM = projectRepository.findByIdAndOrganisationId(projectId, organisationId).stream().findFirst();
         if (projectM.isEmpty()) {
             return ProjectView.error(Problems.projectNotFound(projectId));
         }
@@ -80,7 +80,7 @@ public class ProjectService {
         if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
             return PagedResponse.error(Problems.unauthorized());
         }
-        Optional<ProjectEntity> parentM = projectRepository.findByIdAndOrganisationId(parentProjectId, organisationId);
+        Optional<ProjectEntity> parentM = projectRepository.findByIdAndOrganisationId(parentProjectId, organisationId).stream().findFirst();
         if (parentM.isEmpty()) {
             return PagedResponse.error(Problems.projectNotFound(parentProjectId));
         }
@@ -217,7 +217,7 @@ public class ProjectService {
         if (!keycloakSecurityHelper.canUserAccessOrg(request.getOrganisationId())) {
             return ProjectView.error(Problems.unauthorized());
         }
-        Optional<ProjectEntity> projectM = projectRepository.findByIdAndOrganisationId(projectId, request.getOrganisationId());
+        Optional<ProjectEntity> projectM = projectRepository.findByIdAndOrganisationId(projectId, request.getOrganisationId()).stream().findFirst();
         if (projectM.isEmpty()) {
             return ProjectView.error(Problems.projectNotFound(projectId));
         }
@@ -356,7 +356,7 @@ public class ProjectService {
         if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
             return Optional.of(Problems.unauthorized());
         }
-        Optional<ProjectEntity> projectM = projectRepository.findByIdAndOrganisationId(projectId, organisationId);
+        Optional<ProjectEntity> projectM = projectRepository.findByIdAndOrganisationId(projectId, organisationId).stream().findFirst();
         if (projectM.isEmpty()) {
             return Optional.of(Problems.projectNotFound(projectId));
         }

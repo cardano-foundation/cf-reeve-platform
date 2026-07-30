@@ -31,6 +31,6 @@ public interface MilestoneRepository extends JpaRepository<MilestoneEntity, Stri
     Optional<MilestoneEntity> findByIdAndProjectId(String id, String projectId);
 
     /** Resolves a milestone only when it belongs to the given project and that project belongs to the given organisation. */
-    Optional<MilestoneEntity> findByIdAndProjectIdAndProject_OrganisationId(String id, String projectId, String organisationId);
+    List<MilestoneEntity> findByIdAndProjectIdAndProject_OrganisationId(String id, String projectId, String organisationId);
 
 }

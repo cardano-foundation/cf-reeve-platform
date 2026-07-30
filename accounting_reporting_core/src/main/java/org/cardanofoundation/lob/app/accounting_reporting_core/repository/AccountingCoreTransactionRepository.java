@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
 import jakarta.persistence.LockModeType;
@@ -81,8 +80,8 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
             WHERE t.id = :id
             AND t.organisation.id = :organisationId
             """)
-    Optional<TransactionEntity> findByIdAndOrganisationId(@Param("id") String id,
-                                                            @Param("organisationId") String organisationId);
+    Set<TransactionEntity> findByIdAndOrganisationId(@Param("id") String id,
+                                                       @Param("organisationId") String organisationId);
 
     @Query("""
         SELECT t FROM accounting_reporting_core.TransactionEntity t

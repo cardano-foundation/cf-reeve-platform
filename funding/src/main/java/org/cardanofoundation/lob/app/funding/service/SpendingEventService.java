@@ -77,7 +77,7 @@ public class SpendingEventService {
         if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
             return SpendingEventView.error(Problems.unauthorized());
         }
-        Optional<FundingEventEntity> eventM = fundingEventRepository.findByIdAndOrganisationId(eventId, organisationId);
+        Optional<FundingEventEntity> eventM = fundingEventRepository.findByIdAndOrganisationId(eventId, organisationId).stream().findFirst();
         if (eventM.isEmpty()) {
             return SpendingEventView.error(Problems.eventNotFound(eventId));
         }

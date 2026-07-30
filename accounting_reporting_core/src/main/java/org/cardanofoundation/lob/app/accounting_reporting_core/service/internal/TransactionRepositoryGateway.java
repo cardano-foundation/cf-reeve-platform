@@ -217,7 +217,7 @@ public class TransactionRepositoryGateway {
     }
 
     public Optional<TransactionEntity> findByIdAndOrganisationId(String transactionId, String organisationId) {
-        return accountingCoreTransactionRepository.findByIdAndOrganisationId(transactionId, organisationId);
+        return accountingCoreTransactionRepository.findByIdAndOrganisationId(transactionId, organisationId).stream().findFirst();
     }
 
     public List<TransactionEntity> findByAllId(Set<String> transactionIds) {

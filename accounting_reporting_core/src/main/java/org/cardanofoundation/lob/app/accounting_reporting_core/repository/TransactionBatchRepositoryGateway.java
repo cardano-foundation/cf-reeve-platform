@@ -35,7 +35,7 @@ public class TransactionBatchRepositoryGateway {
     }
 
     public Optional<TransactionBatchEntity> findByIdAndOrganisationId(String batchId, String organisationId) {
-        return transactionBatchRepository.findByIdAndFilteringParametersOrganisationId(batchId, organisationId);
+        return transactionBatchRepository.findByIdAndFilteringParametersOrganisationId(batchId, organisationId).stream().findFirst();
     }
 
     // TODO: Pagination need to be implemented

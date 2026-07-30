@@ -63,6 +63,7 @@ public class MilestoneService {
             return MilestoneView.error(denied.get());
         }
         return milestoneRepository.findByIdAndProjectIdAndProject_OrganisationId(milestoneId, projectId, organisationId)
+                .stream().findFirst()
                 .map(this::toView)
                 .orElseGet(() -> MilestoneView.error(Problems.milestoneNotFound(milestoneId)));
     }
@@ -94,7 +95,8 @@ public class MilestoneService {
         if (denied.isPresent()) {
             return denied;
         }
-        Optional<MilestoneEntity> milestoneM = milestoneRepository.findByIdAndProjectIdAndProject_OrganisationId(milestoneId, projectId, organisationId);
+        Optional<MilestoneEntity> milestoneM = milestoneRepository.findByIdAndProjectIdAndProject_OrganisationId(milestoneId, projectId, organisationId)
+                .stream().findFirst();
         if (milestoneM.isEmpty()) {
             return Optional.of(Problems.milestoneNotFound(milestoneId));
         }

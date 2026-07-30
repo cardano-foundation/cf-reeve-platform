@@ -20,7 +20,7 @@ public interface TransactionBatchRepository extends JpaRepository<TransactionBat
         List<TransactionBatchEntity> findAllByFilteringParametersOrganisationId(
                         String organisationId);
 
-        Optional<TransactionBatchEntity> findByIdAndFilteringParametersOrganisationId(
+        List<TransactionBatchEntity> findByIdAndFilteringParametersOrganisationId(
                         String id, String organisationId);
 
         @Query("""
