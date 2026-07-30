@@ -6,7 +6,6 @@ import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -15,7 +14,6 @@ import com.bloxbean.cardano.client.account.Account;
 import com.bloxbean.cardano.client.api.UtxoSupplier;
 import com.bloxbean.cardano.client.backend.api.BackendService;
 import com.bloxbean.cardano.client.backend.api.DefaultUtxoSupplier;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
@@ -23,7 +21,6 @@ import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Docume
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.KeriService;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.keri.OrganiserWalletMetadataReader;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.L1TransactionCreatorConfig;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.authbegin.AuthBeginL1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentConverter;
@@ -36,7 +33,6 @@ import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction.API1MetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.transation_submit.*;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
-import org.cardanofoundation.lob.app.keri_attestation.service.CardanoMetadataReader;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 
 @Configuration
@@ -178,19 +174,6 @@ public class TransactionSubmissionConfig {
                 metadataLabel,
                 debugStoreOutputTx
         );
-    }
-
-    /**
-     * Read-only chain access for {@code keri_attestation}'s card-import verifier. This module submits
-     * AUTH_BEGIN through {@link #authBeginL1TransactionCreator} and the normal dispatcher, so nothing
-     * here hands a submitter to another module.
-     */
-    @Bean
-    @ConditionalOnProperty(name = "lob.keri-attestation.enabled", havingValue = "true", matchIfMissing = false)
-    public CardanoMetadataReader cardanoMetadataReader(@Qualifier("yaci_blockfrost") BackendService backendService,
-                                                       ObjectMapper objectMapper
-    ) {
-        return new OrganiserWalletMetadataReader(backendService, objectMapper);
     }
 
     @Bean

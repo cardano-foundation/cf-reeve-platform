@@ -16,9 +16,11 @@ import org.cardanofoundation.lob.app.document_vault.domain.enums.CardSubjectType
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyAssurance;
 
 /**
- * The platform (B2) must recompute the SAME card-attestation digest the indexer anchored on-chain, or
- * import verification silently rejects genuine cards. This test cross-checks against the indexer's
- * golden vector (reeve-indexing-example {@code CardAttestationDigestFactoryTest}, same fixed card).
+ * The platform must recompute the SAME card-attestation digest the issuing indexer wrapped into the
+ * payload its wallet sealed, or import verification silently rejects genuine cards. This test
+ * cross-checks against the indexer's golden vector (reeve-indexing-example
+ * {@code CardAttestationDigestFactoryTest}, same fixed card) — a fixture written here from the
+ * platform's own assumptions would agree with the platform and prove nothing.
  */
 class CardAttestationDigestFactoryTest {
 
@@ -44,7 +46,7 @@ class CardAttestationDigestFactoryTest {
     void attestationBlockNeverAffectsTheDigest() {
         KeyCardDto withAttestation = goldenCard();
         withAttestation.setAttestation(new KeyCardDto.CardAttestation("http://oobi", "Eaid", "Ecred",
-                "Eschema", "tx", "cesr"));
+                "Eschema", "3", "Eevent", "170", "Edigest", "Epayload", "cesr"));
         assertEquals(digestFactory.digestOf(goldenCard()), digestFactory.digestOf(withAttestation));
     }
 
@@ -55,6 +57,52 @@ class CardAttestationDigestFactoryTest {
         other.setKey(new KeyCardDto.Key("a".repeat(64), "Bob's key", KeyAssurance.PORTABLE,
                 "2026-01-01T00:00:00Z"));
         assertNotEquals(base, digestFactory.digestOf(other));
+    }
+
+    /**
+     * The issuer omits these three when blank rather than sending empty strings, so a card that never
+     * had them must digest identically to one whose values were cleared. Getting this wrong shifts the
+     * digest and fails only against real cards, never against a fixture built the same wrong way.
+     */
+    @Test
+    void blankOptionalFieldsDigestTheSameAsAbsentOnes() {
+        assertEquals(digestFactory.digestOf(card(null, null, null)), digestFactory.digestOf(card("", "", "")));
+    }
+
+    @Test
+    void eachOptionalFieldIsOmittedIndependently() {
+        String allAbsent = digestFactory.digestOf(card(null, null, null));
+        assertNotEquals(allAbsent, digestFactory.digestOf(card("Bob Example", null, null)));
+        assertNotEquals(allAbsent, digestFactory.digestOf(card(null, "bob@example.org", null)));
+        assertNotEquals(allAbsent, digestFactory.digestOf(card(null, null, "Bob's key")));
+    }
+
+    /**
+     * The issuer always emits organisationId, using the empty string when the holder named none — it is
+     * never omitted and never null. A card arriving without the field must therefore digest as "",
+     * not as a missing key.
+     */
+    @Test
+    void anAbsentOrganisationIdDigestsAsTheEmptyStringTheIssuerWouldHaveSent() {
+        KeyCardDto absent = goldenCard();
+        absent.setSubject(new KeyCardDto.Subject(CardSubjectType.REEVE_ACCOUNT, "kc-sub-1",
+                "Bob Example", "bob@example.org", null));
+        KeyCardDto empty = goldenCard();
+        empty.setSubject(new KeyCardDto.Subject(CardSubjectType.REEVE_ACCOUNT, "kc-sub-1",
+                "Bob Example", "bob@example.org", ""));
+
+        assertEquals(digestFactory.digestOf(empty), digestFactory.digestOf(absent));
+    }
+
+    private static KeyCardDto card(String displayName, String email, String label) {
+        KeyCardDto card = new KeyCardDto();
+        card.setV(1);
+        card.setType("REEVE_KEY_CARD");
+        card.setSubject(new KeyCardDto.Subject(CardSubjectType.EXTERNAL, "indexer-uuid-1",
+                displayName, email, ""));
+        card.setKey(new KeyCardDto.Key("8f".repeat(32), label, KeyAssurance.PORTABLE,
+                "2026-01-01T00:00:00Z"));
+        return card;
     }
 
     private static KeyCardDto goldenCard() {

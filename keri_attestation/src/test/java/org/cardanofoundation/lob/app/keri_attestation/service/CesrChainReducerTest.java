@@ -12,6 +12,9 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
+import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchema;
+import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchema.TrustModel;
+import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchemaRegistry;
 import org.cardanofoundation.signify.cesr.util.CESRStreamUtil;
 
 /**
@@ -92,10 +95,15 @@ class CesrChainReducerTest {
         byte[] reduced = reducer.reduceToVcpIssAcdc(fullCesr);
         String reducedStream = new String(reduced, StandardCharsets.UTF_8);
 
-        CredentialChainValidator validator = new CredentialChainValidator();
+        CredentialChainValidator validator = new CredentialChainValidator(new CredentialSchemaRegistry(
+                List.of(new CredentialSchema("EG9587oc7lSUJGS7mtTkpmRUnJ8F5Ji79-e_pY4jt3Ik", "vLEI Legal Entity",
+                        TrustModel.CHAINED, List.of("EHt6RIKM4CHeMom5_yASwrKkFiqQquLH_S4aE1172GEe"),
+                        List.of(), List.of()))),
+                CredentialChainValidatorTest.provider(
+                        (registryId, credentialSaid) -> CredentialTelStateReader.TelStatus.ISSUED));
         var result = validator.validate(reducedStream, "EGDonzZJbqF3HqaEI_FOT1kL7x7P5xUmZQ76unf9suwR",
-                List.of("EG9587oc7lSUJGS7mtTkpmRUnJ8F5Ji79-e_pY4jt3Ik"),
-                List.of("EHt6RIKM4CHeMom5_yASwrKkFiqQquLH_S4aE1172GEe"));
+                "ELizup8Q4keLtgGDBcvBi3Y3c_EJcKiXwV2HzaJyZcdb",
+                "EG9587oc7lSUJGS7mtTkpmRUnJ8F5Ji79-e_pY4jt3Ik");
 
         assertTrue(result.isRight(), () -> "expected the reduced stream to still validate: "
                 + (result.isLeft() ? result.getLeft().getDetail() : ""));

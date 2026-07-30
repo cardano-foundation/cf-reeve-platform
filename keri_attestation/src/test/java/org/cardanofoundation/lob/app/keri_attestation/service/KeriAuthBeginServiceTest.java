@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.context.ApplicationEventPublisher;
@@ -29,6 +30,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.events.AuthBeginPublishCommand;
+import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchema.TrustModel;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
@@ -82,15 +84,17 @@ class KeriAuthBeginServiceTest {
         lenient().when(keriClient.client()).thenReturn(client);
         lenient().when(client.credentials()).thenReturn(credentials);
         lenient().when(chainValidator.validate(any(), any(), any(), any()))
-                .thenReturn(Either.right(new CredentialChainValidator.ValidatedCredential(CREDENTIAL_SAID, SCHEMA_SAID)));
+                .thenReturn(Either.right(new CredentialChainValidator.ValidatedCredential(CREDENTIAL_SAID, SCHEMA_SAID,
+                        "Foundation Employee", WALLET_AID, WALLET_AID, TrustModel.STANDALONE, Map.of(), "fingerprint")));
         service = new KeriAuthBeginService(keriClient, cesrChainReducer, eventPublisher,
-                ceremonyService, identityLinkRepository, properties(), chainValidator);
+                ceremonyService, identityLinkRepository, chainValidator);
     }
 
     private static KeriAttestationProperties properties() {
         return new KeriAttestationProperties(
                 true, null, "identifier",
                 new KeriAttestationProperties.CredentialPolicy(List.of(SCHEMA_SAID), List.of(), null),
+                null,
                 Duration.parse("PT1H"), Duration.parse("PT24H"), Duration.parse("PT3M"), Duration.parse("PT0.01S"),
                 3, new KeriAttestationProperties.Limits(3, Duration.parse("PT10S")),
                 Duration.parse("PT0.01S"), Duration.parse("PT0.05S"), Duration.parse("PT0.01S"),

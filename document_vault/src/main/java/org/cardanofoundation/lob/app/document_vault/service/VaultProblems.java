@@ -44,6 +44,10 @@ public final class VaultProblems {
     // Key cards
     public static final String CARD_CONTAINS_PRIVATE_KEY = "CARD_CONTAINS_PRIVATE_KEY";
     public static final String UNSUPPORTED_CARD_VERSION = "UNSUPPORTED_CARD_VERSION";
+    /** A re-import would rewrite attested identity fields with values nothing has signed. The stored
+     *  row's name/e-mail/label are covered by its attestation digest, so a card that cannot produce a
+     *  matching attestation may not change them. */
+    public static final String ATTESTED_CARD_FIELDS_IMMUTABLE = "ATTESTED_CARD_FIELDS_IMMUTABLE";
 
     private VaultProblems() {
     }

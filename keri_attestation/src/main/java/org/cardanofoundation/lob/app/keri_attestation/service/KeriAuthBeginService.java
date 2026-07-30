@@ -16,7 +16,6 @@ import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.events.AuthBeginPublishCommand;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
-import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestationCeremonyEntity;
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentityLinkEntity;
@@ -59,7 +58,6 @@ public class KeriAuthBeginService {
     private final ApplicationEventPublisher eventPublisher;
     private final CeremonyService ceremonyService;
     private final KeriIdentityLinkRepository identityLinkRepository;
-    private final KeriAttestationProperties properties;
     private final CredentialChainValidator chainValidator;
 
     /**
@@ -164,8 +162,7 @@ public class KeriAuthBeginService {
             // The same gate as credential presentation, applied again immediately before this identity's
             // chain is published on-chain. See CredentialChainValidator for what is (and is not) enforced.
             Either<ProblemDetail, CredentialChainValidator.ValidatedCredential> validated = chainValidator.validate(
-                    fullCesr, link.getAid(), properties.credentialPolicy().schemaSaids(),
-                    properties.credentialPolicy().trustedRootAids());
+                    fullCesr, link.getAid(), link.getCredentialSaid(), link.getCredentialSchemaSaid());
             if (validated.isLeft()) {
                 return failAuthBegin(ceremonyId, userId, generation, KeriAttestationProblems.CREDENTIAL_REJECTED,
                         validated.getLeft().getDetail());

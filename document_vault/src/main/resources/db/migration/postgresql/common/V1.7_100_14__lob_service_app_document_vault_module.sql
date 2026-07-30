@@ -1,3 +1,10 @@
+-- This file creates document_vault's tables and has never been released: it exists only on the branch
+-- that introduces the module, so it is still edited in place rather than amended by a follow-up
+-- migration. Once it merges that stops being true — from then on, a schema change here needs a new
+-- versioned file with explicit ALTER TABLE statements, because these CREATE TABLE IF NOT EXISTS
+-- statements do nothing against a database that already ran this version, and editing an applied
+-- migration breaks its checksum.
+
 -- ORGANISATION KEYS. A key whose holder is a Keycloak user in this organisation and who owns the
 -- private half. Identity comes from the login, so there is no e-mail column: the account IS the
 -- contact. Contrast document_vault_addressbook_entry below, which is a contact and not an account.
@@ -13,7 +20,9 @@ CREATE TABLE IF NOT EXISTS document_vault_key (
     account_name VARCHAR(255),
     credential_id VARCHAR(512),
     public_key VARCHAR(64) NOT NULL,
-    label VARCHAR(255) NOT NULL,
+    -- nullable: the card issuer treats a key label as optional and omits it when blank, so requiring
+    -- one here would reject a card that is otherwise perfectly valid.
+    label VARCHAR(255),
     origin VARCHAR(20) NOT NULL,
     assurance VARCHAR(20) NOT NULL,
     -- Veridian attestation an imported card carried, stored as provenance. Set once at import and
@@ -21,11 +30,20 @@ CREATE TABLE IF NOT EXISTS document_vault_key (
     -- keri_attestation's own columns for the same values, which is what verification reads them back
     -- through. attestation_credential_cesr is TEXT because a credential chain can be large, and is
     -- carried because the credential cannot be fetched through the OOBI alone.
+    --
+    -- There is no transaction hash here: the issuing ceremony publishes nothing on-chain, and the
+    -- attestation IS the interaction event the attesting wallet sealed in its own KEL. kel_sequence and
+    -- kel_event_said name that event; metadata_label is the exact string that went into the signed
+    -- payload, and is needed to reproduce payload_said on re-verification.
     attestation_oobi VARCHAR(2048),
     attestation_aid VARCHAR(255),
     attestation_credential_said VARCHAR(255),
     attestation_schema_said VARCHAR(255),
-    attestation_tx_hash VARCHAR(255),
+    attestation_kel_sequence VARCHAR(32),
+    attestation_kel_event_said VARCHAR(255),
+    attestation_metadata_label VARCHAR(32),
+    attestation_card_digest VARCHAR(255),
+    attestation_payload_said VARCHAR(255),
     attestation_credential_cesr TEXT,
     created_by VARCHAR(255),
     updated_by VARCHAR(255),
@@ -49,7 +67,8 @@ CREATE TABLE IF NOT EXISTS document_vault_addressbook_entry (
     entry_id VARCHAR(36) PRIMARY KEY,
     -- whose addressbook this contact is in
     organisation_id VARCHAR(255) NOT NULL,
-    display_name VARCHAR(255) NOT NULL,
+    -- nullable: the card issuer omits a blank display name, so an imported card need not carry one.
+    display_name VARCHAR(255),
     -- nullable: a hand-entered contact may not have one
     email VARCHAR(320),
     description VARCHAR(255),
@@ -66,7 +85,11 @@ CREATE TABLE IF NOT EXISTS document_vault_addressbook_entry (
     attestation_aid VARCHAR(255),
     attestation_credential_said VARCHAR(255),
     attestation_schema_said VARCHAR(255),
-    attestation_tx_hash VARCHAR(255),
+    attestation_kel_sequence VARCHAR(32),
+    attestation_kel_event_said VARCHAR(255),
+    attestation_metadata_label VARCHAR(32),
+    attestation_card_digest VARCHAR(255),
+    attestation_payload_said VARCHAR(255),
     attestation_credential_cesr TEXT,
     created_by VARCHAR(255),
     updated_by VARCHAR(255),

@@ -138,13 +138,16 @@ class KeriAttestServiceTest {
         // Default: no pre-existing remotesign-ref debris. The snapshot-and-exclude test overrides this.
         lenient().when(correlator.outstandingNoteIds(any())).thenReturn(Set.of());
 
+        // Real KelAnchorVerifier, not a mock: it is a thin reader over the same mocked signify client,
+        // so the KEL stubs below still drive it and the seal logic stays under test.
         service = new KeriAttestService(keriClient, agentService, kedFactory, providerRegistry, correlator,
-                ceremonyService, identityLinkRepository, properties(), oobiService);
+                ceremonyService, identityLinkRepository, properties(), oobiService,
+                new KelAnchorVerifier(keriClient));
     }
 
     private static KeriAttestationProperties properties() {
         return new KeriAttestationProperties(
-                true, null, "identifier", null,
+                true, null, "identifier", null, null,
                 Duration.parse("PT1H"), Duration.parse("PT24H"), Duration.parse("PT3M"), Duration.parse("PT0.01S"),
                 3, new KeriAttestationProperties.Limits(3, Duration.parse("PT10S")),
                 Duration.parse("PT0.01S"), Duration.parse("PT0.05S"), Duration.parse("PT0.001S"),

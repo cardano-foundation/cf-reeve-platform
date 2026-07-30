@@ -2,8 +2,11 @@ package org.cardanofoundation.lob.app.document_vault.domain.view;
 
 import java.time.LocalDateTime;
 
+import jakarta.annotation.Nullable;
+
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyAssurance;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyOrigin;
+import org.cardanofoundation.lob.app.keri_attestation.domain.view.CredentialAttestationView;
 
 /**
  * An ORGANISATION key — one belonging to a Keycloak user who owns the private half. Used by
@@ -27,5 +30,6 @@ public record VaultKeyView(String keyId,
                            String credentialId,
                            KeyAssurance assurance,
                            KeyOrigin origin,
-                           LocalDateTime createdAt) {
+                           LocalDateTime createdAt,
+                           @Nullable CredentialAttestationView attestation) {
 }

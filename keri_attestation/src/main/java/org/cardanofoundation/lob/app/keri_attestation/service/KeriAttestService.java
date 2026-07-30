@@ -4,7 +4,6 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -27,6 +26,7 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestat
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentityLinkEntity;
 import org.cardanofoundation.lob.app.keri_attestation.domain.view.CeremonyView;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
+import org.cardanofoundation.lob.app.keri_attestation.service.KelAnchorVerifier.AnchorCandidate;
 import org.cardanofoundation.lob.app.keri_attestation.service.KeriNotificationCorrelator.CorrelatedNotification;
 import org.cardanofoundation.signify.app.Exchanging.ExchangeMessageResult;
 import org.cardanofoundation.signify.app.coring.Operation;
@@ -77,16 +77,7 @@ public class KeriAttestService {
     private final KeriIdentityLinkRepository identityLinkRepository;
     private final KeriAttestationProperties properties;
     private final KeriOobiService oobiService;
-
-    /** A candidate anchoring-event locator learned from the wallet's ref exn (or, failing that, a
-     *  key-state query fallback) — either field may be {@code null} if unavailable. */
-    private record AnchorCandidate(String said, String sequence) {
-        private static final AnchorCandidate EMPTY = new AnchorCandidate(null, null);
-
-        boolean isEmpty() {
-            return said == null && sequence == null;
-        }
-    }
+    private final KelAnchorVerifier anchorVerifier;
 
     /**
      * Orchestrates the ATTEST step end-to-end, SYNCHRONOUSLY, for a single controller call: {@link
@@ -361,15 +352,14 @@ public class KeriAttestService {
     private Optional<Map<String, Object>> locateAnchoringEvent(String walletAid, String payloadSaid,
             String floorSequence, CorrelatedNotification ref) throws Exception {
         AnchorCandidate candidate = extractCandidate(ref.exn());
-        List<Map<String, Object>> kel = fetchKel(walletAid);
-        List<Map<String, Object>> ixnEvents = kel.stream().filter(ke -> "ixn".equals(ke.get("t"))).toList();
+        List<Map<String, Object>> ixnEvents = anchorVerifier.fetchIxnEvents(walletAid);
         if (!candidate.isEmpty()) {
-            Map<String, Object> event = locateExplicitCandidate(ixnEvents, candidate);
-            return event != null && satisfiesFloorAndDigest(event, floorSequence, payloadSaid)
+            Map<String, Object> event = KelAnchorVerifier.locateCandidate(ixnEvents, candidate);
+            return event != null && KelAnchorVerifier.satisfiesFloorAndDigest(event, floorSequence, payloadSaid)
                     ? Optional.of(event) : Optional.empty();
         }
         return queryLatestSequenceWithRetries(walletAid)
-                .map(cs -> scanForSealMatch(ixnEvents, floorSequence, cs, payloadSaid));
+                .map(cs -> KelAnchorVerifier.scanForSealMatch(ixnEvents, floorSequence, cs, payloadSaid));
     }
 
     /**
@@ -451,112 +441,6 @@ public class KeriAttestService {
         return Operations.WaitOptions.builder()
                 .abortSignal(Operations.AbortSignal.builder().timeout(KEY_STATE_QUERY_WAIT_MILLIS).build())
                 .build();
-    }
-
-    // --- KEL fetch + anchoring-event location, coded defensively over the pinned jar's raw Object
-    //     shapes (field names confirmed against a live agent response) ---
-
-    private List<Map<String, Object>> fetchKel(String aid) throws Exception {
-        Object raw = client.client().keyEvents().get(aid);
-        if (!(raw instanceof List<?> rawList)) {
-            return List.of();
-        }
-        List<Map<String, Object>> events = new ArrayList<>();
-        for (Object item : rawList) {
-            Map<String, Object> ked = extractKed(item);
-            if (ked != null) {
-                events.add(ked);
-            }
-        }
-        return events;
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> extractKed(Object item) {
-        if (!(item instanceof Map<?, ?> map)) {
-            return null;
-        }
-        Object ked = map.get("ked");
-        if (ked instanceof Map<?, ?>) {
-            return (Map<String, Object>) ked;
-        }
-        // Defensive fallback: some KERIA responses may not wrap events under "ked" — if this item
-        // already looks like a key event itself (has a type and sequence), use it directly.
-        if (map.containsKey("t") && map.containsKey("s")) {
-            return (Map<String, Object>) map;
-        }
-        return null;
-    }
-
-    /** Locates the {@code ixn} event an explicit ref-derived {@code candidate} names — by SAID first,
-     *  then by sequence (no fallback to "the latest event" if neither matches — a caller with an
-     *  explicit candidate that can't be found must fail, not shop for a different event). */
-    private static Map<String, Object> locateExplicitCandidate(List<Map<String, Object>> ixnEvents,
-            AnchorCandidate candidate) {
-        if (candidate.said() != null) {
-            for (Map<String, Object> ke : ixnEvents) {
-                if (candidate.said().equals(ke.get("d"))) {
-                    return ke;
-                }
-            }
-        }
-        if (candidate.sequence() != null) {
-            for (Map<String, Object> ke : ixnEvents) {
-                if (candidate.sequence().equals(String.valueOf(ke.get("s")))) {
-                    return ke;
-                }
-            }
-        }
-        return null;
-    }
-
-    /** Bounded scan over {@code ixnEvents} whose sequence falls within
-     *  ({@code floorSequence}, {@code currentSequence}] — <b>strictly</b> after the floor, at or before
-     *  the current key-state sequence (hex-compared numerically) — returning the first whose seal
-     *  contains {@code payloadSaid}, or {@code null} if none in that window match. */
-    private static Map<String, Object> scanForSealMatch(List<Map<String, Object>> ixnEvents, String floorSequence,
-            String currentSequence, String payloadSaid) {
-        long floor = parseHexSequence(floorSequence);
-        long current = parseHexSequence(currentSequence);
-        for (Map<String, Object> ke : ixnEvents) {
-            long sn = parseHexSequence(String.valueOf(ke.get("s")));
-            if (sn <= floor || sn > current) {
-                continue;
-            }
-            if (sealContainsDigest(ke.get("a"), payloadSaid)) {
-                return ke;
-            }
-        }
-        return null;
-    }
-
-    /** {@code event}'s sequence must be <b>strictly after</b> {@code floorSequence} (hex-compared
-     *  numerically) AND its seal must contain {@code payloadSaid}. Sequence equal to the floor is
-     *  rejected: the floor is the sequence observed before the request was sent, so the genuine
-     *  anchoring event is always strictly newer. */
-    private static boolean satisfiesFloorAndDigest(Map<String, Object> event, String floorSequence,
-            String payloadSaid) {
-        long sn = parseHexSequence(String.valueOf(event.get("s")));
-        if (sn <= parseHexSequence(floorSequence)) {
-            return false;
-        }
-        return sealContainsDigest(event.get("a"), payloadSaid);
-    }
-
-    private static long parseHexSequence(String hexSequence) {
-        return Long.parseLong(hexSequence, 16);
-    }
-
-    private static boolean sealContainsDigest(Object sealField, String digestQb64) {
-        if (!(sealField instanceof List<?> seals) || digestQb64 == null) {
-            return false;
-        }
-        for (Object seal : seals) {
-            if (seal instanceof Map<?, ?> sealMap && digestQb64.equals(sealMap.get("d"))) {
-                return true;
-            }
-        }
-        return false;
     }
 
     // --- internals ---

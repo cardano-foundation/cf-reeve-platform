@@ -1,13 +1,20 @@
 package org.cardanofoundation.lob.app.document_vault.service;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import jakarta.annotation.Nullable;
 
 import lombok.RequiredArgsConstructor;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ProblemDetail;
 import org.springframework.security.core.Authentication;
@@ -28,6 +35,8 @@ import org.cardanofoundation.lob.app.document_vault.domain.view.RecipientKeyView
 import org.cardanofoundation.lob.app.document_vault.domain.view.VaultKeyView;
 import org.cardanofoundation.lob.app.document_vault.repository.AddressbookEntryRepository;
 import org.cardanofoundation.lob.app.document_vault.repository.VaultKeyRepository;
+import org.cardanofoundation.lob.app.keri_attestation.domain.view.CredentialAttestationView;
+import org.cardanofoundation.lob.app.keri_attestation.service.CredentialVerificationService;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
@@ -40,6 +49,8 @@ public class VaultKeyService {
     private final AddressbookEntryRepository entryRepository;
     private final KeycloakSecurityHelper securityHelper;
     private final OrganisationPublicApiIF organisationPublicApi;
+    /** Absent when keri_attestation is disabled — keys then simply carry no verdict. */
+    private final ObjectProvider<CredentialVerificationService> verificationServiceProvider;
 
     @Value("${keycloak.roles.admin:admin}")
     private String adminRoleName;
@@ -79,8 +90,9 @@ public class VaultKeyService {
 
     @Transactional(readOnly = true)
     public PagedResponse<VaultKeyView> listMyKeys(Pageable pageable) {
-        return PagedResponse.of(keyRepository.findByAccountId(securityHelper.getCurrentUserId(), pageable),
-                VaultKeyService::toView);
+        Page<VaultKeyEntity> page = keyRepository.findByAccountId(securityHelper.getCurrentUserId(), pageable);
+        Map<String, CredentialAttestationView> verdicts = attestationsFor(page);
+        return PagedResponse.of(page, key -> toView(key, verdicts.get(verdictKey(key.getOrganisationId(), key.getPublicKey()))));
     }
 
     /**
@@ -94,8 +106,9 @@ public class VaultKeyService {
             return Either.left(VaultProblems.forbidden(
                     "Current user is not a member of organisation %s.".formatted(organisationId)));
         }
-        return Either.right(PagedResponse.of(
-                keyRepository.findByOrganisationId(organisationId, pageable), VaultKeyService::toView));
+        Page<VaultKeyEntity> page = keyRepository.findByOrganisationId(organisationId, pageable);
+        Map<String, CredentialAttestationView> verdicts = attestationsFor(page);
+        return Either.right(PagedResponse.of(page, key -> toView(key, verdicts.get(verdictKey(key.getOrganisationId(), key.getPublicKey())))));
     }
 
     /**
@@ -163,10 +176,45 @@ public class VaultKeyService {
                 entry.getAssurance(), null, entry.getHomeOrganisationId());
     }
 
+    /**
+     * @return the credential verdicts keri_attestation holds for this page's cards, keyed by
+     *         {@code organisationId + "/" + publicKey}.
+     *
+     * <p>Grouped by organisation rather than assuming the page has only one. {@code /keys/me} lists a
+     * user's keys across EVERY organisation they belong to, so taking the first row's organisation for
+     * the whole page would look up one organisation's verdicts and then apply them to another's rows —
+     * attaching a badge earned in organisation A to a key in organisation B. One query per distinct
+     * organisation on the page, which for the common single-org page is still one query.
+     */
+    private Map<String, CredentialAttestationView> attestationsFor(Page<VaultKeyEntity> page) {
+        CredentialVerificationService verificationService = verificationServiceProvider.getIfAvailable();
+        if (verificationService == null || page.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, List<String>> keysByOrganisation = page.getContent().stream().collect(
+                Collectors.groupingBy(VaultKeyEntity::getOrganisationId,
+                        Collectors.mapping(VaultKeyEntity::getPublicKey, Collectors.toList())));
+        Map<String, CredentialAttestationView> byOrgAndKey = new LinkedHashMap<>();
+        keysByOrganisation.forEach((organisationId, publicKeys) ->
+                verificationService.findAll(organisationId, publicKeys).forEach((publicKey, view) ->
+                        byOrgAndKey.put(verdictKey(organisationId, publicKey), view)));
+        return byOrgAndKey;
+    }
+
+    /** Verdicts are scoped to an organisation, so the lookup key must be too. */
+    private static String verdictKey(String organisationId, String publicKey) {
+        return organisationId + "/" + publicKey;
+    }
+
     /** Package-private + static so CardImportService reuses the exact same mapping. */
     static VaultKeyView toView(VaultKeyEntity key) {
+        return toView(key, null);
+    }
+
+    /** As above, with the credential verdict keri_attestation holds for this key's card, if any. */
+    static VaultKeyView toView(VaultKeyEntity key, @Nullable CredentialAttestationView attestation) {
         return new VaultKeyView(key.getId(), key.getOrganisationId(), key.getAccountId(), key.getAccountName(),
                 key.getLabel(), key.getPublicKey(), key.getCredentialId(),
-                key.getAssurance(), key.getOrigin(), key.getCreatedAt());
+                key.getAssurance(), key.getOrigin(), key.getCreatedAt(), attestation);
     }
 }

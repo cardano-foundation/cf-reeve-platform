@@ -67,13 +67,30 @@ class CardImportServiceTest {
             org.cardanofoundation.lob.app.keri_attestation.service.AttestationImportVerifier> attestationVerifierProvider;
     @Mock
     private org.cardanofoundation.lob.app.keri_attestation.service.AttestationImportVerifier attestationVerifier;
+    @Mock
+    private org.springframework.beans.factory.ObjectProvider<
+            org.cardanofoundation.lob.app.keri_attestation.service.CredentialVerificationService>
+            verificationServiceProvider;
+    @Mock
+    private org.cardanofoundation.lob.app.keri_attestation.service.CredentialVerificationService
+            verificationService;
+
+    /** A recorded verdict for the card under test; only its presence matters to the guard. */
+    private static final org.cardanofoundation.lob.app.keri_attestation.domain.view.CredentialAttestationView
+            VERDICT = new org.cardanofoundation.lob.app.keri_attestation.domain.view.CredentialAttestationView(
+                    org.cardanofoundation.lob.app.keri_attestation.domain.core.AttestationStatus.VERIFIED,
+                    java.time.Instant.now(), "EWalletAid", "ESchemaSaid", "Foundation Employee",
+                    "EIssuer", "EIssuer",
+                    org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchema.TrustModel.STANDALONE,
+                    "3", "EKelEventSaid", java.util.Map.of());
 
     private CardImportService service;
 
     @BeforeEach
     void setUp() {
         service = new CardImportService(keyRepository, entryRepository, securityHelper, organisationPublicApi,
-                new KeyCardVerifier(), attestationDigestFactory, attestationVerifierProvider);
+                new KeyCardVerifier(), attestationDigestFactory, attestationVerifierProvider,
+                verificationServiceProvider);
         // Attested-card tests exercise B1 persistence, not B2's verifier internals: stub the verifier to pass.
         when(attestationVerifierProvider.getIfAvailable()).thenReturn(attestationVerifier);
         when(attestationDigestFactory.digestOf(any())).thenReturn("EcardDigest");
@@ -95,7 +112,8 @@ class CardImportServiceTest {
 
     private static final KeyCardDto.CardAttestation ATTESTATION = new KeyCardDto.CardAttestation(
             "https://example.org/oobi/EWalletAid/agent/EAgentEid", "EWalletAid", "ECredentialSaid",
-            "ESchemaSaid", "deadbeef", "-CESR-credential-chain-");
+            "ESchemaSaid", "3", "EKelEventSaid", "170", "ECardDigest", "EPayloadSaid",
+            "-CESR-credential-chain-");
 
     private KeyCardDto card(CardSubjectType subjectType, String subjectId, String organisationId) {
         KeyCardDto card = new KeyCardDto();
@@ -161,7 +179,11 @@ class CardImportServiceTest {
         assertEquals(ATTESTATION.aid(), entry.getAttestationAid());
         assertEquals(ATTESTATION.credentialSaid(), entry.getAttestationCredentialSaid());
         assertEquals(ATTESTATION.schemaSaid(), entry.getAttestationSchemaSaid());
-        assertEquals(ATTESTATION.txHash(), entry.getAttestationTxHash());
+        assertEquals(ATTESTATION.kelSequence(), entry.getAttestationKelSequence());
+        assertEquals(ATTESTATION.kelEventSaid(), entry.getAttestationKelEventSaid());
+        assertEquals(ATTESTATION.metadataLabel(), entry.getAttestationMetadataLabel());
+        assertEquals(ATTESTATION.cardDigest(), entry.getAttestationCardDigest());
+        assertEquals(ATTESTATION.payloadSaid(), entry.getAttestationPayloadSaid());
     }
 
     /** A card without the optional block leaves the provenance columns NULL, same as today. */
@@ -246,7 +268,139 @@ class CardImportServiceTest {
         assertEquals(ATTESTATION.aid(), key.getAttestationAid());
         assertEquals(ATTESTATION.credentialSaid(), key.getAttestationCredentialSaid());
         assertEquals(ATTESTATION.schemaSaid(), key.getAttestationSchemaSaid());
-        assertEquals(ATTESTATION.txHash(), key.getAttestationTxHash());
+        assertEquals(ATTESTATION.kelSequence(), key.getAttestationKelSequence());
+        assertEquals(ATTESTATION.kelEventSaid(), key.getAttestationKelEventSaid());
+        assertEquals(ATTESTATION.metadataLabel(), key.getAttestationMetadataLabel());
+        assertEquals(ATTESTATION.cardDigest(), key.getAttestationCardDigest());
+        assertEquals(ATTESTATION.payloadSaid(), key.getAttestationPayloadSaid());
+    }
+
+    // --- an attested row's signed identity fields cannot be rewritten by an unattested card ---
+
+    private AddressbookEntryEntity attestedContact() {
+        AddressbookEntryEntity existing = new AddressbookEntryEntity();
+        existing.setId("existing-entry");
+        existing.setOrganisationId("org1");
+        existing.setPublicKey(X25519_PUB);
+        existing.setDisplayName("Bob Miller");
+        existing.setEmail("bob@example.org");
+        existing.setDescription("Bob's audit key");
+        existing.setAssurance(KeyAssurance.PORTABLE);
+        existing.setAttestationAid("EWalletAid");
+        return existing;
+    }
+
+    /**
+     * The attack this guards: import a genuine attested card, then re-import an UNATTESTED card
+     * carrying the same public key and attacker-chosen identity. Attestation provenance is written once
+     * and never revisited, so without the guard the row would keep its verified anchor while every
+     * field a reader looks at changed underneath it.
+     */
+    @Test
+    void anUnattestedCardCannotRewriteAnAttestedContactsIdentityFields() {
+        when(entryRepository.findByOrganisationIdAndPublicKey("org1", X25519_PUB))
+                .thenReturn(Optional.of(attestedContact()));
+        ImportCardRequest request = request(CardSubjectType.REEVE_ACCOUNT, "sub-bob");
+        request.getCard().setSubject(new KeyCardDto.Subject(CardSubjectType.REEVE_ACCOUNT, "sub-bob",
+                "Mallory", "mallory@evil.example", "org1"));
+
+        Either<ProblemDetail, ImportCardResultView> result = service.importCard(request);
+
+        assertTrue(result.isLeft());
+        assertEquals(VaultProblems.ATTESTED_CARD_FIELDS_IMMUTABLE, result.getLeft().getTitle());
+        assertTrue(result.getLeft().getDetail().contains("displayName"));
+        assertTrue(result.getLeft().getDetail().contains("email"));
+        verify(entryRepository, never()).save(any());
+    }
+
+    /**
+     * The gap between provenance and verdict. Attestation provenance is written only when a row is
+     * CREATED, so a card first imported unattested and later re-imported with a verified attestation
+     * earns a verdict while its attestationAid stays null. A guard reading only the column would treat
+     * that row as unattested and let the next unattested import rewrite the fields the verdict covers.
+     */
+    @Test
+    void aRecordedVerdictProtectsARowWhoseProvenanceColumnsAreStillNull() {
+        AddressbookEntryEntity existing = attestedContact();
+        existing.setAttestationAid(null);
+        when(entryRepository.findByOrganisationIdAndPublicKey("org1", X25519_PUB))
+                .thenReturn(Optional.of(existing));
+        when(verificationServiceProvider.getIfAvailable()).thenReturn(verificationService);
+        when(verificationService.find("org1", X25519_PUB)).thenReturn(Optional.of(VERDICT));
+        ImportCardRequest request = request(CardSubjectType.REEVE_ACCOUNT, "sub-bob");
+        request.getCard().setSubject(new KeyCardDto.Subject(CardSubjectType.REEVE_ACCOUNT, "sub-bob",
+                "Mallory", "mallory@evil.example", "org1"));
+
+        Either<ProblemDetail, ImportCardResultView> result = service.importCard(request);
+
+        assertTrue(result.isLeft());
+        assertEquals(VaultProblems.ATTESTED_CARD_FIELDS_IMMUTABLE, result.getLeft().getTitle());
+        verify(entryRepository, never()).save(any());
+    }
+
+    /** A re-import that changes nothing stays the ordinary no-op it looks like. */
+    @Test
+    void reimportingAnIdenticalUnattestedCardOverAnAttestedContactIsStillAllowed() {
+        when(entryRepository.findByOrganisationIdAndPublicKey("org1", X25519_PUB))
+                .thenReturn(Optional.of(attestedContact()));
+
+        Either<ProblemDetail, ImportCardResultView> result =
+                service.importCard(request(CardSubjectType.REEVE_ACCOUNT, "sub-bob"));
+
+        assertTrue(result.isRight(), () -> result.isLeft() ? result.getLeft().getDetail() : "");
+    }
+
+    /** A card carrying its own verified attestation covers these fields by digest, so it may update them. */
+    @Test
+    void anAttestedCardMayUpdateAnAttestedContactsIdentityFields() {
+        when(entryRepository.findByOrganisationIdAndPublicKey("org1", X25519_PUB))
+                .thenReturn(Optional.of(attestedContact()));
+        ImportCardRequest request = request(CardSubjectType.REEVE_ACCOUNT, "sub-bob");
+        request.getCard().setSubject(new KeyCardDto.Subject(CardSubjectType.REEVE_ACCOUNT, "sub-bob",
+                "Robert Miller", "robert@example.org", "org1"));
+        request.getCard().setAttestation(ATTESTATION);
+
+        Either<ProblemDetail, ImportCardResultView> result = service.importCard(request);
+
+        assertTrue(result.isRight(), () -> result.isLeft() ? result.getLeft().getDetail() : "");
+        assertEquals("Robert Miller", savedEntry().getDisplayName());
+    }
+
+    /** An UNattested row is ordinary trust-on-first-use: nothing signed its fields, so it stays mutable. */
+    @Test
+    void anUnattestedContactsFieldsRemainFreelyUpdatable() {
+        AddressbookEntryEntity existing = attestedContact();
+        existing.setAttestationAid(null);
+        when(entryRepository.findByOrganisationIdAndPublicKey("org1", X25519_PUB))
+                .thenReturn(Optional.of(existing));
+        ImportCardRequest request = request(CardSubjectType.REEVE_ACCOUNT, "sub-bob");
+        request.getCard().setSubject(new KeyCardDto.Subject(CardSubjectType.REEVE_ACCOUNT, "sub-bob",
+                "Renamed", "renamed@example.org", "org1"));
+
+        assertTrue(service.importCard(request).isRight());
+        assertEquals("Renamed", savedEntry().getDisplayName());
+    }
+
+    @Test
+    void anUnattestedCardCannotRelabelAnAttestedOwnKey() {
+        VaultKeyEntity existing = new VaultKeyEntity();
+        existing.setId("existing-key");
+        existing.setAccountId("sub-alice");
+        existing.setOrganisationId("org1");
+        existing.setPublicKey(X25519_PUB);
+        existing.setLabel("Attested label");
+        existing.setOrigin(KeyOrigin.INDEXER_ISSUED);
+        existing.setAssurance(KeyAssurance.PORTABLE);
+        existing.setAttestationAid("EWalletAid");
+        when(keyRepository.findByAccountIdAndOrganisationIdAndPublicKey("sub-alice", "org1", X25519_PUB))
+                .thenReturn(Optional.of(existing));
+
+        Either<ProblemDetail, ImportCardResultView> result =
+                service.importCard(request(CardSubjectType.REEVE_ACCOUNT, "sub-alice"));
+
+        assertTrue(result.isLeft());
+        assertEquals(VaultProblems.ATTESTED_CARD_FIELDS_IMMUTABLE, result.getLeft().getTitle());
+        verify(keyRepository, never()).save(any());
     }
 
     /**
@@ -404,4 +558,5 @@ class CardImportServiceTest {
         verify(entryRepository, never()).save(any());
         verify(keyRepository, never()).save(any());
     }
+
 }

@@ -16,8 +16,13 @@ There is no Cardano wallet and no transaction submitter here, by design: the API
 ceremonies has neither chain nor IPFS access. AUTH_BEGIN is published by emitting an
 `AuthBeginPublishCommand`, which `blockchain_publisher` turns into a CIP-170 transaction through the
 same dispatcher every other publishable type uses; the resulting `LedgerUpdatedEvent` completes the
-ceremony step. The one remaining chain interaction is a read (`CardanoMetadataReader`, for verifying
-an imported card's existing ATTEST), which fails closed when the publisher is absent.
+ceremony step.
+
+There are no chain reads either. Verifying an imported card's attestation used to read the CIP-170
+metadata of an on-chain ATTEST transaction, but the issuing indexer publishes no such transaction —
+its wallet seals the attestation in its own KEL, and that seal *is* the attestation. Verification
+therefore reads KERI only (`KelAnchorVerifier`), which is what lets an attested card be imported on a
+tier deployed without any chain client at all.
 
 ## CIP-170 reference
 

@@ -59,7 +59,7 @@ class VaultKeyServiceTest {
 
     @BeforeEach
     void currentUser() {
-        service = new VaultKeyService(keyRepository, entryRepository, securityHelper, organisationPublicApi);
+        service = new VaultKeyService(keyRepository, entryRepository, securityHelper, organisationPublicApi, absentVerificationService());
         ReflectionTestUtils.setField(service, "adminRoleName", "admin");
         // lenient: MockitoExtension defaults to STRICT_STUBS and early-return tests never consume this stub
         lenient().when(securityHelper.getCurrentUserId()).thenReturn("acc1");
@@ -258,5 +258,13 @@ class VaultKeyServiceTest {
         entry.setPublicKey("f".repeat(64));
         entry.setAssurance(KeyAssurance.PORTABLE);
         return entry;
+    }
+
+    /** keri_attestation is not wired into these unit tests, so there is no verdict store to consult. */
+    @SuppressWarnings("unchecked")
+    private static org.springframework.beans.factory.ObjectProvider<
+            org.cardanofoundation.lob.app.keri_attestation.service.CredentialVerificationService>
+            absentVerificationService() {
+        return org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class);
     }
 }

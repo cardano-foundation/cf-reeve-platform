@@ -2,7 +2,10 @@ package org.cardanofoundation.lob.app.document_vault.domain.view;
 
 import java.time.LocalDateTime;
 
+import jakarta.annotation.Nullable;
+
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyAssurance;
+import org.cardanofoundation.lob.app.keri_attestation.domain.view.CredentialAttestationView;
 
 /**
  * An addressbook contact, as managed at {@code /addressbook}. E-mail is org-internal contact data — it
@@ -23,5 +26,6 @@ public record AddressbookEntryView(String entryId,
                                    String publicKey,
                                    KeyAssurance assurance,
                                    String homeOrganisationId,
-                                   LocalDateTime createdAt) {
+                                   LocalDateTime createdAt,
+                                   @Nullable CredentialAttestationView attestation) {
 }

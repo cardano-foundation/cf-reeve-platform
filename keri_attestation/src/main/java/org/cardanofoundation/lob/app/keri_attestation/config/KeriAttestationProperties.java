@@ -12,6 +12,10 @@ public record KeriAttestationProperties(
         Keria keria,
         String identifierName,
         CredentialPolicy credentialPolicy,
+        /** The schemas this deployment accepts and who may issue them — see
+         *  {@link CredentialSchemaRegistry}, which validates this at startup. Supersedes the schema and
+         *  trust-root fields of {@link CredentialPolicy}. */
+        List<CredentialSchema> credentialSchemas,
         @DefaultValue("PT1H") Duration ceremonyTtl,
         @DefaultValue("PT24H") Duration freezeMaxAge,
         @DefaultValue("PT3M") Duration remotesignTimeout,
@@ -57,12 +61,17 @@ public record KeriAttestationProperties(
      * {@code schemaBaseUrl} is the credential schema server's base OOBI URL, without a trailing slash.
      * {@code KeriCredentialService} uses it twice: as the IPEX apply's top-level {@code oobiUrl}, which
      * is where the wallet resolves the schema from — not our agent's own OOBI — and as the base for
-     * resolving each of {@link #schemaSaids()} on our own agent before sending an apply, since KERIA
+     * resolving each accepted schema SAID on our own agent before sending an apply, since KERIA
      * silently drops an exchange referencing a schema SAID the receiving agent has never resolved.
+     *
+     * <p>{@code schemaSaids} and {@code trustedRootAids} are <b>deprecated</b> in favour of
+     * {@link KeriAttestationProperties#credentialSchemas()}, which says which trust model each schema
+     * uses instead of assuming one for all of them. They are still read for one release — see
+     * {@link CredentialSchemaRegistry} — and then removed. {@code schemaBaseUrl} is not deprecated.
      */
     public record CredentialPolicy(
-            List<String> schemaSaids,
-            List<String> trustedRootAids,
+            @Deprecated List<String> schemaSaids,
+            @Deprecated List<String> trustedRootAids,
             @DefaultValue("https://cred-issuance.demo.idw-sandboxes.cf-deployments.org/oobi") String schemaBaseUrl) {
     }
 

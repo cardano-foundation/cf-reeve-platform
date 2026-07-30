@@ -50,7 +50,7 @@ class AddressbookServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AddressbookService(entryRepository, securityHelper, organisationPublicApi);
+        service = new AddressbookService(entryRepository, securityHelper, organisationPublicApi, absentVerificationService());
         when(securityHelper.canUserAccessOrg("org1")).thenReturn(true);
         when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(new Organisation()));
         when(entryRepository.findByOrganisationIdAndPublicKey(any(), any())).thenReturn(Optional.empty());
@@ -194,5 +194,13 @@ class AddressbookServiceTest {
         assertTrue(result.isLeft());
         assertEquals(403, result.getLeft().getStatus());
         verify(entryRepository, never()).save(any());
+    }
+
+    /** keri_attestation is not wired into these unit tests, so there is no verdict store to consult. */
+    @SuppressWarnings("unchecked")
+    private static org.springframework.beans.factory.ObjectProvider<
+            org.cardanofoundation.lob.app.keri_attestation.service.CredentialVerificationService>
+            absentVerificationService() {
+        return org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class);
     }
 }

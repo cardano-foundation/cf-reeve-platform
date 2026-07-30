@@ -79,7 +79,8 @@ class KeriAttestationModuleFlagTest {
     void credentialPolicySchemaBaseUrl_defaultsWhenUnset() {
         contextRunner.withPropertyValues(
                 "lob.keri-attestation.enabled=true",
-                "lob.keri-attestation.credential-policy.schema-saids[0]=ESCHEMA00000000000000000000000000000000")
+                "lob.keri-attestation.credential-policy.schema-saids[0]=ESCHEMA00000000000000000000000000000000",
+                "lob.keri-attestation.credential-policy.trusted-root-aids[0]=EROOT000000000000000000000000000000000")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     KeriAttestationProperties properties = context.getBean(KeriAttestationProperties.class);
@@ -94,12 +95,68 @@ class KeriAttestationModuleFlagTest {
         contextRunner.withPropertyValues(
                 "lob.keri-attestation.enabled=true",
                 "lob.keri-attestation.credential-policy.schema-saids[0]=ESCHEMA00000000000000000000000000000000",
+                "lob.keri-attestation.credential-policy.trusted-root-aids[0]=EROOT000000000000000000000000000000000",
                 "lob.keri-attestation.credential-policy.schema-base-url=https://custom.example.org/oobi")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     KeriAttestationProperties properties = context.getBean(KeriAttestationProperties.class);
                     assertThat(properties.credentialPolicy().schemaBaseUrl())
                             .isEqualTo("https://custom.example.org/oobi");
+                });
+    }
+
+    /**
+     * The deprecated {@code schema-saids}/{@code trusted-root-aids} pair is bridged for one release as
+     * CHAINED entries, so a deployment still on it keeps working — but only if it actually named a root.
+     * Schema SAIDs with no roots is not a working legacy config, it is a trust policy that accepts
+     * anyone, and it must take the deployment down rather than come up quietly.
+     */
+    @Test
+    void legacyCredentialPolicyWithoutTrustedRootsRefusesToStart() {
+        contextRunner.withPropertyValues(
+                "lob.keri-attestation.enabled=true",
+                "lob.keri-attestation.credential-policy.schema-saids[0]=ESCHEMA00000000000000000000000000000000")
+                .run(context -> assertThat(context).hasFailed());
+    }
+
+    /** The same pair WITH a root is bridged into a usable registry. */
+    @Test
+    void legacyCredentialPolicyWithTrustedRootsIsBridgedIntoTheRegistry() {
+        contextRunner.withPropertyValues(
+                "lob.keri-attestation.enabled=true",
+                "lob.keri-attestation.credential-policy.schema-saids[0]=ESCHEMA00000000000000000000000000000000",
+                "lob.keri-attestation.credential-policy.trusted-root-aids[0]=EROOT000000000000000000000000000000000")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    CredentialSchemaRegistry registry = context.getBean(CredentialSchemaRegistry.class);
+                    assertThat(registry.accepts("ESCHEMA00000000000000000000000000000000")).isTrue();
+                    assertThat(registry.find("ESCHEMA00000000000000000000000000000000").orElseThrow().trustModel())
+                            .isEqualTo(CredentialSchema.TrustModel.CHAINED);
+                });
+    }
+
+    /** The new form wins outright, and picks up per-schema trust models the legacy pair could not express. */
+    @Test
+    void credentialSchemasBindBothTrustModels() {
+        contextRunner.withPropertyValues(
+                "lob.keri-attestation.enabled=true",
+                "lob.keri-attestation.credential-schemas[0].said=EVLEI0000000000000000000000000000000000",
+                "lob.keri-attestation.credential-schemas[0].name=vLEI Legal Entity",
+                "lob.keri-attestation.credential-schemas[0].trust-model=CHAINED",
+                "lob.keri-attestation.credential-schemas[0].trusted-roots[0]=EROOT000000000000000000000000000000000",
+                "lob.keri-attestation.credential-schemas[1].said=EEMPLOYEE0000000000000000000000000000000",
+                "lob.keri-attestation.credential-schemas[1].name=Foundation Employee",
+                "lob.keri-attestation.credential-schemas[1].trust-model=STANDALONE",
+                "lob.keri-attestation.credential-schemas[1].trusted-issuers[0]=EISSUER00000000000000000000000000000000")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    CredentialSchemaRegistry registry = context.getBean(CredentialSchemaRegistry.class);
+                    assertThat(registry.find("EVLEI0000000000000000000000000000000000").orElseThrow().trustModel())
+                            .isEqualTo(CredentialSchema.TrustModel.CHAINED);
+                    assertThat(registry.find("EEMPLOYEE0000000000000000000000000000000").orElseThrow().trustModel())
+                            .isEqualTo(CredentialSchema.TrustModel.STANDALONE);
+                    assertThat(registry.find("EEMPLOYEE0000000000000000000000000000000").orElseThrow().trustAnchors())
+                            .containsExactly("EISSUER00000000000000000000000000000000");
                 });
     }
 

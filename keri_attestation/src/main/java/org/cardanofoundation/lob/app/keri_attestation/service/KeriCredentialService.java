@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 
 import io.vavr.control.Either;
 
+import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchemaRegistry;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
@@ -118,6 +119,8 @@ public class KeriCredentialService {
     private final CeremonyService ceremonyService;
     private final KeriIdentityLinkRepository identityLinkRepository;
     private final KeriAttestationProperties properties;
+    private final CredentialSchemaRegistry registry;
+    private final SchemaOobiResolver schemaOobiResolver;
     private final KeriOobiService oobiService;
 
     /** In-memory cache of schema SAIDs already resolved as an OOBI on our agent this process
@@ -145,8 +148,10 @@ public class KeriCredentialService {
         // Live-testing fix: resolved BEFORE beginStep, i.e. before any ceremony state is touched at
         // all — a resolution failure here must surface as a plain problem, not a failed/rolled-back
         // ceremony step. See ensureSchemasResolved's javadoc for why this has to happen at all.
-        Either<ProblemDetail, Void> schemasResolved =
-                ensureSchemasResolved(properties.credentialPolicy().schemaSaids());
+        // The issuers' OOBIs as well as the schemas': validation asks each issuer's registry for TEL
+        // state, which it can only answer for issuers this agent has been introduced to.
+        schemaOobiResolver.ensureResolved();
+        Either<ProblemDetail, Void> schemasResolved = ensureSchemasResolved(registry.schemaSaids());
         if (schemasResolved.isLeft()) {
             return Either.left(schemasResolved.getLeft());
         }
@@ -347,13 +352,12 @@ public class KeriCredentialService {
         // contract, so it's easy to forget it can still throw (e.g. a malformed/hostile chain tripping
         // an assumption CredentialChainValidator didn't explicitly guard) — wrapped the same as every
         // other step so a defect here fails the ceremony instead of escaping this request thread.
-        List<String> allowedSchemaSaids = properties.credentialPolicy().schemaSaids();
-        List<String> trustedRootAids = properties.credentialPolicy().trustedRootAids();
-        log.info("validating credential chain (issuee={}, allowed schemas={}, trusted roots={})", linkedAid,
-                allowedSchemaSaids, trustedRootAids);
+        log.info("validating credential chain (issuee={}, credential={})", linkedAid, credentialSaid);
         Either<ProblemDetail, ValidatedCredential> validated;
         try {
-            validated = validator.validate(fullCesr, linkedAid, allowedSchemaSaids, trustedRootAids);
+            // No schema claim to cross-check: an IPEX admit learns the schema from the credential it
+            // just received. The validator still gates that schema against the registry.
+            validated = validator.validate(fullCesr, linkedAid, credentialSaid, null);
         } catch (Exception e) {
             interruptIfNeeded(e);
             log.warn("credential chain validation threw: {}", e.getMessage(), e);
@@ -465,10 +469,15 @@ public class KeriCredentialService {
     private Either<ProblemDetail, Void> sendApply(KeriAttestationCeremonyEntity ceremony, String linkedAid,
             String agentName) {
         try {
-            List<String> schemaSaids = properties.credentialPolicy().schemaSaids();
-            if (schemaSaids == null || schemaSaids.isEmpty()) {
+            // The schema this deployment asks a wallet to present. The registry is ordered, and the
+            // first entry is the one requested — with several configured, which one to ask for is a
+            // deployment decision, made by ordering rather than left to whichever the map happened to
+            // yield first.
+            List<String> schemaSaids = registry.schemaSaids();
+            if (schemaSaids.isEmpty()) {
                 return Either.left(requestFailed(
-                        "No schema SAIDs configured under lob.keri-attestation.credential-policy.schema-saids."));
+                        "No credential schemas are configured under lob.keri-attestation.credential-schemas, "
+                                + "so there is nothing to ask the wallet to present."));
             }
             String schemaSaid = schemaSaids.get(0);
 

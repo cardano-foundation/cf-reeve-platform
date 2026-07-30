@@ -1,5 +1,9 @@
 package org.cardanofoundation.lob.app.document_vault.service;
 
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Component;
 
@@ -23,7 +27,10 @@ public class KeyCardVerifier {
 
     private static final int SUPPORTED_CARD_VERSION = 1;
     private static final String CARD_TYPE = "REEVE_KEY_CARD";
-    private static final String PRIVATE_KEY_FIELD = "privateKey";
+    /** Names a card must never carry. Matched case-insensitively and ignoring separators, so
+     *  {@code private_key}, {@code PrivateKey} and {@code privatekey} are all the same field. */
+    private static final List<String> SECRET_FIELD_NAMES = List.of("privatekey", "secretkey", "seed",
+            "mnemonic", "passphrase", "scalar");
 
     public Either<ProblemDetail, KeyCardDto> verify(KeyCardDto card) {
         if (card.getV() != SUPPORTED_CARD_VERSION || !CARD_TYPE.equals(card.getType())) {
@@ -32,12 +39,21 @@ public class KeyCardVerifier {
                             .formatted(card.getType(), card.getV(), CARD_TYPE, SUPPORTED_CARD_VERSION)));
         }
         // I5: the backend must never hold private key material. Checked regardless of anything else, so
-        // a card full of key material is rejected outright.
-        if (card.getUnknown().containsKey(PRIVATE_KEY_FIELD)) {
+        // a card full of key material is rejected outright. Nested objects cannot smuggle one past this:
+        // KeyCardDto's subject and key records reject unknown fields outright, so anything secret-shaped
+        // lands either here or in a deserialisation failure.
+        Optional<String> secret = card.getUnknown().keySet().stream().filter(KeyCardVerifier::isSecretName)
+                .findFirst();
+        if (secret.isPresent()) {
             return Either.left(VaultProblems.badRequest(VaultProblems.CARD_CONTAINS_PRIVATE_KEY,
-                    "This card still carries its privateKey section. Strip it in the client before "
-                            + "importing: the server must never hold private key material."));
+                    ("This card still carries a '%s' field. Strip it in the client before importing: the "
+                            + "server must never hold private key material.").formatted(secret.get())));
         }
         return Either.right(card);
+    }
+
+    private static boolean isSecretName(String field) {
+        String normalised = field.toLowerCase(Locale.ROOT).replace("_", "").replace("-", "");
+        return SECRET_FIELD_NAMES.contains(normalised);
     }
 }

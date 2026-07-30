@@ -37,6 +37,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchema;
+import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchema.TrustModel;
+import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchemaRegistry;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
@@ -131,6 +134,8 @@ class KeriCredentialServiceTest {
     private KeriIdentityLinkRepository identityLinkRepository;
     @Mock
     private KeriOobiService oobiService;
+    @Mock
+    private SchemaOobiResolver schemaOobiResolver;
 
     private KeriCredentialService service;
 
@@ -181,8 +186,14 @@ class KeriCredentialServiceTest {
         // to success so the tests that DO set an OOBI on the link still reach the rest of the flow.
         lenient().when(oobiService.refreshResolve(any(), any(), any())).thenReturn(Either.right(null));
 
+        // The registry is what the apply now asks for, so it carries the schema these tests expect.
         service = new KeriCredentialService(keriClient, agentService, correlator, validator, ceremonyService,
-                identityLinkRepository, properties(), oobiService);
+                identityLinkRepository, properties(), registry(), schemaOobiResolver, oobiService);
+    }
+
+    private static CredentialSchemaRegistry registry() {
+        return new CredentialSchemaRegistry(List.of(new CredentialSchema(SCHEMA_SAID, "Foundation Employee",
+                TrustModel.STANDALONE, List.of(), List.of(ROOT_AID), List.of())));
     }
 
     private static KeriAttestationProperties properties() {
@@ -190,6 +201,7 @@ class KeriCredentialServiceTest {
                 true, null, "identifier",
                 new KeriAttestationProperties.CredentialPolicy(List.of(SCHEMA_SAID), List.of(ROOT_AID),
                         SCHEMA_BASE_URL),
+                null,
                 Duration.parse("PT1H"), Duration.parse("PT24H"), Duration.parse("PT3M"), Duration.parse("PT0.01S"),
                 3, new KeriAttestationProperties.Limits(3, Duration.parse("PT10S")),
                 Duration.parse("PT0.01S"), Duration.parse("PT0.05S"), Duration.parse("PT0.01S"),
@@ -287,8 +299,9 @@ class KeriCredentialServiceTest {
         lenient().when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "atc3"));
 
         lenient().when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
-        lenient().when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
-                .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID)));
+        lenient().when(validator.validate("FULL-CESR-STREAM", LINKED_AID, CREDENTIAL_SAID, null))
+                .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID, "Foundation Employee", ROOT_AID, ROOT_AID,
+                        TrustModel.STANDALONE, Map.of(), "fingerprint")));
         lenient().when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
                 eq(CeremonyState.CREDENTIAL_RECEIVED), any())).thenReturn(true);
         lenient().when(ceremonyService.get(CEREMONY_ID, USER_ID))
@@ -529,7 +542,7 @@ class KeriCredentialServiceTest {
         stubHappyPath(ceremony);
         ProblemDetail rejection = KeriAttestationProblems.unprocessable(KeriAttestationProblems.CREDENTIAL_REJECTED,
                 "issuee mismatch");
-        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
+        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, CREDENTIAL_SAID, null))
                 .thenReturn(Either.left(rejection));
 
         Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
@@ -548,7 +561,7 @@ class KeriCredentialServiceTest {
     void presentCredentialValidatorThrowingFailsTheStepInsteadOfPropagating() throws Exception {
         KeriAttestationCeremonyEntity ceremony = ceremony(null);
         stubHappyPath(ceremony);
-        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
+        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, CREDENTIAL_SAID, null))
                 .thenThrow(new RuntimeException("null issuer somewhere in the chain"));
 
         Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
@@ -564,8 +577,9 @@ class KeriCredentialServiceTest {
         KeriAttestationCeremonyEntity ceremony = ceremony(null);
         stubHappyPath(ceremony);
         String someOtherCredentialSaid = "ESOMEOTHERCREDSAID00000000000000000000";
-        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
-                .thenReturn(Either.right(new ValidatedCredential(someOtherCredentialSaid, RESULT_SCHEMA_SAID)));
+        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, CREDENTIAL_SAID, null))
+                .thenReturn(Either.right(new ValidatedCredential(someOtherCredentialSaid, RESULT_SCHEMA_SAID, "Foundation Employee", ROOT_AID, ROOT_AID,
+                        TrustModel.STANDALONE, Map.of(), "fingerprint")));
 
         Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
 
@@ -631,8 +645,9 @@ class KeriCredentialServiceTest {
         Serder admitExn = serderWithSaid(ADMIT_SAID);
         when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "atc3"));
         when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
-        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
-                .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID)));
+        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, CREDENTIAL_SAID, null))
+                .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID, "Foundation Employee", ROOT_AID, ROOT_AID,
+                        TrustModel.STANDALONE, Map.of(), "fingerprint")));
         when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
                 eq(CeremonyState.CREDENTIAL_RECEIVED), any())).thenReturn(true);
         when(ceremonyService.get(CEREMONY_ID, USER_ID))
@@ -693,8 +708,9 @@ class KeriCredentialServiceTest {
         KeriIdentityLinkEntity freshLink = link(LINKED_AID);
         when(identityLinkRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(freshLink));
         when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
-        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
-                .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID)));
+        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, CREDENTIAL_SAID, null))
+                .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID, "Foundation Employee", ROOT_AID, ROOT_AID,
+                        TrustModel.STANDALONE, Map.of(), "fingerprint")));
         when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
                 eq(CeremonyState.CREDENTIAL_RECEIVED), any())).thenReturn(true);
         when(ceremonyService.get(CEREMONY_ID, USER_ID))
@@ -756,7 +772,7 @@ class KeriCredentialServiceTest {
         when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
         ProblemDetail rejection = KeriAttestationProblems.unprocessable(KeriAttestationProblems.CREDENTIAL_REJECTED,
                 "issuee mismatch");
-        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
+        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, CREDENTIAL_SAID, null))
                 .thenReturn(Either.left(rejection));
 
         Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
@@ -785,8 +801,9 @@ class KeriCredentialServiceTest {
         Serder admitExn = serderWithSaid(ADMIT_SAID);
         when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "directAdmitAtc"));
         when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
-        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
-                .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID)));
+        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, CREDENTIAL_SAID, null))
+                .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID, "Foundation Employee", ROOT_AID, ROOT_AID,
+                        TrustModel.STANDALONE, Map.of(), "fingerprint")));
         when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
                 eq(CeremonyState.CREDENTIAL_RECEIVED), any())).thenReturn(true);
         when(ceremonyService.get(CEREMONY_ID, USER_ID))
@@ -822,8 +839,9 @@ class KeriCredentialServiceTest {
         Serder admitExn = serderWithSaid(ADMIT_SAID);
         when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "directAdmitAtc"));
         when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
-        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, List.of(SCHEMA_SAID), List.of(ROOT_AID)))
-                .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID)));
+        when(validator.validate("FULL-CESR-STREAM", LINKED_AID, CREDENTIAL_SAID, null))
+                .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID, "Foundation Employee", ROOT_AID, ROOT_AID,
+                        TrustModel.STANDALONE, Map.of(), "fingerprint")));
         when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
                 eq(CeremonyState.CREDENTIAL_RECEIVED), any())).thenReturn(true);
         when(ceremonyService.get(CEREMONY_ID, USER_ID))

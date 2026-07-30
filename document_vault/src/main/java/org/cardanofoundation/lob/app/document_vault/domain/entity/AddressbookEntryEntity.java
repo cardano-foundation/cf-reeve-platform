@@ -49,9 +49,10 @@ public class AddressbookEntryEntity extends VaultBaseEntity implements Persistab
     @Column(name = "organisation_id", nullable = false)
     private String organisationId;
 
-    /** Free text. Two contacts may share a name — only (organisation, publicKey) is unique. */
-    @NotBlank
-    @Column(name = "display_name", nullable = false)
+    /** Free text, and optional: two contacts may share a name — only (organisation, publicKey) is
+     *  unique — and the card issuer omits a blank name rather than sending an empty one. */
+    @Nullable
+    @Column(name = "display_name")
     private String displayName;
 
     /**
@@ -112,9 +113,29 @@ public class AddressbookEntryEntity extends VaultBaseEntity implements Persistab
     @Column(name = "attestation_schema_said")
     private String attestationSchemaSaid;
 
+    /** The KEL interaction event the attesting wallet sealed this card's attestation in — the
+     *  attestation itself, since the issuing ceremony publishes nothing on-chain. */
     @Nullable
-    @Column(name = "attestation_tx_hash")
-    private String attestationTxHash;
+    @Column(name = "attestation_kel_sequence", length = 32)
+    private String attestationKelSequence;
+
+    @Nullable
+    @Column(name = "attestation_kel_event_said", length = 255)
+    private String attestationKelEventSaid;
+
+    /** The CIP-170 label the ceremony ran under, as the exact string that went into the signed
+     *  payload — an input to the anchored SAID, so it cannot be assumed on re-verification. */
+    @Nullable
+    @Column(name = "attestation_metadata_label", length = 32)
+    private String attestationMetadataLabel;
+
+    @Nullable
+    @Column(name = "attestation_card_digest", length = 255)
+    private String attestationCardDigest;
+
+    @Nullable
+    @Column(name = "attestation_payload_said", length = 255)
+    private String attestationPayloadSaid;
 
     /** The full CESR credential chain the wallet presented, carried because the credential cannot be
      *  fetched through the OOBI alone. Nullable, and potentially large. */

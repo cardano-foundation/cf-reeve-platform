@@ -14,11 +14,14 @@ import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170
 import org.cardanofoundation.lob.app.document_vault.domain.card.KeyCardDto;
 
 /**
- * Recomputes an imported card's CIP-170 attestation digest — the platform (B2) side of the contract
- * defined by the indexer's {@code CardAttestationDigestFactory}
- * ({@code reeve-indexing-example}). The on-chain CIP-170 {@code ATTEST} metadata for the card's
- * {@code txHash} carries this value in its {@code d} field; verifying an imported card means
- * recomputing this digest from the card JSON and comparing it against that on-chain {@code d}.
+ * Recomputes an imported card's canonical attestation digest — the platform side of the contract
+ * defined by the issuing indexer's {@code CardAttestationDigestFactory}
+ * ({@code reeve-indexing-example}).
+ *
+ * <p>This digest is not itself the anchored value. It is wrapped into a remotesign payload whose SAID
+ * is what the attesting wallet seals in its KEL, so verification recomputes this digest, derives that
+ * payload SAID from it ({@code RemotesignRequestFactory}), and looks for the seal — see
+ * {@code AttestationImportVerifier}.
  *
  * <p><b>The formula MUST byte-match the indexer's</b> (any divergence silently fails verification of
  * genuine cards): the Blake3-256 {@link Cip170MetadataFactory#digestOf} qb64 over the canonical CBOR
@@ -62,8 +65,10 @@ public class CardAttestationDigestFactory {
         subjectMap.put("subjectId", subject.subjectId());
         putIfPresent(subjectMap, "displayName", subject.displayName());
         putIfPresent(subjectMap, "email", subject.email());
-        // Mirror the indexer exactly: organisationId is put unconditionally (never omitted).
-        subjectMap.put("organisationId", subject.organisationId());
+        // Mirror the indexer exactly: organisationId is always present and never omitted, defaulting to
+        // the empty string when the holder named no organisation. A null here would digest differently
+        // from the "" the issuer put in.
+        subjectMap.put("organisationId", subject.organisationId() == null ? "" : subject.organisationId());
         root.put("subject", subjectMap);
 
         KeyCardDto.Key key = card.getKey();

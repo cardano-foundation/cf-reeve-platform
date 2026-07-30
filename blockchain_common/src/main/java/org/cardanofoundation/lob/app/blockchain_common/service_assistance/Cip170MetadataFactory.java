@@ -15,6 +15,7 @@ import com.bloxbean.cardano.client.metadata.MetadataMap;
 
 import org.cardanofoundation.signify.cesr.Diger;
 import org.cardanofoundation.signify.cesr.args.RawArgs;
+import org.cardanofoundation.signify.cesr.util.CoreUtil;
 
 /**
  * Builds the CIP-170 label-170 {@code ATTEST} and {@code AUTH_BEGIN} metadata maps, matching the
@@ -87,8 +88,8 @@ public class Cip170MetadataFactory {
      */
     public String digestOf(MetadataMap map1447) {
         try {
-            byte[] cbor = CborSerializationUtil.serialize(map1447.getMap());
-            return new Diger(new RawArgs(), cbor).getQb64();
+            byte[] blake3_256 = CoreUtil.blake3_256(CborSerializationUtil.serialize(map1447.getMap()), 32);
+            return new Diger(RawArgs.builder().raw(blake3_256).build()).getQb64();
         } catch (CborException e) {
             throw new IllegalStateException("Failed to CBOR-serialize a metadata map for digesting.", e);
         } catch (DigestException e) {

@@ -1,3 +1,9 @@
+-- This file creates keri_attestation's tables and has never been released: it exists only on the
+-- branch that introduces the module, so it is still edited in place rather than amended by a follow-up
+-- migration. Once it merges that stops being true — from then on, a schema change here needs a new
+-- versioned file with explicit ALTER/CREATE statements, because editing an applied migration breaks its
+-- checksum and CREATE TABLE IF NOT EXISTS does nothing against a database that already ran this version.
+
 -- IDENTITY LINK. One row per platform user (Keycloak subject): their Veridian AID and the one-time
 -- identity-level steps (OOBI resolve, credential presentation, AUTH_BEGIN) completed so far.
 -- binding_version increments on every relink to a different AID; ceremonies created
@@ -80,3 +86,46 @@ CREATE INDEX IF NOT EXISTS idx_keri_attestation_ceremony_user_state ON keri_atte
 -- "is there already an attested/anchored ceremony for this target?" lookups from the consuming side
 -- (document_vault publish)
 CREATE INDEX IF NOT EXISTS idx_keri_attestation_ceremony_target ON keri_attestation_ceremony (target_type, target_id);
+
+-- CREDENTIAL VERIFICATION VERDICTS. What this deployment concluded about an imported card's
+-- credential, and why. Owned here rather than added as more columns on document_vault's key and
+-- addressbook tables: the verdict is this module's decision, made under this module's policy, and a
+-- verdict stored next to the data it judges drifts out of step with the policy that produced it.
+--
+-- Keyed by the CARD (organisation + public key), not by a vault row id. The same card can appear in
+-- both vault tables, the verdict is identical either way, and keying on a vault id would make this
+-- module depend on identifiers it does not own.
+CREATE TABLE IF NOT EXISTS keri_attestation_credential_verification (
+    id VARCHAR(36) PRIMARY KEY,
+    organisation_id VARCHAR(255) NOT NULL,
+    public_key VARCHAR(64) NOT NULL,
+    -- VERIFIED | UNKNOWN_LEGACY | REVOKED_AFTER_IMPORT. An enum rather than a boolean because "not
+    -- verified" covers three different situations, and a row that was never checked did not fail one.
+    status VARCHAR(32) NOT NULL,
+    -- when the checks actually ran. The claim is "verified at import", never "valid right now".
+    verified_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    attester_aid VARCHAR(255),
+    credential_said VARCHAR(255),
+    schema_said VARCHAR(255),
+    -- the schema's display name as configured AT THE TIME, so the UI does not relabel old verdicts.
+    schema_name VARCHAR(255),
+    -- leaf_issuer_aid is who issued the credential; trust_anchor_aid is what trust was established
+    -- against. In a vLEI chain these differ (QVI vs GLEIF) and showing one as the other misstates both.
+    leaf_issuer_aid VARCHAR(255),
+    trust_anchor_aid VARCHAR(255),
+    trust_model VARCHAR(20),
+    -- the KEL interaction event that anchors the attestation. Nothing on-chain is involved.
+    kel_sequence VARCHAR(32),
+    kel_event_said VARCHAR(255),
+    -- digest of the schema entry that produced this verdict, so a later configuration change is
+    -- reconstructable rather than silently rewriting history.
+    policy_fingerprint VARCHAR(64),
+    -- the credential's own attributes, as JSON. Display only, never a trust input. Deliberately NOT
+    -- the CESR chain: that is bulk verification input with no display value, and exposing a third
+    -- party's full credential chain to anyone who can read the addressbook is not a trade worth making.
+    claims TEXT,
+    CONSTRAINT uq_keri_attestation_credential_verification_org_pub UNIQUE (organisation_id, public_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_keri_attestation_credential_verification_org
+    ON keri_attestation_credential_verification (organisation_id);

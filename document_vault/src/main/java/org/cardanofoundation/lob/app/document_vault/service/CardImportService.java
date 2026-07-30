@@ -1,7 +1,12 @@
 package org.cardanofoundation.lob.app.document_vault.service;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+
+import jakarta.annotation.Nullable;
 
 import lombok.RequiredArgsConstructor;
 
@@ -23,6 +28,8 @@ import org.cardanofoundation.lob.app.document_vault.domain.view.VaultKeyView;
 import org.cardanofoundation.lob.app.document_vault.repository.AddressbookEntryRepository;
 import org.cardanofoundation.lob.app.document_vault.repository.VaultKeyRepository;
 import org.cardanofoundation.lob.app.keri_attestation.service.AttestationImportVerifier;
+import org.cardanofoundation.lob.app.keri_attestation.service.CredentialChainValidator;
+import org.cardanofoundation.lob.app.keri_attestation.service.CredentialVerificationService;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
@@ -58,6 +65,9 @@ public class CardImportService {
     // Present only when keri_attestation is enabled. A card claiming an attestation that cannot be
     // verified is rejected, never imported as if it were unattested.
     private final ObjectProvider<AttestationImportVerifier> attestationVerifierProvider;
+    // Where the verdict is recorded. keri_attestation owns it; this module only asks for it to be
+    // written and later reads it back for display.
+    private final ObjectProvider<CredentialVerificationService> verificationServiceProvider;
 
     @Transactional
     public Either<ProblemDetail, ImportCardResultView> importCard(ImportCardRequest request) {
@@ -77,21 +87,149 @@ public class CardImportService {
         }
         KeyCardDto card = verified.get();
 
-        // A card carrying an attestation block must verify cryptographically — OOBI resolves, chain
-        // valid, on-chain ATTEST binds this exact card — before it is trusted.
-        Either<ProblemDetail, Void> attestationVerified = verifyAttestationIfPresent(card);
+        // A card carrying an attestation block must verify cryptographically — OOBI resolves, the
+        // credential chain is trusted, and the attesting AID sealed this exact card in its KEL — before
+        // it is trusted.
+        Either<ProblemDetail, CredentialChainValidator.ValidatedCredential> attestationVerified =
+                verifyAttestationIfPresent(card);
         if (attestationVerified.isLeft()) {
             return Either.left(attestationVerified.getLeft());
         }
 
         boolean isSelfImport = card.getSubject().subjectId().equals(securityHelper.getCurrentUserId());
+
+        Either<ProblemDetail, Void> mutable = checkAttestedFieldsNotRewritten(card, organisationId, isSelfImport);
+        if (mutable.isLeft()) {
+            return Either.left(mutable.getLeft());
+        }
+
+        recordVerdictIfVerified(card, organisationId, attestationVerified.get());
+
         return Either.right(isSelfImport
                 ? ImportCardResultView.ofOrgKey(importOwnKey(card, organisationId))
                 : ImportCardResultView.ofAddressbookEntry(importContact(card, organisationId)));
     }
 
-    /** Verifies a card's attestation block when present; a card with none is fine (trust-on-first-use). */
-    private Either<ProblemDetail, Void> verifyAttestationIfPresent(KeyCardDto card) {
+    /**
+     * Records the verdict for a card whose attestation verified.
+     *
+     * <p>Only ever writes a passing verdict. A card with no attestation leaves any existing verdict
+     * untouched rather than clearing it: someone re-importing a stripped copy of a colleague's card
+     * must not be able to quietly remove the badge from it.
+     */
+    private void recordVerdictIfVerified(KeyCardDto card,  String organisationId,
+            @Nullable CredentialChainValidator.ValidatedCredential credential) {
+        if (credential == null) {
+            return;
+        }
+        CredentialVerificationService verificationService = verificationServiceProvider.getIfAvailable();
+        if (verificationService == null) {
+            return;
+        }
+        KeyCardDto.CardAttestation attestation = card.getAttestation();
+        verificationService.recordVerified(organisationId, card.getKey().publicKey(), attestation.aid(),
+                credential, attestation.kelSequence(), attestation.kelEventSaid(),
+                credential.policyFingerprint());
+    }
+
+    /**
+     * Refuses a re-import that would rewrite an attested row's identity fields with values no
+     * attestation covers.
+     *
+     * <p>The issuer's signed digest covers {@code displayName}, {@code email} and {@code label}, but
+     * attestation provenance is written once at creation and never revisited. Without this check, the
+     * two facts combine into an attack: import a genuine attested card, then re-import an unattested
+     * card carrying the same public key and attacker-chosen name and e-mail. Every field a reader
+     * actually looks at would change while the row kept the verified anchor that vouched for the old
+     * values.
+     *
+     * <p>Only cards that cannot produce a matching attestation are refused, and only when they would
+     * actually change something — a re-import that changes nothing stays the ordinary no-op it looks
+     * like. A card carrying its own verified attestation has already been checked against the digest
+     * over exactly these fields, so it is free to update them.
+     */
+    private Either<ProblemDetail, Void> checkAttestedFieldsNotRewritten(KeyCardDto card, String organisationId,
+            boolean isSelfImport) {
+        if (card.getAttestation() != null) {
+            return Either.right(null);
+        }
+        String publicKey = card.getKey().publicKey();
+        if (!isAttested(organisationId, publicKey, isSelfImport)) {
+            return Either.right(null);
+        }
+        if (isSelfImport) {
+            return keyRepository
+                    .findByAccountIdAndOrganisationIdAndPublicKey(securityHelper.getCurrentUserId(),
+                            organisationId, publicKey)
+                    .filter(existing -> differs(existing.getLabel(), card.getKey().label()))
+                    .<Either<ProblemDetail, Void>>map(existing -> Either.left(attestedFieldsImmutable("label")))
+                    .orElseGet(() -> Either.right(null));
+        }
+        return entryRepository.findByOrganisationIdAndPublicKey(organisationId, publicKey)
+                .map(existing -> changedContactFields(existing, card))
+                .filter(changed -> !changed.isEmpty())
+                .<Either<ProblemDetail, Void>>map(changed -> Either.left(attestedFieldsImmutable(
+                        String.join(", ", changed))))
+                .orElseGet(() -> Either.right(null));
+    }
+
+    /**
+     * @return whether anything vouches for this card's identity fields — either the row's own
+     *         provenance columns or a recorded verification verdict.
+     *
+     * <p>Both, not just the columns. Provenance is written once at row CREATION, so a card first
+     * imported unattested and later re-imported with a verified attestation earns a verdict while its
+     * {@code attestationAid} stays null. Checking only the column would then read that row as
+     * unattested and let the next unattested import rewrite the very fields the verdict covers.
+     */
+    private boolean isAttested(String organisationId, String publicKey, boolean isSelfImport) {
+        boolean provenanceOnRow = isSelfImport
+                ? keyRepository.findByAccountIdAndOrganisationIdAndPublicKey(securityHelper.getCurrentUserId(),
+                        organisationId, publicKey).filter(k -> k.getAttestationAid() != null).isPresent()
+                : entryRepository.findByOrganisationIdAndPublicKey(organisationId, publicKey)
+                        .filter(e -> e.getAttestationAid() != null).isPresent();
+        if (provenanceOnRow) {
+            return true;
+        }
+        CredentialVerificationService verificationService = verificationServiceProvider.getIfAvailable();
+        return verificationService != null
+                && verificationService.find(organisationId, publicKey).isPresent();
+    }
+
+    private static List<String> changedContactFields(AddressbookEntryEntity existing, KeyCardDto card) {
+        List<String> changed = new ArrayList<>();
+        if (differs(existing.getDisplayName(), card.getSubject().displayName())) {
+            changed.add("displayName");
+        }
+        if (differs(existing.getEmail(), card.getSubject().email())) {
+            changed.add("email");
+        }
+        if (differs(existing.getDescription(), card.getKey().label())) {
+            changed.add("label");
+        }
+        return changed;
+    }
+
+    private static boolean differs(String stored, String incoming) {
+        return !Objects.equals(stored, incoming);
+    }
+
+    private static ProblemDetail attestedFieldsImmutable(String fields) {
+        return VaultProblems.conflict(VaultProblems.ATTESTED_CARD_FIELDS_IMMUTABLE,
+                ("This public key is already stored with a verified attestation covering %s. An unattested "
+                        + "card cannot change those values — re-export the card from its issuer with a current "
+                        + "attestation.").formatted(fields));
+    }
+
+    /**
+     * Verifies a card's attestation block when present; a card with none is fine (trust-on-first-use).
+     *
+     * @return the validated credential when the card carried a verifiable attestation, or
+     *         {@code Either.right(null)} when it carried none at all — an unattested card is imported,
+     *         it simply earns no verdict.
+     */
+    private Either<ProblemDetail, CredentialChainValidator.ValidatedCredential> verifyAttestationIfPresent(
+            KeyCardDto card) {
         KeyCardDto.CardAttestation attestation = card.getAttestation();
         if (attestation == null) {
             return Either.right(null);
@@ -103,10 +241,13 @@ public class CardImportService {
                             + "(keri_attestation module disabled)."));
         }
         String cardDigest = attestationDigestFactory.digestOf(card);
-        return attestationVerifier.verify(securityHelper.getCurrentUserId(),
+        Either<ProblemDetail, CredentialChainValidator.ValidatedCredential> verified = attestationVerifier.verify(
+                securityHelper.getCurrentUserId(),
                 new AttestationImportVerifier.CardAttestationClaim(attestation.oobi(), attestation.aid(),
-                        attestation.credentialSaid(), attestation.schemaSaid(), attestation.txHash(),
-                        attestation.credentialCesr(), cardDigest));
+                        attestation.credentialSaid(), attestation.schemaSaid(), attestation.kelSequence(),
+                        attestation.kelEventSaid(), attestation.metadataLabel(), attestation.cardDigest(),
+                        attestation.payloadSaid(), attestation.credentialCesr(), cardDigest));
+        return verified;
     }
 
     /**
@@ -146,7 +287,11 @@ public class CardImportService {
                 key.setAttestationAid(attestation.aid());
                 key.setAttestationCredentialSaid(attestation.credentialSaid());
                 key.setAttestationSchemaSaid(attestation.schemaSaid());
-                key.setAttestationTxHash(attestation.txHash());
+                key.setAttestationKelSequence(attestation.kelSequence());
+                key.setAttestationKelEventSaid(attestation.kelEventSaid());
+                key.setAttestationMetadataLabel(attestation.metadataLabel());
+                key.setAttestationCardDigest(attestation.cardDigest());
+                key.setAttestationPayloadSaid(attestation.payloadSaid());
                 key.setAttestationCredentialCesr(attestation.credentialCesr());
             }
         }
@@ -190,7 +335,11 @@ public class CardImportService {
                 entry.setAttestationAid(attestation.aid());
                 entry.setAttestationCredentialSaid(attestation.credentialSaid());
                 entry.setAttestationSchemaSaid(attestation.schemaSaid());
-                entry.setAttestationTxHash(attestation.txHash());
+                entry.setAttestationKelSequence(attestation.kelSequence());
+                entry.setAttestationKelEventSaid(attestation.kelEventSaid());
+                entry.setAttestationMetadataLabel(attestation.metadataLabel());
+                entry.setAttestationCardDigest(attestation.cardDigest());
+                entry.setAttestationPayloadSaid(attestation.payloadSaid());
                 entry.setAttestationCredentialCesr(attestation.credentialCesr());
             }
         }

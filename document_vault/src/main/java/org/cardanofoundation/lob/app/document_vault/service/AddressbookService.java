@@ -1,10 +1,16 @@
 package org.cardanofoundation.lob.app.document_vault.service;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import jakarta.annotation.Nullable;
+
 import lombok.RequiredArgsConstructor;
 
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
@@ -18,6 +24,8 @@ import org.cardanofoundation.lob.app.document_vault.domain.request.UpdateAddress
 import org.cardanofoundation.lob.app.document_vault.domain.view.AddressbookEntryView;
 import org.cardanofoundation.lob.app.document_vault.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.document_vault.repository.AddressbookEntryRepository;
+import org.cardanofoundation.lob.app.keri_attestation.domain.view.CredentialAttestationView;
+import org.cardanofoundation.lob.app.keri_attestation.service.CredentialVerificationService;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
@@ -40,6 +48,8 @@ public class AddressbookService {
     private final AddressbookEntryRepository entryRepository;
     private final KeycloakSecurityHelper securityHelper;
     private final OrganisationPublicApiIF organisationPublicApi;
+    /** Absent when keri_attestation is disabled — contacts then simply carry no verdict. */
+    private final ObjectProvider<CredentialVerificationService> verificationServiceProvider;
 
     @Transactional(readOnly = true)
     public Either<ProblemDetail, PagedResponse<AddressbookEntryView>> list(String organisationId,
@@ -48,8 +58,12 @@ public class AddressbookService {
             return Either.left(VaultProblems.forbidden(
                     "Current user is not a member of organisation %s.".formatted(organisationId)));
         }
-        return Either.right(PagedResponse.of(
-                entryRepository.findByOrganisationId(organisationId, pageable), AddressbookService::toView));
+        Page<AddressbookEntryEntity> page = entryRepository.findByOrganisationId(organisationId, pageable);
+        // One bulk lookup for the whole page, not one query per row.
+        Map<String, CredentialAttestationView> verdicts = attestationsFor(organisationId,
+                page.getContent().stream().map(AddressbookEntryEntity::getPublicKey).toList());
+        return Either.right(PagedResponse.of(page,
+                entry -> toView(entry, verdicts.get(entry.getPublicKey()))));
     }
 
     public Either<ProblemDetail, AddressbookEntryView> create(CreateAddressbookEntryRequest request) {
@@ -87,6 +101,17 @@ public class AddressbookService {
             return Either.left(found.getLeft());
         }
         AddressbookEntryEntity entry = found.get();
+
+        // An attested contact's name, e-mail and description are covered by the issuer's signed card
+        // digest. Editing them by hand would leave the row asserting a verified attestation over values
+        // nobody attested, which is the same defect the import path guards against — and this endpoint
+        // would otherwise be the easy way around that guard.
+        if (entry.getAttestationAid() != null) {
+            return Either.left(VaultProblems.conflict(VaultProblems.ATTESTED_CARD_FIELDS_IMMUTABLE,
+                    "This contact was imported from an attested card, whose attestation covers its name, "
+                            + "e-mail and description. Import an updated attested card instead of editing "
+                            + "them here."));
+        }
 
         // Only what a human wrote about the contact. publicKey is absent from the request on purpose —
         // see UpdateAddressbookEntryRequest — as are assurance and homeOrganisationId, which record what
@@ -140,10 +165,23 @@ public class AddressbookService {
         return Optional.empty();
     }
 
+    /** @return the credential verdicts keri_attestation holds for these cards, keyed by public key. */
+    private Map<String, CredentialAttestationView> attestationsFor(String organisationId,
+            List<String> publicKeys) {
+        CredentialVerificationService verificationService = verificationServiceProvider.getIfAvailable();
+        return verificationService == null ? Map.of() : verificationService.findAll(organisationId, publicKeys);
+    }
+
     /** Package-private + static so CardImportService reuses the exact same mapping. */
     static AddressbookEntryView toView(AddressbookEntryEntity entry) {
+        return toView(entry, null);
+    }
+
+    /** As above, with the credential verdict keri_attestation holds for this contact's card, if any. */
+    static AddressbookEntryView toView(AddressbookEntryEntity entry,
+            @Nullable CredentialAttestationView attestation) {
         return new AddressbookEntryView(entry.getId(), entry.getOrganisationId(), entry.getDisplayName(),
                 entry.getEmail(), entry.getDescription(), entry.getPublicKey(), entry.getAssurance(),
-                entry.getHomeOrganisationId(), entry.getCreatedAt());
+                entry.getHomeOrganisationId(), entry.getCreatedAt(), attestation);
     }
 }
