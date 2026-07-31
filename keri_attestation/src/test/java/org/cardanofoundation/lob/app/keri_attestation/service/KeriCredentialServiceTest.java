@@ -54,14 +54,18 @@ import org.cardanofoundation.signify.app.Contacting;
 import org.cardanofoundation.signify.app.Exchanging;
 import org.cardanofoundation.signify.app.Exchanging.ExchangeMessageResult;
 import org.cardanofoundation.signify.app.Notifying;
-import org.cardanofoundation.signify.app.aiding.Identifier;
+import org.cardanofoundation.signify.app.aiding.IdentifierController;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
 import org.cardanofoundation.signify.app.coring.Oobis;
 import org.cardanofoundation.signify.app.coring.Operations;
-import org.cardanofoundation.signify.app.credentialing.credentials.Credentials;
 import org.cardanofoundation.signify.app.credentialing.ipex.Ipex;
 import org.cardanofoundation.signify.cesr.Serder;
-import org.cardanofoundation.signify.core.States;
+import org.cardanofoundation.signify.exception.SignifyInterruptedException;
+import org.cardanofoundation.signify.exception.SignifyTransportException;
+import org.cardanofoundation.signify.generated.keria.model.HabState;
+import org.cardanofoundation.signify.generated.keria.model.Operation;
+import org.cardanofoundation.signify.generated.keria.model.PendingExchangeOperation;
+import org.cardanofoundation.signify.generated.keria.model.PendingOOBIOperation;
 
 /**
  * Tests {@link KeriCredentialService#presentCredential}, the single synchronous entry point that
@@ -111,9 +115,9 @@ class KeriCredentialServiceTest {
     @Mock
     private Exchanging.Exchanges exchanges;
     @Mock
-    private Identifier identifiers;
+    private IdentifierController identifiers;
     @Mock
-    private Credentials credentials;
+    private CredentialCesrFetcher cesrFetcher;
     @Mock
     private Oobis oobis;
     @Mock
@@ -145,7 +149,6 @@ class KeriCredentialServiceTest {
         lenient().when(client.ipex()).thenReturn(ipex);
         lenient().when(client.exchanges()).thenReturn(exchanges);
         lenient().when(client.identifiers()).thenReturn(identifiers);
-        lenient().when(client.credentials()).thenReturn(credentials);
         lenient().when(client.oobis()).thenReturn(oobis);
         lenient().when(client.operations()).thenReturn(operations);
         lenient().when(client.contacts()).thenReturn(contacts);
@@ -159,23 +162,23 @@ class KeriCredentialServiceTest {
         lenient().when(agentService.agentOobi()).thenReturn("http://keria.example/oobi/EAGENTPREFIX/agent");
         lenient().when(contacts.get(any())).thenReturn(Optional.empty());
         lenient().when(notifications.list())
-                .thenReturn(new Notifying.Notifications.NotificationListResponse(0, 0, 0, "[]"));
+                .thenReturn(new Notifying.Notifications.NotificationListResponse(0, 0, 0, List.of()));
         // Live-testing fix: presentCredential resolves every configured schema SAID as an OOBI on our
         // own agent before beginStep. Defaulted here to succeed so every test not specifically about
         // schema resolution can still reach the rest of the flow; the schema-resolution tests themselves
         // override oobis.resolve to assert on call counts / simulate a failure.
-        lenient().when(oobis.resolve(any(), any())).thenReturn(Map.of("done", true));
-        lenient().when(operations.wait(any(), any())).thenReturn(null);
-        // Every IPEX submit* is followed by an operations().wait(Operation.fromObject(...)) call (the
+        lenient().when(oobis.resolve(any(), any())).thenReturn(new PendingOOBIOperation());
+        lenient().when(operations.wait(any(Operation.class), any(Operations.WaitOptions.class))).thenReturn(null);
+        // Every IPEX submit* is followed by an operations().wait(...) call (the
         // 1-arg overload, distinct from the 2-arg WaitOptions one stubbed above).
         // Operation.fromObject throws IllegalArgumentException on anything that isn't itself an
         // Operation/Map/JSON-String, so submitApply/submitAgree/submitAdmit — otherwise unstubbed, and
         // therefore null by Mockito's own default for an Object-returning method — must return a benign
         // non-null value here for every test not specifically about a submit failure.
-        lenient().when(operations.wait(any())).thenReturn(null);
-        lenient().when(ipex.submitApply(any(), any(), any(), any())).thenReturn(Map.of());
-        lenient().when(ipex.submitAgree(any(), any(), any(), any())).thenReturn(Map.of());
-        lenient().when(ipex.submitAdmit(any(), any(), any(), any(), any())).thenReturn(Map.of());
+        lenient().when(operations.wait(any(Operation.class))).thenReturn(null);
+        lenient().when(ipex.submitApply(any(), any(), any(), any())).thenReturn(new PendingExchangeOperation());
+        lenient().when(ipex.submitAgree(any(), any(), any(), any())).thenReturn(new PendingExchangeOperation());
+        lenient().when(ipex.submitAdmit(any(), any(), any(), any(), any())).thenReturn(new PendingExchangeOperation());
         // Every apply-send fetches the agent's own HabState first (wallet contract — the hand-built
         // /ipex/apply createExchangeMessage call needs it as the signing sender).
         lenient().when(identifiers.get(AGENT_NAME)).thenReturn(Optional.of(habState(AGENT_NAME)));
@@ -188,7 +191,7 @@ class KeriCredentialServiceTest {
 
         // The registry is what the apply now asks for, so it carries the schema these tests expect.
         service = new KeriCredentialService(keriClient, agentService, correlator, validator, ceremonyService,
-                identityLinkRepository, properties(), registry(), schemaOobiResolver, oobiService);
+                identityLinkRepository, properties(), registry(), schemaOobiResolver, oobiService, cesrFetcher);
     }
 
     private static CredentialSchemaRegistry registry() {
@@ -225,8 +228,8 @@ class KeriCredentialServiceTest {
         return link;
     }
 
-    private static States.HabState habState(String name) {
-        States.HabState hab = new States.HabState();
+    private static HabState habState(String name) {
+        HabState hab = new HabState();
         hab.setName(name);
         return hab;
     }
@@ -298,7 +301,7 @@ class KeriCredentialServiceTest {
         Serder admitExn = serderWithSaid(ADMIT_SAID);
         lenient().when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "atc3"));
 
-        lenient().when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
+        lenient().when(cesrFetcher.fetch(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
         lenient().when(validator.validate("FULL-CESR-STREAM", LINKED_AID, CREDENTIAL_SAID, null))
                 .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID, "Foundation Employee", ROOT_AID, ROOT_AID,
                         TrustModel.STANDALONE, Map.of(), "fingerprint")));
@@ -469,7 +472,8 @@ class KeriCredentialServiceTest {
         Serder exn = serderWithSaid(APPLY_SAID);
         when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
                 .thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
-        when(ipex.submitApply(any(), any(), any(), any())).thenThrow(new IOException("network blip"));
+        when(ipex.submitApply(any(), any(), any(), any()))
+                .thenThrow(new SignifyTransportException("network blip", new IOException("network blip")));
         KeriAttestationCeremonyEntity ceremony = ceremony(null);
         stubGuardedUpdateSuccess(ceremony);
 
@@ -479,6 +483,33 @@ class KeriCredentialServiceTest {
         assertEquals(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED, result.getLeft().getTitle());
         assertEquals(APPLY_SAID, ceremony.getRequestExnSaid());
         verifyNoInteractions(correlator);
+    }
+
+    @Test
+    void presentCredentialRestoresTheInterruptFlagWhenTheClientReportsAnInterrupt() throws Exception {
+        // The client wraps an interrupt in SignifyInterruptedException, which extends RuntimeException
+        // -- NOT InterruptedException. A handler that tests only the checked type therefore matches
+        // nothing the client throws, reports the interrupt as an ordinary step failure, and drops the
+        // flag; the caller's next poll or sleep then runs to its full timeout after being told to stop.
+        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+                CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony(null)));
+        when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
+        Serder exn = serderWithSaid(APPLY_SAID);
+        when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
+                .thenReturn(new ExchangeMessageResult(exn, List.of("sig1"), "atc1"));
+        when(ipex.submitApply(any(), any(), any(), any()))
+                .thenThrow(new SignifyInterruptedException(new InterruptedException("shutting down")));
+        stubGuardedUpdateSuccess(ceremony(null));
+
+        try {
+            Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+
+            assertTrue(result.isLeft());
+            assertTrue(Thread.currentThread().isInterrupted(), "the interrupt flag must survive the failure");
+        } finally {
+            // Clear it again, or every later test on this thread inherits an interrupted state.
+            Thread.interrupted();
+        }
     }
 
     @Test
@@ -644,7 +675,7 @@ class KeriCredentialServiceTest {
                         grantExn(LINKED_AID, CREDENTIAL_SAID))));
         Serder admitExn = serderWithSaid(ADMIT_SAID);
         when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "atc3"));
-        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
+        when(cesrFetcher.fetch(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
         when(validator.validate("FULL-CESR-STREAM", LINKED_AID, CREDENTIAL_SAID, null))
                 .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID, "Foundation Employee", ROOT_AID, ROOT_AID,
                         TrustModel.STANDALONE, Map.of(), "fingerprint")));
@@ -707,7 +738,7 @@ class KeriCredentialServiceTest {
 
         KeriIdentityLinkEntity freshLink = link(LINKED_AID);
         when(identityLinkRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(freshLink));
-        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
+        when(cesrFetcher.fetch(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
         when(validator.validate("FULL-CESR-STREAM", LINKED_AID, CREDENTIAL_SAID, null))
                 .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID, "Foundation Employee", ROOT_AID, ROOT_AID,
                         TrustModel.STANDALONE, Map.of(), "fingerprint")));
@@ -735,11 +766,11 @@ class KeriCredentialServiceTest {
         // javadoc): nothing durable records which credential was admitted until completeStep commits, so
         // deleting any earlier would let a crash between admit and persist silently lose the wallet's
         // grant with no way for a retry to recover it.
-        InOrder inOrder = inOrder(ipex, operations, credentials, validator, ceremonyService, correlator);
+        InOrder inOrder = inOrder(ipex, operations, cesrFetcher, validator, ceremonyService, correlator);
         inOrder.verify(ipex).admit(any());
         inOrder.verify(ipex).submitAdmit(any(), any(), any(), any(), any());
         inOrder.verify(operations).wait(any());
-        inOrder.verify(credentials).get(CREDENTIAL_SAID);
+        inOrder.verify(cesrFetcher).fetch(CREDENTIAL_SAID);
         inOrder.verify(validator).validate(any(), any(), any(), any());
         inOrder.verify(ceremonyService).completeStep(any(), anyInt(), any(), any(), any());
         inOrder.verify(correlator).markAndDelete(GRANT_NOTIF_ID);
@@ -769,7 +800,7 @@ class KeriCredentialServiceTest {
                         directGrantExn(LINKED_AID, CREDENTIAL_SAID), "/exn/ipex/grant")));
         Serder admitExn = serderWithSaid(ADMIT_SAID);
         when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "directAdmitAtc"));
-        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
+        when(cesrFetcher.fetch(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
         ProblemDetail rejection = KeriAttestationProblems.unprocessable(KeriAttestationProblems.CREDENTIAL_REJECTED,
                 "issuee mismatch");
         when(validator.validate("FULL-CESR-STREAM", LINKED_AID, CREDENTIAL_SAID, null))
@@ -800,7 +831,7 @@ class KeriCredentialServiceTest {
                         directGrantExn(LINKED_AID, CREDENTIAL_SAID), "/exn/ipex/grant")));
         Serder admitExn = serderWithSaid(ADMIT_SAID);
         when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "directAdmitAtc"));
-        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
+        when(cesrFetcher.fetch(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
         when(validator.validate("FULL-CESR-STREAM", LINKED_AID, CREDENTIAL_SAID, null))
                 .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID, "Foundation Employee", ROOT_AID, ROOT_AID,
                         TrustModel.STANDALONE, Map.of(), "fingerprint")));
@@ -838,7 +869,7 @@ class KeriCredentialServiceTest {
                         grantExn(LINKED_AID, CREDENTIAL_SAID), "/exn/ipex/grant")));
         Serder admitExn = serderWithSaid(ADMIT_SAID);
         when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "directAdmitAtc"));
-        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
+        when(cesrFetcher.fetch(CREDENTIAL_SAID)).thenReturn(Optional.of("FULL-CESR-STREAM"));
         when(validator.validate("FULL-CESR-STREAM", LINKED_AID, CREDENTIAL_SAID, null))
                 .thenReturn(Either.right(new ValidatedCredential(CREDENTIAL_SAID, RESULT_SCHEMA_SAID, "Foundation Employee", ROOT_AID, ROOT_AID,
                         TrustModel.STANDALONE, Map.of(), "fingerprint")));
@@ -898,7 +929,7 @@ class KeriCredentialServiceTest {
         assertTrue(first.isRight());
         assertTrue(second.isRight());
         verify(oobis, times(1)).resolve(schemaUrl, null);
-        verify(operations, times(1)).wait(any(), any());
+        verify(operations, times(1)).wait(any(Operation.class), any(Operations.WaitOptions.class));
     }
 
     @Test

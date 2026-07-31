@@ -11,7 +11,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
+import org.cardanofoundation.signify.generated.keria.model.KeyEvent;
+import org.cardanofoundation.signify.generated.keria.model.KeyEventRecord;
 
 /**
  * Reads an AID's KEL and decides whether one of its interaction events anchors a given payload SAID.
@@ -37,6 +42,16 @@ import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClie
 @ConditionalOnProperty(prefix = "lob.keri-attestation.keria", name = "url")
 public class KelAnchorVerifier {
 
+    /**
+     * Projects typed key events into the generic maps the seal locators read.
+     *
+     * <p>This class used to walk raw {@code Object}s and test {@code instanceof Map}. Against the typed
+     * return that test never matches: the KEL would come back EMPTY and every attestation would fail
+     * with a seal mismatch, looking exactly like a wallet that never signed. Compile-clean, silently
+     * wrong — hence the typed boundary here.
+     */
+    private static final ObjectMapper KEL_MAPPER = new ObjectMapper();
+
     private final KeriAttestationClient client;
 
     /** An anchoring-event locator: a SAID, a sequence, or neither. Both fields may be {@code null}. */
@@ -51,15 +66,12 @@ public class KelAnchorVerifier {
 
     /** @return every {@code ixn} event in {@code aid}'s KEL, empty when the agent returns nothing usable. */
     public List<Map<String, Object>> fetchIxnEvents(String aid) throws Exception {
-        Object raw = client.client().keyEvents().get(aid);
-        if (!(raw instanceof List<?> rawList)) {
-            return List.of();
-        }
         List<Map<String, Object>> events = new ArrayList<>();
-        for (Object item : rawList) {
-            Map<String, Object> ked = extractKed(item);
-            if (ked != null && "ixn".equals(ked.get("t"))) {
-                events.add(ked);
+        for (KeyEventRecord record : client.client().keyEvents().get(aid)) {
+            KeyEvent ked = record.getKed();
+            if (ked != null && "ixn".equals(ked.getT())) {
+                events.add(KEL_MAPPER.convertValue(ked, new TypeReference<Map<String, Object>>() {
+                }));
             }
         }
         return events;
@@ -174,20 +186,4 @@ public class KelAnchorVerifier {
         return false;
     }
 
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> extractKed(Object item) {
-        if (!(item instanceof Map<?, ?> map)) {
-            return null;
-        }
-        Object ked = map.get("ked");
-        if (ked instanceof Map<?, ?>) {
-            return (Map<String, Object>) ked;
-        }
-        // Defensive fallback: some KERIA responses may not wrap events under "ked" — if this item
-        // already looks like a key event itself (has a type and sequence), use it directly.
-        if (map.containsKey("t") && map.containsKey("s")) {
-            return (Map<String, Object>) map;
-        }
-        return null;
-    }
 }

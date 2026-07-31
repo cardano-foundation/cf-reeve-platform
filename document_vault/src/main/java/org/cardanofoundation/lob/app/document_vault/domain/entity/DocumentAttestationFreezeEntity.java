@@ -31,7 +31,8 @@ import org.springframework.data.domain.Persistable;
  * caller that loses the race re-reads the winner's row rather than failing.
  *
  * <p>Unlike its predecessor it stores no {@code ipfs_cid} and no {@code metadata_creation_slot}:
- * neither is knowable on the pod that writes this row. See {@code DocumentAttestationCommitment}.
+ * both are now knowable on the pod that writes this row: the CID is obtained without pinning
+ * and the slot is no longer part of a DOCUMENT manifest at all.
  */
 @Getter
 @Setter
@@ -55,7 +56,7 @@ public class DocumentAttestationFreezeEntity implements Persistable<String> {
     @Column(name = "ceremony_id", nullable = false)
     private String ceremonyId;
 
-    /** CBOR of the {@code DocumentAttestationCommitment} map — the exact bytes the wallet anchors. */
+    /** CBOR of the label-1447 manifest — the exact bytes whose digest the wallet anchors. */
     @NotNull
     @Column(name = "commitment_cbor", nullable = false)
     private byte[] commitmentCbor;

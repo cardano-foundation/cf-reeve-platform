@@ -1,10 +1,6 @@
 package org.cardanofoundation.lob.app.blockchain_common.service_assistance;
 
 import java.math.BigInteger;
-import java.time.Clock;
-import java.time.Instant;
-
-import lombok.RequiredArgsConstructor;
 
 import com.bloxbean.cardano.client.metadata.MetadataBuilder;
 import com.bloxbean.cardano.client.metadata.MetadataList;
@@ -17,6 +13,12 @@ import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPub
  * {@code metadata} sections come from {@link L1MetadataSections} so the on-chain shape stays
  * byte-compatible across publishable types.
  *
+ * <p>The one deliberate divergence is {@code metadata}: this type uses
+ * {@link L1MetadataSections#attestableMetadataSection}, which carries the schema version alone. A
+ * document can be attested by a holder's wallet before it is published, and that wallet has neither a
+ * chain tip nor the publisher's clock — so a manifest carrying {@code creation_slot} or
+ * {@code timestamp} is one no wallet can commit to. The other publishable types keep both.
+ *
  * <p>The {@code data} section carries nothing beyond id, ipfs_cid, content_hash, plaintext_hash,
  * envelope_version, slot_count and recipient_key_hashes. All but the last are PII-free;
  * {@code recipient_key_hashes} is a deliberate exception that trades permanent recipient linkability
@@ -26,24 +28,20 @@ import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPub
  * module must not depend on {@code organisation}. Beans are registered explicitly in
  * {@code BlockchainCommonConfig}, so this class is not annotated {@code @Service}.
  */
-@RequiredArgsConstructor
 public class DocumentMetadataSerialiser {
 
     /** 1.1 added {@code data.recipient_key_hashes}; 1.0 manifests carry none. */
     public static final String VERSION = "1.1";
 
-    private final Clock clock;
-
     public MetadataMap serialiseToMetadataMap(DocumentPublishCommand command,
                                               String ipfsCid,
-                                              long creationSlot,
                                               String organisationId,
                                               String organisationName,
                                               String organisationTaxIdNumber,
                                               String organisationCurrencyId,
                                               String organisationCountryCode) {
         MetadataMap globalMetadataMap = MetadataBuilder.createMap();
-        globalMetadataMap.put("metadata", createMetadataSection(creationSlot));
+        globalMetadataMap.put("metadata", L1MetadataSections.attestableMetadataSection(VERSION));
         globalMetadataMap.put("org", L1MetadataSections.orgSection(
                 organisationId, organisationName, organisationTaxIdNumber, organisationCurrencyId, organisationCountryCode));
 
@@ -64,10 +62,6 @@ public class DocumentMetadataSerialiser {
         globalMetadataMap.put("data", data);
 
         return globalMetadataMap;
-    }
-
-    private MetadataMap createMetadataSection(long creationSlot) {
-        return L1MetadataSections.metadataSection(creationSlot, Instant.now(clock), VERSION);
     }
 
 }

@@ -12,8 +12,8 @@ import org.springframework.stereotype.Service;
 
 import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchemaRegistry;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
-import org.cardanofoundation.signify.app.coring.Operation;
 import org.cardanofoundation.signify.app.coring.Operations;
+import org.cardanofoundation.signify.exception.SignifyInterruptedException;
 
 /**
  * Resolves the issuer OOBIs configured on the credential-schema registry, so our agent knows the
@@ -65,19 +65,14 @@ public class SchemaOobiResolver {
 
     private void resolveOne(String oobi) {
         try {
-            Object raw = client.client().oobis().resolve(oobi, null);
-            Operation<Object> operation = client.client().operations()
-                    .wait(Operation.fromObject(raw), boundedWait());
-            // A completed operation can still carry an error: the wait returns rather than throws.
-            // Caching on "no exception" would remember a failure as a success.
-            if (operation != null && operation.getError() != null) {
-                log.warn("Issuer OOBI {} resolved to a failed operation ({}), leaving it retryable.",
-                        oobi, operation.getError());
-                return;
-            }
+            var raw = client.client().oobis().resolve(oobi, null);
+            client.client().operations().wait(raw, boundedWait());
+            // Reaching here means the wait completed without raising: the client now throws
+            // OperationFailedException/OperationTimeoutException instead of handing back a
+            // done-with-error operation, and those are caught below and left retryable.
             resolved.add(oobi);
             log.info("Resolved configured issuer OOBI {}", oobi);
-        } catch (InterruptedException e) {
+        } catch (SignifyInterruptedException e) {
             Thread.currentThread().interrupt();
         } catch (Exception e) {
             log.warn("Could not resolve configured issuer OOBI {} (will retry): {}", oobi, e.getMessage());

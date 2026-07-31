@@ -12,10 +12,10 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
+import org.cardanofoundation.lob.app.keri_attestation.cesr.CESRStreamUtil;
 import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchema;
 import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchema.TrustModel;
 import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchemaRegistry;
-import org.cardanofoundation.signify.cesr.util.CESRStreamUtil;
 
 /**
  * {@code fixtures/vlei-chain-valid.cesr} is a <strong>real</strong> full CESR credential stream —

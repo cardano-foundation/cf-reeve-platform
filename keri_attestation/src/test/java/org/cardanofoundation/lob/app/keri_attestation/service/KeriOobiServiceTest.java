@@ -16,7 +16,6 @@ import static org.mockito.Mockito.when;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.context.ApplicationEventPublisher;
@@ -41,9 +40,15 @@ import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestation
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
 import org.cardanofoundation.signify.app.Contacting;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
-import org.cardanofoundation.signify.app.clienting.exception.UnexpectedResponseStatusException;
 import org.cardanofoundation.signify.app.coring.Oobis;
 import org.cardanofoundation.signify.app.coring.Operations;
+import org.cardanofoundation.signify.exception.OperationTimeoutException;
+import org.cardanofoundation.signify.exception.SignifyAgentException;
+import org.cardanofoundation.signify.exception.SignifyInterruptedException;
+import org.cardanofoundation.signify.exception.SignifyTransportException;
+import org.cardanofoundation.signify.generated.keria.model.Contact;
+import org.cardanofoundation.signify.generated.keria.model.Operation;
+import org.cardanofoundation.signify.generated.keria.model.PendingOOBIOperation;
 
 @ExtendWith(MockitoExtension.class)
 class KeriOobiServiceTest {
@@ -81,9 +86,9 @@ class KeriOobiServiceTest {
         lenient().when(client.oobis()).thenReturn(oobis);
         lenient().when(client.operations()).thenReturn(operations);
         lenient().when(client.contacts()).thenReturn(contacts);
-        lenient().when(oobis.resolve(anyString(), anyString())).thenReturn(Map.of("done", true));
-        lenient().when(operations.wait(any(), any())).thenReturn(null);
-        lenient().when(contacts.get(anyString())).thenReturn(Optional.of(new Object()));
+        lenient().when(oobis.resolve(anyString(), anyString())).thenReturn(new PendingOOBIOperation());
+        lenient().when(operations.wait(any(Operation.class), any(Operations.WaitOptions.class))).thenReturn(null);
+        lenient().when(contacts.get(anyString())).thenReturn(Optional.of(new Contact()));
 
         service = new KeriOobiService(keriClient, identityLinkRepository, ceremonyRepository, eventPublisher);
     }
@@ -442,9 +447,13 @@ class KeriOobiServiceTest {
 
     @Test
     void ioExceptionDuringResolveIsKeriAgentUnavailableWithActionableDetailAndDoesNotPersist() throws Exception {
-        // Covers connection-refused/timeout/any other network-level transport failure: all surface as
-        // some java.io.IOException subclass from the JDK HttpClient underneath SignifyClient#fetch.
-        when(oobis.resolve(anyString(), anyString())).thenThrow(new java.io.IOException("agent unreachable"));
+        // Covers connection-refused/timeout/any other network-level transport failure. The JDK
+        // HttpClient underneath SignifyClient#fetch still raises an IOException subclass, but the client
+        // wraps it: no signify method declares a checked IOException any more, so an unwrapped one can
+        // no longer reach this classifier and testing with one would prove nothing.
+        when(oobis.resolve(anyString(), anyString()))
+                .thenThrow(new SignifyTransportException("agent unreachable",
+                        new java.io.IOException("agent unreachable")));
 
         Either<ProblemDetail, String> result = service.resolveUserOobi(USER, VALID_OOBI, false);
 
@@ -457,11 +466,11 @@ class KeriOobiServiceTest {
 
     @Test
     void abortSignalTimeoutWhileWaitingOnTheResolveIsKeriAgentUnavailable() throws Exception {
-        // Operations.AbortSignal#throwIfAborted throws exactly this (an InterruptedException whose
-        // message is the abort reason) when the resolve wait's own timeout (RESOLVE_TIMEOUT_MILLIS)
-        // fires -- the agent accepted the resolve request but the long-running operation never completed
-        // in time, i.e. the agent is slow/unresponsive, not the request being malformed.
-        when(operations.wait(any(), any())).thenThrow(new InterruptedException("Operation aborted: Timeout"));
+        // The resolve wait's own timeout (RESOLVE_TIMEOUT_MILLIS) fires as a TYPED timeout now -- the
+        // agent accepted the resolve request but the long-running operation never completed in time,
+        // i.e. the agent is slow/unresponsive, not the request being malformed.
+        when(operations.wait(any(Operation.class), any(Operations.WaitOptions.class)))
+                .thenThrow(new OperationTimeoutException("oobi-resolve", 15_000L));
 
         Either<ProblemDetail, String> result = service.resolveUserOobi(USER, VALID_OOBI, false);
 
@@ -474,15 +483,24 @@ class KeriOobiServiceTest {
     @Test
     void nonTimeoutInterruptedExceptionWhileWaitingOnTheResolveStaysOobiInvalid() throws Exception {
         // A plain thread interruption unrelated to the abort-signal timeout must not be misclassified as
-        // agent unavailability -- only a message that actually names a timeout does.
-        when(operations.wait(any(), any())).thenThrow(new InterruptedException("thread pool shutting down"));
+        // agent unavailability -- only a genuine operation timeout/abort is.
+        when(operations.wait(any(Operation.class), any(Operations.WaitOptions.class)))
+                .thenThrow(new SignifyInterruptedException(new InterruptedException("thread pool shutting down")));
 
-        Either<ProblemDetail, String> result = service.resolveUserOobi(USER, VALID_OOBI, false);
+        try {
+            Either<ProblemDetail, String> result = service.resolveUserOobi(USER, VALID_OOBI, false);
 
-        assertTrue(result.isLeft());
-        assertEquals(KeriAttestationProblems.OOBI_INVALID, result.getLeft().getTitle());
-        assertEquals(HttpStatus.UNPROCESSABLE_ENTITY.value(), result.getLeft().getStatus());
-        verifyNoInteractions(identityLinkRepository);
+            assertTrue(result.isLeft());
+            assertEquals(KeriAttestationProblems.OOBI_INVALID, result.getLeft().getTitle());
+            assertEquals(HttpStatus.UNPROCESSABLE_ENTITY.value(), result.getLeft().getStatus());
+            // Reported as an ordinary resolve failure, but the flag still has to survive: the caller
+            // goes straight on to a notification wait that must not poll out its full timeout.
+            assertTrue(Thread.currentThread().isInterrupted(), "the interrupt flag must survive the failure");
+            verifyNoInteractions(identityLinkRepository);
+        } finally {
+            // Clear it again, or every later test on this thread inherits an interrupted state.
+            Thread.interrupted();
+        }
     }
 
     @Test
@@ -490,7 +508,7 @@ class KeriOobiServiceTest {
         // The agent responded, but with an HTTP 5xx -- a server-side failure, not a rejection of the
         // request itself.
         when(oobis.resolve(anyString(), anyString())).thenThrow(
-                new UnexpectedResponseStatusException("HTTP POST /oobis - 503 - Service Unavailable"));
+                SignifyAgentException.from("POST", "/oobis", 503, "Service Unavailable"));
 
         Either<ProblemDetail, String> result = service.resolveUserOobi(USER, VALID_OOBI, false);
 
@@ -505,7 +523,7 @@ class KeriOobiServiceTest {
         // The agent was reachable and understood the request well enough to reject it (HTTP 4xx) -- this
         // is a genuine problem with the OOBI/AID, not agent unavailability, so it must stay OOBI_INVALID.
         when(oobis.resolve(anyString(), anyString())).thenThrow(
-                new UnexpectedResponseStatusException("HTTP POST /oobis - 400 - Bad Request"));
+                SignifyAgentException.from("POST", "/oobis", 400, "Bad Request"));
 
         Either<ProblemDetail, String> result = service.resolveUserOobi(USER, VALID_OOBI, false);
 

@@ -33,6 +33,7 @@ import com.bloxbean.cardano.client.quicktx.Tx;
 import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPublishCommand;
+import org.cardanofoundation.lob.app.blockchain_common.service.ipfs.IpfsPublisher;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentMetadataSerialiser;
@@ -41,8 +42,8 @@ import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API3Blockc
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.SerializedCardanoL1Transaction;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Organisation;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
+import org.cardanofoundation.lob.app.keri_attestation.service.RemotesignRequestFactory;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 
 /**
@@ -68,6 +69,7 @@ public class DocumentL1TransactionCreator {
     private final Account organiserWallet;
     private final Optional<IpfsPublisher> ipfsPublisher;
     private final Cip170MetadataFactory cip170MetadataFactory;
+    private final RemotesignRequestFactory remotesignRequestFactory;
 
     private final int metadataTag;
     private final boolean debugStoreOutputTx;
@@ -120,13 +122,67 @@ public class DocumentL1TransactionCreator {
                         .orElseThrow(() -> new IllegalArgumentException(
                                 "Organisation not found for id: %s".formatted(command.organisationId())));
                 Organisation organisation = Organisation.fromOrganisationEntity(organisationEntity);
-                MetadataMap metadataMap = documentMetadataSerialiser.serialiseToMetadataMap(command, cid, creationSlot,
+                // creationSlot is still read and still persisted on the entity (l1_creation_slot) and
+                // used for the L1 transaction — it just no longer goes INTO the manifest, which has to
+                // stay derivable by a wallet that has no chain tip. See
+                // L1MetadataSections#attestableMetadataSection.
+                MetadataMap metadataMap = documentMetadataSerialiser.serialiseToMetadataMap(command, cid,
                         organisation.getId(), organisation.getName(), organisation.getTaxIdNumber(),
                         organisation.getCurrencyId(), organisation.getCountryCode());
+
+                Optional<ProblemDetail> attestationDrift = verifyAttestationCoversThisManifest(document, metadataMap);
+                if (attestationDrift.isPresent()) {
+                    return Either.left(attestationDrift.get());
+                }
 
                 return handleTransactionCreation(metadataMap, attestMapOrNull(document), creationSlot);
             });
         });
+    }
+
+    /**
+     * For an attested document, proves the manifest about to be published is the one the wallet signed.
+     *
+     * <p>Rebuilds the wallet's anchored payload SAID from THIS manifest — digest it, wrap it in the same
+     * remotesign payload the ceremony used, take its SAID — and requires the result to equal the SAID
+     * the wallet actually sealed. Any divergence at all fails the publish: a different CID because the
+     * envelope changed, a different organisation record, a different recipient set. Publishing anyway
+     * would put a manifest on chain under an ATTEST that authorises a different one, which is precisely
+     * the claim the whole attestation exists to make.
+     *
+     * <p>This is the only end-to-end check of that equality. The vault's freeze guard compares envelope
+     * bytes, which catches a changed document but not a manifest assembled differently here.
+     *
+     * @return a problem when the attestation does not cover this manifest, empty when it does or when
+     *         the document is not attested at all.
+     */
+    private Optional<ProblemDetail> verifyAttestationCoversThisManifest(DocumentEntity document,
+            MetadataMap metadataMap) {
+        // An incomplete attestation is attestMapOrNull's business, not this method's: it fails those
+        // closed with a louder error, and pre-empting it here would only mask which invariant broke.
+        if (document.getAttestationCeremonyId() == null
+                || document.getAttestationAid() == null
+                || document.getAttestationPayloadSaid() == null) {
+            return Optional.empty();
+        }
+        String expectedPayloadSaid = (String) remotesignRequestFactory.anchorRequestKed(
+                document.getAttestationAid(), String.valueOf(metadataTag),
+                cip170MetadataFactory.digestOf(metadataMap)).get("d");
+
+        if (expectedPayloadSaid.equals(document.getAttestationPayloadSaid())) {
+            return Optional.empty();
+        }
+
+        log.error("Document {} would publish a manifest its attestation does not cover: the wallet sealed {} "
+                        + "but this manifest yields {}. Refusing to publish.",
+                document.getId(), document.getAttestationPayloadSaid(), expectedPayloadSaid);
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                ("Document %s carries an attestation over a different manifest than the one assembled for "
+                        + "publication; the document or its organisation changed after it was attested.")
+                        .formatted(document.getId()));
+        problem.setTitle("ATTESTED_MANIFEST_MISMATCH");
+
+        return Optional.of(problem);
     }
 
     /**

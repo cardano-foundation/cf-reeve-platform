@@ -29,8 +29,8 @@ All metadata entries under label 1447 follow this base structure, containing org
       "tax_id_number": "string"  // Tax identification number
     },
     "metadata": {
-      "creation_slot": "u64",                      // Cardano slot number when created
-      "timestamp": "string",                       // ISO-8601 timestamp
+      "creation_slot": "u64",                      // Cardano slot number when created (NOT on DOCUMENT)
+      "timestamp": "string",                       // ISO-8601 timestamp (NOT on DOCUMENT)
       "version": "string"                          // Metadata format version (e.g., "1.1")
     },
     "type": "string",            // Type of metadata: "INDIVIDUAL_TRANSACTIONS", "REPORT" or "FUNDING"
@@ -554,6 +554,14 @@ decrypting anything.
 
 ### Example: Document record
 
+> **`metadata` carries the version alone for this type.** `creation_slot` and `timestamp` are omitted
+> from a DOCUMENT manifest on purpose: both are decided at dispatch — the slot needs a live chain tip,
+> the timestamp is the publisher's clock — so a holder's wallet asked to attest the document *before*
+> it is published cannot reproduce either, and therefore could not commit to a manifest containing
+> them. Consumers should take both from the containing block instead, which is more trustworthy
+> anyway: block slot and block time cannot be influenced by the publisher, whereas these two fields
+> were publisher-supplied and could say anything. Every other publishable type still carries them.
+
 ```json
 {
   "1447": {
@@ -565,8 +573,6 @@ decrypting anything.
       "tax_id_number": "CHE-184477354"
     },
     "metadata": {
-      "creation_slot": 12345,
-      "timestamp": "2026-07-28T10:15:30Z",
       "version": "1.1"
     },
     "type": "DOCUMENT",

@@ -29,9 +29,10 @@ import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLin
 import org.cardanofoundation.lob.app.keri_attestation.service.KelAnchorVerifier.AnchorCandidate;
 import org.cardanofoundation.lob.app.keri_attestation.service.KeriNotificationCorrelator.CorrelatedNotification;
 import org.cardanofoundation.signify.app.Exchanging.ExchangeMessageResult;
-import org.cardanofoundation.signify.app.coring.Operation;
 import org.cardanofoundation.signify.app.coring.Operations;
-import org.cardanofoundation.signify.core.States.HabState;
+import org.cardanofoundation.signify.exception.SignifyInterruptedException;
+import org.cardanofoundation.signify.generated.keria.model.HabState;
+import org.cardanofoundation.signify.generated.keria.model.KeyStateRecord;
 
 /**
  * Drives the ATTEST step SYNCHRONOUSLY, in the request thread — the same treatment as
@@ -247,7 +248,7 @@ public class KeriAttestService {
             client.client().exchanges().sendFromEvents(agentService.agentName(), REMOTESIGN_TOPIC, built.exn(),
                     built.sigs(), built.atc(), List.of(walletAid));
             log.info("remotesign request sent to {}", walletAid);
-        } catch (InterruptedException e) {
+        } catch (SignifyInterruptedException e) {
             Thread.currentThread().interrupt();
             return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_REQUEST_FAILED,
                     "Interrupted while sending the ATTEST remotesign request: " + e.getMessage());
@@ -352,14 +353,24 @@ public class KeriAttestService {
     private Optional<Map<String, Object>> locateAnchoringEvent(String walletAid, String payloadSaid,
             String floorSequence, CorrelatedNotification ref) throws Exception {
         AnchorCandidate candidate = extractCandidate(ref.exn());
+        // Refresh the agent's view of the wallet's KEL BEFORE reading it, and for BOTH branches.
+        //
+        // fetchIxnEvents and keyStates().get() both answer from THIS agent's local store, and the wallet
+        // signed its interaction event moments ago on a DIFFERENT KERIA. Without an explicit network
+        // query that event is simply not here yet, and the attestation fails ATTEST_SEAL_MISMATCH even
+        // though the wallet did sign — blaming the wallet for what is our own stale read.
+        //
+        // Reading the KEL first and refreshing afterwards (as this did) is the same mistake in slow
+        // motion, and worse for being subtle: the scan's upper bound would be refreshed while the
+        // events it scans are not, so the bound would admit exactly the event the list is missing.
+        Optional<String> currentSequence = queryLatestSequenceWithRetries(walletAid);
         List<Map<String, Object>> ixnEvents = anchorVerifier.fetchIxnEvents(walletAid);
         if (!candidate.isEmpty()) {
             Map<String, Object> event = KelAnchorVerifier.locateCandidate(ixnEvents, candidate);
             return event != null && KelAnchorVerifier.satisfiesFloorAndDigest(event, floorSequence, payloadSaid)
                     ? Optional.of(event) : Optional.empty();
         }
-        return queryLatestSequenceWithRetries(walletAid)
-                .map(cs -> KelAnchorVerifier.scanForSealMatch(ixnEvents, floorSequence, cs, payloadSaid));
+        return currentSequence.map(cs -> KelAnchorVerifier.scanForSealMatch(ixnEvents, floorSequence, cs, payloadSaid));
     }
 
     /**
@@ -411,14 +422,13 @@ public class KeriAttestService {
         Duration delay = properties.keyStateRetryInitialDelay();
         for (int attempt = 1; attempt <= KEY_STATE_QUERY_ATTEMPTS; attempt++) {
             try {
-                Object raw = client.client().keyStates().query(aid, null);
-                Operation<Object> op = client.client().operations().wait(Operation.fromObject(raw), boundedKeyStateWait());
-                Object response = op.getResponse();
-                if (response instanceof Map<?, ?> map) {
-                    Object sn = map.get("s");
-                    if (sn != null) {
-                        return Optional.of(String.valueOf(sn));
-                    }
+                // The query is a NETWORK call and must stay one: keyStates().get() answers from the
+                // agent's local store and can never observe an event the wallet has only just signed.
+                client.client().operations().wait(
+                        client.client().keyStates().query(aid, null), boundedKeyStateWait());
+                Optional<KeyStateRecord> state = client.client().keyStates().get(aid);
+                if (state.isPresent() && state.get().getS() != null) {
+                    return Optional.of(state.get().getS());
                 }
             } catch (Exception e) {
                 log.warn("Key-state query attempt {}/{} for AID {} failed: {}", attempt, KEY_STATE_QUERY_ATTEMPTS,
@@ -451,8 +461,19 @@ public class KeriAttestService {
         return Either.left(KeriAttestationProblems.unprocessable(title, detail));
     }
 
+    /**
+     * Restores the interrupt flag when {@code e} is an interruption in EITHER form.
+     *
+     * <p>Both kinds have to be named. {@code Thread.sleep} still raises the checked
+     * {@link InterruptedException}, but a signify client call now wraps one in
+     * {@link SignifyInterruptedException} — which extends {@code RuntimeException}, not
+     * {@code InterruptedException}. Testing only the checked type therefore matches nothing the client
+     * throws any more: the interrupt is caught by the surrounding {@code catch (Exception e)}, reported
+     * as an ordinary step failure, and the flag is silently dropped — so a caller polling or sleeping
+     * afterwards keeps going to its full timeout instead of stopping.
+     */
     private static void interruptIfNeeded(Exception e) {
-        if (e instanceof InterruptedException) {
+        if (e instanceof InterruptedException || e instanceof SignifyInterruptedException) {
             Thread.currentThread().interrupt();
         }
     }

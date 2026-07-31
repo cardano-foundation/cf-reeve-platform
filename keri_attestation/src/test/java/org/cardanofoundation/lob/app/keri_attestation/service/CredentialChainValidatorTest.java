@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.security.DigestException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -19,12 +18,12 @@ import io.vavr.control.Either;
 
 import org.junit.jupiter.api.Test;
 
+import org.cardanofoundation.lob.app.keri_attestation.cesr.CESRStreamUtil;
 import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchema;
 import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchema.TrustModel;
 import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchemaRegistry;
 import org.cardanofoundation.lob.app.keri_attestation.service.CredentialChainValidator.ValidatedCredential;
 import org.cardanofoundation.signify.cesr.Saider;
-import org.cardanofoundation.signify.cesr.util.CESRStreamUtil;
 
 /**
  * {@code fixtures/vlei-chain-valid.cesr} is a real, genuine 3-level vLEI credential chain (see
@@ -592,11 +591,8 @@ class CredentialChainValidatorTest {
             e.put("d", "");
             event.put("e", e);
         }
-        try {
-            return Saider.saidify(event).sad();
-        } catch (DigestException ex) {
-            throw new IllegalStateException("could not saidify the synthetic ACDC", ex);
-        }
+        // saidify raises unchecked SignifyCryptoException now — nothing left to translate here.
+        return Saider.saidify(event).sad();
     }
 
     private static Map<String, Object> issEvent(String credentialSaid) {

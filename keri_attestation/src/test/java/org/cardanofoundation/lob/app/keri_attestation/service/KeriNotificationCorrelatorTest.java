@@ -35,6 +35,10 @@ import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProp
 import org.cardanofoundation.signify.app.Exchanging;
 import org.cardanofoundation.signify.app.Notifying;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
+import org.cardanofoundation.signify.generated.keria.model.ExchangeResource;
+import org.cardanofoundation.signify.generated.keria.model.Exn;
+import org.cardanofoundation.signify.generated.keria.model.Notification;
+import org.cardanofoundation.signify.generated.keria.model.NotificationData;
 
 @ExtendWith(MockitoExtension.class)
 class KeriNotificationCorrelatorTest {
@@ -81,27 +85,26 @@ class KeriNotificationCorrelatorTest {
 
     // --- notification / exchange fixture builders ---
 
-    @SafeVarargs
-    private static Notifying.Notifications.NotificationListResponse responseOf(Map<String, Object>... notes) {
-        String json = writeJson(List.of(notes));
-        return new Notifying.Notifications.NotificationListResponse(0, notes.length, notes.length, json);
+    /** The client parses the notification list itself now, so fixtures build the typed records
+     *  directly rather than round-tripping JSON through a local mirror of the shape. */
+    private static Notifying.Notifications.NotificationListResponse responseOf(Notification... notes) {
+        return new Notifying.Notifications.NotificationListResponse(0, notes.length, notes.length, List.of(notes));
     }
 
     /** One page of a larger queue: {@code total} is the whole queue, not this page. */
     private static Notifying.Notifications.NotificationListResponse page(int start, int total,
-            List<Map<String, Object>> notes) {
-        return new Notifying.Notifications.NotificationListResponse(start, start + notes.size(), total,
-                writeJson(notes));
+            List<Notification> notes) {
+        return new Notifying.Notifications.NotificationListResponse(start, start + notes.size(), total, notes);
     }
 
-    private static List<Map<String, Object>> filler(int count) {
+    private static List<Notification> filler(int count) {
         return java.util.stream.IntStream.range(0, count)
                 .mapToObj(i -> note("stale-" + i, false, "/exn/ipex/other", "ESTALE" + i))
                 .toList();
     }
 
-    private static Map<String, Object> noteAt(String id, String dt, String route) {
-        return Map.of("i", id, "dt", dt, "r", false, "a", Map.of("r", route, "d", "E" + id, "m", ""));
+    private static Notification noteAt(String id, String dt, String route) {
+        return note(id, false, route, "E" + id).dt(dt);
     }
 
     private static String isoMinutesAgo(long minutes) {
@@ -109,26 +112,22 @@ class KeriNotificationCorrelatorTest {
                 .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSSxxx"));
     }
 
-    private static String writeJson(Object value) {
-        try {
-            return MAPPER.writeValueAsString(value);
-        } catch (Exception e) {
-            throw new IllegalStateException(e);
-        }
+    private static Notification note(String id, boolean read, String route, String exnSaid) {
+        return new Notification()
+                .i(id)
+                .dt("2026-07-21T00:00:00.000000+00:00")
+                .r(read)
+                .a(new NotificationData().r(route).d(exnSaid).m(""));
     }
 
-    private static Map<String, Object> note(String id, boolean read, String route, String exnSaid) {
-        return Map.of("i", id, "dt", "2026-07-21T00:00:00.000000+00:00", "r", read,
-                "a", Map.of("r", route, "d", exnSaid, "m", ""));
+    private static Optional<ExchangeResource> exchangeWithRoute(String sender, String route, String prior) {
+        return Optional.of(new ExchangeResource().exn(
+                new Exn().i(sender).r(route).p(prior).a(Map.of()).e(Map.of())));
     }
 
-    private static Optional<Object> exchangeWithRoute(String sender, String route, String prior) {
-        return Optional.of(Map.of("exn",
-                Map.of("i", sender, "r", route, "p", prior, "a", Map.of(), "e", Map.of())));
-    }
-
-    private static Optional<Object> exchangeWithRouteAndSaid(String sender, String route, String said) {
-        return Optional.of(Map.of("exn", Map.of("i", sender, "r", route, "d", said, "a", Map.of(), "e", Map.of())));
+    private static Optional<ExchangeResource> exchangeWithRouteAndSaid(String sender, String route, String said) {
+        return Optional.of(new ExchangeResource().exn(
+                new Exn().i(sender).r(route).d(said).a(Map.of()).e(Map.of())));
     }
 
     // --- awaitByRoute: claims the first unread route-matching notification, no other checks ---
@@ -361,8 +360,8 @@ class KeriNotificationCorrelatorTest {
      */
     @Test
     void claimsAReplyThatSitsBeyondTheFirstPageOfAnAgentCloggedWithStaleNotifications() throws Exception {
-        List<Map<String, Object>> firstPage = filler(25);
-        List<Map<String, Object>> secondPage = new java.util.ArrayList<>(filler(3));
+        List<Notification> firstPage = filler(25);
+        List<Notification> secondPage = new java.util.ArrayList<>(filler(3));
         secondPage.add(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID));
 
         when(notifications.list(0, 24)).thenReturn(page(0, 29, firstPage));

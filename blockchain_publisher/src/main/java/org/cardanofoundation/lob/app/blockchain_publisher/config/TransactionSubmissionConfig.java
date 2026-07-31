@@ -15,12 +15,12 @@ import com.bloxbean.cardano.client.api.UtxoSupplier;
 import com.bloxbean.cardano.client.backend.api.BackendService;
 import com.bloxbean.cardano.client.backend.api.DefaultUtxoSupplier;
 
+import org.cardanofoundation.lob.app.blockchain_common.service.ipfs.IpfsPublisher;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.KeriService;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.L1TransactionCreatorConfig;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.authbegin.AuthBeginL1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentConverter;
@@ -33,6 +33,7 @@ import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction.API1MetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.transation_submit.*;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
+import org.cardanofoundation.lob.app.keri_attestation.service.RemotesignRequestFactory;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 
 @Configuration
@@ -171,6 +172,11 @@ public class TransactionSubmissionConfig {
                 organiserAccount,
                 ipfsPublisher,
                 cip170MetadataFactory,
+                // Constructed, not injected: the class is stateless and collaborator-free, but it is a
+                // @Service in keri_attestation's package, which is only component-scanned when
+                // lob.keri-attestation.enabled=true. That is FALSE on the publisher pod — the very pod
+                // that needs it — so injecting it would fail the context exactly where it is required.
+                new RemotesignRequestFactory(),
                 metadataLabel,
                 debugStoreOutputTx
         );

@@ -2,7 +2,6 @@ package org.cardanofoundation.lob.app.blockchain_publisher.service.publish.modul
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
@@ -33,14 +32,15 @@ import org.junit.jupiter.api.Test;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.CardanoNetwork;
 import org.cardanofoundation.lob.app.blockchain_common.domain.ChainTip;
+import org.cardanofoundation.lob.app.blockchain_common.service.ipfs.IpfsPublisher;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API3BlockchainTransaction;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentEntity;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
+import org.cardanofoundation.lob.app.keri_attestation.service.RemotesignRequestFactory;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 
@@ -81,7 +81,7 @@ class DocumentL1TransactionCreatorTest {
         organiserWallet = new Account();
         documentConverter = new DocumentConverter();
         documentIpfsSerialiser = new DocumentIpfsSerialiser(new ObjectMapper());
-        documentMetadataSerialiser = spy(new DocumentMetadataSerialiser(FIXED_CLOCK));
+        documentMetadataSerialiser = spy(new DocumentMetadataSerialiser());
 
         when(organisationPublicApi.findByOrganisationId("org-1")).thenReturn(Optional.of(Organisation.builder()
                 .id("org-1")
@@ -119,6 +119,7 @@ class DocumentL1TransactionCreatorTest {
                 organiserWallet,
                 ipfsPublisher,
                 mock(Cip170MetadataFactory.class),
+                new RemotesignRequestFactory(),
                 1447,
                 false);
     }
@@ -148,7 +149,7 @@ class DocumentL1TransactionCreatorTest {
             captured.set(result);
             return result;
         }).when(documentMetadataSerialiser).serialiseToMetadataMap(
-                any(), anyString(), anyLong(), anyString(), anyString(), anyString(), anyString(), anyString());
+                any(), anyString(), anyString(), anyString(), anyString(), anyString(), anyString());
 
         DocumentL1TransactionCreator creator = spy(creator(Optional.of(ipfsPublisher)));
         doReturn(new byte[]{1, 2, 3}).when(creator).serialiseTransaction(any(Metadata.class));

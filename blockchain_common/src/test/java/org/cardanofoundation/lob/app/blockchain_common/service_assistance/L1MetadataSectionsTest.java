@@ -29,6 +29,25 @@ class L1MetadataSectionsTest {
     }
 
     /**
+     * The attestable variant carries the schema version and NOTHING else.
+     *
+     * <p>This is the whole point of it: creation_slot needs a live chain tip and timestamp is the
+     * publisher's clock, so a wallet asked to attest a document before it is published cannot
+     * reproduce either. A manifest containing them is one no wallet can commit to, which is why the
+     * document type uses this variant and the other three do not.
+     */
+    @Test
+    void attestableMetadataSectionEmitsTheVersionAlone() {
+        MetadataMap section = L1MetadataSections.attestableMetadataSection("1.1");
+
+        assertThat(section.get("version")).isEqualTo("1.1");
+        assertThat(section.get("creation_slot")).isNull();
+        assertThat(section.get("timestamp")).isNull();
+        assertThat(((java.util.List<?>) section.keys()).stream().map(Object::toString).toList())
+                .containsExactly("version");
+    }
+
+    /**
      * The version must stay a parameter: each publishable type has its own, and collapsing them would
      * change on-chain bytes for three of the four.
      */

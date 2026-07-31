@@ -1,7 +1,6 @@
 package org.cardanofoundation.lob.app.blockchain_common.service_assistance;
 
 import java.math.BigInteger;
-import java.security.DigestException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -92,9 +91,9 @@ public class Cip170MetadataFactory {
             return new Diger(RawArgs.builder().raw(blake3_256).build()).getQb64();
         } catch (CborException e) {
             throw new IllegalStateException("Failed to CBOR-serialize a metadata map for digesting.", e);
-        } catch (DigestException e) {
-            throw new IllegalStateException("Failed to compute the Blake3-256 digest of a metadata map.", e);
         }
+        // Digest failures raise unchecked now and are left to propagate: a Blake3 failure here is not
+        // something a caller can act on.
     }
 
     // --- internals ---

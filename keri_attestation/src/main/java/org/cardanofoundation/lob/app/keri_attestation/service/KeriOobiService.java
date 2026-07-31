@@ -5,7 +5,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -29,9 +28,14 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentity
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestationCeremonyRepository;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
-import org.cardanofoundation.signify.app.clienting.exception.UnexpectedResponseStatusException;
-import org.cardanofoundation.signify.app.coring.Operation;
 import org.cardanofoundation.signify.app.coring.Operations;
+import org.cardanofoundation.signify.exception.OperationAbortedException;
+import org.cardanofoundation.signify.exception.OperationFailedException;
+import org.cardanofoundation.signify.exception.OperationTimeoutException;
+import org.cardanofoundation.signify.exception.SignifyAgentException;
+import org.cardanofoundation.signify.exception.SignifyInterruptedException;
+import org.cardanofoundation.signify.exception.SignifyServerException;
+import org.cardanofoundation.signify.exception.SignifyTransportException;
 
 /**
  * Resolves a user's wallet OOBI into an AID and creates/updates their {@link KeriIdentityLinkEntity}
@@ -59,9 +63,6 @@ public class KeriOobiService {
     static final int MAX_OOBI_URL_LENGTH = 2048;
     private static final long RESOLVE_TIMEOUT_MILLIS = 15_000L;
     private static final Pattern OOBI_AID_PATTERN = Pattern.compile("/oobi/([^/]+)");
-    // Matches the HTTP status code SignifyClient#fetch embeds in UnexpectedResponseStatusException's
-    // message: String.format("HTTP %s %s - %d - %s", method, path, statusCode, body).
-    private static final Pattern HTTP_STATUS_PATTERN = Pattern.compile("-\\s*(\\d{3})\\s*-");
     private static final Set<CeremonyState> TERMINAL_STATES =
             EnumSet.of(CeremonyState.CONSUMED, CeremonyState.FAILED, CeremonyState.EXPIRED);
 
@@ -137,18 +138,25 @@ public class KeriOobiService {
 
     private Either<ProblemDetail, Void> resolveAndVerify(String userId, String oobiUrl, String aid) {
         try {
-            Object resolveResult = client.client().oobis().resolve(oobiUrl, userId);
+            var resolveResult = client.client().oobis().resolve(oobiUrl, userId);
             Operations.WaitOptions waitOptions = Operations.WaitOptions.builder()
                     .abortSignal(Operations.AbortSignal.builder().timeout(RESOLVE_TIMEOUT_MILLIS).build())
                     .build();
-            client.client().operations().wait(Operation.fromObject(resolveResult), waitOptions);
+            client.client().operations().wait(resolveResult, waitOptions);
 
-            Optional<Object> contact = client.client().contacts().get(aid);
+            var contact = client.client().contacts().get(aid);
             if (contact.isEmpty()) {
                 return Either.left(invalid(
                         "AID %s could not be verified via contacts after resolving the OOBI.".formatted(aid)));
             }
         } catch (Exception e) {
+            // An interrupt is reported like any other resolve failure — but the flag has to survive it,
+            // or the caller's own wait keeps polling to its full timeout after being told to stop. It
+            // arrives unchecked now (SignifyInterruptedException wraps the checked one), so naming only
+            // InterruptedException here would match nothing the client throws.
+            if (e instanceof InterruptedException || e instanceof SignifyInterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             log.warn("OOBI resolve failed for user {} ({}): {}", userId, oobiUrl, e.getMessage());
             if (isTransientAgentFailure(e)) {
                 return Either.left(KeriAttestationProblems.serviceUnavailable(
@@ -171,47 +179,37 @@ public class KeriOobiService {
      *       connect/request timeouts ({@link java.net.http.HttpConnectTimeoutException},
      *       {@link java.net.http.HttpTimeoutException}), and every other network-level transport failure
      *       the JDK {@code HttpClient} used under {@code SignifyClient#fetch} can raise;</li>
-     *   <li>an {@link InterruptedException} whose message contains "timeout" — {@code
-     *       Operations.AbortSignal#throwIfAborted} throws exactly this when the resolve wait's own abort
-     *       signal (bounded by {@link #RESOLVE_TIMEOUT_MILLIS}) fires: the agent accepted the resolve
-     *       request but the long-running operation never completed in time, i.e. the agent itself is
-     *       slow/unresponsive rather than the request being malformed;</li>
-     *   <li>{@link UnexpectedResponseStatusException} whose embedded HTTP status is 5xx — the agent
-     *       responded but with a server-side error, not a rejection of the request.</li>
+     *   <li>{@link OperationTimeoutException} / {@link OperationAbortedException} — the resolve wait's
+     *       own abort signal (bounded by {@link #RESOLVE_TIMEOUT_MILLIS}) fired: the agent accepted the
+     *       resolve request but the long-running operation never completed in time, i.e. the agent
+     *       itself is slow/unresponsive rather than the request being malformed;</li>
+     *   <li>{@link SignifyTransportException} — the client could not complete the exchange at all;</li>
+     *   <li>{@link SignifyAgentException} whose status code is 5xx (which {@link SignifyServerException}
+     *       always is) — the agent responded, but with a server-side error rather than a rejection of
+     *       the request.</li>
      * </ul>
-     * Everything else — including a plain (non-timeout) {@code InterruptedException}, a completed-but-
-     * failed operation, a 4xx {@code UnexpectedResponseStatusException} (the agent understood and
+     * Everything else — including a plain thread interrupt, a completed-but-failed operation
+     * ({@link OperationFailedException}), a 4xx {@code SignifyAgentException} (the agent understood and
      * rejected the request), and the empty-contact case handled separately above — stays
      * {@link KeriAttestationProblems#OOBI_INVALID}: the agent was reachable and the resolution
      * completed, it just didn't produce a usable AID.
+     *
+     * <p>Classification reads the exception TYPE and {@code getStatusCode()}, never the message text.
+     * The old code regex-matched an HTTP status out of the message; that silently reclassifies every
+     * agent outage as "your OOBI is invalid" the moment the client's message format changes.
      */
     private static boolean isTransientAgentFailure(Throwable e) {
-        if (e instanceof IOException) {
+        if (e instanceof IOException || e instanceof SignifyTransportException) {
             return true;
         }
-        if (e instanceof InterruptedException) {
-            return containsIgnoreCase(e.getMessage(), "timeout");
+        if (e instanceof OperationTimeoutException || e instanceof OperationAbortedException) {
+            return true;
         }
-        if (e instanceof UnexpectedResponseStatusException) {
-            return isServerErrorStatus(e.getMessage());
+        if (e instanceof SignifyAgentException agentException) {
+            int status = agentException.getStatusCode();
+            return status >= 500 && status < 600;
         }
         return false;
-    }
-
-    private static boolean containsIgnoreCase(String message, String needle) {
-        return message != null && message.toLowerCase(Locale.ROOT).contains(needle);
-    }
-
-    private static boolean isServerErrorStatus(String message) {
-        if (message == null) {
-            return false;
-        }
-        Matcher statusMatcher = HTTP_STATUS_PATTERN.matcher(message);
-        if (!statusMatcher.find()) {
-            return false;
-        }
-        int status = Integer.parseInt(statusMatcher.group(1));
-        return status >= 500 && status < 600;
     }
 
     // --- persist the identity link ---

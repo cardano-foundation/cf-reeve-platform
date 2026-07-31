@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import org.cardanofoundation.lob.app.blockchain_common.service.IpfsAvailability;
+import org.cardanofoundation.lob.app.blockchain_common.service.ipfs.IpfsPublisher;
 
 @Component
 @RequiredArgsConstructor

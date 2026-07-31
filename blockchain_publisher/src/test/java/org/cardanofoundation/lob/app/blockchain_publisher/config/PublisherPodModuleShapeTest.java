@@ -11,11 +11,11 @@ import com.bloxbean.cardano.client.backend.api.BackendService;
 
 import org.junit.jupiter.api.Test;
 
+import org.cardanofoundation.lob.app.blockchain_common.service.ipfs.IpfsPublisher;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentConverter;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;

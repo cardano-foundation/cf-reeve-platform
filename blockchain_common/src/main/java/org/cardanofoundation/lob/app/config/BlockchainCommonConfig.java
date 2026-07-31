@@ -1,16 +1,19 @@
 package org.cardanofoundation.lob.app.config;
 
-import java.time.Clock;
 
 import lombok.val;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.Resource;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import org.cardanofoundation.lob.app.blockchain_common.service.ipfs.IpfsPublisher;
+import org.cardanofoundation.lob.app.blockchain_common.service.ipfs.impl.BlockfrostPublisher;
+import org.cardanofoundation.lob.app.blockchain_common.service.ipfs.impl.IpfsNodePublisher;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentMetadataSerialiser;
@@ -41,8 +44,8 @@ public class BlockchainCommonConfig {
 
     /** Ungated for the same reason as {@link #cip170MetadataFactory()}. */
     @Bean
-    public DocumentMetadataSerialiser documentMetadataSerialiser(Clock clock) {
-        return new DocumentMetadataSerialiser(clock);
+    public DocumentMetadataSerialiser documentMetadataSerialiser() {
+        return new DocumentMetadataSerialiser();
     }
 
     @Bean
@@ -93,4 +96,27 @@ public class BlockchainCommonConfig {
         return checker;
     }
 
+    /**
+     * The IPFS beans are declared HERE, not as {@code @Service}s in their own package, for the same
+     * reason the serialisers are: this configuration class is always scanned, whereas a module's own
+     * package is scanned only when that module is enabled. Registering them from
+     * {@code BlockchainPublisherModuleConfig} would make them exist only on the publisher — which is
+     * exactly the shape that left the api tier unable to name a CID during an attestation ceremony.
+     *
+     * <p>Gated purely on the IPFS properties, so a tier gets a publisher iff it is configured with one.
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "lob.blockchain_publisher.ipfs.blockfrost", value = "enabled", havingValue = "true", matchIfMissing = false)
+    public IpfsPublisher blockfrostIpfsPublisher(
+            @Value("${lob.blockchain_publisher.ipfs.blockfrost.url}") String url,
+            @Value("${lob.blockchain_publisher.ipfs.blockfrost.project_id}") String projectId) {
+        return new BlockfrostPublisher(url, projectId);
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "lob.blockchain_publisher.ipfs.local", value = "enabled", havingValue = "true", matchIfMissing = false)
+    public IpfsPublisher localIpfsNodePublisher(
+            @Value("${lob.blockchain_publisher.ipfs.local.node}") String node) {
+        return new IpfsNodePublisher(node);
+    }
 }

@@ -19,9 +19,10 @@ import org.slf4j.LoggerFactory;
 
 import org.junit.jupiter.api.Test;
 
-import org.cardanofoundation.signify.app.aiding.Identifier;
+import org.cardanofoundation.signify.app.aiding.IdentifierController;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
-import org.cardanofoundation.signify.core.States;
+import org.cardanofoundation.signify.generated.keria.model.HabState;
+import org.cardanofoundation.signify.generated.keria.model.KeyStateRecord;
 
 /**
  * Unit tests for {@link SignifyClientConfig#resolveBran}: a configured passcode must be honored
@@ -70,12 +71,12 @@ class SignifyClientConfigTest {
     }
 
     private static SignifyClient clientWithWitnesses(List<String> witnesses) throws Exception {
-        States.State state = mock(States.State.class);
+        KeyStateRecord state = mock(KeyStateRecord.class);
         when(state.getB()).thenReturn(witnesses);
-        States.HabState hab = mock(States.HabState.class);
+        HabState hab = mock(HabState.class);
         when(hab.getState()).thenReturn(state);
 
-        Identifier identifiers = mock(Identifier.class);
+        IdentifierController identifiers = mock(IdentifierController.class);
         when(identifiers.get("agent")).thenReturn(Optional.of(hab));
         SignifyClient client = mock(SignifyClient.class);
         when(client.identifiers()).thenReturn(identifiers);

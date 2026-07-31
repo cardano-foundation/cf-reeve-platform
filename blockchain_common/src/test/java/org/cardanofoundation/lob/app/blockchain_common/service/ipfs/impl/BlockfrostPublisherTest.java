@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs;
+package org.cardanofoundation.lob.app.blockchain_common.service.ipfs.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -8,9 +8,10 @@ import java.io.IOException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.springframework.http.ProblemDetail;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import io.vavr.control.Either;
 import org.mockito.Mock;
@@ -20,7 +21,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.impl.BlockfrostPublisher;
 
 @ExtendWith(MockitoExtension.class)
 class BlockfrostPublisherTest {
@@ -36,9 +36,8 @@ class BlockfrostPublisherTest {
 
     @BeforeEach
     void setUp() {
-        publisher = new BlockfrostPublisher(httpClient);
-        ReflectionTestUtils.setField(publisher, "blockfrostUrl", "https://ipfs.blockfrost.io/api/v0/ipfs/add");
-        ReflectionTestUtils.setField(publisher, "blockfrostProjectId", "test-project-id");
+        publisher = new BlockfrostPublisher("https://ipfs.blockfrost.io/api/v0/ipfs/add", "test-project-id",
+                httpClient);
     }
 
     @Test
@@ -121,19 +120,69 @@ class BlockfrostPublisherTest {
         when(httpResponse.statusCode()).thenReturn(200);
         when(httpResponse.body()).thenReturn(responseBody);
 
-        // Capture the request to verify headers
+        List<HttpRequest> requests = new ArrayList<>();
         when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
                 .thenAnswer(invocation -> {
-                    HttpRequest request = invocation.getArgument(0);
-                    assertThat(request.headers().firstValue("project_id")).hasValue("test-project-id");
-                    assertThat(request.headers().firstValue("Content-Type").orElse(""))
-                            .startsWith("multipart/form-data; boundary=");
+                    requests.add(invocation.getArgument(0));
                     return httpResponse;
                 });
 
         Either<ProblemDetail, String> result = publisher.publish("some content");
 
         assertThat(result.isRight()).isTrue();
+        // Both calls carry the project id; only the upload is a multipart body.
+        assertThat(requests).allSatisfy(request ->
+                assertThat(request.headers().firstValue("project_id")).hasValue("test-project-id"));
+        assertThat(requests.get(0).headers().firstValue("Content-Type").orElse(""))
+                .startsWith("multipart/form-data; boundary=");
+    }
+
+    /**
+     * Blockfrost's add does NOT pin, and unpinned objects are garbage-collected — so publishing has to
+     * pin explicitly. It never did, which left every published envelope collectable.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void publish_pinsAfterAddingSoTheEnvelopeSurvives() throws IOException, InterruptedException {
+        when(httpResponse.statusCode()).thenReturn(200);
+        when(httpResponse.body()).thenReturn("{\"name\":\"reeve.json\",\"ipfs_hash\":\"QmHash\",\"size\":\"50\"}");
+
+        List<HttpRequest> requests = new ArrayList<>();
+        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenAnswer(invocation -> {
+                    requests.add(invocation.getArgument(0));
+                    return httpResponse;
+                });
+
+        assertThat(publisher.publish("some content").get()).isEqualTo("QmHash");
+
+        assertThat(requests).hasSize(2);
+        assertThat(requests.get(0).uri().toString()).endsWith("/ipfs/add");
+        assertThat(requests.get(1).uri().toString()).endsWith("/ipfs/pin/add/QmHash");
+    }
+
+    /**
+     * contentId must NOT pin: it names the bytes during an attestation ceremony, and an abandoned
+     * ceremony has to leave nothing durable behind. On Blockfrost an unpinned add expires by itself,
+     * which is what removes the need for any compensating unpin.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void contentId_addsWithoutPinning() throws IOException, InterruptedException {
+        when(httpResponse.statusCode()).thenReturn(200);
+        when(httpResponse.body()).thenReturn("{\"name\":\"reeve.json\",\"ipfs_hash\":\"QmHash\",\"size\":\"50\"}");
+
+        List<HttpRequest> requests = new ArrayList<>();
+        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenAnswer(invocation -> {
+                    requests.add(invocation.getArgument(0));
+                    return httpResponse;
+                });
+
+        assertThat(publisher.contentId("some content").get()).isEqualTo("QmHash");
+
+        assertThat(requests).hasSize(1);
+        assertThat(requests.get(0).uri().toString()).endsWith("/ipfs/add");
     }
 
     @Test

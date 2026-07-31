@@ -21,6 +21,7 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestat
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentityLinkEntity;
 import org.cardanofoundation.lob.app.keri_attestation.domain.view.CeremonyView;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
+import org.cardanofoundation.signify.exception.SignifyInterruptedException;
 
 /**
  * Drives the AUTH_BEGIN step. This module never touches the chain: it validates the linked credential
@@ -55,6 +56,7 @@ public class KeriAuthBeginService {
 
     private final KeriAttestationClient client;
     private final CesrChainReducer cesrChainReducer;
+    private final CredentialCesrFetcher cesrFetcher;
     private final ApplicationEventPublisher eventPublisher;
     private final CeremonyService ceremonyService;
     private final KeriIdentityLinkRepository identityLinkRepository;
@@ -152,7 +154,7 @@ public class KeriAuthBeginService {
 
         byte[] reducedChain;
         try {
-            Optional<String> cesrOpt = client.client().credentials().get(link.getCredentialSaid());
+            Optional<String> cesrOpt = cesrFetcher.fetch(link.getCredentialSaid());
             if (cesrOpt.isEmpty()) {
                 return failAuthBegin(ceremonyId, userId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
                         "Credential %s was not found in the credential store.".formatted(link.getCredentialSaid()));
@@ -248,8 +250,19 @@ public class KeriAuthBeginService {
         });
     }
 
+    /**
+     * Restores the interrupt flag when {@code e} is an interruption in EITHER form.
+     *
+     * <p>Both kinds have to be named. {@code Thread.sleep} still raises the checked
+     * {@link InterruptedException}, but a signify client call now wraps one in
+     * {@link SignifyInterruptedException} — which extends {@code RuntimeException}, not
+     * {@code InterruptedException}. Testing only the checked type therefore matches nothing the client
+     * throws any more: the interrupt is caught by the surrounding {@code catch (Exception e)}, reported
+     * as an ordinary step failure, and the flag is silently dropped — so a caller polling or sleeping
+     * afterwards keeps going to its full timeout instead of stopping.
+     */
     private static void interruptIfNeeded(Exception e) {
-        if (e instanceof InterruptedException) {
+        if (e instanceof InterruptedException || e instanceof SignifyInterruptedException) {
             Thread.currentThread().interrupt();
         }
     }

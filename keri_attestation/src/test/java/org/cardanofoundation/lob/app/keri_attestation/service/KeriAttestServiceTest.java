@@ -50,14 +50,17 @@ import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLin
 import org.cardanofoundation.lob.app.keri_attestation.service.KeriNotificationCorrelator.CorrelatedNotification;
 import org.cardanofoundation.signify.app.Exchanging;
 import org.cardanofoundation.signify.app.Exchanging.ExchangeMessageResult;
-import org.cardanofoundation.signify.app.aiding.Identifier;
+import org.cardanofoundation.signify.app.aiding.IdentifierController;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
 import org.cardanofoundation.signify.app.coring.Coring;
 import org.cardanofoundation.signify.app.coring.KeyStates;
-import org.cardanofoundation.signify.app.coring.Operation;
 import org.cardanofoundation.signify.app.coring.Operations;
 import org.cardanofoundation.signify.cesr.Serder;
-import org.cardanofoundation.signify.core.States;
+import org.cardanofoundation.signify.generated.keria.model.Exn;
+import org.cardanofoundation.signify.generated.keria.model.HabState;
+import org.cardanofoundation.signify.generated.keria.model.KeyEvent;
+import org.cardanofoundation.signify.generated.keria.model.KeyEventRecord;
+import org.cardanofoundation.signify.generated.keria.model.KeyStateRecord;
 
 /**
  * Tests {@link KeriAttestService#attest}, the single synchronous entry point that replaced the old
@@ -95,7 +98,7 @@ class KeriAttestServiceTest {
     @Mock
     private KeriAttestationClient keriClient;
     @Mock
-    private Identifier identifiers;
+    private IdentifierController identifiers;
     @Mock
     private Exchanging.Exchanges exchanges;
     @Mock
@@ -174,8 +177,8 @@ class KeriAttestServiceTest {
         return link;
     }
 
-    private static States.HabState habState(String prefix) {
-        States.HabState hab = new States.HabState();
+    private static HabState habState(String prefix) {
+        HabState hab = new HabState();
         hab.setPrefix(prefix);
         hab.setName(AGENT_NAME);
         return hab;
@@ -206,13 +209,23 @@ class KeriAttestServiceTest {
         return payload;
     }
 
-    private static Map<String, Object> kelEvent(String type, String sequence, String said, Object seals) {
-        java.util.LinkedHashMap<String, Object> ked = new java.util.LinkedHashMap<>();
-        ked.put("t", type);
-        ked.put("s", sequence);
-        ked.put("d", said);
-        ked.put("a", seals);
-        return Map.of("ked", ked);
+    /** A typed key state carrying just the sequence the floor/scan logic reads off it. */
+    private static KeyStateRecord keyState(String sequence) {
+        KeyStateRecord state = mock(KeyStateRecord.class);
+        lenient().when(state.getS()).thenReturn(sequence);
+        return state;
+    }
+
+    /** A typed KEL record, as the client now returns them. */
+    private static KeyEventRecord kelEvent(String type, String sequence, String said, Object seals) {
+        KeyEvent ked = new KeyEvent();
+        ked.setT(type);
+        ked.setS(sequence);
+        ked.setD(said);
+        ked.setA(seals);
+        KeyEventRecord record = new KeyEventRecord();
+        record.setKed(ked);
+        return record;
     }
 
     private static CeremonyView ceremonyView(CeremonyState state) {
@@ -226,7 +239,7 @@ class KeriAttestServiceTest {
         when(exchanges.createExchangeMessage(any(), eq("/remotesign/ixn/req"), anyMap(), anyMap(), eq(WALLET_AID),
                 any(), any())).thenReturn(new ExchangeMessageResult(builtExn, List.of("sig1"), "atc1"));
         lenient().when(exchanges.sendFromEvents(eq(AGENT_NAME), eq("remotesign"), eq(builtExn), eq(List.of("sig1")),
-                eq("atc1"), eq(List.of(WALLET_AID)))).thenReturn(Map.of());
+                eq("atc1"), eq(List.of(WALLET_AID)))).thenReturn(new Exn());
         return builtExn;
     }
 
@@ -234,9 +247,12 @@ class KeriAttestServiceTest {
      *  {@code queryLatestSequenceWithRetries} performs — used both by the pre-send floor query and by
      *  {@code resolveAndComplete}'s no-candidate bounded-scan fallback (the current-sequence query). */
     private void stubKeyStateSequence(String sequence) throws Exception {
-        when(keyStates.query(eq(WALLET_AID), any())).thenReturn(Map.of());
-        Operation<Object> op = Operation.builder().response(Map.of("s", sequence)).build();
-        when(operations.wait(any(), any(Operations.WaitOptions.class))).thenReturn(op);
+        // query() is the NETWORK refresh and stays stubbed, because the code under test must keep
+        // making it: without it the agent never sees the event the wallet just signed.
+        lenient().when(keyStates.query(eq(WALLET_AID), any())).thenReturn(null);
+        lenient().when(operations.wait(any(), any(Operations.WaitOptions.class))).thenReturn(null);
+        KeyStateRecord state = keyState(sequence);
+        when(keyStates.get(WALLET_AID)).thenReturn(Optional.of(state));
     }
 
     /** Stubs {@code ceremonyService.updateWaitingStepData} to apply whichever mutator it is
@@ -674,10 +690,13 @@ class KeriAttestServiceTest {
         when(kedFactory.anchorRequestKed(WALLET_AID, METADATA_LABEL, DIGEST)).thenReturn(Map.of("d", PAYLOAD_SAID));
         stubHappySend();
         stubGuardedUpdateSuccess(ceremony);
-        when(keyStates.query(eq(WALLET_AID), any())).thenReturn(Map.of());
-        Operation<Object> floorOp = Operation.builder().response(Map.of("s", FLOOR_SEQUENCE)).build();
-        Operation<Object> currentOp = Operation.builder().response(Map.of("s", SEQUENCE)).build();
-        when(operations.wait(any(), any(Operations.WaitOptions.class))).thenReturn(floorOp).thenReturn(currentOp);
+        lenient().when(keyStates.query(eq(WALLET_AID), any())).thenReturn(null);
+        lenient().when(operations.wait(any(), any(Operations.WaitOptions.class))).thenReturn(null);
+        KeyStateRecord floorState = mock(KeyStateRecord.class);
+        lenient().when(floorState.getS()).thenReturn(FLOOR_SEQUENCE);
+        KeyStateRecord currentState = mock(KeyStateRecord.class);
+        lenient().when(currentState.getS()).thenReturn(SEQUENCE);
+        when(keyStates.get(WALLET_AID)).thenReturn(Optional.of(floorState)).thenReturn(Optional.of(currentState));
 
         Map<String, Object> refExn = refExn(WALLET_AID, null, null);
         when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any()))
@@ -712,10 +731,11 @@ class KeriAttestServiceTest {
         when(kedFactory.anchorRequestKed(WALLET_AID, METADATA_LABEL, DIGEST)).thenReturn(Map.of("d", PAYLOAD_SAID));
         stubHappySend();
         stubGuardedUpdateSuccess(ceremony);
-        when(keyStates.query(eq(WALLET_AID), any())).thenReturn(Map.of());
-        Operation<Object> floorOp = Operation.builder().response(Map.of("s", "5")).build();
-        Operation<Object> currentOp = Operation.builder().response(Map.of("s", "6")).build();
-        when(operations.wait(any(), any(Operations.WaitOptions.class))).thenReturn(floorOp).thenReturn(currentOp);
+        lenient().when(keyStates.query(eq(WALLET_AID), any())).thenReturn(null);
+        lenient().when(operations.wait(any(), any(Operations.WaitOptions.class))).thenReturn(null);
+        KeyStateRecord floorState = keyState("5");    // floor, queried before the request is sent
+        KeyStateRecord currentState = keyState("6");  // current, queried to bound the fallback scan
+        when(keyStates.get(WALLET_AID)).thenReturn(Optional.of(floorState)).thenReturn(Optional.of(currentState));
 
         // No explicit candidate on the ref exn — goes through the bounded-scan fallback.
         Map<String, Object> refExn = refExn(WALLET_AID, null, null);
@@ -724,7 +744,7 @@ class KeriAttestServiceTest {
 
         Object seal = List.of(Map.of("d", PAYLOAD_SAID));
         // Below the floor (sequence 2 < floor 5) but carries the matching digest — must be rejected.
-        Map<String, Object> oldEvent = kelEvent("ixn", "2", "EOLDEVENT00000000000000000000000000000", seal);
+        KeyEventRecord oldEvent = kelEvent("ixn", "2", "EOLDEVENT00000000000000000000000000000", seal);
         when(keyEvents.get(WALLET_AID)).thenReturn(List.of(oldEvent));
 
         Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
@@ -757,7 +777,7 @@ class KeriAttestServiceTest {
 
         // A different event that WOULD satisfy digest+floor if a scan ever considered it.
         Object seal = List.of(Map.of("d", PAYLOAD_SAID));
-        Map<String, Object> otherEvent = kelEvent("ixn", SEQUENCE, EVENT_SAID, seal);
+        KeyEventRecord otherEvent = kelEvent("ixn", SEQUENCE, EVENT_SAID, seal);
         when(keyEvents.get(WALLET_AID)).thenReturn(List.of(otherEvent));
 
         Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
@@ -766,8 +786,14 @@ class KeriAttestServiceTest {
         assertEquals(KeriAttestationProblems.ATTEST_SEAL_MISMATCH, result.getLeft().getTitle());
         verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
         verify(correlator, never()).markAndDelete(any());
-        // No fallback: the explicit-candidate branch never queries key state a second time to bound a scan.
-        verify(keyStates, times(1)).query(eq(WALLET_AID), any());
+        // The invariant is the OUTCOME above, not a call count: a scannable event that satisfies
+        // digest+floor is sitting right there in the KEL, and the ceremony still fails. That is what
+        // "no fallback once a candidate is on the table" means.
+        //
+        // This used to assert query() ran exactly once, using the call count as a proxy for "no scan".
+        // That proxy broke the moment the key state had to be refreshed before the KEL is READ — which
+        // both branches now need, because the events are fetched from this agent's local store and the
+        // wallet signed on another one. Counting calls was measuring the mechanism, not the rule.
     }
 
     @Test

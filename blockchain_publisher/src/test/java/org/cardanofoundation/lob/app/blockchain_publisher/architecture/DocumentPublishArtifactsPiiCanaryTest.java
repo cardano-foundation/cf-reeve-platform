@@ -2,7 +2,6 @@ package org.cardanofoundation.lob.app.blockchain_publisher.architecture;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
-import java.time.Clock;
 import java.util.List;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -52,8 +51,8 @@ class DocumentPublishArtifactsPiiCanaryTest {
                 org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Organisation.fromOrganisationEntity(organisationEntity);
 
         // CBORMetadataMap does NOT override toString() — toJson() is the scannable serialised form
-        String metadata = new DocumentMetadataSerialiser(Clock.systemUTC())
-                .serialiseToMetadataMap(command, "bafy-1", 1L,
+        String metadata = new DocumentMetadataSerialiser()
+                .serialiseToMetadataMap(command, "bafy-1",
                         publisherOrg.getId(), publisherOrg.getName(), publisherOrg.getTaxIdNumber(),
                         publisherOrg.getCurrencyId(), publisherOrg.getCountryCode())
                 .toJson();

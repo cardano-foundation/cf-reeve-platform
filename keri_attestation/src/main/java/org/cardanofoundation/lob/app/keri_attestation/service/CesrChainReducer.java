@@ -7,7 +7,7 @@ import java.util.Map;
 
 import org.springframework.stereotype.Service;
 
-import org.cardanofoundation.signify.cesr.util.CESRStreamUtil;
+import org.cardanofoundation.lob.app.keri_attestation.cesr.CESRStreamUtil;
 
 /**
  * Reduces a full KERI/ACDC CESR credential stream — as returned by

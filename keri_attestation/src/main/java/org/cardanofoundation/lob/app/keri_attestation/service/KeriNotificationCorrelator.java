@@ -18,18 +18,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.signify.app.Notifying;
-import org.cardanofoundation.signify.cesr.exceptions.serialize.SerializeException;
-import org.cardanofoundation.signify.cesr.util.Utils;
+import org.cardanofoundation.signify.exception.SignifyInterruptedException;
+import org.cardanofoundation.signify.generated.keria.model.ExchangeResource;
+import org.cardanofoundation.signify.generated.keria.model.Notification;
 
 /**
  * Claims KERI agent notifications for an outstanding ceremony request, by route.
  *
- * <p>A notification is claimed when it is unread and its own claimed route ({@code note.a.r}) is one
+ * <p>A notification is claimed when it is unread and its own claimed route ({@code note.getA().getR()}) is one
  * of the routes the caller is waiting on — the FIRST such match wins. There is no sender check, no
  * thread-back check, and no recipient-prefix check: a real Veridian wallet's IPEX offer/grant and
  * remotesign ref replies were found, under live wallet testing, not to reliably carry those extra
@@ -42,6 +43,9 @@ import org.cardanofoundation.signify.cesr.util.Utils;
 @Slf4j
 @ConditionalOnProperty(prefix = "lob.keri-attestation.keria", name = "url")
 public class KeriNotificationCorrelator {
+
+    /** Only ever used to project a typed exn into the generic map form callers expect. */
+    private static final ObjectMapper EXN_MAPPER = new ObjectMapper();
 
     /** Diagnostic de-dupe for {@link #pollOnceByRoute}'s per-poll notification summary: the wait polls
      *  every ~1.5s, so logging the whole notification list every tick would be noise. Instead we log the
@@ -59,7 +63,7 @@ public class KeriNotificationCorrelator {
      *  identifier (for {@link #markAndDelete}), {@code exnSaid} is the referenced exchange's SAID, and
      *  {@code exn} is that exchange's full decoded message (sender {@code i}, route {@code r}, payload
      *  {@code a}, embeds {@code e}, ...). {@code claimedRoute} is the notification's OWN claimed route
-     *  ({@code note.a.r}, populated by {@link #pollOnceByRoute}) — used by callers awaiting more than one
+     *  ({@code note.getA().getR()}, populated by {@link #pollOnceByRoute}) — used by callers awaiting more than one
      *  route at once ({@link KeriCredentialService#presentCredential} awaits an offer AND a grant route
      *  together and must tell which one actually matched). */
     /** KERIA's own page size for {@code Range: notes=start-end}. */
@@ -128,7 +132,9 @@ public class KeriNotificationCorrelator {
                             routes, Duration.between(start, Instant.now()).toSeconds());
                 }
                 Thread.sleep(properties.notificationPollInterval().toMillis());
-            } catch (InterruptedException e) {
+            // Both kinds: Thread.sleep still raises the checked InterruptedException, while a client
+            // call now wraps one in SignifyInterruptedException. Either way the flag is restored.
+            } catch (InterruptedException | SignifyInterruptedException e) {
                 // Restore the interrupt flag rather than swallow it (e.g. executor shutdown mid-wait) —
                 // the caller's async executor is responsible for deciding what an interrupt means next.
                 Thread.currentThread().interrupt();
@@ -153,7 +159,7 @@ public class KeriNotificationCorrelator {
     public Set<String> outstandingNoteIds(List<String> routes) {
         Set<String> ids = listNotifications().stream()
                 .filter(note -> isUnreadRouteMatch(note, routes))
-                .map(note -> note.i)
+                .map(note -> note.getI())
                 .filter(id -> id != null)
                 .collect(Collectors.toSet());
         if (!ids.isEmpty()) {
@@ -188,7 +194,7 @@ public class KeriNotificationCorrelator {
             Notifying.Notifications.NotificationListResponse response;
             try {
                 response = client.client().notifications().list(start, start + NOTIFICATION_PAGE_SIZE - 1);
-            } catch (InterruptedException e) {
+            } catch (SignifyInterruptedException e) {
                 Thread.currentThread().interrupt();
                 return all;
             } catch (Exception e) {
@@ -196,14 +202,9 @@ public class KeriNotificationCorrelator {
                 return all;
             }
 
-            List<Notification> page;
-            try {
-                page = Utils.fromJson(response.notes(), new TypeReference<List<Notification>>() {
-                });
-            } catch (SerializeException e) {
-                log.error("Failed to parse the KERI notification list while route-matching: {}", e.getMessage());
-                return all;
-            }
+            // notes() is already a typed list; the client parses it. The local mirror of this shape
+            // that used to be re-parsed from JSON here is gone with it.
+            List<Notification> page = response.notes();
             if (page == null || page.isEmpty()) {
                 return all;
             }
@@ -232,28 +233,28 @@ public class KeriNotificationCorrelator {
             if (!isUnreadRouteMatch(note, routes)) {
                 continue;
             }
-            if (note.i != null && excludeNoteIds.contains(note.i)) {
+            if (note.getI() != null && excludeNoteIds.contains(note.getI())) {
                 // Pre-existing debris snapshotted before the caller's request was sent — cannot be the
                 // reply to it. Skip it so the wait continues for a genuinely new notification.
                 continue;
             }
-            String noteExnSaid = note.a != null ? note.a.d : null;
+            String noteExnSaid = note.getA() != null ? note.getA().getD() : null;
             if (noteExnSaid == null) {
                 continue;
             }
             Map<String, Object> exn;
             try {
-                Optional<Object> exchange = client.client().exchanges().get(noteExnSaid);
+                var exchange = client.client().exchanges().get(noteExnSaid);
                 if (exchange.isEmpty()) {
                     // The notification is present and its route matches, but the referenced exchange is
                     // not yet retrievable from the agent — surface it and retry on the next poll rather
                     // than looping silently until timeout.
                     log.info("KERI notification matched route {} (exn {}) but the exchange is not yet "
-                            + "retrievable from the agent — retrying", note.a.r, noteExnSaid);
+                            + "retrievable from the agent — retrying", note.getA().getR(), noteExnSaid);
                     continue;
                 }
                 exn = extractExn(exchange.get());
-            } catch (InterruptedException e) {
+            } catch (SignifyInterruptedException e) {
                 throw e;
             } catch (Exception e) {
                 log.warn("Failed to fetch KERI exchange {} while route-matching: {}", noteExnSaid, e.getMessage());
@@ -262,11 +263,11 @@ public class KeriNotificationCorrelator {
             if (exn == null) {
                 continue;
             }
-            log.info("Claimed KERI notification on route {} (exn {})", note.a.r, noteExnSaid);
+            log.info("Claimed KERI notification on route {} (exn {})", note.getA().getR(), noteExnSaid);
             // Prefer the FETCHED exn's own "d" over the notification's claimed note.a.d.
             Object fetchedSaid = exn.get("d");
             String exnSaid = fetchedSaid instanceof String s ? s : noteExnSaid;
-            return Optional.of(new CorrelatedNotification(note.i, exnSaid, exn, note.a.r));
+            return Optional.of(new CorrelatedNotification(note.getI(), exnSaid, exn, note.getA().getR()));
         }
         return Optional.empty();
     }
@@ -289,9 +290,9 @@ public class KeriNotificationCorrelator {
         // old debris — even if it were somehow delivered already-read — directly answering "did a new
         // notification arrive and get read/deleted?": any entry with today's date is a live delivery.
         String summary = notes.stream()
-                .map(n -> (n.a != null && n.a.r != null ? n.a.r : "?")
-                        + (Boolean.TRUE.equals(n.r) ? "(read)" : "(unread)")
-                        + "@" + (n.dt != null ? n.dt : "?"))
+                .map(n -> (n.getA() != null && n.getA().getR() != null ? n.getA().getR() : "?")
+                        + (Boolean.TRUE.equals(n.getR()) ? "(read)" : "(unread)")
+                        + "@" + (n.getDt() != null ? n.getDt() : "?"))
                 .collect(Collectors.joining(", "));
         if (!summary.equals(lastByRouteNotificationSummary.getAndSet(summary))) {
             log.info("KERI notifications present ({}): [{}] — awaiting routes {}", notes.size(), summary, routes);
@@ -310,7 +311,7 @@ public class KeriNotificationCorrelator {
         try {
             client.client().notifications().mark(notificationId);
             client.client().notifications().delete(notificationId);
-        } catch (InterruptedException e) {
+        } catch (SignifyInterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(
                     "Interrupted while marking/deleting KERI notification " + notificationId, e);
@@ -347,10 +348,10 @@ public class KeriNotificationCorrelator {
         int undatable = 0;
 
         for (Notification note : listNotifications()) {
-            if (note.i == null) {
+            if (note.getI() == null) {
                 continue;
             }
-            Optional<Instant> sentAt = parseNotificationTimestamp(note.dt);
+            Optional<Instant> sentAt = parseNotificationTimestamp(note.getDt());
             if (sentAt.isEmpty()) {
                 undatable++;
                 continue;
@@ -359,11 +360,11 @@ public class KeriNotificationCorrelator {
                 continue;
             }
             try {
-                markAndDelete(note.i);
+                markAndDelete(note.getI());
                 pruned++;
             } catch (RuntimeException e) {
                 // One stubborn notification must not abort the sweep; the next run retries it.
-                log.warn("Failed to prune KERI notification {}: {}", note.i, e.getMessage());
+                log.warn("Failed to prune KERI notification {}: {}", note.getI(), e.getMessage());
             }
         }
 
@@ -388,32 +389,24 @@ public class KeriNotificationCorrelator {
     }
 
     private static boolean isUnreadRouteMatch(Notification note, List<String> routes) {
-        boolean unread = !note.r;
-        boolean routeMatches = note.a != null && note.a.r != null && routes.contains(note.a.r);
+        boolean unread = !Boolean.TRUE.equals(note.getR());
+        boolean routeMatches = note.getA() != null && note.getA().getR() != null && routes.contains(note.getA().getR());
         return unread && routeMatches;
     }
 
+    /**
+     * Projects the typed exchange into the generic map {@link CorrelatedNotification} publishes.
+     *
+     * <p>Callers read an exn generically ({@code exn.get("a")}, {@code exn.get("d")}) because what is
+     * interesting differs per route, so converting here keeps that contract rather than retyping every
+     * consumer. This used to be an {@code instanceof Map} test; against the typed return it would never
+     * match, and correlation would fail SILENTLY rather than loudly.
+     */
     @SuppressWarnings("unchecked")
-    private static Map<String, Object> extractExn(Object exchangeResult) {
-        if (!(exchangeResult instanceof Map<?, ?> outer)) {
+    private static Map<String, Object> extractExn(ExchangeResource exchangeResult) {
+        if (exchangeResult == null || exchangeResult.getExn() == null) {
             return null;
         }
-        Object exnObj = outer.get("exn");
-        return exnObj instanceof Map<?, ?> ? (Map<String, Object>) exnObj : null;
-    }
-
-    // --- raw notification shape ---
-
-    private static class Notification {
-        public String i;
-        public String dt;
-        public boolean r;
-        public NotificationAction a;
-
-        public static class NotificationAction {
-            public String r;
-            public String d;
-            public String m;
-        }
+        return EXN_MAPPER.convertValue(exchangeResult.getExn(), Map.class);
     }
 }

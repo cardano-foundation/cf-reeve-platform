@@ -30,12 +30,39 @@ public final class L1MetadataSections {
     /**
      * The {@code metadata} section: chain slot the manifest was built at, an ISO-8601 timestamp, and
      * the emitting type's schema version.
+     *
+     * <p>Used by every type EXCEPT document — see {@link #attestableMetadataSection}.
      */
     public static MetadataMap metadataSection(long creationSlot, Instant timestamp, String version) {
         MetadataMap metadataMap = MetadataBuilder.createMap();
 
         metadataMap.put("creation_slot", BigInteger.valueOf(creationSlot));
         metadataMap.put("timestamp", DateTimeFormatter.ISO_INSTANT.format(timestamp));
+        metadataMap.put("version", version);
+
+        return metadataMap;
+    }
+
+    /**
+     * The {@code metadata} section for a manifest that must be derivable BEFORE it is published:
+     * schema version only.
+     *
+     * <p>{@code creation_slot} and {@code timestamp} are omitted on purpose. Both are decided at
+     * dispatch — the slot needs a live chain-tip read, the timestamp is {@code Instant.now} at
+     * serialisation — so a tier that has to commit to the manifest earlier (a wallet signing an
+     * attestation over it, with no chain access) cannot reproduce them and therefore cannot commit to
+     * any manifest containing them.
+     *
+     * <p>Nothing is lost by dropping them. The slot is still persisted on the publishable entity
+     * ({@code l1_creation_slot}), and both are recoverable from the chain far more reliably than from
+     * the payload: an indexer reads the containing block's own slot and time, which the publisher
+     * cannot influence, whereas these two were publisher-supplied and could say anything.
+     *
+     * @see #metadataSection(long, Instant, String)
+     */
+    public static MetadataMap attestableMetadataSection(String version) {
+        MetadataMap metadataMap = MetadataBuilder.createMap();
+
         metadataMap.put("version", version);
 
         return metadataMap;

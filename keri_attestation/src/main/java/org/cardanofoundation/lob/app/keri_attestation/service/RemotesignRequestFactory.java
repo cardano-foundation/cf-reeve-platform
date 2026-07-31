@@ -1,6 +1,5 @@
 package org.cardanofoundation.lob.app.keri_attestation.service;
 
-import java.security.DigestException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -51,10 +50,8 @@ public class RemotesignRequestFactory {
         payload.put("d", "");
         payload.put("metadataLabel", metadataLabel);
         payload.put("metadataDigest", metadataDigestQb64);
-        try {
-            return Saider.saidify(payload).sad();
-        } catch (DigestException e) {
-            throw new IllegalStateException("Failed to compute the SAID of the remotesign request payload.", e);
-        }
+        // saidify raises unchecked now; a failure here is a defect in the payload shape above rather
+        // than something a caller can recover from, so it is left to propagate.
+        return Saider.saidify(payload).sad();
     }
 }

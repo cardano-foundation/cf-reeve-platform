@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.blockchain_publisher.domain.core;
+package org.cardanofoundation.lob.app.blockchain_common.service.ipfs.impl;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

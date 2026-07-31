@@ -1,6 +1,5 @@
 package org.cardanofoundation.lob.app.keri_attestation.service;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 
 import jakarta.annotation.PostConstruct;
@@ -13,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.config.SignifyClientConfig.IdentifierRecord;
+import org.cardanofoundation.signify.generated.keria.model.OOBI;
 
 /**
  * Exposes the platform's own KERI agent identity to the rest of the module. The
@@ -64,11 +64,12 @@ public class KeriAgentService {
      * for the common single-entry case, and well-defined (rather than mangled) when there are several.
      */
     private String fetchAgentOobi() throws Exception {
-        Object oobi = client.client().oobis().get(identifier.name(), AGENT_ROLE)
+        OOBI oobi = client.client().oobis().get(identifier.name(), AGENT_ROLE)
                 .orElseThrow(() -> new IllegalStateException(
                         "No OOBI available for KERI agent identifier " + identifier.name()));
-        Object oobisValue = ((LinkedHashMap<?, ?>) oobi).get("oobis");
-        if (!(oobisValue instanceof List<?> oobisList) || oobisList.isEmpty()) {
+        // Typed OOBI now, not a map — the old cast threw ClassCastException at startup.
+        List<String> oobisList = oobi.getOobis();
+        if (oobisList == null || oobisList.isEmpty()) {
             throw new IllegalStateException(
                     "KERI agent OOBI response contained no oobis for identifier " + identifier.name());
         }

@@ -1,6 +1,5 @@
 package org.cardanofoundation.lob.app.keri_attestation.service;
 
-import java.util.Map;
 import java.util.Optional;
 
 import lombok.RequiredArgsConstructor;
@@ -10,7 +9,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
-import org.cardanofoundation.signify.app.credentialing.credentials.CredentialState;
+import org.cardanofoundation.signify.exception.SignifyInterruptedException;
+import org.cardanofoundation.signify.generated.keria.model.CredentialState;
 
 /**
  * Asks our KERI agent for a credential's current registry state.
@@ -27,10 +27,8 @@ import org.cardanofoundation.signify.app.credentialing.credentials.CredentialSta
  * <p>Never cached. A revocation is only useful if it is seen promptly, and the entire reason this
  * class exists is that a stale view of revocation state is indistinguishable from an attack.
  *
- * <p>Coded defensively over the pinned signify jar, whose {@code state(...)} is declared to return a
- * raw {@code Object}: it may hand back a typed {@link CredentialState} or the decoded JSON map,
- * depending on version. Both are read here rather than assuming one — the same treatment
- * {@link KelAnchorVerifier} gives the jar's other raw responses.
+ * <p>The client returns a typed {@link CredentialState}, so the event type is read from its enum
+ * rather than guessed at out of a map.
  */
 @Service
 @RequiredArgsConstructor
@@ -46,14 +44,16 @@ public class KeriaCredentialTelStateReader implements CredentialTelStateReader {
             return TelStatus.UNKNOWN;
         }
         try {
-            Optional<Object> state = client.client().credentials().state(registryId, credentialSaid);
+            Optional<CredentialState> state = client.client().credentials().state(registryId, credentialSaid);
             if (state.isEmpty()) {
                 log.warn("Registry {} has no TEL state for credential {} — treating as unverifiable.",
                         registryId, credentialSaid);
                 return TelStatus.UNKNOWN;
             }
-            return classify(eventTypeOf(state.get()), registryId, credentialSaid);
-        } catch (InterruptedException e) {
+            // Typed enum now, not a raw map: the client parses the TEL state for us.
+            CredentialState.EtEnum eventType = state.get().getEt();
+            return classify(eventType == null ? null : eventType.getValue(), registryId, credentialSaid);
+        } catch (SignifyInterruptedException e) {
             Thread.currentThread().interrupt();
             return TelStatus.UNKNOWN;
         } catch (Exception e) {
@@ -63,16 +63,6 @@ public class KeriaCredentialTelStateReader implements CredentialTelStateReader {
         }
     }
 
-    private static String eventTypeOf(Object state) {
-        if (state instanceof CredentialState typed) {
-            return typed.getEt();
-        }
-        if (state instanceof Map<?, ?> map) {
-            Object et = map.get("et");
-            return et == null ? null : String.valueOf(et);
-        }
-        return null;
-    }
 
     /**
      * {@code iss}/{@code bis} are issuance, {@code rev}/{@code brv} revocation — the {@code b} pair

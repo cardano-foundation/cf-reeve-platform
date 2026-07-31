@@ -35,6 +35,7 @@ class KeriAuthBeginServiceMissingSubmitterContextTest {
                 .withBean(KeriAttestationProperties.class,
                         KeriAuthBeginServiceMissingSubmitterContextTest::properties)
                 .withBean(CesrChainReducer.class, () -> mock(CesrChainReducer.class))
+                .withBean(CredentialCesrFetcher.class, () -> mock(CredentialCesrFetcher.class))
                 .withBean(Cip170MetadataFactory.class, () -> mock(Cip170MetadataFactory.class))
                 .withBean(CeremonyService.class, () -> mock(CeremonyService.class))
                 .withBean(KeriIdentityLinkRepository.class, () -> mock(KeriIdentityLinkRepository.class))

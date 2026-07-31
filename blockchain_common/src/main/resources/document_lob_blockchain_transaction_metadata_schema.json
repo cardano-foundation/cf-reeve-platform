@@ -12,10 +12,6 @@
       "type": "string",
       "pattern": "^ISO_4217:[A-Z]{3}$|^ISO_24165:[A-Z0-9]+(:[A-Z0-9]+)?$"
     },
-    "timestampPattern": {
-      "type": "string",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
-    },
     "hexHash64Pattern": {
       "description": "Lowercase 64-char hex SHA-256 digest, e.g. content_hash / plaintext_hash.",
       "type": "string",
@@ -37,19 +33,16 @@
   "properties": {
     "metadata": {
       "type": "object",
+      "description": "Schema version only. creation_slot and timestamp are deliberately NOT part of a DOCUMENT manifest: both are decided at dispatch (the slot needs a live chain tip, the timestamp is the publisher's clock), so a wallet attesting the document beforehand cannot reproduce them and therefore cannot commit to the manifest. An indexer takes both from the containing block instead, which the publisher cannot influence. Other publishable types still carry them.",
       "properties": {
-        "creation_slot": {
-          "type": "integer",
-          "minimum": 0
-        },
         "version": {
           "type": "string"
-        },
-        "timestamp": {
-          "$ref": "#/definitions/timestampPattern"
         }
       },
-      "required": ["creation_slot", "version", "timestamp"]
+      "required": [
+        "version"
+      ],
+      "additionalProperties": false
     },
     "org": {
       "type": "object",
@@ -70,11 +63,19 @@
           "$ref": "#/definitions/currencyIdPattern"
         }
       },
-      "required": ["country_code", "name", "tax_id_number", "id", "currency_id"]
+      "required": [
+        "country_code",
+        "name",
+        "tax_id_number",
+        "id",
+        "currency_id"
+      ]
     },
     "type": {
       "type": "string",
-      "enum": ["DOCUMENT"]
+      "enum": [
+        "DOCUMENT"
+      ]
     },
     "data": {
       "type": "object",
@@ -105,9 +106,22 @@
           "$ref": "#/definitions/recipientKeyHashArray"
         }
       },
-      "required": ["id", "ipfs_cid", "content_hash", "plaintext_hash", "envelope_version", "slot_count", "recipient_key_hashes"],
+      "required": [
+        "id",
+        "ipfs_cid",
+        "content_hash",
+        "plaintext_hash",
+        "envelope_version",
+        "slot_count",
+        "recipient_key_hashes"
+      ],
       "additionalProperties": false
     }
   },
-  "required": ["metadata", "org", "type", "data"]
+  "required": [
+    "metadata",
+    "org",
+    "type",
+    "data"
+  ]
 }

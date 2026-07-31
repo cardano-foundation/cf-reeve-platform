@@ -25,6 +25,8 @@ import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchema.Tr
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
 import org.cardanofoundation.signify.app.coring.Coring;
+import org.cardanofoundation.signify.generated.keria.model.KeyEvent;
+import org.cardanofoundation.signify.generated.keria.model.KeyEventRecord;
 
 /**
  * The card-import contract with the issuing indexer.
@@ -87,9 +89,14 @@ class AttestationImportVerifierTest {
     }
 
     private void kelContains(String sequence, String eventSaid, String sealedDigest) throws Exception {
-        when(keyEvents.get(AID)).thenReturn(List.of(Map.of("ked", Map.of(
-                "t", "ixn", "s", sequence, "d", eventSaid,
-                "a", List.of(Map.of("d", sealedDigest))))));
+        KeyEvent ked = new KeyEvent();
+        ked.setT("ixn");
+        ked.setS(sequence);
+        ked.setD(eventSaid);
+        ked.setA(List.of(Map.of("d", sealedDigest)));
+        KeyEventRecord record = new KeyEventRecord();
+        record.setKed(ked);
+        when(keyEvents.get(AID)).thenReturn(List.of(record));
     }
 
     private AttestationImportVerifier.CardAttestationClaim claim(String label, String assertedDigest,

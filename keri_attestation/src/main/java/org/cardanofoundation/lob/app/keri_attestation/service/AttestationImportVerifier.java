@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.keri_attestation.service.KelAnchorVerifier.AnchorCandidate;
+import org.cardanofoundation.signify.exception.SignifyInterruptedException;
 
 /**
  * Synchronous, no-ceremony verification of a Veridian-attested card at import time.
@@ -184,8 +185,19 @@ public class AttestationImportVerifier {
         return Either.right(null);
     }
 
+    /**
+     * Restores the interrupt flag when {@code e} is an interruption in EITHER form.
+     *
+     * <p>Both kinds have to be named. {@code Thread.sleep} still raises the checked
+     * {@link InterruptedException}, but a signify client call now wraps one in
+     * {@link SignifyInterruptedException} — which extends {@code RuntimeException}, not
+     * {@code InterruptedException}. Testing only the checked type therefore matches nothing the client
+     * throws any more: the interrupt is caught by the surrounding {@code catch (Exception e)}, reported
+     * as an ordinary step failure, and the flag is silently dropped — so a caller polling or sleeping
+     * afterwards keeps going to its full timeout instead of stopping.
+     */
     private static void interruptIfNeeded(Exception e) {
-        if (e instanceof InterruptedException) {
+        if (e instanceof InterruptedException || e instanceof SignifyInterruptedException) {
             Thread.currentThread().interrupt();
         }
     }

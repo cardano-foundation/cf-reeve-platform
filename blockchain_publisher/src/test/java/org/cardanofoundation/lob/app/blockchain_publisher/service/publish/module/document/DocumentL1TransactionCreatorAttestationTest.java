@@ -3,9 +3,9 @@ package org.cardanofoundation.lob.app.blockchain_publisher.service.publish.modul
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
@@ -30,14 +30,15 @@ import org.junit.jupiter.api.Test;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.CardanoNetwork;
 import org.cardanofoundation.lob.app.blockchain_common.domain.ChainTip;
+import org.cardanofoundation.lob.app.blockchain_common.service.ipfs.IpfsPublisher;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.API3BlockchainTransaction;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.documents.DocumentEntity;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
+import org.cardanofoundation.lob.app.keri_attestation.service.RemotesignRequestFactory;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 
@@ -103,6 +104,14 @@ class DocumentL1TransactionCreatorAttestationTest {
                 .build()));
     }
 
+    /** The digest the manifest assembled at dispatch produces; stubbed onto Cip170MetadataFactory. */
+    private static final String MANIFEST_DIGEST = "EAP5Az_lZU2xTS5C--pHFMd7VeyCpqpl8572CfgDoFXC";
+
+    /** What a wallet sealing THAT manifest would have anchored — derived, not invented, so the
+     *  dispatch-time guard is exercised against a genuinely consistent pair. */
+    private static final String ATTESTED_PAYLOAD_SAID = (String) new RemotesignRequestFactory()
+            .anchorRequestKed("Eaid-user-1", "1447", MANIFEST_DIGEST).get("d");
+
     private static DocumentEntity fixture(String ceremonyId) {
         DocumentEntity entity = new DocumentEntity();
         entity.setId("doc-1");
@@ -116,8 +125,8 @@ class DocumentL1TransactionCreatorAttestationTest {
         entity.setAttestationCeremonyId(ceremonyId);
         if (ceremonyId != null) {
             entity.setAttestationAid("Eaid-user-1");
-            // payloadSaid, NOT the commitment digest, is what becomes the on-chain 170.d.
-            entity.setAttestationPayloadSaid("Epayloadsaid-1");
+            // payloadSaid, NOT the manifest digest, is what becomes the on-chain 170.d.
+            entity.setAttestationPayloadSaid(ATTESTED_PAYLOAD_SAID);
             entity.setAttestationKelSequence("5");
         }
 
@@ -141,6 +150,7 @@ class DocumentL1TransactionCreatorAttestationTest {
                 organiserWallet,
                 Optional.of(ipfsPublisher),
                 cip170MetadataFactory,
+                new RemotesignRequestFactory(),
                 1447,
                 false);
         DocumentL1TransactionCreator spied = spy(real);
@@ -152,10 +162,12 @@ class DocumentL1TransactionCreatorAttestationTest {
     private void stubHappyPath() {
         when(ipfsPublisher.publish(anyString())).thenReturn(Either.right("bafy-fresh-cid"));
         when(blockchainReaderPublicApi.getChainTip()).thenReturn(Either.right(CHAIN_TIP));
-        when(documentMetadataSerialiser.serialiseToMetadataMap(any(), anyString(), anyLong(),
+        when(documentMetadataSerialiser.serialiseToMetadataMap(any(), anyString(),
                 anyString(), anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(manifestFixture());
         when(jsonSchemaMetadataChecker.checkTransactionMetadata(anyString())).thenReturn(true);
+        // The manifest assembled here must digest to what the wallet attested, or dispatch refuses it.
+        lenient().when(cip170MetadataFactory.digestOf(any())).thenReturn(MANIFEST_DIGEST);
     }
 
     private static MetadataMap manifestFixture() {
@@ -181,7 +193,7 @@ class DocumentL1TransactionCreatorAttestationTest {
 
         assertThat(result.isRight()).isTrue();
         verify(ipfsPublisher).publish(anyString());
-        verify(documentMetadataSerialiser).serialiseToMetadataMap(any(), anyString(), anyLong(),
+        verify(documentMetadataSerialiser).serialiseToMetadataMap(any(), anyString(),
                 anyString(), anyString(), anyString(), anyString(), anyString());
         // The freshly pinned CID is recorded on the dispatch record.
         assertThat(document.getIpfsCid()).isEqualTo("bafy-fresh-cid");
@@ -199,7 +211,7 @@ class DocumentL1TransactionCreatorAttestationTest {
 
         assertThat(creator().pullBlockchainTransaction("org-1", fixture("cer-1")).isRight()).isTrue();
 
-        verify(cip170MetadataFactory).attestMap("Eaid-user-1", "Epayloadsaid-1", "5");
+        verify(cip170MetadataFactory).attestMap("Eaid-user-1", ATTESTED_PAYLOAD_SAID, "5");
     }
 
     /** A plain publish must never build an ATTEST map. */
@@ -230,13 +242,44 @@ class DocumentL1TransactionCreatorAttestationTest {
                 .hasMessageContaining("refusing to publish it as unattested");
     }
 
+    /**
+     * The guard that makes the attestation mean anything at dispatch: if the manifest assembled here is
+     * not the one the wallet sealed, publishing it would put a manifest on chain under an ATTEST that
+     * authorises a different one.
+     *
+     * <p>Simulated by the manifest digesting differently — which is what a changed CID, a changed
+     * organisation record or a changed recipient set would each do.
+     */
+    @Test
+    void aManifestTheAttestationDoesNotCoverIsRefused() throws Exception {
+        stubHappyPath();
+        when(cip170MetadataFactory.digestOf(any())).thenReturn("EDIFFERENTMANIFESTDIGEST0000000000000000000");
+
+        Either<ProblemDetail, API3BlockchainTransaction> result =
+                creator().pullBlockchainTransaction("org-1", fixture("cer-1"));
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("ATTESTED_MANIFEST_MISMATCH");
+        // and nothing is attached under label 170 for a manifest we are refusing to publish
+        verify(cip170MetadataFactory, never()).attestMap(anyString(), anyString(), anyString());
+    }
+
+    /** An UNattested document is not subject to that guard — there is no attestation to contradict. */
+    @Test
+    void anUnattestedPublishIsNotSubjectToTheManifestGuard() throws Exception {
+        stubHappyPath();
+        when(cip170MetadataFactory.digestOf(any())).thenReturn("EANYTHINGATALL00000000000000000000000000000");
+
+        assertThat(creator().pullBlockchainTransaction("org-1", fixture(null)).isRight()).isTrue();
+    }
+
     /** IPFS is mandatory for documents on both paths — never inlined, never skipped. */
     @Test
     void noIpfsPublisherFailsBeforeTouchingTheChain() {
         DocumentL1TransactionCreator noIpfs = new DocumentL1TransactionCreator(
                 backendService, documentConverter, documentIpfsSerialiser, documentMetadataSerialiser,
                 blockchainReaderPublicApi, jsonSchemaMetadataChecker, organisationPublicApi, organiserWallet,
-                Optional.empty(), cip170MetadataFactory, 1447, false);
+                Optional.empty(), cip170MetadataFactory, new RemotesignRequestFactory(), 1447, false);
 
         Either<ProblemDetail, API3BlockchainTransaction> result =
                 noIpfs.pullBlockchainTransaction("org-1", fixture("cer-1"));

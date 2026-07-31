@@ -1,19 +1,23 @@
 package org.cardanofoundation.lob.app.document_vault.config;
 
 import java.time.Clock;
+import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import org.cardanofoundation.lob.app.blockchain_common.service.ipfs.IpfsPublisher;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.document_vault.repository.DocumentAttestationFreezeRepository;
 import org.cardanofoundation.lob.app.document_vault.service.DocumentAttestationFreezeGuard;
 import org.cardanofoundation.lob.app.document_vault.service.DocumentAttestationTargetProvider;
 import org.cardanofoundation.lob.app.document_vault.service.VaultDocumentService;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 /**
@@ -40,12 +44,18 @@ public class DocumentVaultAttestationConfig {
     public DocumentAttestationTargetProvider documentAttestationTargetProvider(
             VaultDocumentService vaultDocumentService,
             DocumentIpfsSerialiser documentIpfsSerialiser,
+            DocumentMetadataSerialiser documentMetadataSerialiser,
+            OrganisationPublicApiIF organisationPublicApi,
+            // Optional: this tier only has an IPFS publisher if it is configured with one, and the
+            // provider fails the ceremony cleanly when it is not, rather than the bean failing to exist.
+            Optional<IpfsPublisher> ipfsPublisher,
             Cip170MetadataFactory cip170MetadataFactory,
             DocumentAttestationFreezeRepository freezeRepository,
             KeycloakSecurityHelper securityHelper,
             Clock clock,
             @Value("${lob.l1.transaction.metadata_label:1447}") int metadataLabel) {
         return new DocumentAttestationTargetProvider(vaultDocumentService, documentIpfsSerialiser,
+                documentMetadataSerialiser, organisationPublicApi, ipfsPublisher,
                 cip170MetadataFactory, freezeRepository, securityHelper, clock, metadataLabel);
     }
 

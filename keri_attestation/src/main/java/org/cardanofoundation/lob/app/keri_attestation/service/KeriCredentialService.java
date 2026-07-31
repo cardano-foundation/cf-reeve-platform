@@ -31,12 +31,12 @@ import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLin
 import org.cardanofoundation.lob.app.keri_attestation.service.CredentialChainValidator.ValidatedCredential;
 import org.cardanofoundation.lob.app.keri_attestation.service.KeriNotificationCorrelator.CorrelatedNotification;
 import org.cardanofoundation.signify.app.Exchanging.ExchangeMessageResult;
-import org.cardanofoundation.signify.app.coring.Operation;
 import org.cardanofoundation.signify.app.coring.Operations;
 import org.cardanofoundation.signify.app.credentialing.ipex.IpexAdmitArgs;
 import org.cardanofoundation.signify.app.credentialing.ipex.IpexAgreeArgs;
-import org.cardanofoundation.signify.core.States.HabState;
-import org.cardanofoundation.signify.core.States.State;
+import org.cardanofoundation.signify.exception.SignifyInterruptedException;
+import org.cardanofoundation.signify.generated.keria.model.HabState;
+import org.cardanofoundation.signify.generated.keria.model.KeyStateRecord;
 
 /**
  * Drives IPEX credential presentation SYNCHRONOUSLY, in the request thread: the
@@ -122,6 +122,7 @@ public class KeriCredentialService {
     private final CredentialSchemaRegistry registry;
     private final SchemaOobiResolver schemaOobiResolver;
     private final KeriOobiService oobiService;
+    private final CredentialCesrFetcher cesrFetcher;
 
     /** In-memory cache of schema SAIDs already resolved as an OOBI on our agent this process
      *  ({@link #ensureSchemasResolved}) — a schema, once resolved, stays resolved for the life of the
@@ -260,9 +261,9 @@ public class KeriCredentialService {
                 // submitAdmit is given the ADMIT's own atc, not an agree's: this branch has no
                 // preceding agree to borrow one from.
                 logAdmitExn(admitResult, claimedNotification.exnSaid(), linkedAid, "admit-own");
-                Object admitOp = client.client().ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(),
+                var admitOp = client.client().ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(),
                         admitResult.atc(), List.of(linkedAid));
-                client.client().operations().wait(Operation.fromObject(admitOp));
+                client.client().operations().wait(admitOp);
                 log.info("admit operation completed");
             } catch (Exception e) {
                 interruptIfNeeded(e);
@@ -283,9 +284,9 @@ public class KeriCredentialService {
                 agreeResult = client.client().ipex().agree(IpexAgreeArgs.builder()
                         .senderName(agentName).recipient(linkedAid).message("")
                         .offerSaid(claimedNotification.exnSaid()).datetime(nowKeriTimestamp()).build());
-                Object agreeOp = client.client().ipex().submitAgree(agentName, agreeResult.exn(), agreeResult.sigs(),
+                var agreeOp = client.client().ipex().submitAgree(agentName, agreeResult.exn(), agreeResult.sigs(),
                         List.of(linkedAid));
-                client.client().operations().wait(Operation.fromObject(agreeOp));
+                client.client().operations().wait(agreeOp);
             } catch (Exception e) {
                 interruptIfNeeded(e);
                 return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
@@ -317,9 +318,9 @@ public class KeriCredentialService {
                 // submitAdmit is given the AGREE exchange's own atc, NOT the admit's own — a proven
                 // wallet-contract quirk this module matches.
                 logAdmitExn(admitResult, grantNotification.exnSaid(), linkedAid, "agree");
-                Object admitOp = client.client().ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(),
+                var admitOp = client.client().ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(),
                         agreeResult.atc(), List.of(linkedAid));
-                client.client().operations().wait(Operation.fromObject(admitOp));
+                client.client().operations().wait(admitOp);
                 log.info("admit operation completed");
             } catch (Exception e) {
                 interruptIfNeeded(e);
@@ -334,7 +335,7 @@ public class KeriCredentialService {
         String fullCesr;
         try {
             log.info("fetching credential CESR chain for {}", credentialSaid);
-            Optional<String> cesrOpt = client.client().credentials().get(credentialSaid);
+            Optional<String> cesrOpt = cesrFetcher.fetch(credentialSaid);
             if (cesrOpt.isEmpty()) {
                 log.warn("credential {} not retrievable from agent after admit", credentialSaid);
                 return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
@@ -444,11 +445,11 @@ public class KeriCredentialService {
             }
             String schemaUrl = baseUrl + "/" + said;
             try {
-                Object resolveResult = client.client().oobis().resolve(schemaUrl, null);
+                var resolveResult = client.client().oobis().resolve(schemaUrl, null);
                 Operations.WaitOptions waitOptions = Operations.WaitOptions.builder()
                         .abortSignal(Operations.AbortSignal.builder().timeout(SCHEMA_RESOLVE_TIMEOUT_MILLIS).build())
                         .build();
-                client.client().operations().wait(Operation.fromObject(resolveResult), waitOptions);
+                client.client().operations().wait(resolveResult, waitOptions);
                 resolvedSchemaSaids.add(said);
             } catch (Exception e) {
                 interruptIfNeeded(e);
@@ -513,12 +514,12 @@ public class KeriCredentialService {
             }
 
             // Every IPEX submit is followed by operations().wait, not just fire-and-forget.
-            Object applyOp = client.client().ipex().submitApply(agentName, applyResult.exn(), applyResult.sigs(),
+            var applyOp = client.client().ipex().submitApply(agentName, applyResult.exn(), applyResult.sigs(),
                     List.of(linkedAid));
-            client.client().operations().wait(Operation.fromObject(applyOp));
+            client.client().operations().wait(applyOp);
             log.info("IPEX apply sent to {}", linkedAid);
             return Either.right(null);
-        } catch (InterruptedException e) {
+        } catch (SignifyInterruptedException e) {
             Thread.currentThread().interrupt();
             return Either.left(requestFailed("Interrupted while sending IPEX apply: " + e.getMessage()));
         } catch (Exception e) {
@@ -551,7 +552,7 @@ public class KeriCredentialService {
 
             Optional<HabState> agentHab = client.client().identifiers().get(agentName);
             if (agentHab.isPresent()) {
-                State state = agentHab.get().getState();
+                KeyStateRecord state = agentHab.get().getState();
                 List<String> witnesses = state != null ? state.getB() : null;
                 String toad = state != null ? state.getBt() : null;
                 log.info("agent key-state: witnesses={} toad={}", witnesses, toad);
@@ -564,7 +565,7 @@ public class KeriCredentialService {
             // it must still log something actionable rather than falling through to the generic
             // "receive diagnostics unavailable" message below.
             try {
-                Optional<Object> contact = client.client().contacts().get(linkedAid);
+                var contact = client.client().contacts().get(linkedAid);
                 if (contact.isPresent()) {
                     log.info("wallet contact {}: {}", linkedAid, contact.get());
                 } else {
@@ -576,8 +577,9 @@ public class KeriCredentialService {
                 log.info("wallet AID {} is NOT a resolved contact: {}", linkedAid, e.getMessage());
             }
 
-            String rawNotes = client.client().notifications().list().notes();
-            String truncatedNotes = rawNotes != null && rawNotes.length() > 2000
+            // notes() is a typed list now; render it for the diagnostic rather than substring a body.
+            String rawNotes = String.valueOf(client.client().notifications().list().notes());
+            String truncatedNotes = rawNotes.length() > 2000
                     ? rawNotes.substring(0, 2000) + "...(truncated)"
                     : rawNotes;
             log.info("raw notifications: {}", truncatedNotes);
@@ -736,8 +738,19 @@ public class KeriCredentialService {
                 recipient, atc);
     }
 
+    /**
+     * Restores the interrupt flag when {@code e} is an interruption in EITHER form.
+     *
+     * <p>Both kinds have to be named. {@code Thread.sleep} still raises the checked
+     * {@link InterruptedException}, but a signify client call now wraps one in
+     * {@link SignifyInterruptedException} — which extends {@code RuntimeException}, not
+     * {@code InterruptedException}. Testing only the checked type therefore matches nothing the client
+     * throws any more: the interrupt is caught by the surrounding {@code catch (Exception e)}, reported
+     * as an ordinary step failure, and the flag is silently dropped — so a caller polling or sleeping
+     * afterwards keeps going to its full timeout instead of stopping.
+     */
     private static void interruptIfNeeded(Exception e) {
-        if (e instanceof InterruptedException) {
+        if (e instanceof InterruptedException || e instanceof SignifyInterruptedException) {
             Thread.currentThread().interrupt();
         }
     }

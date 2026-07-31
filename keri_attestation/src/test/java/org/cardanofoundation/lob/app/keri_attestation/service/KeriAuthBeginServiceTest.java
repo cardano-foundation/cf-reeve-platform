@@ -40,7 +40,6 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.view.CeremonyView;
 import org.cardanofoundation.lob.app.keri_attestation.domain.view.RequiredSteps;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
-import org.cardanofoundation.signify.app.credentialing.credentials.Credentials;
 
 /**
  * Tests {@link KeriAuthBeginService#submitAuthBegin}. This module owns no Cardano wallet: the
@@ -65,7 +64,7 @@ class KeriAuthBeginServiceTest {
     @Mock
     private KeriAttestationClient keriClient;
     @Mock
-    private Credentials credentials;
+    private CredentialCesrFetcher cesrFetcher;
     @Mock
     private CesrChainReducer cesrChainReducer;
     @Mock
@@ -82,11 +81,10 @@ class KeriAuthBeginServiceTest {
     @BeforeEach
     void setUp() {
         lenient().when(keriClient.client()).thenReturn(client);
-        lenient().when(client.credentials()).thenReturn(credentials);
         lenient().when(chainValidator.validate(any(), any(), any(), any()))
                 .thenReturn(Either.right(new CredentialChainValidator.ValidatedCredential(CREDENTIAL_SAID, SCHEMA_SAID,
                         "Foundation Employee", WALLET_AID, WALLET_AID, TrustModel.STANDALONE, Map.of(), "fingerprint")));
-        service = new KeriAuthBeginService(keriClient, cesrChainReducer, eventPublisher,
+        service = new KeriAuthBeginService(keriClient, cesrChainReducer, cesrFetcher, eventPublisher,
                 ceremonyService, identityLinkRepository, chainValidator);
     }
 
@@ -198,7 +196,7 @@ class KeriAuthBeginServiceTest {
     void ownPublicationEmitsCommandAndLeavesTheCeremonyWaiting() throws Exception {
         givenStepBegun();
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
-        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("full-cesr"));
+        when(cesrFetcher.fetch(CREDENTIAL_SAID)).thenReturn(Optional.of("full-cesr"));
         when(cesrChainReducer.reduceToVcpIssAcdc("full-cesr")).thenReturn(REDUCED_CHAIN);
         when(ceremonyService.get(CEREMONY_ID, USER_ID))
                 .thenReturn(Either.right(ceremonyView(CeremonyState.AUTH_BEGIN_SUBMITTED)));
@@ -224,7 +222,7 @@ class KeriAuthBeginServiceTest {
     void missingCredentialFailsWithoutEmittingACommand() throws Exception {
         givenStepBegun();
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
-        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.empty());
+        when(cesrFetcher.fetch(CREDENTIAL_SAID)).thenReturn(Optional.empty());
         when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
 
         Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, false, false);
@@ -240,7 +238,7 @@ class KeriAuthBeginServiceTest {
     void rejectedCredentialChainFailsWithoutEmittingACommand() throws Exception {
         givenStepBegun();
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
-        when(credentials.get(CREDENTIAL_SAID)).thenReturn(Optional.of("full-cesr"));
+        when(cesrFetcher.fetch(CREDENTIAL_SAID)).thenReturn(Optional.of("full-cesr"));
         when(chainValidator.validate(any(), any(), any(), any())).thenReturn(Either.left(
                 ProblemDetail.forStatusAndDetail(org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "revoked")));
         when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
@@ -257,7 +255,7 @@ class KeriAuthBeginServiceTest {
     void credentialStoreFailureFailsWithoutPropagating() throws Exception {
         givenStepBegun();
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
-        when(credentials.get(CREDENTIAL_SAID)).thenThrow(new RuntimeException("keria down"));
+        when(cesrFetcher.fetch(CREDENTIAL_SAID)).thenThrow(new RuntimeException("keria down"));
         when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
 
         Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, false, false);

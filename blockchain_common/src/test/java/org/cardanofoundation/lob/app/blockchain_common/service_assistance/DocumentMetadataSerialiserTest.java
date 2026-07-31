@@ -40,7 +40,7 @@ class DocumentMetadataSerialiserTest {
     private static final String HASH_A = "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae";
     private static final String HASH_B = "f35e5616160a30bf3c6e79fa73c576d40205e8fc3ba4e1c6dcf93e6b98e857b4";
 
-    private final DocumentMetadataSerialiser serialiser = new DocumentMetadataSerialiser(FIXED_CLOCK);
+    private final DocumentMetadataSerialiser serialiser = new DocumentMetadataSerialiser();
 
     private static DocumentPublishCommand fixture() {
         return new DocumentPublishCommand(
@@ -59,7 +59,7 @@ class DocumentMetadataSerialiserTest {
 
     @Test
     void serialisesTheNormativeDocumentManifest() {
-        MetadataMap metadataMap = serialiser.serialiseToMetadataMap(fixture(), "bafy-cid-1", CREATION_SLOT,
+        MetadataMap metadataMap = serialiser.serialiseToMetadataMap(fixture(), "bafy-cid-1",
                 "org-1", "Acme", "TAX-1", "ISO_4217:CHF", "CH");
 
         assertThat(metadataMap.get("type")).isEqualTo("DOCUMENT");
@@ -70,9 +70,14 @@ class DocumentMetadataSerialiserTest {
         assertThat(org.get("id")).isEqualTo("org-1");
         assertThat(org.get("name")).isEqualTo("Acme");
 
+        // The metadata section carries the schema version ALONE. creation_slot and timestamp are
+        // deliberately absent: both are decided at dispatch, so a wallet attesting this document
+        // beforehand could not reproduce them and so could not commit to the manifest at all.
         MetadataMap metadata = (MetadataMap) metadataMap.get("metadata");
-        assertThat(metadata.get("creation_slot")).isEqualTo(BigInteger.valueOf(CREATION_SLOT));
         assertThat(metadata.get("version")).isEqualTo(DocumentMetadataSerialiser.VERSION);
+        Set<String> metadataKeys = ((List<?>) metadata.keys()).stream().map(Object::toString)
+                .collect(Collectors.toSet());
+        assertThat(metadataKeys).containsExactly("version");
 
         MetadataMap data = (MetadataMap) metadataMap.get("data");
         assertThat(data.get("id")).isEqualTo("doc-1");
@@ -97,7 +102,7 @@ class DocumentMetadataSerialiserTest {
      */
     @Test
     void emitsRecipientKeyHashesInSlotOrder() {
-        MetadataMap metadataMap = serialiser.serialiseToMetadataMap(fixture(), "bafy-cid-1", CREATION_SLOT,
+        MetadataMap metadataMap = serialiser.serialiseToMetadataMap(fixture(), "bafy-cid-1",
                 "org-1", "Acme", "TAX-1", "ISO_4217:CHF", "CH");
 
         MetadataMap data = (MetadataMap) metadataMap.get("data");
@@ -127,7 +132,7 @@ class DocumentMetadataSerialiserTest {
     @Test
     void serialisedManifestValidatesAgainstSchema() throws Exception {
         MetadataMap metadataMap = serialiser.serialiseToMetadataMap(fixture(),
-                "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi", CREATION_SLOT,
+                "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
                 "org-1", "Acme", "TAX-1", "ISO_4217:CHF", "CH");
 
         byte[] bytes = CborSerializationUtil.serialize(metadataMap.getMap());
@@ -148,7 +153,7 @@ class DocumentMetadataSerialiserTest {
     @Test
     void manifestWithExtraDataFieldFailsSchemaValidation() throws Exception {
         MetadataMap metadataMap = serialiser.serialiseToMetadataMap(fixture(),
-                "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi", CREATION_SLOT,
+                "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
                 "org-1", "Acme", "TAX-1", "ISO_4217:CHF", "CH");
 
         byte[] bytes = CborSerializationUtil.serialize(metadataMap.getMap());
