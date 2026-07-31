@@ -132,4 +132,56 @@ class AccountEventControllerTest {
         assertThat(response.getBody()).isEqualTo(view);
     }
 
+    @Test
+    void getReferenceCodes_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(false);
+
+        ResponseEntity<?> response = controller.getReferenceCodes(orgId, null, null, null, null, null, Pageable.unpaged());
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        verifyNoInteractions(accountEventService);
+    }
+
+    @Test
+    void downloadEventCodesCsv_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(false);
+
+        ResponseEntity<?> response = controller.downloadEventCodesCsv(orgId, null, null, null, null, null);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        verifyNoInteractions(accountEventService);
+    }
+
+    @Test
+    void insertReferenceCode_noOrgAccess() {
+        EventCodeUpdate update = new EventCodeUpdate();
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(false);
+
+        ResponseEntity<?> response = controller.insertReferenceCode(orgId, update);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        verifyNoInteractions(accountEventService);
+    }
+
+    @Test
+    void insertReferenceCodeByCsv_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(false);
+
+        ResponseEntity<?> response = controller.insertReferenceCodeByCsv(orgId, null);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        verifyNoInteractions(accountEventService);
+    }
+
+    @Test
+    void updateReferenceCode_noOrgAccess() {
+        EventCodeUpdate update = new EventCodeUpdate();
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(false);
+
+        ResponseEntity<?> response = controller.updateReferenceCode(orgId, update);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        verifyNoInteractions(accountEventService);
+    }
+
 }

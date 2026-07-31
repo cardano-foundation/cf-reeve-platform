@@ -4,10 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +24,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.organisation.domain.request.ReferenceCodeUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.ReferenceCodeView;
 import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
 import org.cardanofoundation.lob.app.organisation.service.ReferenceCodeService;
@@ -69,6 +72,58 @@ class ReferenceCodeResourceTest {
         assertThat(response.getBody()).isInstanceOf(List.class);
         assertThat(((List<?>) response.getBody())).hasSize(1);
         assertThat(((List<?>) response.getBody()).iterator().next()).isEqualTo(view);
+    }
+
+    @Test
+    void getReferenceCodes_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("orgId")).thenReturn(false);
+
+        ResponseEntity<?> response = controller.getReferenceCodes("orgId", null, null, null, null, Pageable.unpaged());
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        verifyNoInteractions(referenceCodeService);
+    }
+
+    @Test
+    void downloadRefCodesCsv_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("orgId")).thenReturn(false);
+
+        ResponseEntity<?> response = controller.downloadRefCodesCsv("orgId", null, null, null, null);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        verifyNoInteractions(referenceCodeService);
+    }
+
+    @Test
+    void insertReferenceCode_noOrgAccess() {
+        ReferenceCodeUpdate update = mock(ReferenceCodeUpdate.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("orgId")).thenReturn(false);
+
+        ResponseEntity<?> response = controller.insertReferenceCode("orgId", update);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        verifyNoInteractions(referenceCodeService);
+    }
+
+    @Test
+    void insertRefCodeByCsv_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("orgId")).thenReturn(false);
+
+        ResponseEntity<?> response = controller.insertRefCodeByCsv("orgId", null);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        verifyNoInteractions(referenceCodeService);
+    }
+
+    @Test
+    void updateReferenceCode_noOrgAccess() {
+        ReferenceCodeUpdate update = mock(ReferenceCodeUpdate.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("orgId")).thenReturn(false);
+
+        ResponseEntity<?> response = controller.updateReferenceCode("orgId", update);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        verifyNoInteractions(referenceCodeService);
     }
 
 }

@@ -84,6 +84,17 @@ class AccountingCoreResourceTest {
     }
 
     @Test
+    void testListAllAction_noAccess() {
+        SearchRequest body = mock(SearchRequest.class);
+        when(body.getOrganisationId()).thenReturn("org1");
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        ResponseEntity<?> listResponseEntity = accountingCoreResource.listAllAction(body);
+        assertTrue(listResponseEntity.getStatusCode().is4xxClientError());
+        verify(accountingCorePresentationViewService, org.mockito.Mockito.never()).allTransactions(any());
+    }
+
+    @Test
     void transactionDetailSpecific_error() {
         String id = "1234567890";
         String orgId = "org123";
@@ -153,6 +164,18 @@ class AccountingCoreResourceTest {
     }
 
     @Test
+    void approveTransactions_noAccess() {
+        TransactionsRequest request = mock(TransactionsRequest.class);
+        when(request.getOrganisationId()).thenReturn("org1");
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        ResponseEntity<?> listResponseEntity = accountingCoreResource.approveTransactions(request);
+
+        assertTrue(listResponseEntity.getStatusCode().is4xxClientError());
+        verify(accountingCorePresentationViewService, org.mockito.Mockito.never()).approveTransactions(any());
+    }
+
+    @Test
     void publishTransactions_test() {
         TransactionsRequest request = mock(TransactionsRequest.class);
         when(request.getOrganisationId()).thenReturn("org1");
@@ -163,6 +186,18 @@ class AccountingCoreResourceTest {
 
         assertTrue(listResponseEntity.getStatusCode().is2xxSuccessful());
         assertNotNull(listResponseEntity.getBody());
+    }
+
+    @Test
+    void publishTransactions_noAccess() {
+        TransactionsRequest request = mock(TransactionsRequest.class);
+        when(request.getOrganisationId()).thenReturn("org1");
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        ResponseEntity<?> listResponseEntity = accountingCoreResource.approveTransactionsPublish(request);
+
+        assertTrue(listResponseEntity.getStatusCode().is4xxClientError());
+        verify(accountingCorePresentationViewService, org.mockito.Mockito.never()).approveTransactionsPublish(any());
     }
 
     @Test
@@ -180,6 +215,18 @@ class AccountingCoreResourceTest {
     }
 
     @Test
+    void rejectTransactions_noAccess() {
+        TransactionItemsRejectionRequest request = mock(TransactionItemsRejectionRequest.class);
+        when(request.getOrganisationId()).thenReturn("org1");
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        ResponseEntity<?> response = accountingCoreResource.rejectTransactionItems(request);
+
+        assertTrue(response.getStatusCode().is4xxClientError());
+        verify(accountingCorePresentationViewService, org.mockito.Mockito.never()).rejectTransactionItems(any());
+    }
+
+    @Test
     void listAllBatches_test() {
         BatchSearchRequest body = mock(BatchSearchRequest.class);
         when(body.getOrganisationId()).thenReturn("org1");
@@ -192,6 +239,18 @@ class AccountingCoreResourceTest {
         ResponseEntity<?> listResponseEntity = accountingCoreResource.listAllBatches(body, pageable);
         assertTrue(listResponseEntity.getStatusCode().is2xxSuccessful());
         assertNotNull(listResponseEntity.getBody());
+    }
+
+    @Test
+    void listAllBatches_noAccess() {
+        BatchSearchRequest body = mock(BatchSearchRequest.class);
+        when(body.getOrganisationId()).thenReturn("org1");
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+        Pageable pageable = Pageable.ofSize(10).withPage(0);
+
+        ResponseEntity<?> listResponseEntity = accountingCoreResource.listAllBatches(body, pageable);
+        assertTrue(listResponseEntity.getStatusCode().is4xxClientError());
+        verify(accountingCorePresentationViewService, org.mockito.Mockito.never()).listAllBatch(any(), any());
     }
 
     @Test
@@ -251,6 +310,32 @@ class AccountingCoreResourceTest {
         ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", List.of(), orgId, createdBy);
         assertTrue(responseEntity.getStatusCode().is4xxClientError());
         assertNotNull(responseEntity.getBody());
+    }
+
+    @Test
+    void extractionTrigger_noAccess() {
+        org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionRequest request =
+                mock(org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionRequest.class);
+        when(request.getOrganisationId()).thenReturn("org1");
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        ResponseEntity<?> responseEntity = accountingCoreResource.extractionTrigger(request);
+
+        assertTrue(responseEntity.getStatusCode().is4xxClientError());
+        verify(organisationPublicApi, org.mockito.Mockito.never()).findByOrganisationId(any());
+    }
+
+    @Test
+    void uploadFile_noAccess() {
+        org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionRequest request =
+                mock(org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionRequest.class);
+        when(request.getOrganisationId()).thenReturn("org1");
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        ResponseEntity<?> responseEntity = accountingCoreResource.uploadFile(request);
+
+        assertTrue(responseEntity.getStatusCode().is4xxClientError());
+        verify(organisationPublicApi, org.mockito.Mockito.never()).findByOrganisationId(any());
     }
 
     @Test

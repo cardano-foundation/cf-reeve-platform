@@ -79,6 +79,17 @@ class AccountingCoreResourceReconciliationTest {
     }
 
     @Test
+    void testReconcileTriggerAction_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(false);
+
+        ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconcileTriggerAction(new ReconciliationRequest());
+
+        Assertions.assertEquals(401, responseEntity.getStatusCode().value());
+        verifyNoInteractions(accountingCoreService);
+        verifyNoInteractions(accountingCorePresentationViewService);
+    }
+
+    @Test
     void testReconcileStart() {
         when(accountingCorePresentationViewService.allReconciliationTransaction(any(), any())).thenReturn(null);
         when(jpaSortFieldValidator.convertPageable(any(Pageable.class), any(), eq(TransactionEntity.class))).thenReturn(Either.right(Pageable.unpaged()));
@@ -87,6 +98,17 @@ class AccountingCoreResourceReconciliationTest {
         verify(accountingCorePresentationViewService).allReconciliationTransaction(any(), any());
         verifyNoMoreInteractions(accountingCorePresentationViewService);
         verifyNoInteractions(accountingCoreService);
+    }
+
+    @Test
+    void testReconcileStart_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(false);
+
+        ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconcileStart(new ReconciliationFilterRequest(), Pageable.unpaged());
+
+        Assertions.assertEquals(401, responseEntity.getStatusCode().value());
+        verifyNoInteractions(accountingCorePresentationViewService);
+        verifyNoInteractions(jpaSortFieldValidator);
     }
 
     @Test
@@ -140,5 +162,15 @@ class AccountingCoreResourceReconciliationTest {
         verify(accountingCorePresentationViewService).getReconciliationStatisticByDateRange(any(ReconciliationStatisticRequest.class));
         verifyNoMoreInteractions(accountingCorePresentationViewService);
         verifyNoInteractions(accountingCoreService);
+    }
+
+    @Test
+    void testReconciliationStatistic_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(false);
+
+        ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconciliationStatistic(new ReconciliationStatisticRequest());
+
+        Assertions.assertEquals(401, responseEntity.getStatusCode().value());
+        verifyNoInteractions(accountingCorePresentationViewService);
     }
 }

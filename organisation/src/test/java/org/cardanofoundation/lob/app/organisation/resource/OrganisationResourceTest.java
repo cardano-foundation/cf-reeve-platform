@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.organisation.resource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -203,5 +204,35 @@ class OrganisationResourceTest {
         assertEquals(validationView, responseEntity.getBody());
     }
 
+    @Test
+    void organisationDetailSpecific_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("123")).thenReturn(false);
+
+        ResponseEntity<?> responseEntity = organisationResource.organisationDetailSpecific("123");
+
+        assertEquals(401, responseEntity.getStatusCode().value());
+        verifyNoInteractions(organisationService);
+    }
+
+    @Test
+    void organisationEvent_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("123")).thenReturn(false);
+
+        ResponseEntity<?> responseEntity = organisationResource.organisationEvent("123");
+
+        assertEquals(401, responseEntity.getStatusCode().value());
+        verifyNoInteractions(organisationService);
+    }
+
+    @Test
+    void organisationUpdate_noOrgAccess() {
+        OrganisationUpdate request = mock(OrganisationUpdate.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("123")).thenReturn(false);
+
+        ResponseEntity<?> responseEntity = organisationResource.organisationUpdate("123", request);
+
+        assertEquals(401, responseEntity.getStatusCode().value());
+        verifyNoInteractions(organisationService);
+    }
 
 }

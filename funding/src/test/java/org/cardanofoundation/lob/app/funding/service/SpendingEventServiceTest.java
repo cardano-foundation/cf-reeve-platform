@@ -949,6 +949,24 @@ class SpendingEventServiceTest {
     }
 
     @Test
+    void create_returnsLeft_whenUserCannotAccessOrg() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
+                .organisationId("org1").eventType(EventType.FUNDING).fundingId("GRANT-2025-001")
+                .fundingEntity("Cardano Foundation").currencyRcy("USD")
+                .allocations(List.of(EventProjectAllocationRequest.builder()
+                        .externalProjectId("PROJ-AB").milestones(List.of(fundingMilestone("MS-1", ALLOCATED))).build()))
+                .build();
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void create_returnsLeft_whenFundingEventMissingFundingEntity() {
         SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
                 .organisationId("org1").eventType(EventType.FUNDING).fundingId("GRANT-2025-001").currencyRcy("USD")

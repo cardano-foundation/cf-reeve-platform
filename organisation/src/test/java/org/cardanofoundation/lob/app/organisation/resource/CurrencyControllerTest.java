@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -128,5 +129,68 @@ class CurrencyControllerTest {
         assertEquals(400, response.getStatusCode().value());
         assertNotNull(response.getBody());
         assertEquals(either.getLeft(), response.getBody());
+    }
+
+    @Test
+    void getAllCurrencies_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<?> response = currencyController.getAllCurrencies("org123", null, null, Pageable.unpaged());
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(currencyService);
+    }
+
+    @Test
+    void getCurrency_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<?> response = currencyController.getCurrency("org123", "USD");
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(currencyService);
+    }
+
+    @Test
+    void insertCurrency_noOrgAccess() {
+        CurrencyUpdate update = mock(CurrencyUpdate.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<?> response = currencyController.insertCurrency("org123", update);
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(currencyService);
+    }
+
+    @Test
+    void updateCurrency_noOrgAccess() {
+        CurrencyUpdate update = mock(CurrencyUpdate.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<?> response = currencyController.updateCurrency("org123", update);
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(currencyService);
+    }
+
+    @Test
+    void insertCurrenciesCsv_noOrgAccess() {
+        MultipartFile file = mock(MultipartFile.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<?> response = currencyController.insertCurrenciesCsv("org123", file);
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(currencyService);
+    }
+
+    @Test
+    void downloadCurrenciesCsv_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<?> response = currencyController.downloadCurrenciesCsv("org123", null, null);
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(currencyService);
     }
 }
