@@ -147,20 +147,24 @@ public class AccountingCoreResource {
     })
     @GetMapping(value = "/transactions/{id}", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<?> transactionDetailSpecific(@Valid @PathVariable("id") @Parameter(example = "7e9e8bcbb38a283b41eab57add98278561ab51d23a16f3e3baf3daa461b84ab4") String id,
+    public ResponseEntity<TransactionView> transactionDetailSpecific(@Valid @PathVariable("id") @Parameter(example = "7e9e8bcbb38a283b41eab57add98278561ab51d23a16f3e3baf3daa461b84ab4") String id,
                                                         @RequestParam(name = "organisationId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String organisationId) {
-        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
-            return OrgAccessDenied.response();
+        if(!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return ResponseEntity.status(UNAUTHORIZED.value()).body(TransactionView.builder()
+                    .error(Optional.of(OrgAccessDenied.problem()))
+                    .build());
         }
         Optional<TransactionView> transactionEntity = accountingCorePresentationService.transactionDetailSpecific(id, organisationId);
         if (transactionEntity.isEmpty()) {
             ProblemDetail issue = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Transaction not found for id: %s".formatted(id));
             issue.setTitle("TX_NOT_FOUND");
 
-            return ResponseEntity.status(issue.getStatus()).body(issue);
+            return ResponseEntity.status(issue.getStatus()).body(TransactionView.builder()
+                    .error(Optional.of(issue))
+                    .build());
         }
 
-        return ResponseEntity.ok().body(transactionEntity);
+        return ResponseEntity.ok().body(transactionEntity.get());
     }
 
     @Tag(name = "Transactions", description = "Transactions API")

@@ -659,7 +659,8 @@ public class AccountingCorePresentationViewService {
                         .map(CommonEntity::getCreatedAt).orElse(null),
                 transactionEntity.getItemCount(),
                 getTransactionItemView(transactionEntity),
-                getViolations(transactionEntity)
+                getViolations(transactionEntity),
+                Optional.empty()
 
         );
     }
