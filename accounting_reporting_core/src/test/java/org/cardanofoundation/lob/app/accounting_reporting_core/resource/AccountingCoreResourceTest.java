@@ -185,6 +185,30 @@ class AccountingCoreResourceTest {
     }
 
     @Test
+    void listAllBatches_invalidSort() {
+        BatchSearchRequest body = mock(BatchSearchRequest.class);
+        Pageable pageable = Pageable.ofSize(10).withPage(0);
+        org.springframework.http.ProblemDetail problem = org.springframework.http.ProblemDetail.forStatus(org.springframework.http.HttpStatus.BAD_REQUEST);
+        when(jpaSortFieldValidator.convertPageable(pageable, Map.of(), TransactionBatchEntity.class)).thenReturn(Either.left(problem));
+
+        ResponseEntity<?> listResponseEntity = accountingCoreResource.listAllBatches(body, pageable);
+        assertTrue(listResponseEntity.getStatusCode().is4xxClientError());
+        verify(accountingCorePresentationViewService, org.mockito.Mockito.never()).listAllBatch(any(), any());
+    }
+
+    @Test
+    void listAllBatches_serviceError() {
+        BatchSearchRequest body = mock(BatchSearchRequest.class);
+        Pageable pageable = Pageable.ofSize(10).withPage(0);
+        org.springframework.http.ProblemDetail problem = org.springframework.http.ProblemDetail.forStatus(org.springframework.http.HttpStatus.BAD_REQUEST);
+        when(jpaSortFieldValidator.convertPageable(pageable, Map.of(), TransactionBatchEntity.class)).thenReturn(Either.right(pageable));
+        when(accountingCorePresentationViewService.listAllBatch(body, pageable)).thenReturn(Either.left(problem));
+
+        ResponseEntity<?> listResponseEntity = accountingCoreResource.listAllBatches(body, pageable);
+        assertTrue(listResponseEntity.getStatusCode().is4xxClientError());
+    }
+
+    @Test
     void batchReprocess_test() {
         BatchReprocessView batchReprocessView = mock(BatchReprocessView.class);
         String orgId = "org123";
@@ -241,6 +265,33 @@ class AccountingCoreResourceTest {
         ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", List.of(), orgId, createdBy);
         assertTrue(responseEntity.getStatusCode().is4xxClientError());
         assertNotNull(responseEntity.getBody());
+    }
+
+    @Test
+    void batchesDetailTest_invalidDateRange() {
+        BatchFilterRequest batchFilterRequest = new BatchFilterRequest();
+        batchFilterRequest.setOrganisationId("org123");
+        batchFilterRequest.setDateFrom(java.time.LocalDate.of(2024, 2, 1));
+        batchFilterRequest.setDateTo(java.time.LocalDate.of(2024, 1, 1));
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+
+        ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", List.of(), batchFilterRequest, null);
+
+        assertTrue(responseEntity.getStatusCode().is4xxClientError());
+        assertNotNull(responseEntity.getBody());
+    }
+
+    @Test
+    void extractionTrigger_orgNotFound() {
+        org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionRequest request =
+                mock(org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionRequest.class);
+        when(request.getOrganisationId()).thenReturn("org1");
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.empty());
+
+        ResponseEntity<?> responseEntity = accountingCoreResource.extractionTrigger(request);
+
+        assertTrue(responseEntity.getStatusCode().is4xxClientError());
     }
 
     @Test

@@ -101,6 +101,27 @@ class AccountingCoreResourceReconciliationTest {
     }
 
     @Test
+    void testReconcileStart_invalidSortField() {
+        ProblemDetail problem = ProblemDetail.forStatus(BAD_REQUEST);
+        when(jpaSortFieldValidator.convertPageable(any(Pageable.class), any(), eq(TransactionEntity.class))).thenReturn(Either.left(problem));
+
+        ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconcileStart(new ReconciliationFilterRequest(), Pageable.unpaged());
+
+        Assertions.assertEquals(400, responseEntity.getStatusCode().value());
+        verifyNoInteractions(accountingCorePresentationViewService);
+    }
+
+    @Test
+    void testReconcileTriggerCsvAction_delegatesToReconcileTriggerAction() {
+        when(accountingCoreService.scheduleReconcilation(any(), any(), any(), any(), any(), any())).thenReturn(Either.right(null));
+
+        ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconcileTriggerCsvAction(new ReconciliationRequest());
+
+        Assertions.assertEquals(200, responseEntity.getStatusCode().value());
+        verify(accountingCoreService).scheduleReconcilation(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
     void testReconciliationRejectionCode() {
         ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconciliationRejectionCode();
         Assertions.assertEquals(200, responseEntity.getStatusCode().value());

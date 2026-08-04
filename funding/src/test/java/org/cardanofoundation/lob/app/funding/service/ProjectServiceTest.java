@@ -398,6 +398,21 @@ class ProjectServiceTest {
     }
 
     @Test
+    void create_asSubProject_returns400_whenParentBelongsToDifferentOrg() {
+        ProjectEntity parent = ProjectEntity.builder().id("parent1").organisationId("otherOrg")
+                .totalAmount(new BigDecimal("200000.00")).currency("USD").build();
+        when(projectRepository.findById("parent1")).thenReturn(Optional.of(parent));
+
+        ProjectView result = projectService.createWithMilestones(ProjectWithMilestonesCreateRequest.builder()
+                .organisationId("org1").externalProjectId("WP-1").projectTitle("WP")
+                .totalAmount(new BigDecimal("100000.00")).currency("USD").parentProjectId("parent1")
+                .build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PARENT_PROJECT_ORG_MISMATCH);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void create_asSubProject_returns400_whenParentHasMilestones() {
         ProjectEntity parent = ProjectEntity.builder().id("parent1").organisationId("org1")
                 .totalAmount(new BigDecimal("200000.00")).currency("USD").build();
