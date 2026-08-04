@@ -90,11 +90,6 @@ public class ReportTemplateController {
             @RequestBody(required = true) ReportTemplateDto template) {
         log.debug("POST /api/report-templates - Creating template: {}", template.getName());
 
-        if (!keycloakSecurityHelper.canUserAccessOrg(template.getOrganisationId())) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ReportTemplateResponseDto.builder().error(Optional.of(problem)).build());
-        }
-
         Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.create(template);
 
         if (result.isLeft()) {
@@ -144,11 +139,6 @@ public class ReportTemplateController {
     public ResponseEntity<?> update(
             @RequestBody(required = true) ReportTemplateDto template) {
         log.debug("PUT /api/report-templates - Updating template: {}", template.getName());
-
-        if (!keycloakSecurityHelper.canUserAccessOrg(template.getOrganisationId())) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(problem);
-        }
 
         Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.update(template);
 

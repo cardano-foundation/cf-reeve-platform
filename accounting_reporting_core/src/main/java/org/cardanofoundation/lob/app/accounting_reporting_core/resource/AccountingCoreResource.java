@@ -79,9 +79,6 @@ public class AccountingCoreResource {
     @PostMapping(value = "/transactions", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<List<TransactionView>> listAllAction(@Valid @RequestBody SearchRequest body) {
-        if (!keycloakSecurityHelper.canUserAccessOrg(body.getOrganisationId())) {
-            return OrgAccessDenied.response();
-        }
         List<TransactionView> transactions = accountingCorePresentationService.allTransactions(body);
         return ResponseEntity.ok().body(transactions);
     }
@@ -277,9 +274,6 @@ public class AccountingCoreResource {
     )
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<List<TransactionProcessView>> approveTransactions(@Valid @RequestBody TransactionsRequest transactionsRequest) {
-        if (!keycloakSecurityHelper.canUserAccessOrg(transactionsRequest.getOrganisationId())) {
-            return OrgAccessDenied.response();
-        }
         List<TransactionProcessView> transactionProcessViews = accountingCorePresentationService.approveTransactions(transactionsRequest);
 
         return ResponseEntity
@@ -298,9 +292,6 @@ public class AccountingCoreResource {
     )
     @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
     public ResponseEntity<List<TransactionProcessView>> approveTransactionsPublish(@Valid @RequestBody TransactionsRequest transactionsRequest) {
-        if (!keycloakSecurityHelper.canUserAccessOrg(transactionsRequest.getOrganisationId())) {
-            return OrgAccessDenied.response();
-        }
         List<TransactionProcessView> transactionProcessViewList = accountingCorePresentationService.approveTransactionsPublish(transactionsRequest);
 
         return ResponseEntity
@@ -319,9 +310,6 @@ public class AccountingCoreResource {
     )
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<TransactionItemsProcessRejectView> rejectTransactionItems(@Valid @RequestBody TransactionItemsRejectionRequest transactionItemsRejectionRequest) {
-        if (!keycloakSecurityHelper.canUserAccessOrg(transactionItemsRejectionRequest.getOrganisationId())) {
-            return OrgAccessDenied.response();
-        }
         TransactionItemsProcessRejectView transactionProcessViewsResult = accountingCorePresentationService.rejectTransactionItems(transactionItemsRejectionRequest);
 
         return ResponseEntity
@@ -341,10 +329,6 @@ public class AccountingCoreResource {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> listAllBatches(@Valid @RequestBody BatchSearchRequest body,
                                             @PageableDefault(page = 0, size = 10) Pageable pageable) {
-        if (!keycloakSecurityHelper.canUserAccessOrg(body.getOrganisationId())) {
-            return OrgAccessDenied.response();
-        }
-
         body.setLimit(pageable.getPageSize());
         body.setPage(pageable.getPageNumber());
         Either<ProblemDetail, Pageable> convertPageable = jpaSortFieldValidator.convertPageable(pageable, Map.of(), TransactionBatchEntity.class);

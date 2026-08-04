@@ -87,9 +87,6 @@ public class AccountingCoreResourceReconciliation {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> reconcileStart(@Valid @RequestBody ReconciliationFilterRequest body,
                                             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-        if (!keycloakSecurityHelper.canUserAccessOrg(body.getOrganisationId())) {
-            return OrgAccessDenied.response();
-        }
         Either<ProblemDetail, Pageable> pageableEither = jpaSortFieldValidator.convertPageable(pageable,
                         PageableFieldMappings.RECONCILATION_FIELD_MAPPINGS, TransactionEntity.class);
         if (pageableEither.isLeft()) {
@@ -121,9 +118,6 @@ public class AccountingCoreResourceReconciliation {
     @PostMapping(value = "/reconciliation-statistic", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<Map<String, ReconciliationStatisticView>> reconciliationStatistic(@Valid @RequestBody ReconciliationStatisticRequest body) {
-        if (!keycloakSecurityHelper.canUserAccessOrg(body.getOrganisationId())) {
-            return OrgAccessDenied.response();
-        }
         Map<String, ReconciliationStatisticView> result = accountingCorePresentationService.getReconciliationStatisticByDateRange(body);
         return ResponseEntity.ok().body(result);
     }

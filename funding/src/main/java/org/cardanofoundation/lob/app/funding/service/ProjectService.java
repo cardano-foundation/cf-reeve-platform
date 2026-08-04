@@ -217,9 +217,6 @@ public class ProjectService {
 
     @Transactional
     public ProjectView updateProject(String projectId, ProjectUpdateRequest request) {
-        if (!keycloakSecurityHelper.canUserAccessOrg(request.getOrganisationId())) {
-            return ProjectView.error(Problems.unauthorized());
-        }
         Optional<ProjectEntity> projectM = projectRepository.findByIdAndOrganisationId(projectId, request.getOrganisationId()).stream().findFirst();
         if (projectM.isEmpty()) {
             return ProjectView.error(Problems.projectNotFound(projectId));
