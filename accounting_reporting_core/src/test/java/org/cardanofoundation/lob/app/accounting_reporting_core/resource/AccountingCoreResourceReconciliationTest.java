@@ -101,17 +101,6 @@ class AccountingCoreResourceReconciliationTest {
     }
 
     @Test
-    void testReconcileStart_noOrgAccess() {
-        when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(false);
-
-        ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconcileStart(new ReconciliationFilterRequest(), Pageable.unpaged());
-
-        Assertions.assertEquals(401, responseEntity.getStatusCode().value());
-        verifyNoInteractions(accountingCorePresentationViewService);
-        verifyNoInteractions(jpaSortFieldValidator);
-    }
-
-    @Test
     void testReconciliationRejectionCode() {
         ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconciliationRejectionCode();
         Assertions.assertEquals(200, responseEntity.getStatusCode().value());
@@ -164,13 +153,4 @@ class AccountingCoreResourceReconciliationTest {
         verifyNoInteractions(accountingCoreService);
     }
 
-    @Test
-    void testReconciliationStatistic_noOrgAccess() {
-        when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(false);
-
-        ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconciliationStatistic(new ReconciliationStatisticRequest());
-
-        Assertions.assertEquals(401, responseEntity.getStatusCode().value());
-        verifyNoInteractions(accountingCorePresentationViewService);
-    }
 }

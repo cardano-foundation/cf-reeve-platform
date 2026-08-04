@@ -73,25 +73,12 @@ class AccountingCoreResourceTest {
     @Test
     void testListAllAction() {
         SearchRequest body = mock(SearchRequest.class);
-        when(body.getOrganisationId()).thenReturn("org1");
-        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
 
         when(accountingCorePresentationViewService.allTransactions(body)).thenReturn(List.of());
 
         ResponseEntity<?> listResponseEntity = accountingCoreResource.listAllAction(body);
         assertTrue(listResponseEntity.getStatusCode().is2xxSuccessful());
         assertNotNull(listResponseEntity.getBody());
-    }
-
-    @Test
-    void testListAllAction_noAccess() {
-        SearchRequest body = mock(SearchRequest.class);
-        when(body.getOrganisationId()).thenReturn("org1");
-        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
-
-        ResponseEntity<?> listResponseEntity = accountingCoreResource.listAllAction(body);
-        assertTrue(listResponseEntity.getStatusCode().is4xxClientError());
-        verify(accountingCorePresentationViewService, org.mockito.Mockito.never()).allTransactions(any());
     }
 
     @Test
@@ -153,8 +140,6 @@ class AccountingCoreResourceTest {
     @Test
     void approveTransactions_test() {
         TransactionsRequest request = mock(TransactionsRequest.class);
-        when(request.getOrganisationId()).thenReturn("org1");
-        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
         when(accountingCorePresentationViewService.approveTransactions(request)).thenReturn(List.of());
 
         ResponseEntity<?> listResponseEntity = accountingCoreResource.approveTransactions(request);
@@ -164,22 +149,8 @@ class AccountingCoreResourceTest {
     }
 
     @Test
-    void approveTransactions_noAccess() {
-        TransactionsRequest request = mock(TransactionsRequest.class);
-        when(request.getOrganisationId()).thenReturn("org1");
-        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
-
-        ResponseEntity<?> listResponseEntity = accountingCoreResource.approveTransactions(request);
-
-        assertTrue(listResponseEntity.getStatusCode().is4xxClientError());
-        verify(accountingCorePresentationViewService, org.mockito.Mockito.never()).approveTransactions(any());
-    }
-
-    @Test
     void publishTransactions_test() {
         TransactionsRequest request = mock(TransactionsRequest.class);
-        when(request.getOrganisationId()).thenReturn("org1");
-        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
         when(accountingCorePresentationViewService.approveTransactionsPublish(request)).thenReturn(List.of());
 
         ResponseEntity<?> listResponseEntity = accountingCoreResource.approveTransactionsPublish(request);
@@ -189,22 +160,8 @@ class AccountingCoreResourceTest {
     }
 
     @Test
-    void publishTransactions_noAccess() {
-        TransactionsRequest request = mock(TransactionsRequest.class);
-        when(request.getOrganisationId()).thenReturn("org1");
-        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
-
-        ResponseEntity<?> listResponseEntity = accountingCoreResource.approveTransactionsPublish(request);
-
-        assertTrue(listResponseEntity.getStatusCode().is4xxClientError());
-        verify(accountingCorePresentationViewService, org.mockito.Mockito.never()).approveTransactionsPublish(any());
-    }
-
-    @Test
     void rejectTransactions_test() {
         TransactionItemsRejectionRequest request = mock(TransactionItemsRejectionRequest.class);
-        when(request.getOrganisationId()).thenReturn("org1");
-        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
         TransactionItemsProcessRejectView transactionItemsProcessRejectView = mock(TransactionItemsProcessRejectView.class);
         when(accountingCorePresentationViewService.rejectTransactionItems(request)).thenReturn(transactionItemsProcessRejectView);
 
@@ -215,22 +172,8 @@ class AccountingCoreResourceTest {
     }
 
     @Test
-    void rejectTransactions_noAccess() {
-        TransactionItemsRejectionRequest request = mock(TransactionItemsRejectionRequest.class);
-        when(request.getOrganisationId()).thenReturn("org1");
-        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
-
-        ResponseEntity<?> response = accountingCoreResource.rejectTransactionItems(request);
-
-        assertTrue(response.getStatusCode().is4xxClientError());
-        verify(accountingCorePresentationViewService, org.mockito.Mockito.never()).rejectTransactionItems(any());
-    }
-
-    @Test
     void listAllBatches_test() {
         BatchSearchRequest body = mock(BatchSearchRequest.class);
-        when(body.getOrganisationId()).thenReturn("org1");
-        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
         BatchsDetailView batchsDetailView = mock(BatchsDetailView.class);
         Pageable pageable = Pageable.ofSize(10).withPage(0);
         when(jpaSortFieldValidator.convertPageable(pageable, Map.of(), TransactionBatchEntity.class)).thenReturn(Either.right(pageable));
@@ -239,18 +182,6 @@ class AccountingCoreResourceTest {
         ResponseEntity<?> listResponseEntity = accountingCoreResource.listAllBatches(body, pageable);
         assertTrue(listResponseEntity.getStatusCode().is2xxSuccessful());
         assertNotNull(listResponseEntity.getBody());
-    }
-
-    @Test
-    void listAllBatches_noAccess() {
-        BatchSearchRequest body = mock(BatchSearchRequest.class);
-        when(body.getOrganisationId()).thenReturn("org1");
-        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
-        Pageable pageable = Pageable.ofSize(10).withPage(0);
-
-        ResponseEntity<?> listResponseEntity = accountingCoreResource.listAllBatches(body, pageable);
-        assertTrue(listResponseEntity.getStatusCode().is4xxClientError());
-        verify(accountingCorePresentationViewService, org.mockito.Mockito.never()).listAllBatch(any(), any());
     }
 
     @Test

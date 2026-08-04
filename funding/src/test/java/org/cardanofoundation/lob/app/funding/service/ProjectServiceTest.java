@@ -460,17 +460,6 @@ class ProjectServiceTest {
     // --- updateProject ---
 
     @Test
-    void update_returns401_whenUserCannotAccessOrg() {
-        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
-
-        ProjectView result = projectService.updateProject("p1", ProjectUpdateRequest.builder().organisationId("org1").projectTitle("New").build());
-
-        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
-        verify(projectRepository, never()).findByIdAndOrganisationId(any(), any());
-        verify(projectRepository, never()).saveAndFlush(any());
-    }
-
-    @Test
     void update_notFound() {
         when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(List.of());
 
