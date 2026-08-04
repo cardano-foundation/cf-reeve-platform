@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -23,11 +24,17 @@ import com.opencsv.bean.CsvBindByName;
 
 /**
  * Detects which of the three bulk-import CSV shapes an uploaded file is, by comparing its header
- * row against each {@link FundingCsvFileType}'s full declared column set. Detection requires an
- * <em>exact</em> match (not just "required headers present") — a subset match would let, say, an
- * Events file (which happens to also carry "External Project ID" and "Project Title" columns)
- * satisfy the Projects file's required-header check too. Since users are expected to fill in the
- * downloaded template unmodified, exact-set matching is unambiguous in practice.
+ * row against each {@link FundingCsvFileType}'s full declared column set (mandatory + optional).
+ * A type is a candidate only if the uploaded headers are entirely explainable by it (i.e. the
+ * uploaded header set is a subset of its declared columns) — this rules out files belonging to a
+ * different template. Among candidates, the one with the smallest declared column set wins (the
+ * tightest fit), since a file missing some of its own columns still explains itself better via its
+ * true, smaller template than via an unrelated, larger one it happens to also be a subset of.
+ *
+ * <p>Note this deliberately does <em>not</em> require every mandatory column to be present — a
+ * file missing a mandatory column still needs to be routed to the right parser so it gets a
+ * specific "missing required header" error, rather than being dropped into the generic
+ * "unrecognized file" bucket.
  */
 @Slf4j
 @Component
@@ -43,8 +50,8 @@ public class FundingCsvTypeDetector {
             return Optional.empty();
         }
         return Arrays.stream(FundingCsvFileType.values())
-                .filter(type -> declaredColumns(type.getLineType()).equals(headers))
-                .findFirst();
+                .filter(type -> declaredColumns(type.getLineType()).containsAll(headers))
+                .min(Comparator.comparingInt(type -> declaredColumns(type.getLineType()).size()));
     }
 
     private Set<String> readHeaders(MultipartFile file) {
