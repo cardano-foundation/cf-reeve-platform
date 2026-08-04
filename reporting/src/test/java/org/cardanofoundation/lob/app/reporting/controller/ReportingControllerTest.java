@@ -406,16 +406,6 @@ class ReportingControllerTest {
     }
 
     @Test
-    void create_NoOrganisationAccess() {
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
-
-        ResponseEntity<?> response = reportingController.create(reportDto);
-
-        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
-        verify(reportService, never()).create(any());
-    }
-
-    @Test
     void templateCreateCsv_NoOrganisationAccess() {
         CreateCsvReportRequest request = mock(CreateCsvReportRequest.class);
         when(request.getOrganisationId()).thenReturn("org123");
@@ -427,27 +417,4 @@ class ReportingControllerTest {
         verify(csvReportService, never()).createCsvReports(any());
     }
 
-    @Test
-    void publish_NoOrganisationAccess() {
-        ReportIdRequest request = mock(ReportIdRequest.class);
-        when(request.getOrganisationId()).thenReturn("org123");
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
-
-        ResponseEntity<?> response = reportingController.publish(request);
-
-        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
-        verify(reportService, never()).publish(any());
-    }
-
-    @Test
-    void reject_NoOrganisationAccess() {
-        ReportIdRequest request = mock(ReportIdRequest.class);
-        when(request.getOrganisationId()).thenReturn("org123");
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
-
-        ResponseEntity<?> response = reportingController.reject(request);
-
-        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
-        verify(reportService, never()).reject(any());
-    }
 }

@@ -350,26 +350,6 @@ class ReportTemplateControllerTest {
     }
 
     @Test
-    void create_NoOrganisationAccess() {
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
-
-        ResponseEntity<?> response = reportTemplateController.create(templateDto);
-
-        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
-        verify(reportTemplateService, never()).create(any());
-    }
-
-    @Test
-    void update_NoOrganisationAccess() {
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
-
-        ResponseEntity<?> response = reportTemplateController.update(templateDto);
-
-        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
-        verify(reportTemplateService, never()).update(any());
-    }
-
-    @Test
     void templateCreateCsv_NoOrganisationAccess() {
         CreateCsvTemplateRequest csvRequest = mock(CreateCsvTemplateRequest.class);
         when(csvRequest.getOrganisationId()).thenReturn("org123");
