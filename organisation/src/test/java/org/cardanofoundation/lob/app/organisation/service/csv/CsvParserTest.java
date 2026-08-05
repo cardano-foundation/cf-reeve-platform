@@ -88,6 +88,45 @@ class CsvParserTest {
     }
 
     @Test
+    void parseCsv_missingRequiredHeader() throws IOException {
+        MultipartFile file = mock(MultipartFile.class);
+        when(file.isEmpty()).thenReturn(false);
+
+        // "Credit Reference Code" header is missing.
+        byte[] bytes = "Debit Reference Code,Name\n123,Test Dummy\n".getBytes();
+        when(file.getBytes()).thenReturn(bytes);
+        when(antiVirusScanner.isFileSafe(bytes)).thenReturn(true);
+
+        Either<ProblemDetail, List<EventCodeUpdate>> parse = csvParser.parseCsv(file, EventCodeUpdate.class);
+
+        Assertions.assertTrue(parse.isLeft());
+        Assertions.assertEquals("CSV_HEADER_ERROR", parse.getLeft().getTitle());
+        Assertions.assertTrue(parse.getLeft().getDetail().contains("Credit Reference Code"));
+    }
+
+    @Test
+    void parseCsv_missingRequiredHeader_usesConfiguredDelimiterNotDefaultComma() throws NoSuchFieldException, IllegalAccessException, IOException {
+        // Header check must read with the *configured* delimiter, same as the real parse below it —
+        // using the wrong one either misreads a present header as missing, or a missing one as present.
+        Field delimiterField = CsvParser.class.getDeclaredField("delimiter");
+        delimiterField.setAccessible(true);
+        delimiterField.set(csvParser, ";");
+
+        MultipartFile file = mock(MultipartFile.class);
+        when(file.isEmpty()).thenReturn(false);
+
+        // All three required headers are present, but semicolon-delimited.
+        byte[] bytes = "Debit Reference Code;Credit Reference Code;Name\n123;456;Test Dummy\n".getBytes();
+        when(file.getBytes()).thenReturn(bytes);
+        when(antiVirusScanner.isFileSafe(bytes)).thenReturn(true);
+
+        Either<ProblemDetail, List<EventCodeUpdate>> parse = csvParser.parseCsv(file, EventCodeUpdate.class);
+
+        Assertions.assertTrue(parse.isRight(), () -> "expected success but got: " + parse.getLeft());
+        Assertions.assertEquals(1, parse.get().size());
+    }
+
+    @Test
     void parseCsv_maliciousFile() throws IOException {
         MultipartFile file = mock(MultipartFile.class);
         when(file.isEmpty()).thenReturn(false);
