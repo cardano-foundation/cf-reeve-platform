@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.funding.e2e;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
@@ -8,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -29,6 +31,9 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import org.cardanofoundation.lob.app.funding.domain.request.BulkImportRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingBulkImportResult;
@@ -105,6 +110,64 @@ class FundingBulkImportE2ETest {
         // ...and, crucially, nothing was actually left behind in the database: this is the part the
         // Mockito-based unit test cannot observe, since it has no real transaction to roll back.
         assertThat(projectRepository.findByOrganisationIdAndExternalProjectId(ORG_ID, "PROJ-E")).isEmpty();
+    }
+
+    /**
+     * Sweeps all five "missing-*.csv" sample files. Only Funding ID is genuinely optional (never
+     * required for a root project); the other four are all required fields on sub-project/root
+     * <em>create</em> and correctly fail without persisting anything: Project Title and Sub Project
+     * Title always were required, and Sub Total Amount / Sub Currency were tightened to match the
+     * REST API's flat {@code parentProjectId} shape ({@code ProjectWithMilestonesCreateRequest}:
+     * {@code totalAmount} {@code @NotNull}, {@code currency} {@code @NotBlank}) — even though the
+     * API's own nested {@code subProjects} shape ({@code ProjectTreeNodeRequest}) leaves both
+     * optional; the CSV path deliberately picks the stricter of the two. Each case uses its own
+     * organisationId so the five runs can't collide with each other in the shared database.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("missingFieldCsvCases")
+    void missingFieldCsvFiles_behaveAsCurrentlyValidated(String csvFileName, String orgId,
+            String externalProjectId, boolean expectSuccess) throws IOException {
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+
+        byte[] csvBytes = Files.readAllBytes(Path.of("/home/mrusso/Downloads/" + csvFileName));
+        MultipartFile file = new MockMultipartFile("file", csvFileName, "text/csv", csvBytes);
+
+        BulkImportRequest request = BulkImportRequest.builder()
+                .organisationId(orgId)
+                .files(List.of(file))
+                .build();
+
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+        boolean projectPersisted = !projectRepository
+                .findByOrganisationIdAndExternalProjectId(orgId, externalProjectId).isEmpty();
+
+        if (expectSuccess) {
+            assertThat(result.getFiles().get(0).getRowErrors()).isEmpty();
+            assertThat(result.getProjectsCreated()).isEqualTo(1);
+            assertThat(projectPersisted).as("%s: %s should be persisted", csvFileName, externalProjectId).isTrue();
+        } else {
+            assertThat(result.getFiles().get(0).getRowErrors()).isNotEmpty();
+            assertThat(result.getProjectsCreated()).isZero();
+            assertThat(projectPersisted).as("%s: %s should NOT be persisted", csvFileName, externalProjectId).isFalse();
+        }
+    }
+
+    static Stream<Arguments> missingFieldCsvCases() {
+        return Stream.of(
+                // Funding ID missing -> optional, row succeeds.
+                arguments("missing-funding-id.csv", "org-missing-funding-id", "PROJ-A", true),
+                // Root Project Title missing -> required; fails before any persistence (pre-existing
+                // behavior, not part of the orphan-root fix).
+                arguments("missing-project-title.csv", "org-missing-project-title", "PROJ-A", false),
+                // Sub Currency missing -> now required to match the REST API's stricter shape; fails,
+                // root rolled back as an orphan (no surviving sub-project).
+                arguments("missing-sub-currency.csv", "org-missing-sub-currency", "PROJ-D", false),
+                // Sub Project Title missing -> required; this is the orphan-root case the fix covers.
+                arguments("missing-sub-project-title.csv", "org-missing-sub-project-title-2", "PROJ-E", false),
+                // Sub Total Amount missing -> now required to match the REST API's stricter shape;
+                // fails, root rolled back as an orphan.
+                arguments("missing-sub-total-amount.csv", "org-missing-sub-total-amount", "PROJ-C", false)
+        );
     }
 
     @Configuration

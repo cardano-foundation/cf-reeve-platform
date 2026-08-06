@@ -393,9 +393,22 @@ public class FundingBulkImportService {
     private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> createNewSubProject(ProjectEntity rootEntity, ProjectCsvLine line,
             BigDecimal subAmount, Map<String, String> resolvedProjectIds) {
 
+        // CREATE — full data is required, matching the REST API's flat parentProjectId shape
+        // (ProjectWithMilestonesCreateRequest: totalAmount @NotNull, currency @NotBlank), even though
+        // the API's own nested subProjects shape (ProjectTreeNodeRequest) leaves both optional.
         if (isBlank(line.getSubProjectTitle())) {
             return Either.left(Problems.badRequest(
                     "Sub Project Title is required to create sub-project: " + line.getSubExternalProjectId(),
+                    ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
+        }
+        if (subAmount == null) {
+            return Either.left(Problems.badRequest(
+                    "Sub Total Amount is required to create sub-project: " + line.getSubExternalProjectId(),
+                    ErrorTitleConstants.PROJECT_AMOUNT_INVALID));
+        }
+        if (isBlank(line.getSubCurrency())) {
+            return Either.left(Problems.badRequest(
+                    "Sub Currency is required to create sub-project: " + line.getSubExternalProjectId(),
                     ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
         Either<ProblemDetail, ProjectEntity> created = projectStructureService.createSubProject(

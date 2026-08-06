@@ -40,6 +40,7 @@ import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestone
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingBulkImportResult;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingFileImportResult;
+import org.cardanofoundation.lob.app.funding.domain.view.FundingRowError;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
@@ -845,6 +846,59 @@ class FundingBulkImportServiceTest {
     }
 
     @Test
+    void projectsFile_subProjectMissingTotalAmountOnCreate_reportsError() {
+        // Sub Total Amount is required on create, matching the REST API's flat parentProjectId shape
+        // (ProjectWithMilestonesCreateRequest.totalAmount is @NotNull) even though the API's own
+        // nested subProjects shape (ProjectTreeNodeRequest) leaves it optional.
+        MultipartFile file = file("projects.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS));
+        ProjectCsvLine line = projectLine("PROJ-A", "Project A", "100000.00", "USD");
+        line.setSubExternalProjectId("SUB-1");
+        line.setSubProjectTitle("Sub One");
+        line.setSubCurrency("USD"); // no sub total amount supplied
+        when(projectCsvParser.parseCsv(file, ProjectCsvLine.class)).thenReturn(Either.right(List.of(line)));
+        when(projectRepository.findByOrganisationIdAndExternalProjectId(ORG_ID, "PROJ-A")).thenReturn(List.of());
+        when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1", "PROJ-A", List.of()));
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1", "PROJ-A")));
+        when(projectRepository.findByOrganisationIdAndExternalProjectId(ORG_ID, "SUB-1")).thenReturn(List.of());
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getProjectsCreated()).isZero();
+        assertThat(result.getFiles().get(0).getRowsSucceeded()).isZero();
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(2);
+        assertThat(result.getFiles().get(0).getRowErrors()).extracting(FundingRowError::getReason)
+                .anySatisfy(reason -> assertThat(reason).contains("Sub Total Amount"));
+        verify(projectStructureService, never()).createSubProject(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void projectsFile_subProjectMissingCurrencyOnCreate_reportsError() {
+        MultipartFile file = file("projects.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS));
+        ProjectCsvLine line = projectLine("PROJ-A", "Project A", "100000.00", "USD");
+        line.setSubExternalProjectId("SUB-1");
+        line.setSubProjectTitle("Sub One");
+        line.setSubTotalAmount("40000.00"); // no sub currency supplied
+        when(projectCsvParser.parseCsv(file, ProjectCsvLine.class)).thenReturn(Either.right(List.of(line)));
+        when(projectRepository.findByOrganisationIdAndExternalProjectId(ORG_ID, "PROJ-A")).thenReturn(List.of());
+        when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1", "PROJ-A", List.of()));
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1", "PROJ-A")));
+        when(projectRepository.findByOrganisationIdAndExternalProjectId(ORG_ID, "SUB-1")).thenReturn(List.of());
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getProjectsCreated()).isZero();
+        assertThat(result.getFiles().get(0).getRowsSucceeded()).isZero();
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(2);
+        assertThat(result.getFiles().get(0).getRowErrors()).extracting(FundingRowError::getReason)
+                .anySatisfy(reason -> assertThat(reason).contains("Sub Currency"));
+        verify(projectStructureService, never()).createSubProject(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
     void projectsFile_subProjectCreateFails_rootRolledBackToo() {
         MultipartFile file = file("projects.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS));
@@ -852,6 +906,7 @@ class FundingBulkImportServiceTest {
         line.setSubExternalProjectId("SUB-1");
         line.setSubProjectTitle("Sub One");
         line.setSubTotalAmount("40000.00");
+        line.setSubCurrency("USD");
         when(projectCsvParser.parseCsv(file, ProjectCsvLine.class)).thenReturn(Either.right(List.of(line)));
         when(projectRepository.findByOrganisationIdAndExternalProjectId(ORG_ID, "PROJ-A")).thenReturn(List.of());
         when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1", "PROJ-A", List.of()));
