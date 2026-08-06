@@ -1,7 +1,7 @@
 services:
 
   postgres-follower:
-    image: postgres:16.3
+    image: postgres:17
     command: -p 5433
     environment:
       - POSTGRES_USER=postgres
@@ -22,6 +22,9 @@ services:
   follower-app:
     build:
       context: .
+    read_only: true
+    tmpfs:
+      - /tmp
     ports:
       - "9090:9090"
     environment:
@@ -39,12 +42,13 @@ services:
       - lob
 
   yaci-cli:
-    image: bloxbean/yaci-cli:0.10.0-preview5
+    image: bloxbean/yaci-cli:0.10.6
     env_file:
       - ./yaci-config/env
       - ./yaci-config/node.properties
     volumes:
-      - ./yaci-config/node.properties:/app/node.properties
+      - ./yaci-config/node.properties:/app/config/node.properties
+      - yaci-data:/clusters
     ports:
       - "3001:3001"
       - "8082:8080"
@@ -52,7 +56,7 @@ services:
     networks:
       - lob
   yaci-viewer:
-    image: bloxbean/yaci-viewer:0.10.0-preview5
+    image: bloxbean/yaci-viewer:0.10.6
     ports:
       - "5173:5173"
     env_file:
@@ -64,6 +68,7 @@ services:
       - lob
 volumes:
   postgres-data:
+  yaci-data:
 networks:
   lob:
     name: lob

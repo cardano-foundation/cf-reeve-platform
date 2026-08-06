@@ -15,6 +15,9 @@ group = "org.cardano.foundation"
 version = "1.6.0"
 java.sourceCompatibility = JavaVersion.VERSION_21
 
+// support postgres 17
+extra["flyway.version"] = "10.20.1"
+
 configurations {
     compileOnly {
         extendsFrom(configurations.annotationProcessor.get())
