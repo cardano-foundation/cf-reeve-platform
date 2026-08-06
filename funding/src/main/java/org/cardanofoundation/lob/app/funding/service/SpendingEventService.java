@@ -1,10 +1,12 @@
 package org.cardanofoundation.lob.app.funding.service;
 
 import java.math.BigDecimal;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
@@ -377,13 +379,20 @@ public class SpendingEventService {
         // the summed milestone budgets nor the summed project budgets. A null budget anywhere lifts that
         // bound (it cannot be meaningfully enforced).
         BudgetAccumulator budget = new BudgetAccumulator();
+        // Tracks every milestone already allocated in this event (across all nodes) — a milestone can
+        // only belong to one project, so a repeat here always means the same milestone was requested
+        // twice. Without this check, two allocation rows for the same milestone add two
+        // EventMilestoneAllocationEntity rows with the same (eventId, milestoneId) id, which Hibernate
+        // rejects at flush time as a raw, uncaught DuplicateKeyException (surfaces as a 500) instead of
+        // a clean validation error.
+        Set<String> seenMilestoneIds = new HashSet<>();
 
         for (EventProjectAllocationRequest req : allocationRequests) {
             Either<ProblemDetail, ProjectEntity> rootResult = resolveOrCreateRootProject(req, organisationId);
             if (rootResult.isLeft()) return Either.left(rootResult.getLeft());
 
             Optional<ProblemDetail> nodeProblem = populateNode(
-                    event, rootResult.get(), req.getMilestones(), req.getSubProjects(), budget);
+                    event, rootResult.get(), req.getMilestones(), req.getSubProjects(), budget, seenMilestoneIds);
             if (nodeProblem.isPresent()) return Either.left(nodeProblem.get());
         }
 
@@ -403,7 +412,7 @@ public class SpendingEventService {
      */
     private Optional<ProblemDetail> populateNode(FundingEventEntity event, ProjectEntity project,
             List<EventMilestoneAllocationRequest> milestones, List<EventSubProjectAllocationRequest> subProjects,
-            BudgetAccumulator budget) {
+            BudgetAccumulator budget, Set<String> seenMilestoneIds) {
 
         Optional<ProblemDetail> xor = FundingValidations.milestonesXorSubProjects(
                 !milestones.isEmpty(), !subProjects.isEmpty());
@@ -425,6 +434,13 @@ public class SpendingEventService {
                 if (milestoneResult.isLeft()) return Optional.of(milestoneResult.getLeft());
 
                 MilestoneEntity milestone = milestoneResult.get();
+
+                if (!seenMilestoneIds.add(milestone.getId())) {
+                    return Optional.of(Problems.conflict(
+                            "Duplicate allocation to the same milestone in this event: "
+                                    + (milestone.getExternalMilestoneId() != null ? milestone.getExternalMilestoneId() : milestone.getMilestoneTitle()),
+                            ErrorTitleConstants.DUPLICATE_MILESTONE_ALLOCATION));
+                }
 
                 Optional<ProblemDetail> allocationProblem = FundingValidations.allocation(
                         milestoneReq.getAllocatedAmount(), milestone, event.getEventType());
@@ -464,7 +480,7 @@ public class SpendingEventService {
             if (subResult.isLeft()) return Optional.of(subResult.getLeft());
 
             Optional<ProblemDetail> childProblem = populateNode(
-                    event, subResult.get(), subNode.getMilestones(), subNode.getSubProjects(), budget);
+                    event, subResult.get(), subNode.getMilestones(), subNode.getSubProjects(), budget, seenMilestoneIds);
             if (childProblem.isPresent()) return childProblem;
         }
         return Optional.empty();
