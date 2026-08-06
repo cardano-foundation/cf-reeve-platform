@@ -62,6 +62,31 @@ class FundingCsvTypeDetectorTest {
     }
 
     @Test
+    void detectsProjectsFileEvenWhenMandatoryColumnIsMissing() {
+        // "Project Title" (mandatory) is missing — the file must still be routed to the Projects
+        // parser so it gets a specific "missing required header" error, not dropped as unrecognized.
+        String header = "External Project ID;Funding ID;Total Amount;Currency;"
+                + "Parent External Project ID;Sub External Project ID;Sub Project Title;Sub Funding ID;"
+                + "Sub Total Amount;Sub Currency\n";
+
+        Optional<FundingCsvFileType> result = detector.detect(file(header));
+
+        assertThat(result).contains(FundingCsvFileType.PROJECTS);
+    }
+
+    @Test
+    void detectsEventsFileEvenWhenMandatoryColumnIsMissing() {
+        // "Funding ID" (mandatory) is missing.
+        String header = "Event Type;Funding Hash;Funding Entity;Currency RCY;Event Date;"
+                + "Category;Vendor;Amount FCY;Currency FCY;FX Rate;Amount RCY;Hash;Notes;"
+                + "External Project ID;External Milestone ID;Allocated Amount\n";
+
+        Optional<FundingCsvFileType> result = detector.detect(file(header));
+
+        assertThat(result).contains(FundingCsvFileType.EVENTS);
+    }
+
+    @Test
     void unrecognizedHeadersYieldEmpty() {
         Optional<FundingCsvFileType> result = detector.detect(file("Foo;Bar;Baz\n"));
 
