@@ -62,7 +62,10 @@ import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
  *   <li>Projects file: a project (root or sub-project) is <em>created</em> when its
  *   {@code externalProjectId} doesn't exist yet, or <em>updated</em> in place when it does. Root and
  *   each sub-project row are resolved and upserted independently, so one bad row doesn't block its
- *   siblings.</li>
+ *   siblings — with one exception: if the root is newly created by this call and every sub-project row
+ *   that tried to attach to it fails, the root is rolled back too rather than left as a childless
+ *   orphan (see {@link FundingProjectGroupTransactionRunner}). A root row with no sub-project columns
+ *   at all, or an already-existing root, is never rolled back this way.</li>
  *   <li>Milestones file: same — created when {@code externalMilestoneId} doesn't exist under the
  *   referenced project, updated when it does. The referenced project itself is never created here —
  *   a missing project is always a row error (create it via the Projects file first).</li>
@@ -99,6 +102,7 @@ public class FundingBulkImportService {
     private final SpendingEventService spendingEventService;
     private final OrganisationPublicApiIF organisationPublicApi;
     private final FundingBulkImportTransactionRunner transactionRunner;
+    private final FundingProjectGroupTransactionRunner projectGroupTransactionRunner;
 
     public FundingBulkImportResult importFiles(BulkImportRequest request) {
         if (organisationPublicApi.findByOrganisationId(request.getOrganisationId()).isEmpty()) {
@@ -194,7 +198,8 @@ public class FundingBulkImportService {
         int subProjectsUpdated = 0;
 
         for (List<Integer> idxs : groups.values()) {
-            ProjectGroupOutcome outcome = processProjectGroup(organisationId, lines, idxs, resolvedProjectIds);
+            ProjectGroupOutcome outcome = projectGroupTransactionRunner.runInTransaction(
+                    () -> processProjectGroup(organisationId, lines, idxs, resolvedProjectIds));
             errors.addAll(outcome.errors());
             succeeded += outcome.succeeded();
             projectsCreated += outcome.projectsCreated();
@@ -213,7 +218,16 @@ public class FundingBulkImportService {
                 projectsCreated, subProjectsCreated, projectsUpdated, subProjectsUpdated);
     }
 
-    /** Upserts one group's root row, then each of its sub-project rows independently of the others. */
+    /**
+     * Upserts one group's root row, then each of its sub-project rows independently of the others.
+     * Exception: if the root is newly created by this call and every sub-project row that tried to
+     * attach to it failed, the whole group is reported as failed (see {@link ProjectGroupOutcome#orphanRoot()})
+     * so the caller can roll the root back too, rather than leaving a childless root behind that the
+     * user never asked for on its own. A root row with no sub-project columns at all is unaffected —
+     * it never attempted a sub-project, so there is nothing to be "orphaned" from; it may legitimately
+     * be waiting on milestones from a separate Milestones file. Likewise an already-existing root is
+     * never rolled back here: it was already a valid project before this call.
+     */
     private ProjectGroupOutcome processProjectGroup(String organisationId, List<ProjectCsvLine> lines,
             List<Integer> idxs, Map<String, String> resolvedProjectIds) {
 
@@ -224,30 +238,46 @@ public class FundingBulkImportService {
         Either<ProblemDetail, UpsertOutcome<ProjectEntity>> rootResult = upsertRootProject(organisationId, root, resolvedProjectIds);
         if (rootResult.isLeft()) {
             errors.add(rowError(rootRowNumber, rootResult.getLeft()));
-            return new ProjectGroupOutcome(errors, 0, 0, 0, 0, 0);
+            return new ProjectGroupOutcome(errors, 0, 0, 0, 0, 0, false);
         }
         UpsertOutcome<ProjectEntity> rootOutcome = rootResult.get();
 
         int subProjectsCreated = 0;
         int subProjectsUpdated = 0;
         int succeeded = 1;
+        boolean attemptedSubProject = false;
+        int subProjectsSucceeded = 0;
         for (int idx : idxs) {
             ProjectCsvLine line = lines.get(idx);
             if (line.hasSubProject()) {
+                attemptedSubProject = true;
                 Either<ProblemDetail, UpsertOutcome<ProjectEntity>> subResult =
                         upsertSubProject(organisationId, rootOutcome.entity(), line, resolvedProjectIds);
                 if (subResult.isLeft()) {
                     errors.add(rowError(idx + 1, subResult.getLeft()));
                 } else {
                     if (subResult.get().created()) subProjectsCreated++; else subProjectsUpdated++;
+                    subProjectsSucceeded++;
                     succeeded++;
                 }
             }
         }
 
+        boolean orphanRoot = rootOutcome.created() && attemptedSubProject && subProjectsSucceeded == 0;
+        if (orphanRoot) {
+            // The transaction wrapping this group will be rolled back — undo the cache entry so a
+            // later Milestones/Events file in the same request doesn't resolve to a project id that
+            // no longer exists.
+            resolvedProjectIds.remove(root.getExternalProjectId());
+            errors.add(rowError(rootRowNumber, Problems.badRequest(
+                    "Project not created: every sub-project row for it failed (see row error(s) above)",
+                    ErrorTitleConstants.PROJECT_NOT_CREATED_NO_SUBPROJECT)));
+            return new ProjectGroupOutcome(errors, 0, 0, 0, 0, 0, true);
+        }
+
         return new ProjectGroupOutcome(errors, succeeded,
                 rootOutcome.created() ? 1 : 0, rootOutcome.created() ? 0 : 1,
-                subProjectsCreated, subProjectsUpdated);
+                subProjectsCreated, subProjectsUpdated, false);
     }
 
     private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> upsertRootProject(String organisationId,
@@ -902,8 +932,11 @@ public class FundingBulkImportService {
             int projectsUpdated, int subProjectsUpdated) {
     }
 
-    private record ProjectGroupOutcome(List<FundingRowError> errors, int succeeded, int projectsCreated,
-            int projectsUpdated, int subProjectsCreated, int subProjectsUpdated) {
+    /** {@code orphanRoot} is true when the root was newly created by this call but every sub-project
+     * row that tried to attach to it failed — signals {@link FundingProjectGroupTransactionRunner}
+     * to roll the whole group's transaction back instead of leaving a childless root behind. */
+    record ProjectGroupOutcome(List<FundingRowError> errors, int succeeded, int projectsCreated,
+            int projectsUpdated, int subProjectsCreated, int subProjectsUpdated, boolean orphanRoot) {
     }
 
     private record MilestonesFileOutcome(FundingFileImportResult fileResult, int milestonesCreated, int milestonesUpdated) {
