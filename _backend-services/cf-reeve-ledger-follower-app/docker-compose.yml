@@ -38,6 +38,11 @@ services:
     depends_on:
       postgres-follower:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "java", "-jar", "/healthcheck.jar", "9090"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     networks:
       - lob
 

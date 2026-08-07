@@ -102,6 +102,24 @@ tasks.jacocoTestReport {
     }
 }
 
+val healthcheckMainClass = "org.cardano.foundation.lob.health.Healthcheck"
+
+val healthcheckJar by tasks.registering(Jar::class) {
+    dependsOn(tasks.named("classes"))
+    archiveBaseName.set("healthcheck")
+    archiveVersion.set("")
+    from(sourceSets.main.get().output) {
+        include(healthcheckMainClass.replace('.', '/') + ".class")
+    }
+    manifest {
+        attributes["Main-Class"] = healthcheckMainClass
+    }
+}
+
+tasks.named("assemble") {
+    dependsOn(healthcheckJar)
+}
+
 tasks.bootJar {
     archiveClassifier = "all"
 }
