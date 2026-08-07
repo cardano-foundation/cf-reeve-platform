@@ -5,8 +5,6 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -51,7 +49,11 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
  * mocked ones. {@code FundingBulkImportServiceTest} runs outside a Spring container, where its
  * transaction runners are inert no-ops, so it cannot prove DB-level behavior.
  *
- * <p>Covers: the orphan-root-project rollback fix (missing-sub-project-title.csv), the Events file's
+ * <p>All CSV fixtures are embedded as string constants below rather than read from disk — earlier
+ * versions of this test read them from the author's local {@code ~/Downloads}, which doesn't exist on
+ * CI and made every one of these tests fail there.
+ *
+ * <p>Covers: the orphan-root-project rollback fix (missing-sub-project-title), the Events file's
  * event-type-conditional column validation, the duplicate-milestone-allocation crash fix, and that
  * External Project ID / External Milestone ID stay strict, exact-match references (a project's title
  * is not an acceptable substitute, even when the title is real and seeded).
@@ -61,7 +63,64 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 class FundingBulkImportE2ETest {
 
     private static final String ORG_ID = "org1";
-    private static final Path MISSING_SUB_PROJECT_TITLE_CSV = Path.of("/home/mrusso/Downloads/missing-sub-project-title.csv");
+
+    private static final String PROJECTS_TEMPLATE_CSV = """
+            External Project ID,Project Title,Funding ID,Total Amount,Currency,Parent External Project ID,Sub External Project ID,Sub Project Title,Sub Funding ID,Sub Total Amount,Sub Currency
+            PROJ-A,Project A,GRANT-2025-001,100000.00,USD,,SUB-1,Sub One,,40000.00,USD
+            """;
+
+    private static final String MILESTONES_TEMPLATE_CSV = """
+            External Project ID,External Milestone ID,Milestone Title,Milestone Amount,Currency,Milestone Date
+            SUB-1,MS-1,Milestone One,20000.00,USD,2026-06-30
+            SUB-1,MS-2,Milestone Two,20000.00,USD,2026-07-15
+            """;
+
+    private static final String EVENTS_TEMPLATE_CSV = """
+            Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,External Project ID,External Milestone ID,Allocated Amount
+            FUNDING,GRANT-2025-001,,Cardano Foundation,USD,2026-07-01,,,,,,,,,SUB-1,MS-1,20000.00
+            FUNDING,GRANT-2025-001,,Cardano Foundation,USD,2026-07-01,,,,,,,,,SUB-1,MS-2,20000.00
+            SPENDING,GRANT-2025-001,,,USD,2026-07-20,Personnel,Vendor AB,36000.00,EUR,0.9,40000.00,,Invoice #INV-001,SUB-1,MS-1,20000.00
+            SPENDING,GRANT-2025-001,,,USD,2026-07-20,Personnel,Vendor AB,36000.00,EUR,0.9,40000.00,,Invoice #INV-001,SUB-1,MS-2,20000.00
+            """;
+
+    private static final String EVENTS_DUPLICATE_MILESTONE_ALLOCATION_CSV = """
+            Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Currency FCY,FX Rate,Amount RCY,Hash,Notes,External Project ID,External Milestone ID,Allocated Amount
+            FUNDING,GRANT-2025-Z,,Cardano Foundation,USD,2026-07-01,,,,,,,,39bb7762-5cfb-430b-bfe7-b0982fc27316,d3978bf7-e9b0-493c-b821-debdaee55708,2000.00
+            FUNDING,GRANT-2025-Z,,Cardano Foundation,USD,2026-07-01,,,,,,,,39bb7762-5cfb-430b-bfe7-b0982fc27316,d3978bf7-e9b0-493c-b821-debdaee55708,2000.00
+            """;
+
+    // Funding ID missing -> optional, row succeeds.
+    private static final String MISSING_FUNDING_ID_CSV = """
+            External Project ID,Project Title,Total Amount,Currency,Parent External Project ID,Sub External Project ID,Sub Project Title,Sub Funding ID,Sub Total Amount,Sub Currency
+            PROJ-A,Project A,100000.00,USD,,SUB-1,Sub One,,40000.00,USD
+            """;
+
+    // Root Project Title missing -> required; fails before any persistence (pre-existing behavior,
+    // not part of the orphan-root fix).
+    private static final String MISSING_PROJECT_TITLE_CSV = """
+            External Project ID,Funding ID,Total Amount,Currency,Parent External Project ID,Sub External Project ID,Sub Project Title,Sub Funding ID,Sub Total Amount,Sub Currency
+            PROJ-A,GRANT-2025-001,100000.00,USD,,SUB-1,Sub One,,40000.00,USD
+            """;
+
+    // Sub Currency missing -> now required to match the REST API's stricter shape; fails, root
+    // rolled back as an orphan (no surviving sub-project).
+    private static final String MISSING_SUB_CURRENCY_CSV = """
+            External Project ID,Project Title,Funding ID,Total Amount,Currency,Parent External Project ID,Sub External Project ID,Sub Project Title,Sub Funding ID,Sub Total Amount
+            PROJ-D,Project D,GRANT-2025-003,100000.00,USD,,SUB-3,Sub One,,40000.00
+            """;
+
+    // Sub Project Title missing -> required; this is the orphan-root case the fix covers.
+    private static final String MISSING_SUB_PROJECT_TITLE_CSV = """
+            External Project ID,Project Title,Funding ID,Total Amount,Currency,Parent External Project ID,Sub External Project ID,Sub Funding ID,Sub Total Amount,Sub Currency
+            PROJ-E,Project E,GRANT-2025-004,100000.00,USD,,SUB-1,,40000.00,USD
+            """;
+
+    // Sub Total Amount missing -> now required to match the REST API's stricter shape; fails, root
+    // rolled back as an orphan.
+    private static final String MISSING_SUB_TOTAL_AMOUNT_CSV = """
+            External Project ID,Project Title,Funding ID,Total Amount,Currency,Parent External Project ID,Sub External Project ID,Sub Project Title,Sub Funding ID,Sub Currency
+            PROJ-C,Project C,GRANT-2025-002,100000.00,USD,,SUB-1,Sub One,,USD
+            """;
 
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16.3");
@@ -100,8 +159,7 @@ class FundingBulkImportE2ETest {
         when(organisationPublicApi.findByOrganisationId("org-events-good")).thenReturn(Optional.of(new Organisation()));
         seedProjectsAndMilestonesTemplate("org-events-good");
 
-        byte[] csvBytes = Files.readAllBytes(Path.of("/home/mrusso/Downloads/funding_events_template (2).csv"));
-        MultipartFile file = new MockMultipartFile("file", "funding_events_template (2).csv", "text/csv", csvBytes);
+        MultipartFile file = new MockMultipartFile("file", "funding_events_template.csv", "text/csv", EVENTS_TEMPLATE_CSV.getBytes());
 
         BulkImportRequest request = BulkImportRequest.builder()
                 .organisationId("org-events-good")
@@ -171,8 +229,8 @@ class FundingBulkImportE2ETest {
         seedProjectAndMilestone("org-events-missing-amt", "39bb7762-5cfb-430b-bfe7-b0982fc27316",
                 "d3978bf7-e9b0-493c-b821-debdaee55708");
 
-        byte[] csvBytes = Files.readAllBytes(Path.of("/home/mrusso/Downloads/funding_events_missing_funding_amount_fcy.csv"));
-        MultipartFile file = new MockMultipartFile("file", "funding_events_missing_funding_amount_fcy.csv", "text/csv", csvBytes);
+        MultipartFile file = new MockMultipartFile("file", "funding_events_missing_funding_amount_fcy.csv", "text/csv",
+                EVENTS_DUPLICATE_MILESTONE_ALLOCATION_CSV.getBytes());
 
         BulkImportRequest request = BulkImportRequest.builder()
                 .organisationId("org-events-missing-amt")
@@ -218,13 +276,13 @@ class FundingBulkImportE2ETest {
     /** Seeds PROJ-A/SUB-1 + MS-1/MS-2 exactly as the downloadable Projects/Milestones templates do. */
     private void seedProjectsAndMilestonesTemplate(String orgId) throws IOException {
         MultipartFile projectsFile = new MockMultipartFile("file", "funding_projects_template.csv", "text/csv",
-                Files.readAllBytes(Path.of("/home/mrusso/Downloads/funding_projects_template.csv")));
+                PROJECTS_TEMPLATE_CSV.getBytes());
         FundingBulkImportResult projResult = bulkImportService.importFiles(BulkImportRequest.builder()
                 .organisationId(orgId).files(List.of(projectsFile)).build());
         assertThat(projResult.getFiles().get(0).getRowErrors()).as("seed projects").isEmpty();
 
         MultipartFile milestonesFile = new MockMultipartFile("file", "funding_milestones_template.csv", "text/csv",
-                Files.readAllBytes(Path.of("/home/mrusso/Downloads/funding_milestones_template.csv")));
+                MILESTONES_TEMPLATE_CSV.getBytes());
         FundingBulkImportResult msResult = bulkImportService.importFiles(BulkImportRequest.builder()
                 .organisationId(orgId).files(List.of(milestonesFile)).build());
         assertThat(msResult.getFiles().get(0).getRowErrors()).as("seed milestones").isEmpty();
@@ -255,9 +313,8 @@ class FundingBulkImportE2ETest {
     void missingSubProjectTitleCsv_doesNotLeaveOrphanRootProjectBehind() throws IOException {
         when(organisationPublicApi.findByOrganisationId(ORG_ID)).thenReturn(Optional.of(new Organisation()));
 
-        byte[] csvBytes = Files.readAllBytes(MISSING_SUB_PROJECT_TITLE_CSV);
         MultipartFile file = new MockMultipartFile(
-                "file", "missing-sub-project-title.csv", "text/csv", csvBytes);
+                "file", "missing-sub-project-title.csv", "text/csv", MISSING_SUB_PROJECT_TITLE_CSV.getBytes());
 
         BulkImportRequest request = BulkImportRequest.builder()
                 .organisationId(ORG_ID)
@@ -277,24 +334,23 @@ class FundingBulkImportE2ETest {
     }
 
     /**
-     * Sweeps all five "missing-*.csv" sample files. Only Funding ID is genuinely optional (never
-     * required for a root project); the other four are all required fields on sub-project/root
-     * <em>create</em> and correctly fail without persisting anything: Project Title and Sub Project
-     * Title always were required, and Sub Total Amount / Sub Currency were tightened to match the
-     * REST API's flat {@code parentProjectId} shape ({@code ProjectWithMilestonesCreateRequest}:
-     * {@code totalAmount} {@code @NotNull}, {@code currency} {@code @NotBlank}) — even though the
-     * API's own nested {@code subProjects} shape ({@code ProjectTreeNodeRequest}) leaves both
-     * optional; the CSV path deliberately picks the stricter of the two. Each case uses its own
-     * organisationId so the five runs can't collide with each other in the shared database.
+     * Sweeps all five "missing-*" cases. Only Funding ID is genuinely optional (never required for a
+     * root project); the other four are all required fields on sub-project/root <em>create</em> and
+     * correctly fail without persisting anything: Project Title and Sub Project Title always were
+     * required, and Sub Total Amount / Sub Currency were tightened to match the REST API's stricter
+     * flat {@code parentProjectId} shape ({@code ProjectWithMilestonesCreateRequest}: {@code totalAmount}
+     * {@code @NotNull}, {@code currency} {@code @NotBlank}) — even though the API's own nested
+     * {@code subProjects} shape ({@code ProjectTreeNodeRequest}) leaves both optional; the CSV path
+     * deliberately picks the stricter of the two. Each case uses its own organisationId so the five
+     * runs can't collide with each other in the shared database.
      */
     @ParameterizedTest(name = "{0}")
     @MethodSource("missingFieldCsvCases")
-    void missingFieldCsvFiles_behaveAsCurrentlyValidated(String csvFileName, String orgId,
+    void missingFieldCsvFiles_behaveAsCurrentlyValidated(String caseName, String csvContent, String orgId,
             String externalProjectId, boolean expectSuccess) throws IOException {
         when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
 
-        byte[] csvBytes = Files.readAllBytes(Path.of("/home/mrusso/Downloads/" + csvFileName));
-        MultipartFile file = new MockMultipartFile("file", csvFileName, "text/csv", csvBytes);
+        MultipartFile file = new MockMultipartFile("file", caseName + ".csv", "text/csv", csvContent.getBytes());
 
         BulkImportRequest request = BulkImportRequest.builder()
                 .organisationId(orgId)
@@ -308,29 +364,21 @@ class FundingBulkImportE2ETest {
         if (expectSuccess) {
             assertThat(result.getFiles().get(0).getRowErrors()).isEmpty();
             assertThat(result.getProjectsCreated()).isEqualTo(1);
-            assertThat(projectPersisted).as("%s: %s should be persisted", csvFileName, externalProjectId).isTrue();
+            assertThat(projectPersisted).as("%s: %s should be persisted", caseName, externalProjectId).isTrue();
         } else {
             assertThat(result.getFiles().get(0).getRowErrors()).isNotEmpty();
             assertThat(result.getProjectsCreated()).isZero();
-            assertThat(projectPersisted).as("%s: %s should NOT be persisted", csvFileName, externalProjectId).isFalse();
+            assertThat(projectPersisted).as("%s: %s should NOT be persisted", caseName, externalProjectId).isFalse();
         }
     }
 
     static Stream<Arguments> missingFieldCsvCases() {
         return Stream.of(
-                // Funding ID missing -> optional, row succeeds.
-                arguments("missing-funding-id.csv", "org-missing-funding-id", "PROJ-A", true),
-                // Root Project Title missing -> required; fails before any persistence (pre-existing
-                // behavior, not part of the orphan-root fix).
-                arguments("missing-project-title.csv", "org-missing-project-title", "PROJ-A", false),
-                // Sub Currency missing -> now required to match the REST API's stricter shape; fails,
-                // root rolled back as an orphan (no surviving sub-project).
-                arguments("missing-sub-currency.csv", "org-missing-sub-currency", "PROJ-D", false),
-                // Sub Project Title missing -> required; this is the orphan-root case the fix covers.
-                arguments("missing-sub-project-title.csv", "org-missing-sub-project-title-2", "PROJ-E", false),
-                // Sub Total Amount missing -> now required to match the REST API's stricter shape;
-                // fails, root rolled back as an orphan.
-                arguments("missing-sub-total-amount.csv", "org-missing-sub-total-amount", "PROJ-C", false)
+                arguments("missing-funding-id", MISSING_FUNDING_ID_CSV, "org-missing-funding-id", "PROJ-A", true),
+                arguments("missing-project-title", MISSING_PROJECT_TITLE_CSV, "org-missing-project-title", "PROJ-A", false),
+                arguments("missing-sub-currency", MISSING_SUB_CURRENCY_CSV, "org-missing-sub-currency", "PROJ-D", false),
+                arguments("missing-sub-project-title", MISSING_SUB_PROJECT_TITLE_CSV, "org-missing-sub-project-title-2", "PROJ-E", false),
+                arguments("missing-sub-total-amount", MISSING_SUB_TOTAL_AMOUNT_CSV, "org-missing-sub-total-amount", "PROJ-C", false)
         );
     }
 
