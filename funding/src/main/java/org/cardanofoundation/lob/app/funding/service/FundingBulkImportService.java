@@ -242,28 +242,10 @@ public class FundingBulkImportService {
         }
         UpsertOutcome<ProjectEntity> rootOutcome = rootResult.get();
 
-        int subProjectsCreated = 0;
-        int subProjectsUpdated = 0;
-        int succeeded = 1;
-        boolean attemptedSubProject = false;
-        int subProjectsSucceeded = 0;
-        for (int idx : idxs) {
-            ProjectCsvLine line = lines.get(idx);
-            if (line.hasSubProject()) {
-                attemptedSubProject = true;
-                Either<ProblemDetail, UpsertOutcome<ProjectEntity>> subResult =
-                        upsertSubProject(organisationId, rootOutcome.entity(), line, resolvedProjectIds);
-                if (subResult.isLeft()) {
-                    errors.add(rowError(idx + 1, subResult.getLeft()));
-                } else {
-                    if (subResult.get().created()) subProjectsCreated++; else subProjectsUpdated++;
-                    subProjectsSucceeded++;
-                    succeeded++;
-                }
-            }
-        }
+        SubProjectRowsOutcome subOutcome = upsertSubProjectRows(organisationId, lines, idxs, rootOutcome.entity(), resolvedProjectIds);
+        errors.addAll(subOutcome.errors());
 
-        boolean orphanRoot = rootOutcome.created() && attemptedSubProject && subProjectsSucceeded == 0;
+        boolean orphanRoot = rootOutcome.created() && subOutcome.attempted() && subOutcome.succeeded() == 0;
         if (orphanRoot) {
             // The transaction wrapping this group will be rolled back — undo the cache entry so a
             // later Milestones/Events file in the same request doesn't resolve to a project id that
@@ -275,9 +257,36 @@ public class FundingBulkImportService {
             return new ProjectGroupOutcome(errors, 0, 0, 0, 0, 0, true);
         }
 
-        return new ProjectGroupOutcome(errors, succeeded,
+        return new ProjectGroupOutcome(errors, 1 + subOutcome.succeeded(),
                 rootOutcome.created() ? 1 : 0, rootOutcome.created() ? 0 : 1,
-                subProjectsCreated, subProjectsUpdated, false);
+                subOutcome.created(), subOutcome.updated(), false);
+    }
+
+    /** Upserts each sub-project row in the group independently, tallying outcomes for the caller. */
+    private SubProjectRowsOutcome upsertSubProjectRows(String organisationId, List<ProjectCsvLine> lines,
+            List<Integer> idxs, ProjectEntity rootEntity, Map<String, String> resolvedProjectIds) {
+
+        List<FundingRowError> errors = new ArrayList<>();
+        int created = 0;
+        int updated = 0;
+        int succeeded = 0;
+        boolean attempted = false;
+        for (int idx : idxs) {
+            ProjectCsvLine line = lines.get(idx);
+            if (!line.hasSubProject()) {
+                continue;
+            }
+            attempted = true;
+            Either<ProblemDetail, UpsertOutcome<ProjectEntity>> subResult =
+                    upsertSubProject(organisationId, rootEntity, line, resolvedProjectIds);
+            if (subResult.isLeft()) {
+                errors.add(rowError(idx + 1, subResult.getLeft()));
+                continue;
+            }
+            if (subResult.get().created()) created++; else updated++;
+            succeeded++;
+        }
+        return new SubProjectRowsOutcome(errors, created, updated, succeeded, attempted);
     }
 
     private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> upsertRootProject(String organisationId,
@@ -939,6 +948,9 @@ public class FundingBulkImportService {
     }
 
     private record UpsertOutcome<T>(T entity, boolean created) {
+    }
+
+    private record SubProjectRowsOutcome(List<FundingRowError> errors, int created, int updated, int succeeded, boolean attempted) {
     }
 
     private record ProjectsFileOutcome(FundingFileImportResult fileResult, int projectsCreated, int subProjectsCreated,

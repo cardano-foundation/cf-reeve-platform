@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.Mockito.when;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -13,7 +12,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.ComponentScan.Filter;
 import org.springframework.context.annotation.Configuration;
@@ -22,6 +20,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.web.multipart.MultipartFile;
 
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -151,11 +150,11 @@ class FundingBulkImportE2ETest {
     private FundingBulkImportService bulkImportService;
     @Autowired
     private FundingProjectRepository projectRepository;
-    @MockBean
+    @MockitoBean
     private OrganisationPublicApiIF organisationPublicApi;
 
     @Test
-    void eventsTemplateCsv_seededWithMatchingProjectsAndMilestones_importsCleanly() throws IOException {
+    void eventsTemplateCsv_seededWithMatchingProjectsAndMilestones_importsCleanly() {
         when(organisationPublicApi.findByOrganisationId("org-events-good")).thenReturn(Optional.of(new Organisation()));
         seedProjectsAndMilestonesTemplate("org-events-good");
 
@@ -173,15 +172,17 @@ class FundingBulkImportE2ETest {
     }
 
     @Test
-    void fundingEventSingleRow_noAmountFcyColumnAtAll_importsCleanly() throws IOException {
+    void fundingEventSingleRow_noAmountFcyColumnAtAll_importsCleanly() {
         when(organisationPublicApi.findByOrganisationId("org-events-single-funding")).thenReturn(Optional.of(new Organisation()));
         seedProjectAndMilestone("org-events-single-funding", "PROJ-X", "MS-X");
 
         // A FUNDING row with the "Amount FCY" column absent entirely (not just blank) — spend-detail
         // fields are only relevant to SPENDING events (FundingValidations.spendDetail), so this must
         // import cleanly.
-        String csv = "Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Currency FCY,FX Rate,Amount RCY,Hash,Notes,External Project ID,External Milestone ID,Allocated Amount\n"
-                + "FUNDING,GRANT-SINGLE,,Cardano Foundation,USD,2026-07-01,,,,,,,,PROJ-X,MS-X,2000.00\n";
+        String csv = """
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Currency FCY,FX Rate,Amount RCY,Hash,Notes,External Project ID,External Milestone ID,Allocated Amount
+                FUNDING,GRANT-SINGLE,,Cardano Foundation,USD,2026-07-01,,,,,,,,PROJ-X,MS-X,2000.00
+                """;
         MultipartFile file = new MockMultipartFile("file", "single-funding-no-amountfcy.csv", "text/csv", csv.getBytes());
 
         BulkImportRequest request = BulkImportRequest.builder()
@@ -196,15 +197,17 @@ class FundingBulkImportE2ETest {
     }
 
     @Test
-    void spendingEventSingleRow_missingCategoryVendorAmountColumns_reportsCleanValidationError() throws IOException {
+    void spendingEventSingleRow_missingCategoryVendorAmountColumns_reportsCleanValidationError() {
         when(organisationPublicApi.findByOrganisationId("org-events-single-spending")).thenReturn(Optional.of(new Organisation()));
         seedProjectAndMilestone("org-events-single-spending", "PROJ-Y", "MS-Y");
 
         // A SPENDING event with Category/Vendor/Amount FCY/FX Rate/Amount RCY columns entirely absent
         // from the header (not just blank) — these ARE required for SPENDING per FundingValidations.spendDetail,
         // and must fail with a clean 400-shaped row error, not an exception.
-        String csv = "Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Hash,Notes,External Project ID,External Milestone ID,Allocated Amount\n"
-                + "SPENDING,GRANT-SINGLE-2,,,USD,2026-07-20,,,PROJ-Y,MS-Y,2000.00\n";
+        String csv = """
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Hash,Notes,External Project ID,External Milestone ID,Allocated Amount
+                SPENDING,GRANT-SINGLE-2,,,USD,2026-07-20,,,PROJ-Y,MS-Y,2000.00
+                """;
         MultipartFile file = new MockMultipartFile("file", "single-spending-missing-cols.csv", "text/csv", csv.getBytes());
 
         BulkImportRequest request = BulkImportRequest.builder()
@@ -220,7 +223,7 @@ class FundingBulkImportE2ETest {
     }
 
     @Test
-    void duplicateMilestoneAllocationRowsInSameEvent_reportsCleanValidationErrorInsteadOfCrashing() throws IOException {
+    void duplicateMilestoneAllocationRowsInSameEvent_reportsCleanValidationErrorInsteadOfCrashing() {
         when(organisationPublicApi.findByOrganisationId("org-events-missing-amt")).thenReturn(Optional.of(new Organisation()));
 
         // Seed a project + milestone whose external ids literally match the ones referenced in the
@@ -248,7 +251,7 @@ class FundingBulkImportE2ETest {
     }
 
     @Test
-    void eventsCsv_projectTitleDoesNotResolveExternalProjectId_reportsNotFound() throws IOException {
+    void eventsCsv_projectTitleDoesNotResolveExternalProjectId_reportsNotFound() {
         String orgId = "org-events-title-not-resolved";
         when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
 
@@ -258,8 +261,10 @@ class FundingBulkImportE2ETest {
         // UI-created data is a frontend-side gap, not something the Events CSV importer papers over.
         seedProjectAndMilestone(orgId, "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222");
 
-        String csv = "Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,External Project ID,External Milestone ID,Allocated Amount\n"
-                + "FUNDING,GRANT-TITLE,,Cardano Foundation,USD,2026-07-01,,,,,,,,,Seed Project,Seed Milestone,2000.00\n";
+        String csv = """
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,External Project ID,External Milestone ID,Allocated Amount
+                FUNDING,GRANT-TITLE,,Cardano Foundation,USD,2026-07-01,,,,,,,,,Seed Project,Seed Milestone,2000.00
+                """;
         MultipartFile file = new MockMultipartFile("file", "events-by-title.csv", "text/csv", csv.getBytes());
 
         BulkImportRequest request = BulkImportRequest.builder()
@@ -274,7 +279,7 @@ class FundingBulkImportE2ETest {
     }
 
     /** Seeds PROJ-A/SUB-1 + MS-1/MS-2 exactly as the downloadable Projects/Milestones templates do. */
-    private void seedProjectsAndMilestonesTemplate(String orgId) throws IOException {
+    private void seedProjectsAndMilestonesTemplate(String orgId) {
         MultipartFile projectsFile = new MockMultipartFile("file", "funding_projects_template.csv", "text/csv",
                 PROJECTS_TEMPLATE_CSV.getBytes());
         FundingBulkImportResult projResult = bulkImportService.importFiles(BulkImportRequest.builder()
@@ -289,7 +294,7 @@ class FundingBulkImportE2ETest {
     }
 
     /** Seeds a root project and one milestone under it with the given external ids, via the real Projects/Milestones CSV path. */
-    private void seedProjectAndMilestone(String orgId, String externalProjectId, String externalMilestoneId) throws IOException {
+    private void seedProjectAndMilestone(String orgId, String externalProjectId, String externalMilestoneId) {
         String projectsCsv = "External Project ID,Project Title,Funding ID,Total Amount,Currency,Parent External Project ID,Sub External Project ID,Sub Project Title,Sub Funding ID,Sub Total Amount,Sub Currency\n"
                 + externalProjectId + ",Seed Project,,50000.00,USD,,,,,,\n";
         MultipartFile projectsFile = new MockMultipartFile("file", "seed-projects.csv", "text/csv", projectsCsv.getBytes());
@@ -310,7 +315,7 @@ class FundingBulkImportE2ETest {
     }
 
     @Test
-    void missingSubProjectTitleCsv_doesNotLeaveOrphanRootProjectBehind() throws IOException {
+    void missingSubProjectTitleCsv_doesNotLeaveOrphanRootProjectBehind() {
         when(organisationPublicApi.findByOrganisationId(ORG_ID)).thenReturn(Optional.of(new Organisation()));
 
         MultipartFile file = new MockMultipartFile(
@@ -347,7 +352,7 @@ class FundingBulkImportE2ETest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("missingFieldCsvCases")
     void missingFieldCsvFiles_behaveAsCurrentlyValidated(String caseName, String csvContent, String orgId,
-            String externalProjectId, boolean expectSuccess) throws IOException {
+            String externalProjectId, boolean expectSuccess) {
         when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
 
         MultipartFile file = new MockMultipartFile("file", caseName + ".csv", "text/csv", csvContent.getBytes());
