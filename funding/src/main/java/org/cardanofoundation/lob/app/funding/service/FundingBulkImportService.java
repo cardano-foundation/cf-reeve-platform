@@ -218,7 +218,6 @@ public class FundingBulkImportService {
                 projectsCreated, subProjectsCreated, projectsUpdated, subProjectsUpdated);
     }
 
-
     /**
      * Upserts one group's root row, then each of its sub-project rows independently of the others.
      * Exception: if the root is newly created by this call and every sub-project row that tried to
