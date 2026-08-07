@@ -273,18 +273,17 @@ public class FundingBulkImportService {
         boolean attempted = false;
         for (int idx : idxs) {
             ProjectCsvLine line = lines.get(idx);
-            if (!line.hasSubProject()) {
-                continue;
+            if (line.hasSubProject()) {
+                attempted = true;
+                Either<ProblemDetail, UpsertOutcome<ProjectEntity>> subResult =
+                        upsertSubProject(organisationId, rootEntity, line, resolvedProjectIds);
+                if (subResult.isLeft()) {
+                    errors.add(rowError(idx + 1, subResult.getLeft()));
+                } else {
+                    if (subResult.get().created()) created++; else updated++;
+                    succeeded++;
+                }
             }
-            attempted = true;
-            Either<ProblemDetail, UpsertOutcome<ProjectEntity>> subResult =
-                    upsertSubProject(organisationId, rootEntity, line, resolvedProjectIds);
-            if (subResult.isLeft()) {
-                errors.add(rowError(idx + 1, subResult.getLeft()));
-                continue;
-            }
-            if (subResult.get().created()) created++; else updated++;
-            succeeded++;
         }
         return new SubProjectRowsOutcome(errors, created, updated, succeeded, attempted);
     }
