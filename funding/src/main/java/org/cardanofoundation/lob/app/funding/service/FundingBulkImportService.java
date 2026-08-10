@@ -59,22 +59,24 @@ import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
  * <p>Every reference in these files is by <b>title</b>, not by any external/user-defined id — project
  * identity is (parent scope, projectTitle), milestone identity is (project, milestoneTitle), matching
  * the JSON API. A bare title is not necessarily unique across the whole organisation (only within its
- * sibling scope), so lookups that don't yet know the exact scope (a {@code Parent Project Title} or an
- * Events-file reference) search broadly and fail with an "ambiguous reference" error if more than one
- * project shares that title — see {@link #findExistingProjectByTitle}.
+ * sibling scope); the Projects+Milestones file always knows a project's exact scope from the row itself
+ * (root, or the specific parent named on that row), so its lookups are exact. Only the Events file
+ * references a project purely by title with no other context, so it searches broadly and fails with an
+ * "ambiguous reference" error if more than one project shares that title — see
+ * {@link #findExistingProjectByTitle}.
  *
  * <p><b>Upsert semantics</b> (so re-uploading a file with one changed row is safe):
  * <ul>
- *   <li>Projects+Milestones file: a project (root or sub-project, arbitrary depth via
- *   {@code Parent Project Title}) is <em>created</em> when no project with its title exists yet in its
- *   parent scope, or <em>updated</em> in place when it does. Consecutive rows sharing the same
- *   ({@code Parent Project Title}, {@code Project Title}) pair are grouped into one project with
- *   multiple milestones — one milestone per row, created or updated the same way by
- *   {@code Milestone Title} within that project. A row with blank milestone columns declares the
- *   project alone. The project is resolved/saved once per group; each row's milestone (if any) is then
- *   upserted independently of its siblings, so one bad milestone row doesn't block the others — but if
- *   the project itself fails to resolve/create, every row in the group fails together (there is nothing
- *   to attach milestones to).</li>
+ *   <li>Projects+Milestones file: a root project's columns ({@code Project Title}, {@code Funding ID},
+ *   {@code Total Amount}, {@code Currency}) and, optionally on the same row, one sub-project's columns
+ *   ({@code Sub *}) and/or one milestone's columns ({@code Milestone *}) — the milestone belongs to the
+ *   sub-project when one is present on the row, otherwise to the root. Consecutive rows sharing the same
+ *   root {@code Project Title} are grouped into one project; the root is resolved/created once per group
+ *   (from whichever row in the group actually carries its columns — not necessarily the first), and each
+ *   row's sub-project and milestone are then resolved independently of the other rows, so one bad row
+ *   doesn't block its siblings. This is deliberately row-order-independent within a group: a sub-project
+ *   or milestone is always created directly from the data on its own row, never by looking up another
+ *   row's title, so shuffling rows around never breaks the import.</li>
  *   <li>Events file: pure validation, no creation. Both {@code Project Title} and
  *   {@code Milestone Title} must already exist — this file carries only allocation amounts, not
  *   enough data to create a project or milestone from scratch.</li>
@@ -173,8 +175,8 @@ public class FundingBulkImportService {
     }
 
     // -------------------------------------------------------------------------
-    // Projects+Milestones file — upsert: create/update the project (root or sub, any depth via
-    // Parent Project Title), then upsert each row's milestone (if any) independently.
+    // Projects+Milestones file — upsert: create/update the root project once per group, then upsert
+    // each row's sub-project and/or milestone independently.
     // -------------------------------------------------------------------------
 
     private ProjectsMilestonesFileOutcome processProjectsMilestonesFile(String organisationId, MultipartFile file, Map<String, String> resolvedProjectIds) {
@@ -184,10 +186,10 @@ public class FundingBulkImportService {
         }
 
         List<ProjectMilestoneCsvLine> lines = parsed.get();
-        // Group consecutive/duplicate rows sharing the same (parent, title) pair — the project is
-        // upserted once per group, and each grouped row's milestone columns (if any) are upserted as
-        // their own milestone, independently of one another.
-        LinkedHashMap<String, List<Integer>> groups = groupByKey(lines, FundingBulkImportService::projectGroupKey);
+        // Group consecutive/duplicate rows sharing the same root Project Title — the root is upserted
+        // once per group, and each grouped row's sub-project and/or milestone columns (if any) are
+        // upserted independently of one another.
+        LinkedHashMap<String, List<Integer>> groups = groupByKey(lines, ProjectMilestoneCsvLine::getProjectTitle);
 
         List<FundingRowError> errors = new ArrayList<>();
         int succeeded = 0;
@@ -200,9 +202,8 @@ public class FundingBulkImportService {
             ProjectMilestoneGroupOutcome outcome = processProjectMilestoneGroup(organisationId, lines, idxs, resolvedProjectIds);
             errors.addAll(outcome.errors());
             succeeded += outcome.succeeded();
-            if (outcome.projectCreated() != null) {
-                if (outcome.projectCreated()) projectsCreated++; else projectsUpdated++;
-            }
+            projectsCreated += outcome.projectsCreated();
+            projectsUpdated += outcome.projectsUpdated();
             milestonesCreated += outcome.milestonesCreated();
             milestonesUpdated += outcome.milestonesUpdated();
         }
@@ -217,148 +218,160 @@ public class FundingBulkImportService {
                 projectsCreated, projectsUpdated, milestonesCreated, milestonesUpdated);
     }
 
-    private static String projectGroupKey(ProjectMilestoneCsvLine line) {
-        return nullToEmpty(line.getParentProjectTitle()) + "||" + nullToEmpty(line.getProjectTitle());
-    }
-
     /**
-     * Upserts one group's project once, then upserts each row's milestone independently of the
-     * others. If the project itself fails to resolve/create, every row in the group reports the same
-     * error (there is nothing to attach a milestone to).
+     * Upserts the group's root project once, then walks every row in the group upserting its
+     * sub-project (if any) and milestone (if any) independently of the other rows — a bad sub-project
+     * or milestone row is reported and skipped without affecting its siblings. If the root itself
+     * fails to resolve/create, every row in the group reports the same error (there is nothing to
+     * attach a sub-project or milestone to).
      */
     private ProjectMilestoneGroupOutcome processProjectMilestoneGroup(String organisationId, List<ProjectMilestoneCsvLine> lines,
             List<Integer> idxs, Map<String, String> resolvedProjectIds) {
 
-        ProjectMilestoneCsvLine first = lines.get(idxs.get(0));
-        if (isBlank(first.getProjectTitle())) {
+        if (isBlank(lines.get(idxs.get(0)).getProjectTitle())) {
             return groupFailure(idxs, Problems.badRequest("Project Title is required", ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
+        // The root's own columns may be on any row of the group, not necessarily the first — e.g. a
+        // sub-project row could come first if the file isn't ordered "root row before its subs".
+        ProjectMilestoneCsvLine rootLine = idxs.stream().map(lines::get)
+                .filter(ProjectMilestoneCsvLine::hasRootProjectData)
+                .findFirst()
+                .orElseGet(() -> lines.get(idxs.get(0)));
 
-        Either<ProblemDetail, String> parentIdE = resolveOptionalParentId(organisationId, first.getParentProjectTitle(), resolvedProjectIds);
-        if (parentIdE.isLeft()) {
-            return groupFailure(idxs, parentIdE.getLeft());
+        Either<ProblemDetail, UpsertOutcome<ProjectEntity>> rootE = upsertRootProject(organisationId, rootLine);
+        if (rootE.isLeft()) {
+            return groupFailure(idxs, rootE.getLeft());
         }
-
-        Either<ProblemDetail, UpsertOutcome<ProjectEntity>> projectE = upsertProject(organisationId, first, parentIdE.get(), resolvedProjectIds);
-        if (projectE.isLeft()) {
-            return groupFailure(idxs, projectE.getLeft());
-        }
-        ProjectEntity project = projectE.get().entity();
+        ProjectEntity root = rootE.get().entity();
+        resolvedProjectIds.put(rootLine.getProjectTitle(), root.getId());
 
         List<FundingRowError> errors = new ArrayList<>();
-        int succeeded = 1; // the project row itself
+        int succeeded = 1; // the root
+        int projectsCreated = rootE.get().created() ? 1 : 0;
+        int projectsUpdated = rootE.get().created() ? 0 : 1;
         int milestonesCreated = 0;
         int milestonesUpdated = 0;
+
         for (int idx : idxs) {
             ProjectMilestoneCsvLine line = lines.get(idx);
-            if (!line.hasMilestone()) {
-                continue;
+            ProjectEntity target = root;
+
+            if (line.hasSubProject()) {
+                Either<ProblemDetail, UpsertOutcome<ProjectEntity>> subE = upsertSubProject(root, line);
+                if (subE.isLeft()) {
+                    errors.add(rowError(idx + 1, subE.getLeft()));
+                    continue; // nothing to attach a milestone to on this row
+                }
+                target = subE.get().entity();
+                resolvedProjectIds.put(line.getSubProjectTitle(), target.getId());
+                succeeded++;
+                if (subE.get().created()) projectsCreated++; else projectsUpdated++;
             }
-            Either<ProblemDetail, Boolean> result = upsertMilestoneRow(project, line);
-            if (result.isLeft()) {
-                errors.add(rowError(idx + 1, result.getLeft()));
-                continue;
+
+            if (line.hasMilestone()) {
+                Either<ProblemDetail, Boolean> msE = upsertMilestoneRow(target, line);
+                if (msE.isLeft()) {
+                    errors.add(rowError(idx + 1, msE.getLeft()));
+                    continue;
+                }
+                succeeded++;
+                if (msE.get()) milestonesCreated++; else milestonesUpdated++;
             }
-            succeeded++;
-            if (result.get()) milestonesCreated++; else milestonesUpdated++;
         }
 
-        return new ProjectMilestoneGroupOutcome(errors, succeeded, projectE.get().created(), milestonesCreated, milestonesUpdated);
+        return new ProjectMilestoneGroupOutcome(errors, succeeded, projectsCreated, projectsUpdated, milestonesCreated, milestonesUpdated);
     }
 
     private static ProjectMilestoneGroupOutcome groupFailure(List<Integer> idxs, ProblemDetail problem) {
         List<FundingRowError> errors = idxs.stream().map(idx -> rowError(idx + 1, problem)).toList();
-        return new ProjectMilestoneGroupOutcome(errors, 0, null, 0, 0);
+        return new ProjectMilestoneGroupOutcome(errors, 0, 0, 0, 0, 0);
     }
 
-    /** Blank means "no parent" (a root project); otherwise resolves the referenced existing project's id. */
-    private Either<ProblemDetail, String> resolveOptionalParentId(String organisationId, String parentProjectTitle,
-            Map<String, String> resolvedProjectIds) {
-        if (isBlank(parentProjectTitle)) {
-            return Either.right(null);
-        }
-        return resolveProjectId(organisationId, parentProjectTitle, resolvedProjectIds);
-    }
+    private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> upsertRootProject(String organisationId, ProjectMilestoneCsvLine rootLine) {
+        Optional<ProjectEntity> existing = projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(
+                organisationId, rootLine.getProjectTitle());
 
-    private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> upsertProject(String organisationId,
-            ProjectMilestoneCsvLine first, String parentId, Map<String, String> resolvedProjectIds) {
-
-        Either<ProblemDetail, Optional<ProjectEntity>> existingE = findExistingProjectByTitle(organisationId, first.getProjectTitle());
-        if (existingE.isLeft()) {
-            return Either.left(existingE.getLeft());
-        }
-        Optional<ProjectEntity> existing = existingE.get();
-
-        Either<ProblemDetail, BigDecimal> totalAmountE = parseDecimal(first.getTotalAmount(), "Total Amount");
+        Either<ProblemDetail, BigDecimal> totalAmountE = parseDecimal(rootLine.getTotalAmount(), "Total Amount");
         if (totalAmountE.isLeft()) {
             return Either.left(totalAmountE.getLeft());
         }
 
-        return existing.isEmpty()
-                ? createProject(organisationId, first, totalAmountE.get(), parentId, resolvedProjectIds)
-                : updateProject(first, existing.get(), totalAmountE.get(), parentId, resolvedProjectIds);
-    }
-
-    private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> createProject(String organisationId, ProjectMilestoneCsvLine first,
-            BigDecimal totalAmount, String parentId, Map<String, String> resolvedProjectIds) {
-
+        if (existing.isPresent()) {
+            return updateProjectEntity(existing.get(), rootLine.getCurrency(), totalAmountE.get());
+        }
         // CREATE — full data is required.
-        if (totalAmount == null) {
+        if (totalAmountE.get() == null) {
             return Either.left(Problems.badRequest(
-                    "Total Amount is required to create project: " + first.getProjectTitle(), ErrorTitleConstants.PROJECT_AMOUNT_INVALID));
+                    "Total Amount is required to create project: " + rootLine.getProjectTitle(), ErrorTitleConstants.PROJECT_AMOUNT_INVALID));
         }
-        if (isBlank(first.getCurrency())) {
+        if (isBlank(rootLine.getCurrency())) {
             return Either.left(Problems.badRequest(
-                    "Currency is required to create project: " + first.getProjectTitle(), ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
+                    "Currency is required to create project: " + rootLine.getProjectTitle(), ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
-
-        ProjectEntity created;
-        if (parentId == null) {
-            ProjectView view = projectService.createWithMilestones(ProjectWithMilestonesCreateRequest.builder()
-                    .organisationId(organisationId)
-                    .projectTitle(first.getProjectTitle())
-                    .fundingId(blankToNull(first.getFundingId()))
-                    .totalAmount(totalAmount)
-                    .currency(first.getCurrency())
-                    .build());
-            Optional<ProblemDetail> error = view.getError();
-            if (error.isPresent()) {
-                return Either.left(error.get());
-            }
-            created = projectRepository.findById(view.getProjectId()).orElseThrow();
-        } else {
-            ProjectEntity parent = projectRepository.findById(parentId).orElseThrow();
-            Either<ProblemDetail, ProjectEntity> subResult = projectStructureService.createSubProject(
-                    parent, first.getProjectTitle(), blankToNull(first.getFundingId()), totalAmount, first.getCurrency());
-            if (subResult.isLeft()) {
-                return Either.left(subResult.getLeft());
-            }
-            created = subResult.get();
+        ProjectView view = projectService.createWithMilestones(ProjectWithMilestonesCreateRequest.builder()
+                .organisationId(organisationId)
+                .projectTitle(rootLine.getProjectTitle())
+                .fundingId(blankToNull(rootLine.getFundingId()))
+                .totalAmount(totalAmountE.get())
+                .currency(rootLine.getCurrency())
+                .build());
+        Optional<ProblemDetail> error = view.getError();
+        if (error.isPresent()) {
+            return Either.left(error.get());
         }
-        resolvedProjectIds.put(first.getProjectTitle(), created.getId());
+        ProjectEntity created = projectRepository.findById(view.getProjectId()).orElseThrow();
         return Either.right(new UpsertOutcome<>(created, true));
     }
 
-    private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> updateProject(ProjectMilestoneCsvLine first, ProjectEntity existing,
-            BigDecimal totalAmount, String parentId, Map<String, String> resolvedProjectIds) {
+    private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> upsertSubProject(ProjectEntity root, ProjectMilestoneCsvLine line) {
+        Optional<ProjectEntity> existing = projectRepository.findByParentProjectIdAndProjectTitle(root.getId(), line.getSubProjectTitle());
 
-        // UPDATE — partial: a blank CSV cell means "leave this field unchanged". projectTitle is
-        // never sent — it's immutable and we already matched the existing row by its exact title.
+        Either<ProblemDetail, BigDecimal> subAmountE = parseDecimal(line.getSubTotalAmount(), "Sub Total Amount");
+        if (subAmountE.isLeft()) {
+            return Either.left(subAmountE.getLeft());
+        }
+
+        if (existing.isPresent()) {
+            return updateProjectEntity(existing.get(), line.getSubCurrency(), subAmountE.get());
+        }
+        // CREATE — full data is required.
+        if (subAmountE.get() == null) {
+            return Either.left(Problems.badRequest(
+                    "Sub Total Amount is required to create sub-project: " + line.getSubProjectTitle(), ErrorTitleConstants.PROJECT_AMOUNT_INVALID));
+        }
+        if (isBlank(line.getSubCurrency())) {
+            return Either.left(Problems.badRequest(
+                    "Sub Currency is required to create sub-project: " + line.getSubProjectTitle(), ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
+        }
+        Either<ProblemDetail, ProjectEntity> created = projectStructureService.createSubProject(
+                root, line.getSubProjectTitle(), blankToNull(line.getSubFundingId()), subAmountE.get(), line.getSubCurrency());
+        if (created.isLeft()) {
+            return Either.left(created.getLeft());
+        }
+        return Either.right(new UpsertOutcome<>(created.get(), true));
+    }
+
+    /** UPDATE — partial: a blank CSV cell means "leave this field unchanged". Title is never sent — it's immutable and already matched. */
+    private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> updateProjectEntity(ProjectEntity existing, String currency, BigDecimal totalAmount) {
         ProjectUpdateRequest updateRequest = ProjectUpdateRequest.builder()
                 .totalAmount(totalAmount)
-                .currency(blankToNull(first.getCurrency()))
-                .parentProjectId(parentId)
+                .currency(blankToNull(currency))
                 .build();
         ProjectView view = projectService.updateProject(existing.getId(), updateRequest);
         Optional<ProblemDetail> error = view.getError();
         if (error.isPresent()) {
             return Either.left(error.get());
         }
-        resolvedProjectIds.put(first.getProjectTitle(), existing.getId());
         return Either.right(new UpsertOutcome<>(existing, false));
     }
 
-    /** Returns {@code Right(true)} when a new milestone was created, {@code Right(false)} when an existing one was updated. */
+    /**
+     * Returns {@code Right(true)} when a new milestone was created, {@code Right(false)} when an
+     * existing one was updated. A milestone's currency always matches its project's — there is no
+     * separate "Milestone Currency" column — so it's taken from the already-resolved {@code project}
+     * entity rather than the CSV row (which may leave the row-level {@code Currency} cell blank on a
+     * continuation row that doesn't re-declare the project).
+     */
     private Either<ProblemDetail, Boolean> upsertMilestoneRow(ProjectEntity project, ProjectMilestoneCsvLine line) {
         Either<ProblemDetail, BigDecimal> amountE = parseDecimal(line.getMilestoneAmount(), "Milestone Amount");
         if (amountE.isLeft()) {
@@ -370,6 +383,7 @@ public class FundingBulkImportService {
         }
         BigDecimal amount = amountE.get();
         LocalDate date = dateE.get();
+        String currency = project.getCurrency();
 
         Optional<MilestoneEntity> existing = milestoneService.findByProjectIdAndMilestoneTitle(project.getId(), line.getMilestoneTitle());
         if (existing.isPresent()) {
@@ -377,7 +391,7 @@ public class FundingBulkImportService {
             // never sent — it's immutable and we already matched the existing row by its exact title.
             MilestoneUpdateRequest updateRequest = MilestoneUpdateRequest.builder()
                     .milestoneAmount(amount)
-                    .currency(blankToNull(line.getMilestoneCurrency()))
+                    .currency(currency)
                     .milestoneDate(date)
                     .build();
             MilestoneView view = milestoneService.updateMilestone(project.getId(), existing.get().getId(), updateRequest);
@@ -389,15 +403,20 @@ public class FundingBulkImportService {
         }
 
         // CREATE — full data is required.
-        if (amount == null || isBlank(line.getMilestoneCurrency()) || date == null) {
+        if (amount == null || date == null) {
             return Either.left(Problems.badRequest(
-                    "milestoneAmount, milestoneCurrency and milestoneDate are required to create milestone: " + line.getMilestoneTitle(),
+                    "milestoneAmount and milestoneDate are required to create milestone: " + line.getMilestoneTitle(),
                     ErrorTitleConstants.MILESTONE_FIELDS_REQUIRED));
+        }
+        if (isBlank(currency)) {
+            return Either.left(Problems.badRequest(
+                    "Project " + project.getProjectTitle() + " has no currency, required to create milestone: " + line.getMilestoneTitle(),
+                    ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
         MilestoneCreateRequest request = MilestoneCreateRequest.builder()
                 .milestoneTitle(line.getMilestoneTitle())
                 .milestoneAmount(amount)
-                .currency(line.getMilestoneCurrency())
+                .currency(currency)
                 .milestoneDate(date)
                 .build();
         MilestoneView view = milestoneService.createMilestone(project.getId(), request);
@@ -680,30 +699,13 @@ public class FundingBulkImportService {
     }
 
     /**
-     * Resolves a CSV projectTitle reference to an internal project id — first against projects
-     * created/updated earlier in this same import call, then against the database. Returns an error
+     * Resolves a CSV projectTitle reference (Events file) to its project entity — first against
+     * projects created/updated earlier in this same import call (cache write-through, not read —
+     * every call still confirms against the database), then against the database. Returns an error
      * when no project matches, or when more than one project in the organisation shares that title
      * (a bare title is only guaranteed unique within its sibling scope, not organisation-wide). Never
      * creates anything.
      */
-    private Either<ProblemDetail, String> resolveProjectId(String organisationId, String projectTitle, Map<String, String> resolvedProjectIds) {
-        String cached = resolvedProjectIds.get(projectTitle);
-        if (cached != null) {
-            return Either.right(cached);
-        }
-        Either<ProblemDetail, Optional<ProjectEntity>> existingE = findExistingProjectByTitle(organisationId, projectTitle);
-        if (existingE.isLeft()) {
-            return Either.left(existingE.getLeft());
-        }
-        return existingE.get()
-                .map(project -> {
-                    resolvedProjectIds.put(projectTitle, project.getId());
-                    return Either.<ProblemDetail, String>right(project.getId());
-                })
-                .orElseGet(() -> Either.left(Problems.projectReferenceNotFound(projectTitle)));
-    }
-
-    /** Same resolution as {@link #resolveProjectId}, but returns the full entity — needed to inspect {@code parentProject}. */
     private Either<ProblemDetail, ProjectEntity> resolveExistingProjectEntity(String organisationId, String projectTitle, Map<String, String> resolvedProjectIds) {
         Either<ProblemDetail, Optional<ProjectEntity>> existingE = findExistingProjectByTitle(organisationId, projectTitle);
         if (existingE.isLeft()) {
@@ -789,9 +791,8 @@ public class FundingBulkImportService {
             int milestonesCreated, int milestonesUpdated) {
     }
 
-    /** {@code projectCreated} is null when the group failed before the project itself could be resolved. */
-    private record ProjectMilestoneGroupOutcome(List<FundingRowError> errors, int succeeded, Boolean projectCreated,
-            int milestonesCreated, int milestonesUpdated) {
+    private record ProjectMilestoneGroupOutcome(List<FundingRowError> errors, int succeeded, int projectsCreated,
+            int projectsUpdated, int milestonesCreated, int milestonesUpdated) {
     }
 
     private record EventsFileOutcome(FundingFileImportResult fileResult, int eventsCreated, int allocationsCreated) {

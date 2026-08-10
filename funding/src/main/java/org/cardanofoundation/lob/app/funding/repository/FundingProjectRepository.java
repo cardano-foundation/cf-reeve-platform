@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.funding.repository;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -27,6 +28,12 @@ public interface FundingProjectRepository extends JpaRepository<ProjectEntity, S
     boolean existsByOrganisationIdAndProjectTitleAndParentProjectIsNull(String organisationId, String projectTitle);
 
     boolean existsByOrganisationIdAndProjectTitleAndParentProjectIsNullAndIdNot(String organisationId, String projectTitle, String id);
+
+    // Exact, unambiguous scoped lookups (DB-constraint-backed) — used by the bulk CSV importer, which
+    // always knows a project's exact scope (root, or a specific parent) from the same CSV row.
+    Optional<ProjectEntity> findByOrganisationIdAndProjectTitleAndParentProjectIsNull(String organisationId, String projectTitle);
+
+    Optional<ProjectEntity> findByParentProjectIdAndProjectTitle(String parentProjectId, String projectTitle);
 
     boolean existsByParentProjectIdAndProjectTitle(String parentProjectId, String projectTitle);
 

@@ -42,34 +42,37 @@ public class FundingCsvTemplateService {
     }
 
     /**
-     * Covers the three shapes a project/milestone can take: a root with sub-projects only (Project
-     * A), sub-projects that each carry their own milestones — with the <em>same</em> milestone titles
-     * reused across sibling sub-projects Sub One/Sub Two (allowed: milestone titles are unique per
-     * project, not across siblings), and a standalone root with a milestone directly on it, no
-     * sub-projects (Project B).
+     * Covers the three shapes a project/milestone row can take: a root-only declaration (Project A's
+     * first row: no sub-project, no milestone), a sub-project with its own milestones — with the
+     * <em>same</em> milestone titles reused across sibling sub-projects Sub One/Sub Two (allowed:
+     * milestone titles are unique per project, not across siblings), and a standalone root with a
+     * milestone directly on it, no sub-project (Project B). The root's own columns and a sub-project's
+     * columns are always on the same row as each other (never split across rows referencing one
+     * another by title), so row order within the file never matters.
      */
     private void writeProjectsMilestonesTemplate(CSVWriter csvWriter) {
         csvWriter.writeNext(new String[]{
-                COL_PROJECT_TITLE, "Parent Project Title", "Funding ID", "Total Amount", "Currency",
-                COL_MILESTONE_TITLE, "Milestone Amount", "Milestone Currency", "Milestone Date"
+                COL_PROJECT_TITLE, "Funding ID", "Total Amount", "Currency",
+                "Sub Project Title", "Sub Funding ID", "Sub Total Amount", "Sub Currency",
+                COL_MILESTONE_TITLE, "Milestone Amount", "Milestone Date"
         }, false);
         csvWriter.writeNext(new String[]{
-                "Project A", "", EXAMPLE_FUNDING_ID, "100000.00", "USD", "", "", "", ""
+                "Project A", EXAMPLE_FUNDING_ID, "100000.00", "USD", "", "", "", "", "", "", ""
         }, false);
         csvWriter.writeNext(new String[]{
-                "Sub One", "Project A", "", "40000.00", "USD", "Milestone One", MILESTONE_AMOUNT, "USD", "2026-06-30"
+                "Project A", "", "", "", "Sub One", "", "40000.00", "USD", "Milestone One", MILESTONE_AMOUNT, "2026-06-30"
         }, false);
         csvWriter.writeNext(new String[]{
-                "Sub One", "Project A", "", "", "", "Milestone Two", MILESTONE_AMOUNT, "USD", "2026-07-15"
+                "Project A", "", "", "", "Sub One", "", "", "", "Milestone Two", MILESTONE_AMOUNT, "2026-07-15"
         }, false);
         csvWriter.writeNext(new String[]{
-                "Sub Two", "Project A", "", "40000.00", "USD", "Milestone One", MILESTONE_AMOUNT, "USD", "2026-06-30"
+                "Project A", "", "", "", "Sub Two", "", "40000.00", "USD", "Milestone One", MILESTONE_AMOUNT, "2026-06-30"
         }, false);
         csvWriter.writeNext(new String[]{
-                "Sub Two", "Project A", "", "", "", "Milestone Two", MILESTONE_AMOUNT, "USD", "2026-07-15"
+                "Project A", "", "", "", "Sub Two", "", "", "", "Milestone Two", MILESTONE_AMOUNT, "2026-07-15"
         }, false);
         csvWriter.writeNext(new String[]{
-                "Project B", "", "GRANT-2025-002", "20000.00", "USD", "Milestone One", MILESTONE_AMOUNT, "USD", "2026-06-30"
+                "Project B", "GRANT-2025-002", "20000.00", "USD", "", "", "", "", "Milestone One", MILESTONE_AMOUNT, "2026-06-30"
         }, false);
     }
 

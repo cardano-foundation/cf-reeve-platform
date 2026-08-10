@@ -8,16 +8,17 @@ import lombok.Setter;
 import com.opencsv.bean.CsvBindByName;
 
 /**
- * One row of the Projects+Milestones bulk-import CSV. A row always carries a project (root when
- * {@code parentProjectTitle} is blank, otherwise a sub-project of that parent) and optionally one
- * milestone of that same project. Consecutive rows sharing the same
- * ({@code parentProjectTitle}, {@code projectTitle}) pair are grouped into one project with
- * multiple milestones — one milestone per row in the group. A row with blank milestone columns
- * declares the project alone (no milestone on that row).
+ * One row of the Projects+Milestones bulk-import CSV. A row always carries the root project's
+ * columns, and optionally a sub-project of that root ({@code sub*} columns) and/or one milestone
+ * ({@code milestone*} columns) — the milestone belongs to the sub-project when one is present on
+ * the same row, otherwise to the root. Consecutive rows sharing the same root {@code projectTitle}
+ * are grouped into one project; each row's sub-project and milestone are then resolved
+ * independently of the other rows in the group, one sub-project (or one milestone) per row.
  *
- * <p>Unlike the old two-file (Projects / Milestones) shape, this format supports arbitrary-depth
- * nesting: {@code parentProjectTitle} may itself reference a sub-project created earlier (in this
- * same file, or previously), not just a root.
+ * <p>Every row that declares a sub-project or a milestone carries the data needed to create it
+ * directly, on that same row — so unlike a design that references another row's project by title,
+ * row order within the file does not matter (a sub-project row doesn't need its root to have been
+ * "seen" first; the root's own columns, wherever they appear in the group, are enough).
  */
 @Getter
 @Setter
@@ -28,10 +29,6 @@ public class ProjectMilestoneCsvLine {
     @CsvBindByName(column = "Project Title")
     private String projectTitle;
 
-    /** Blank for a root project; otherwise the title of an existing project (root or sub) this row nests under. */
-    @CsvBindByName(column = "Parent Project Title", profiles = "optional")
-    private String parentProjectTitle;
-
     @CsvBindByName(column = "Funding ID", profiles = "optional")
     private String fundingId;
 
@@ -41,23 +38,41 @@ public class ProjectMilestoneCsvLine {
     @CsvBindByName(column = "Currency", profiles = "optional")
     private String currency;
 
+    @CsvBindByName(column = "Sub Project Title", profiles = "optional")
+    private String subProjectTitle;
+
+    @CsvBindByName(column = "Sub Funding ID", profiles = "optional")
+    private String subFundingId;
+
+    @CsvBindByName(column = "Sub Total Amount", profiles = "optional")
+    private String subTotalAmount;
+
+    @CsvBindByName(column = "Sub Currency", profiles = "optional")
+    private String subCurrency;
+
     @CsvBindByName(column = "Milestone Title", profiles = "optional")
     private String milestoneTitle;
 
     @CsvBindByName(column = "Milestone Amount", profiles = "optional")
     private String milestoneAmount;
 
-    @CsvBindByName(column = "Milestone Currency", profiles = "optional")
-    private String milestoneCurrency;
-
     @CsvBindByName(column = "Milestone Date", profiles = "optional")
     private String milestoneDate;
 
-    public boolean isSubProject() {
-        return parentProjectTitle != null && !parentProjectTitle.isBlank();
+    public boolean hasSubProject() {
+        return subProjectTitle != null && !subProjectTitle.isBlank();
+    }
+
+    /** Whether this row carries any of the root project's own creation/update columns. */
+    public boolean hasRootProjectData() {
+        return notBlank(fundingId) || notBlank(totalAmount) || notBlank(currency);
     }
 
     public boolean hasMilestone() {
         return milestoneTitle != null && !milestoneTitle.isBlank();
+    }
+
+    private static boolean notBlank(String s) {
+        return s != null && !s.isBlank();
     }
 }
