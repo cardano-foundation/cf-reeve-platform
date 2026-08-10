@@ -437,8 +437,7 @@ public class SpendingEventService {
 
                 if (!seenMilestoneIds.add(milestone.getId())) {
                     return Optional.of(Problems.conflict(
-                            "Duplicate allocation to the same milestone in this event: "
-                                    + (milestone.getExternalMilestoneId() != null ? milestone.getExternalMilestoneId() : milestone.getMilestoneTitle()),
+                            "Duplicate allocation to the same milestone in this event: " + milestone.getMilestoneTitle(),
                             ErrorTitleConstants.DUPLICATE_MILESTONE_ALLOCATION));
                 }
 
@@ -495,23 +494,14 @@ public class SpendingEventService {
     }
 
     private Either<ProblemDetail, ProjectEntity> resolveOrCreateRootProject(EventProjectAllocationRequest req, String organisationId) {
-        if (req.getExternalProjectId() == null) {
-            return Either.left(Problems.badRequest("externalProjectId is required",
+        if (req.getProjectTitle() == null) {
+            return Either.left(Problems.badRequest("projectTitle is required",
                     ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
 
-        String projectId = ProjectEntity.id(organisationId, req.getExternalProjectId());
+        String projectId = ProjectEntity.id(organisationId, req.getProjectTitle());
         if (projectRepository.existsById(projectId)) {
             return Either.right(projectRepository.findById(projectId).orElseThrow());
-        }
-
-        // Id supplied but no project exists for it. With no creation fields, the caller is referencing
-        // an existing project — fail as not-found. Supplying projectTitle (and budget) creates it instead.
-        if (req.getProjectTitle() == null) {
-            return Either.left(Problems.notFound(
-                    "Project not found: %s. Supply projectTitle (and totalAmount/currency) to create it."
-                            .formatted(req.getExternalProjectId()),
-                    ErrorTitleConstants.PROJECT_NOT_FOUND));
         }
 
         // A root that directly carries milestones needs a budget; one that only holds sub-projects may omit it.
@@ -528,18 +518,11 @@ public class SpendingEventService {
         if (fundingIdProblem.isPresent()) {
             return Either.left(fundingIdProblem.get());
         }
-        // Root titles are unique per organisation — return a clean 409 rather than a DB-integrity 500.
-        if (projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNull(organisationId, req.getProjectTitle())) {
-            return Either.left(Problems.conflict(
-                    "Project title already exists in this organisation: " + req.getProjectTitle(),
-                    ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS));
-        }
 
         ProjectEntity newProject = ProjectEntity.builder()
                 .id(projectId)
                 .organisationId(organisationId)
                 .fundingId(req.getFundingId())
-                .externalProjectId(req.getExternalProjectId())
                 .projectTitle(req.getProjectTitle())
                 .totalAmount(req.getTotalAmount())
                 .currency(req.getCurrency())
@@ -548,23 +531,19 @@ public class SpendingEventService {
     }
 
     private Either<ProblemDetail, ProjectEntity> resolveOrCreateSubProjectNode(EventSubProjectAllocationRequest subReq, ProjectEntity parent) {
-        String subProjectUid = ProjectEntity.subId(parent.getId(), subReq.getExternalProjectId());
+        if (subReq.getProjectTitle() == null) {
+            return Either.left(Problems.badRequest("projectTitle is required",
+                    ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
+        }
+
+        String subProjectUid = ProjectEntity.subId(parent.getId(), subReq.getProjectTitle());
         Optional<ProjectEntity> existing = projectRepository.findById(subProjectUid);
         if (existing.isPresent()) {
             return Either.right(existing.get());
         }
 
-        // Id supplied but no sub-project exists for it under this parent. With no creation fields, the
-        // caller is referencing an existing sub-project — fail as not-found. Supplying projectTitle creates it.
-        if (subReq.getProjectTitle() == null) {
-            return Either.left(Problems.notFound(
-                    "Sub-project not found: %s. Supply projectTitle to create it."
-                            .formatted(subReq.getExternalProjectId()),
-                    ErrorTitleConstants.PROJECT_NOT_FOUND));
-        }
-
         // Same shared creation path (structure + budget rules) as the create-project endpoint.
-        return projectStructureService.createSubProject(parent, subReq.getExternalProjectId(),
+        return projectStructureService.createSubProject(parent,
                 subReq.getProjectTitle(), subReq.getFundingId(), subReq.getTotalAmount(), subReq.getCurrency());
     }
 

@@ -15,8 +15,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 /**
  * A sub-project node inside an event allocation — the same recursive shape as the create-project
  * endpoint's sub-project tree, except each milestone carries an {@code allocatedAmount}. A node holds
- * <em>either</em> milestones <em>or</em> sub-projects (never both). Existing projects are matched by
- * {@code externalProjectId} within the parent; otherwise a new sub-project is created.
+ * <em>either</em> milestones <em>or</em> sub-projects (never both). Existing sub-projects are matched
+ * by {@code projectTitle} within the parent; otherwise a new sub-project is created.
  */
 @Getter
 @Setter
@@ -26,11 +26,11 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public class EventSubProjectAllocationRequest {
 
     @NotBlank
-    @Schema(example = "Sub1", description = "User-defined sub-project id, unique within its parent.")
+    @Schema(example = "Sub1", description = "User-defined sub-project id. No longer used to match an existing sub-project — matched by projectTitle instead. Accepted and stored for backward compatibility only.")
     private String externalProjectId;
 
     @Nullable
-    @Schema(example = "Project leaf 1", description = "Required when creating a new sub-project.")
+    @Schema(example = "Project leaf 1", description = "Required. Matches an existing sub-project by (parentProjectId, projectTitle), or names a new one.")
     private String projectTitle;
 
     @Nullable

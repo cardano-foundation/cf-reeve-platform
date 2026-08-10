@@ -36,11 +36,11 @@ public class ProjectStructureService {
 
     /**
      * Creates a sub-project of {@code parent} after applying the structural and budget rules.
-     * The new project's id is the deterministic {@code (parentId, externalProjectId)} sub-id and
+     * The new project's id is the deterministic {@code (parentId, projectTitle)} sub-id and
      * its organisation is inherited from the parent.
      */
     @Transactional
-    public Either<ProblemDetail, ProjectEntity> createSubProject(ProjectEntity parent, String externalProjectId,
+    public Either<ProblemDetail, ProjectEntity> createSubProject(ProjectEntity parent,
             String projectTitle, @Nullable String fundingId, @Nullable BigDecimal totalAmount, @Nullable String currency) {
 
         Optional<ProblemDetail> structure = FundingValidations.subProjectAllowed(
@@ -52,13 +52,6 @@ public class ProjectStructureService {
         Optional<ProblemDetail> amount = FundingValidations.projectAmount(totalAmount);
         if (amount.isPresent()) {
             return Either.left(amount.get());
-        }
-
-        String subProjectId = ProjectEntity.subId(parent.getId(), externalProjectId);
-        if (projectRepository.existsById(subProjectId)) {
-            return Either.left(Problems.conflict(
-                    "Sub-project already exists: " + externalProjectId,
-                    ErrorTitleConstants.PROJECT_ALREADY_EXISTS));
         }
 
         if (projectRepository.existsByParentProjectIdAndProjectTitle(parent.getId(), projectTitle)) {
@@ -80,10 +73,9 @@ public class ProjectStructureService {
         }
 
         return Either.right(projectRepository.saveAndFlush(ProjectEntity.builder()
-                .id(subProjectId)
+                .id(ProjectEntity.subId(parent.getId(), projectTitle))
                 .organisationId(parent.getOrganisationId())
                 .fundingId(fundingId)
-                .externalProjectId(externalProjectId)
                 .projectTitle(projectTitle)
                 .totalAmount(totalAmount)
                 .currency(currency)

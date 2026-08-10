@@ -420,7 +420,7 @@ public class FundingBulkImportService {
                     ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
         Either<ProblemDetail, ProjectEntity> created = projectStructureService.createSubProject(
-                rootEntity, line.getSubExternalProjectId(), line.getSubProjectTitle(),
+                rootEntity, line.getSubProjectTitle(),
                 blankToNull(line.getSubFundingId()), subAmount, blankToNull(line.getSubCurrency()));
         if (created.isLeft()) {
             return Either.left(created.getLeft());
