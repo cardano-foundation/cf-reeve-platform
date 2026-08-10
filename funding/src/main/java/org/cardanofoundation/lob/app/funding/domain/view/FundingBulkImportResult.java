@@ -32,6 +32,8 @@ public class FundingBulkImportResult implements ErrorAware {
 
     private int projectsUpdated;
     private int milestonesUpdated;
+    private int eventsUpdated;
+    private int allocationsUpdated;
 
     @Builder.Default
     private Optional<ProblemDetail> error = Optional.empty();

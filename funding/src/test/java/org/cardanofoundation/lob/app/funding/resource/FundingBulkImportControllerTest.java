@@ -66,16 +66,16 @@ class FundingBulkImportControllerTest {
 
     @Test
     void downloadTemplate_streamsFromTemplateService() throws Exception {
-        ResponseEntity<StreamingResponseBody> response = controller.downloadTemplate(FundingCsvFileType.PROJECTS);
+        ResponseEntity<StreamingResponseBody> response = controller.downloadTemplate(FundingCsvFileType.PROJECTS_MILESTONES);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getHeaders().getFirst("Content-Disposition"))
-                .isEqualTo("attachment; filename=\"funding_projects_template.csv\"");
+                .isEqualTo("attachment; filename=\"funding_projects_milestones_template.csv\"");
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         response.getBody().writeTo(out);
 
-        verify(fundingCsvTemplateService).writeTemplate(eq(FundingCsvFileType.PROJECTS), any());
+        verify(fundingCsvTemplateService).writeTemplate(eq(FundingCsvFileType.PROJECTS_MILESTONES), any());
     }
 
     @Test

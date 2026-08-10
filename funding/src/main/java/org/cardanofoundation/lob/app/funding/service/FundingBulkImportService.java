@@ -26,6 +26,7 @@ import org.cardanofoundation.lob.app.funding.domain.csv.EventCsvLine;
 import org.cardanofoundation.lob.app.funding.domain.csv.FundingCsvFileType;
 import org.cardanofoundation.lob.app.funding.domain.csv.FundingCsvTypeDetector;
 import org.cardanofoundation.lob.app.funding.domain.csv.ProjectMilestoneCsvLine;
+import org.cardanofoundation.lob.app.funding.domain.entity.FundingEventEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
@@ -351,11 +352,18 @@ public class FundingBulkImportService {
         return Either.right(new UpsertOutcome<>(created.get(), true));
     }
 
-    /** UPDATE — partial: a blank CSV cell means "leave this field unchanged". Title is never sent — it's immutable and already matched. */
+    /**
+     * UPDATE — partial: a blank CSV cell means "leave this field unchanged", and a cell that repeats
+     * the field's current stored value is treated the same way (also left out of the request) so that
+     * re-uploading the same, unchanged CSV is a safe no-op — it must not re-trigger validations tied to
+     * other state that can legitimately grow over time (e.g. a milestone's cumulative event
+     * allocations), which would otherwise reject a value that isn't actually changing. Title is never
+     * sent — it's immutable and already matched.
+     */
     private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> updateProjectEntity(ProjectEntity existing, String currency, BigDecimal totalAmount) {
         ProjectUpdateRequest updateRequest = ProjectUpdateRequest.builder()
-                .totalAmount(totalAmount)
-                .currency(blankToNull(currency))
+                .totalAmount(ifChanged(totalAmount, existing.getTotalAmount()))
+                .currency(ifChanged(blankToNull(currency), existing.getCurrency()))
                 .build();
         ProjectView view = projectService.updateProject(existing.getId(), updateRequest);
         Optional<ProblemDetail> error = view.getError();
@@ -387,14 +395,19 @@ public class FundingBulkImportService {
 
         Optional<MilestoneEntity> existing = milestoneService.findByProjectIdAndMilestoneTitle(project.getId(), line.getMilestoneTitle());
         if (existing.isPresent()) {
-            // UPDATE — partial: a blank CSV cell means "leave this field unchanged". milestoneTitle is
+            // UPDATE — partial: a blank (or unchanged) value means "leave this field alone" — see
+            // updateProjectEntity's Javadoc for why a resent-but-unchanged value must not be forwarded:
+            // this milestone's amount can be unchanged while its cumulative event allocations have
+            // legitimately grown (e.g. both a FUNDING and a SPENDING event allocated against it), and
+            // resending the same amount must not spuriously trip that coverage check. milestoneTitle is
             // never sent — it's immutable and we already matched the existing row by its exact title.
+            MilestoneEntity current = existing.get();
             MilestoneUpdateRequest updateRequest = MilestoneUpdateRequest.builder()
-                    .milestoneAmount(amount)
-                    .currency(currency)
-                    .milestoneDate(date)
+                    .milestoneAmount(ifChanged(amount, current.getMilestoneAmount()))
+                    .currency(ifChanged(currency, current.getCurrency()))
+                    .milestoneDate(ifChanged(date, current.getMilestoneDate()))
                     .build();
-            MilestoneView view = milestoneService.updateMilestone(project.getId(), existing.get().getId(), updateRequest);
+            MilestoneView view = milestoneService.updateMilestone(project.getId(), current.getId(), updateRequest);
             Optional<ProblemDetail> error = view.getError();
             if (error.isPresent()) {
                 return Either.left(error.get());
@@ -428,13 +441,14 @@ public class FundingBulkImportService {
     }
 
     // -------------------------------------------------------------------------
-    // Events file — pure validation: both the project and the milestone must already exist.
+    // Events file — upsert by the event's deterministic id; the referenced project and milestone
+    // must already exist (this file never creates one).
     // -------------------------------------------------------------------------
 
     private EventsFileOutcome processEventsFile(String organisationId, MultipartFile file, Map<String, String> resolvedProjectIds) {
         Either<ProblemDetail, List<EventCsvLine>> parsed = eventCsvParser.parseCsv(file, EventCsvLine.class);
         if (parsed.isLeft()) {
-            return new EventsFileOutcome(fileLevelError(file, FundingCsvFileType.EVENTS, parsed.getLeft()), 0, 0);
+            return new EventsFileOutcome(fileLevelError(file, FundingCsvFileType.EVENTS, parsed.getLeft()), 0, 0, 0, 0);
         }
 
         List<EventCsvLine> lines = parsed.get();
@@ -443,7 +457,9 @@ public class FundingBulkImportService {
         List<FundingRowError> errors = new ArrayList<>();
         int succeeded = 0;
         int eventsCreated = 0;
+        int eventsUpdated = 0;
         int allocationsCreated = 0;
+        int allocationsUpdated = 0;
 
         for (List<Integer> idxs : groups.values()) {
             List<EventCsvLine> group = idxs.stream().map(lines::get).toList();
@@ -453,8 +469,9 @@ public class FundingBulkImportService {
                 continue;
             }
             succeeded++;
-            eventsCreated++;
+            if (outcome.created()) eventsCreated++; else eventsUpdated++;
             allocationsCreated += outcome.allocationsCreated();
+            allocationsUpdated += outcome.allocationsUpdated();
         }
 
         return new EventsFileOutcome(
@@ -464,7 +481,7 @@ public class FundingBulkImportService {
                         .rowsSucceeded(succeeded)
                         .rowErrors(errors)
                         .build(),
-                eventsCreated, allocationsCreated);
+                eventsCreated, eventsUpdated, allocationsCreated, allocationsUpdated);
     }
 
     private EventGroupOutcome processEventGroup(String organisationId, int firstRowNumber, List<EventCsvLine> group,
@@ -472,15 +489,30 @@ public class FundingBulkImportService {
 
         Either<ProblemDetail, SpendingEventCreateRequest> built = buildEventRequest(organisationId, group, resolvedProjectIds);
         if (built.isLeft()) {
-            return new EventGroupOutcome(rowError(firstRowNumber, built.getLeft()), 0);
+            return new EventGroupOutcome(rowError(firstRowNumber, built.getLeft()), 0, 0, false);
         }
+        SpendingEventCreateRequest request = built.get();
 
-        SpendingEventView view = spendingEventService.createEvent(built.get());
+        // Upsert: an event's id is fully deterministic from its header fields, so re-uploading the
+        // same Events file resolves to the same event — update its allocations (replacing them)
+        // instead of failing as "already exists". updateEvent already refuses to touch a published
+        // event on its own (Problems.conflict via its internal requireDraft guard).
+        String eventId = FundingEventEntity.id(organisationId, request.getEventType(), request.getFundingId(),
+                request.getFundingHash(), request.getCurrencyRcy());
+        boolean alreadyExists = spendingEventService.findById(eventId).isPresent();
+
+        SpendingEventView view = alreadyExists
+                ? spendingEventService.updateEvent(eventId, request)
+                : spendingEventService.createEvent(request);
         Optional<ProblemDetail> error = view.getError();
         if (error.isPresent()) {
-            return new EventGroupOutcome(rowError(firstRowNumber, error.get()), 0);
+            return new EventGroupOutcome(rowError(firstRowNumber, error.get()), 0, 0, false);
         }
-        return new EventGroupOutcome(null, group.size());
+        // An update replaces the event's allocations wholesale, so every allocation row in the group
+        // counts as updated rather than created when the event already existed.
+        return alreadyExists
+                ? new EventGroupOutcome(null, 0, group.size(), false)
+                : new EventGroupOutcome(null, group.size(), 0, true);
     }
 
     private static String eventKey(EventCsvLine line) {
@@ -753,6 +785,26 @@ public class FundingBulkImportService {
         return s == null ? "" : s;
     }
 
+    /**
+     * Returns {@code newValue} only when it's both present and different from {@code current} —
+     * otherwise {@code null}, so the caller's partial-update request treats it the same as "not
+     * supplied". Used to make re-uploading an unchanged CSV a safe no-op: a resent value that merely
+     * repeats what's already stored must not be forwarded into an update request, or it can
+     * needlessly re-trigger validations tied to other, independently-changing state (e.g. a
+     * milestone's cumulative event allocations).
+     */
+    private static BigDecimal ifChanged(BigDecimal newValue, BigDecimal current) {
+        return (newValue != null && (current == null || newValue.compareTo(current) != 0)) ? newValue : null;
+    }
+
+    private static String ifChanged(String newValue, String current) {
+        return (newValue != null && !newValue.equals(current)) ? newValue : null;
+    }
+
+    private static LocalDate ifChanged(LocalDate newValue, LocalDate current) {
+        return (newValue != null && !newValue.equals(current)) ? newValue : null;
+    }
+
     private static Either<ProblemDetail, BigDecimal> parseDecimal(String raw, String fieldLabel) {
         if (isBlank(raw)) {
             return Either.right(null);
@@ -795,10 +847,12 @@ public class FundingBulkImportService {
             int projectsUpdated, int milestonesCreated, int milestonesUpdated) {
     }
 
-    private record EventsFileOutcome(FundingFileImportResult fileResult, int eventsCreated, int allocationsCreated) {
+    private record EventsFileOutcome(FundingFileImportResult fileResult, int eventsCreated, int eventsUpdated,
+            int allocationsCreated, int allocationsUpdated) {
     }
 
-    private record EventGroupOutcome(FundingRowError error, int allocationsCreated) {
+    /** {@code created} is meaningless when {@code error} is set. */
+    private record EventGroupOutcome(FundingRowError error, int allocationsCreated, int allocationsUpdated, boolean created) {
     }
 
     /** The event-level (non-allocation) columns shared by every row in a grouped Events-file event. */
@@ -814,7 +868,9 @@ public class FundingBulkImportService {
         private int milestonesCreated;
         private int milestonesUpdated;
         private int eventsCreated;
+        private int eventsUpdated;
         private int allocationsCreated;
+        private int allocationsUpdated;
 
         void addProjectsMilestones(ProjectsMilestonesFileOutcome outcome) {
             projectsCreated += outcome.projectsCreated();
@@ -825,7 +881,9 @@ public class FundingBulkImportService {
 
         void addEvents(EventsFileOutcome outcome) {
             eventsCreated += outcome.eventsCreated();
+            eventsUpdated += outcome.eventsUpdated();
             allocationsCreated += outcome.allocationsCreated();
+            allocationsUpdated += outcome.allocationsUpdated();
         }
 
         FundingBulkImportResult toResult(boolean dryRun, List<FundingFileImportResult> fileResults) {
@@ -835,7 +893,9 @@ public class FundingBulkImportService {
                     .projectsCreated(projectsCreated)
                     .milestonesCreated(milestonesCreated)
                     .eventsCreated(eventsCreated)
+                    .eventsUpdated(eventsUpdated)
                     .allocationsCreated(allocationsCreated)
+                    .allocationsUpdated(allocationsUpdated)
                     .projectsUpdated(projectsUpdated)
                     .milestonesUpdated(milestonesUpdated)
                     .build();

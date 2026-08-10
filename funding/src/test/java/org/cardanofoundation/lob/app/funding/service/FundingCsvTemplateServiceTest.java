@@ -37,85 +37,113 @@ class FundingCsvTemplateServiceTest {
     }
 
     @Test
-    void projectsTemplate_hasHeaderAndOneExampleRow() throws Exception {
-        List<String[]> rows = readRows(FundingCsvFileType.PROJECTS);
+    void projectsMilestonesTemplate_hasHeaderAndExpectedRows() throws Exception {
+        List<String[]> rows = readRows(FundingCsvFileType.PROJECTS_MILESTONES);
 
-        assertThat(rows).hasSize(2);
-        assertThat(rows.get(0)).containsExactly("External Project ID", "Project Title", "Funding ID",
-                "Total Amount", "Currency", "Parent External Project ID", "Sub External Project ID",
-                "Sub Project Title", "Sub Funding ID", "Sub Total Amount", "Sub Currency");
-        assertThat(rows.get(1)).containsExactly("PROJ-A", "Project A", "GRANT-2025-001", "100000.00", "USD",
-                "", "SUB-1", "Sub One", "", "40000.00", "USD");
+        assertThat(rows).hasSize(7); // header + root-only + 2x Sub One + 2x Sub Two + Project B
+        assertThat(rows.get(0)).containsExactly("Project Title", "Funding ID", "Total Amount", "Currency",
+                "Sub Project Title", "Sub Funding ID", "Sub Total Amount", "Sub Currency",
+                "Milestone Title", "Milestone Amount", "Milestone Date");
+
+        // Root-only declaration row: no sub-project, no milestone.
+        assertThat(rows.get(1)).containsExactly("Project A", "GRANT-2025-001", "100000.00", "USD",
+                "", "", "", "", "", "", "");
+        // Sub One's two milestones — root columns left blank (already declared on row 1).
+        assertThat(rows.get(2)).containsExactly("Project A", "", "", "",
+                "Sub One", "", "40000.00", "USD", "Milestone One", "20000.00", "2026-06-30");
+        assertThat(rows.get(3)).containsExactly("Project A", "", "", "",
+                "Sub One", "", "", "", "Milestone Two", "20000.00", "2026-07-15");
+        // Sub Two reuses the same milestone titles as Sub One — allowed, since uniqueness is per project.
+        assertThat(rows.get(4)).containsExactly("Project A", "", "", "",
+                "Sub Two", "", "40000.00", "USD", "Milestone One", "20000.00", "2026-06-30");
+        assertThat(rows.get(5)).containsExactly("Project A", "", "", "",
+                "Sub Two", "", "", "", "Milestone Two", "20000.00", "2026-07-15");
+        // Project B: standalone root with a milestone directly on it, no sub-project.
+        assertThat(rows.get(6)).containsExactly("Project B", "GRANT-2025-002", "20000.00", "USD",
+                "", "", "", "", "Milestone One", "20000.00", "2026-06-30");
     }
 
     @Test
-    void milestonesTemplate_hasHeaderAndTwoExampleRows_coveringSub1sFullBudget() throws Exception {
-        List<String[]> rows = readRows(FundingCsvFileType.MILESTONES);
+    void projectsMilestonesTemplate_subProjectMilestonesSumToTheirOwnBudget() throws Exception {
+        List<String[]> rows = readRows(FundingCsvFileType.PROJECTS_MILESTONES);
 
-        assertThat(rows).hasSize(3);
-        assertThat(rows.get(0)).containsExactly("External Project ID", "External Milestone ID", "Milestone Title",
-                "Milestone Amount", "Currency", "Milestone Date");
-        assertThat(rows.get(1)).containsExactly("SUB-1", "MS-1", "Milestone One", "20000.00", "USD", "2026-06-30");
-        assertThat(rows.get(2)).containsExactly("SUB-1", "MS-2", "Milestone Two", "20000.00", "USD", "2026-07-15");
+        // column indices: 6=Sub Total Amount, 9=Milestone Amount
+        double subOneTotal = Double.parseDouble(rows.get(2)[6]);
+        double subOneMilestonesSum = Double.parseDouble(rows.get(2)[9]) + Double.parseDouble(rows.get(3)[9]);
+        double subTwoTotal = Double.parseDouble(rows.get(4)[6]);
+        double subTwoMilestonesSum = Double.parseDouble(rows.get(4)[9]) + Double.parseDouble(rows.get(5)[9]);
 
-        // The two milestones together exactly cover SUB-1's 40000.00 budget (see the Projects template).
-        double sum = Double.parseDouble(rows.get(1)[3]) + Double.parseDouble(rows.get(2)[3]);
-        assertThat(sum).isEqualTo(40000.00);
+        assertThat(subOneMilestonesSum).isEqualTo(subOneTotal);
+        assertThat(subTwoMilestonesSum).isEqualTo(subTwoTotal);
     }
 
     @Test
-    void eventsTemplate_hasHeaderAndFourExampleRows_fundingThenSpendingBothMilestones() throws Exception {
+    void projectsMilestonesTemplate_sameMilestoneTitleReusedAcrossDifferentSubProjects() throws Exception {
+        List<String[]> rows = readRows(FundingCsvFileType.PROJECTS_MILESTONES);
+
+        // Sub One's "Milestone One" (row 2) and Sub Two's "Milestone One" (row 4) share a title but
+        // belong to different (sibling) sub-projects — demonstrating this is allowed.
+        assertThat(rows.get(2)[4]).isEqualTo("Sub One");
+        assertThat(rows.get(4)[4]).isEqualTo("Sub Two");
+        assertThat(rows.get(2)[8]).isEqualTo(rows.get(4)[8]).isEqualTo("Milestone One");
+    }
+
+    @Test
+    void eventsTemplate_hasHeaderAndTenExampleRows_fundingThenSpendingAllFiveMilestones() throws Exception {
         List<String[]> rows = readRows(FundingCsvFileType.EVENTS);
 
-        assertThat(rows).hasSize(5);
+        assertThat(rows).hasSize(11); // header + 5 FUNDING + 5 SPENDING
         assertThat(rows.get(0)).containsExactly("Event Type", "Funding ID", "Funding Hash", "Funding Entity",
                 "Currency RCY", "Event Date", "Category", "Vendor", "Amount FCY", "Currency FCY", "FX Rate",
-                "Amount RCY", "Hash", "Notes", "External Project ID", "External Milestone ID", "Allocated Amount");
+                "Amount RCY", "Hash", "Notes", "Project Title", "Milestone Title", "Allocated Amount");
 
-        // Two FUNDING rows (one per milestone), grouped into a single FUNDING event. Every spend-detail
-        // column (including Notes) must stay blank — FundingValidations.spendDetail rejects any of
-        // them being set on a non-SPENDING event.
-        assertThat(rows.get(1)).containsExactly("FUNDING", "GRANT-2025-001", "", "Cardano Foundation", "USD",
-                "2026-07-01", "", "", "", "", "", "", "", "", "SUB-1", "MS-1", "20000.00");
-        assertThat(rows.get(2)).containsExactly("FUNDING", "GRANT-2025-001", "", "Cardano Foundation", "USD",
-                "2026-07-01", "", "", "", "", "", "", "", "", "SUB-1", "MS-2", "20000.00");
+        // FUNDING rows: every spend-detail column (including Notes) must stay blank —
+        // FundingValidations.spendDetail rejects any of them being set on a non-SPENDING event.
+        List<String[]> fundingRows = rows.subList(1, 6);
+        assertThat(fundingRows).extracting(r -> r[0]).containsOnly("FUNDING");
+        assertThat(fundingRows).extracting(r -> new String[]{r[14], r[15]}).containsExactly(
+                new String[]{"Sub One", "Milestone One"}, new String[]{"Sub One", "Milestone Two"},
+                new String[]{"Sub Two", "Milestone One"}, new String[]{"Sub Two", "Milestone Two"},
+                new String[]{"Project B", "Milestone One"});
 
-        // Two SPENDING rows (one per milestone), grouped into a single SPENDING event.
-        assertThat(rows.get(3)).containsExactly("SPENDING", "GRANT-2025-001", "", "", "USD", "2026-07-20",
-                "Personnel", "Vendor AB", "36000.00", "EUR", "0.9", "40000.00", "", "Invoice #INV-001",
-                "SUB-1", "MS-1", "20000.00");
-        assertThat(rows.get(4)).containsExactly("SPENDING", "GRANT-2025-001", "", "", "USD", "2026-07-20",
-                "Personnel", "Vendor AB", "36000.00", "EUR", "0.9", "40000.00", "", "Invoice #INV-001",
-                "SUB-1", "MS-2", "20000.00");
+        List<String[]> spendingRows = rows.subList(6, 11);
+        assertThat(spendingRows).extracting(r -> r[0]).containsOnly("SPENDING");
+        assertThat(spendingRows).extracting(r -> new String[]{r[14], r[15]}).containsExactly(
+                new String[]{"Sub One", "Milestone One"}, new String[]{"Sub One", "Milestone Two"},
+                new String[]{"Sub Two", "Milestone One"}, new String[]{"Sub Two", "Milestone Two"},
+                new String[]{"Project B", "Milestone One"});
     }
 
     @Test
-    void eventsTemplate_totalFundedMatchesTotalSpent() throws Exception {
+    void eventsTemplate_totalFundedMatchesTotalSpent_andMatchesTheProjectTree() throws Exception {
         List<String[]> rows = readRows(FundingCsvFileType.EVENTS);
 
-        double totalFunded = Double.parseDouble(rows.get(1)[16]) + Double.parseDouble(rows.get(2)[16]);
-        double totalSpent = Double.parseDouble(rows.get(3)[16]) + Double.parseDouble(rows.get(4)[16]);
+        double totalFunded = rows.subList(1, 6).stream().mapToDouble(r -> Double.parseDouble(r[16])).sum();
+        double totalSpent = rows.subList(6, 11).stream().mapToDouble(r -> Double.parseDouble(r[16])).sum();
         // The SPENDING event's own reporting-currency amount must also equal what's allocated —
         // required by FundingValidations.spendFullyAllocated.
-        double spendingEventAmountRcy = Double.parseDouble(rows.get(3)[11]);
+        double spendingEventAmountRcy = Double.parseDouble(rows.get(6)[11]);
 
         assertThat(totalFunded).isEqualTo(totalSpent);
         assertThat(totalSpent).isEqualTo(spendingEventAmountRcy);
+        // Matches the combined budget of Sub One (40000) + Sub Two (40000) + Project B (20000) from
+        // the Projects+Milestones template.
+        assertThat(totalFunded).isEqualTo(100000.00);
     }
 
     /**
      * Regression test for a real bug: the FUNDING example rows used to set {@code Notes}, which
      * {@link FundingValidations#spendDetail} treats as spend-only detail — forbidden for any
-     * non-SPENDING event. This runs the real validation against each event group's columns (event
-     * row layout: 0=Event Type,4=Currency RCY,6=Category,7=Vendor,8=Amount FCY,9=Currency FCY,
-     * 10=FX Rate,11=Amount RCY,12=Hash,13=Notes) so any future template edit that reintroduces
-     * spend-only data on a FUNDING/REFUND row fails here instead of at upload time.
+     * non-SPENDING event. This runs the real validation against each event row's columns (row layout:
+     * 0=Event Type,4=Currency RCY,6=Category,7=Vendor,8=Amount FCY,9=Currency FCY,10=FX Rate,
+     * 11=Amount RCY,12=Hash,13=Notes) so any future template edit that reintroduces spend-only data on
+     * a FUNDING/REFUND row fails here instead of at upload time.
      */
     @Test
     void fundingEventExampleRows_passRealSpendDetailValidation() throws Exception {
         List<String[]> rows = readRows(FundingCsvFileType.EVENTS);
 
-        for (String[] row : List.of(rows.get(1), rows.get(2))) {
+        for (String[] row : rows.subList(1, 6)) {
             Optional<ProblemDetail> problem = FundingValidations.spendDetail(EventType.FUNDING,
                     blankToNull(row[6]), blankToNull(row[7]), decimal(row[8]), blankToNull(row[9]),
                     decimal(row[10]), decimal(row[11]), row[4], blankToNull(row[12]), blankToNull(row[13]));
@@ -128,7 +156,7 @@ class FundingCsvTemplateServiceTest {
     void spendingEventExampleRows_passRealSpendDetailValidation() throws Exception {
         List<String[]> rows = readRows(FundingCsvFileType.EVENTS);
 
-        for (String[] row : List.of(rows.get(3), rows.get(4))) {
+        for (String[] row : rows.subList(6, 11)) {
             Optional<ProblemDetail> problem = FundingValidations.spendDetail(EventType.SPENDING,
                     blankToNull(row[6]), blankToNull(row[7]), decimal(row[8]), blankToNull(row[9]),
                     decimal(row[10]), decimal(row[11]), row[4], blankToNull(row[12]), blankToNull(row[13]));
@@ -154,7 +182,7 @@ class FundingCsvTemplateServiceTest {
             }
         };
 
-        assertThatCode(() -> templateService.writeTemplate(FundingCsvFileType.PROJECTS, failingStream))
+        assertThatCode(() -> templateService.writeTemplate(FundingCsvFileType.PROJECTS_MILESTONES, failingStream))
                 .doesNotThrowAnyException();
     }
 
