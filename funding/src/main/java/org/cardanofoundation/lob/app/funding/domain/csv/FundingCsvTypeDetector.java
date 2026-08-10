@@ -23,7 +23,7 @@ import com.opencsv.CSVReaderBuilder;
 import com.opencsv.bean.CsvBindByName;
 
 /**
- * Detects which of the three bulk-import CSV shapes an uploaded file is, by comparing its header
+ * Detects which of the two bulk-import CSV shapes an uploaded file is, by comparing its header
  * row against each {@link FundingCsvFileType}'s full declared column set (mandatory + optional).
  * A type is a candidate only if the uploaded headers are entirely explainable by it (i.e. the
  * uploaded header set is a subset of its declared columns) — this rules out files belonging to a

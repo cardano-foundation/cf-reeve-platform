@@ -26,13 +26,11 @@ public class FundingBulkImportResult implements ErrorAware {
     private List<FundingFileImportResult> files = new ArrayList<>();
 
     private int projectsCreated;
-    private int subProjectsCreated;
     private int milestonesCreated;
     private int eventsCreated;
     private int allocationsCreated;
 
     private int projectsUpdated;
-    private int subProjectsUpdated;
     private int milestonesUpdated;
 
     @Builder.Default

@@ -50,15 +50,15 @@ public final class Problems {
                 ErrorTitleConstants.ORGANISATION_NOT_FOUND);
     }
 
-    public static ProblemDetail projectReferenceNotFound(String externalProjectId) {
-        return notFound("Project not found for externalProjectId: %s".formatted(externalProjectId),
+    public static ProblemDetail projectReferenceNotFound(String projectTitle) {
+        return notFound("Project not found for projectTitle: %s".formatted(projectTitle),
                 ErrorTitleConstants.PROJECT_REFERENCE_NOT_FOUND);
     }
 
-    public static ProblemDetail ambiguousProjectReference(String externalProjectId) {
+    public static ProblemDetail ambiguousProjectReference(String projectTitle) {
         return badRequest(
-                "externalProjectId %s matches more than one project in this organisation; use the JSON API to disambiguate"
-                        .formatted(externalProjectId),
+                "projectTitle %s matches more than one project in this organisation; use the JSON API to disambiguate"
+                        .formatted(projectTitle),
                 ErrorTitleConstants.AMBIGUOUS_PROJECT_REFERENCE);
     }
 }

@@ -16,11 +16,14 @@ public interface FundingProjectRepository extends JpaRepository<ProjectEntity, S
 
     boolean existsByOrganisationIdAndExternalProjectId(String organisationId, String externalProjectId);
 
-    List<ProjectEntity> findByOrganisationIdAndExternalProjectId(String organisationId, String externalProjectId);
-
     boolean existsByOrganisationIdAndFundingId(String organisationId, String fundingId);
 
     // Title uniqueness: root titles are unique per organisation, sub-project titles within their parent.
+    // A bare title is not globally unique across the whole org (sub-project titles only need to be
+    // unique among siblings), so this broad any-level lookup is used only where the caller checks for
+    // ambiguity — see FundingBulkImportService.findExistingProjectByTitle.
+    List<ProjectEntity> findByOrganisationIdAndProjectTitle(String organisationId, String projectTitle);
+
     boolean existsByOrganisationIdAndProjectTitleAndParentProjectIsNull(String organisationId, String projectTitle);
 
     boolean existsByOrganisationIdAndProjectTitleAndParentProjectIsNullAndIdNot(String organisationId, String projectTitle, String id);
