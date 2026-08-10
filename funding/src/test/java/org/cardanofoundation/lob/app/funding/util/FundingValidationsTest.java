@@ -29,6 +29,10 @@ class FundingValidationsTest {
         return p.orElseThrow().getTitle();
     }
 
+    private String detail(Optional<ProblemDetail> p) {
+        return p.orElseThrow().getDetail();
+    }
+
     // --- milestone(amount, project, otherTotal) ---
 
     @Test
@@ -204,6 +208,22 @@ class FundingValidationsTest {
                 "Personnel", "Vendor", new BigDecimal("100000"), null, new BigDecimal("2"),
                 new BigDecimal("50000"), "USD", null, null)))
                 .isEqualTo(ErrorTitleConstants.SPEND_FIELDS_REQUIRED);
+    }
+
+    @Test
+    void spendDetail_message_namesOnlyTheActuallyMissingField() {
+        // Only currencyFcy is absent — the message must not claim the other four are missing too.
+        assertThat(detail(FundingValidations.spendDetail(EventType.SPENDING,
+                "Personnel", "Vendor", new BigDecimal("100000"), null, new BigDecimal("2"),
+                new BigDecimal("50000"), "USD", null, null)))
+                .isEqualTo("Missing required field(s) for a SPENDING event: currencyFcy");
+    }
+
+    @Test
+    void spendDetail_message_listsEveryMissingField_whenSeveralAreAbsent() {
+        assertThat(detail(FundingValidations.spendDetail(EventType.SPENDING,
+                "Personnel", "Vendor", null, null, null, null, "USD", null, null)))
+                .isEqualTo("Missing required field(s) for a SPENDING event: amountFcy, amountRcy, currencyFcy, fxRate");
     }
 
     @Test

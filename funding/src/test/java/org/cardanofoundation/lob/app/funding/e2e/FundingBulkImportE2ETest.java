@@ -303,8 +303,9 @@ class FundingBulkImportE2ETest {
 
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
+        // Currency RCY is present ("USD") — the message must name only the fields that are actually missing.
         assertThat(reasons(result)).containsExactly(
-                "amountFcy, amountRcy, currencyRcy, currencyFcy and fxRate are required for SPENDING events");
+                "Missing required field(s) for a SPENDING event: amountFcy, amountRcy, currencyFcy, fxRate");
         assertThat(result.getEventsCreated()).isZero();
     }
 

@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.funding.util;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -149,10 +150,17 @@ public final class FundingValidations {
             return Optional.empty();
         }
 
-        // SPENDING: the amount fields are required to record the spend.
+        // SPENDING: the amount fields are required to record the spend. Name only the fields that are
+        // actually missing — a blanket list of all five is misleading when just one is absent.
         if (amountFcy == null || amountRcy == null || fxRate == null || currencyRcy == null || currencyFcy == null) {
+            List<String> missing = new ArrayList<>();
+            if (amountFcy == null) missing.add("amountFcy");
+            if (amountRcy == null) missing.add("amountRcy");
+            if (currencyRcy == null) missing.add("currencyRcy");
+            if (currencyFcy == null) missing.add("currencyFcy");
+            if (fxRate == null) missing.add("fxRate");
             return Optional.of(Problems.badRequest(
-                    "amountFcy, amountRcy, currencyRcy, currencyFcy and fxRate are required for SPENDING events",
+                    "Missing required field(s) for a SPENDING event: " + String.join(", ", missing),
                     ErrorTitleConstants.SPEND_FIELDS_REQUIRED));
         }
 
