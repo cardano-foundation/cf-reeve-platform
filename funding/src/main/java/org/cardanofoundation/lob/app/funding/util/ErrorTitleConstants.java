@@ -56,5 +56,7 @@ public final class ErrorTitleConstants {
     public static final String PROJECT_REFERENCE_NOT_FOUND = "PROJECT_REFERENCE_NOT_FOUND";
     public static final String CSV_ROW_INVALID = "CSV_ROW_INVALID";
     public static final String NO_FILES_UPLOADED = "NO_FILES_UPLOADED";
+    public static final String PROJECT_NOT_CREATED_NO_SUBPROJECT = "PROJECT_NOT_CREATED_NO_SUBPROJECT";
+    public static final String DUPLICATE_MILESTONE_ALLOCATION = "DUPLICATE_MILESTONE_ALLOCATION";
 
 }

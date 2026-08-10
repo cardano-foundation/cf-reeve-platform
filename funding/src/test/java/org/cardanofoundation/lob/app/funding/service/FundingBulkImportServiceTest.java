@@ -40,6 +40,7 @@ import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestone
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingBulkImportResult;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingFileImportResult;
+import org.cardanofoundation.lob.app.funding.domain.view.FundingRowError;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
@@ -79,12 +80,14 @@ class FundingBulkImportServiceTest {
 
     @BeforeEach
     void setUp() {
-        // Real (unmocked) transaction runner: outside a Spring container there is no active
-        // transaction to roll back, so it just runs the work — sufficient to exercise the shared
-        // processing path for dryRun; the actual rollback behavior is integration-test territory.
+        // Real (unmocked) transaction runners: outside a Spring container there is no active
+        // transaction to roll back, so they just run the work — sufficient to exercise the shared
+        // processing path (including which rows get reported/counted); the actual DB rollback
+        // behavior is integration-test territory.
         bulkImportService = new FundingBulkImportService(projectCsvParser, milestoneCsvParser, eventCsvParser,
                 csvTypeDetector, projectRepository, projectService, projectStructureService, milestoneService,
-                spendingEventService, organisationPublicApi, new FundingBulkImportTransactionRunner());
+                spendingEventService, organisationPublicApi, new FundingBulkImportTransactionRunner(),
+                new FundingProjectGroupTransactionRunner());
         lenient().when(organisationPublicApi.findByOrganisationId(ORG_ID)).thenReturn(Optional.of(new Organisation()));
     }
 
@@ -267,6 +270,81 @@ class FundingBulkImportServiceTest {
         assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
         assertThat(result.getFiles().get(0).getRowErrors().get(0).getRowNumber()).isEqualTo(1);
         verify(projectService, times(1)).createWithMilestones(any());
+    }
+
+    @Test
+    void projectsFile_orphanRootIsNotResolvableByLaterMilestonesFileInSameRequest() {
+        // The root created (and rolled back) while processing the Projects file must not linger in
+        // the cross-file id cache, or a Milestones file later in the same request could try to attach
+        // a milestone to a project id that no longer exists in the database.
+        MultipartFile projectsFile = file("projects.csv");
+        MultipartFile milestonesFile = file("milestones.csv");
+        when(csvTypeDetector.detect(projectsFile)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS));
+        when(csvTypeDetector.detect(milestonesFile)).thenReturn(Optional.of(FundingCsvFileType.MILESTONES));
+
+        ProjectCsvLine row = projectLine("PROJ-E", "Project E", "100000.00", "USD");
+        row.setSubExternalProjectId("SUB-1");
+        row.setSubTotalAmount("40000.00");
+        row.setSubCurrency("USD");
+        when(projectCsvParser.parseCsv(projectsFile, ProjectCsvLine.class)).thenReturn(Either.right(List.of(row)));
+        when(projectRepository.findByOrganisationIdAndExternalProjectId(ORG_ID, "PROJ-E")).thenReturn(List.of());
+        when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1", "PROJ-E", List.of()));
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1", "PROJ-E")));
+        when(projectRepository.findByOrganisationIdAndExternalProjectId(ORG_ID, "SUB-1")).thenReturn(List.of());
+
+        MilestoneCsvLine milestoneLine = new MilestoneCsvLine();
+        milestoneLine.setExternalProjectId("PROJ-E");
+        milestoneLine.setMilestoneTitle("Milestone One");
+        milestoneLine.setMilestoneAmount("10000.00");
+        milestoneLine.setCurrency("USD");
+        milestoneLine.setMilestoneDate("2026-06-30");
+        when(milestoneCsvParser.parseCsv(milestonesFile, MilestoneCsvLine.class)).thenReturn(Either.right(List.of(milestoneLine)));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID)
+                .files(List.of(projectsFile, milestonesFile)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getFiles().get(1).getRowErrors()).hasSize(1);
+        assertThat(result.getFiles().get(1).getRowErrors().get(0).getReason()).contains("PROJ-E");
+        verify(milestoneService, never()).createMilestone(any(), any());
+    }
+
+    @Test
+    void projectsFile_newRootKeptWhenAtLeastOneSubProjectRowSucceeds() {
+        // Not every sub-project row needs to succeed for the root to survive — only "all failed"
+        // triggers the orphan rollback.
+        MultipartFile file = file("projects.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS));
+
+        ProjectCsvLine goodSubRow = projectLine("PROJ-F", "Project F", "100000.00", "USD");
+        goodSubRow.setSubExternalProjectId("SUB-GOOD");
+        goodSubRow.setSubProjectTitle("Sub Good");
+        goodSubRow.setSubTotalAmount("30000.00");
+        goodSubRow.setSubCurrency("USD");
+
+        ProjectCsvLine badSubRow = projectLine("PROJ-F", "Project F", "100000.00", "USD");
+        badSubRow.setSubExternalProjectId("SUB-BAD");
+        // Sub Project Title intentionally left blank -> this sub-project fails.
+        badSubRow.setSubTotalAmount("10000.00");
+        badSubRow.setSubCurrency("USD");
+
+        when(projectCsvParser.parseCsv(file, ProjectCsvLine.class)).thenReturn(Either.right(List.of(goodSubRow, badSubRow)));
+        when(projectRepository.findByOrganisationIdAndExternalProjectId(ORG_ID, "PROJ-F")).thenReturn(List.of());
+        when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1", "PROJ-F", List.of()));
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1", "PROJ-F")));
+        when(projectRepository.findByOrganisationIdAndExternalProjectId(ORG_ID, "SUB-GOOD")).thenReturn(List.of());
+        when(projectStructureService.createSubProject(any(), eq("SUB-GOOD"), eq("Sub Good"), any(), any(), any()))
+                .thenReturn(Either.right(projectEntity("s-good", "SUB-GOOD")));
+        when(projectRepository.findByOrganisationIdAndExternalProjectId(ORG_ID, "SUB-BAD")).thenReturn(List.of());
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getProjectsCreated()).isEqualTo(1);
+        assertThat(result.getSubProjectsCreated()).isEqualTo(1);
+        assertThat(result.getFiles().get(0).getRowsSucceeded()).isEqualTo(2); // root + SUB-GOOD
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getReason()).contains("Sub Project Title");
     }
 
     // -------------------------------------------------------------------------
@@ -759,19 +837,76 @@ class FundingBulkImportServiceTest {
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
-        assertThat(result.getProjectsCreated()).isEqualTo(1);
-        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        // The root is newly created by this row, and its only sub-project row failed -> the root is
+        // rolled back too rather than left as a childless orphan (see ProjectGroupOutcome#orphanRoot).
+        assertThat(result.getProjectsCreated()).isZero();
+        assertThat(result.getFiles().get(0).getRowsSucceeded()).isZero();
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(2);
         verify(projectStructureService, never()).createSubProject(any(), any(), any(), any(), any(), any());
     }
 
     @Test
-    void projectsFile_subProjectCreateFails_rootStillSucceeds() {
+    void projectsFile_subProjectMissingTotalAmountOnCreate_reportsError() {
+        // Sub Total Amount is required on create, matching the REST API's flat parentProjectId shape
+        // (ProjectWithMilestonesCreateRequest.totalAmount is @NotNull) even though the API's own
+        // nested subProjects shape (ProjectTreeNodeRequest) leaves it optional.
+        MultipartFile file = file("projects.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS));
+        ProjectCsvLine line = projectLine("PROJ-A", "Project A", "100000.00", "USD");
+        line.setSubExternalProjectId("SUB-1");
+        line.setSubProjectTitle("Sub One");
+        line.setSubCurrency("USD"); // no sub total amount supplied
+        when(projectCsvParser.parseCsv(file, ProjectCsvLine.class)).thenReturn(Either.right(List.of(line)));
+        when(projectRepository.findByOrganisationIdAndExternalProjectId(ORG_ID, "PROJ-A")).thenReturn(List.of());
+        when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1", "PROJ-A", List.of()));
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1", "PROJ-A")));
+        when(projectRepository.findByOrganisationIdAndExternalProjectId(ORG_ID, "SUB-1")).thenReturn(List.of());
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getProjectsCreated()).isZero();
+        assertThat(result.getFiles().get(0).getRowsSucceeded()).isZero();
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(2);
+        assertThat(result.getFiles().get(0).getRowErrors()).extracting(FundingRowError::getReason)
+                .anySatisfy(reason -> assertThat(reason).contains("Sub Total Amount"));
+        verify(projectStructureService, never()).createSubProject(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void projectsFile_subProjectMissingCurrencyOnCreate_reportsError() {
+        MultipartFile file = file("projects.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS));
+        ProjectCsvLine line = projectLine("PROJ-A", "Project A", "100000.00", "USD");
+        line.setSubExternalProjectId("SUB-1");
+        line.setSubProjectTitle("Sub One");
+        line.setSubTotalAmount("40000.00"); // no sub currency supplied
+        when(projectCsvParser.parseCsv(file, ProjectCsvLine.class)).thenReturn(Either.right(List.of(line)));
+        when(projectRepository.findByOrganisationIdAndExternalProjectId(ORG_ID, "PROJ-A")).thenReturn(List.of());
+        when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1", "PROJ-A", List.of()));
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1", "PROJ-A")));
+        when(projectRepository.findByOrganisationIdAndExternalProjectId(ORG_ID, "SUB-1")).thenReturn(List.of());
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getProjectsCreated()).isZero();
+        assertThat(result.getFiles().get(0).getRowsSucceeded()).isZero();
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(2);
+        assertThat(result.getFiles().get(0).getRowErrors()).extracting(FundingRowError::getReason)
+                .anySatisfy(reason -> assertThat(reason).contains("Sub Currency"));
+        verify(projectStructureService, never()).createSubProject(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void projectsFile_subProjectCreateFails_rootRolledBackToo() {
         MultipartFile file = file("projects.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS));
         ProjectCsvLine line = projectLine("PROJ-A", "Project A", "100000.00", "USD");
         line.setSubExternalProjectId("SUB-1");
         line.setSubProjectTitle("Sub One");
         line.setSubTotalAmount("40000.00");
+        line.setSubCurrency("USD");
         when(projectCsvParser.parseCsv(file, ProjectCsvLine.class)).thenReturn(Either.right(List.of(line)));
         when(projectRepository.findByOrganisationIdAndExternalProjectId(ORG_ID, "PROJ-A")).thenReturn(List.of());
         when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1", "PROJ-A", List.of()));
@@ -783,10 +918,13 @@ class FundingBulkImportServiceTest {
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
-        assertThat(result.getProjectsCreated()).isEqualTo(1);
+        // Even though the sub-project attempt actually reached ProjectStructureService (unlike the
+        // missing-title case above, which fails before that call), the outcome is the same: the root
+        // has no surviving sub-project, so it's rolled back too.
+        assertThat(result.getProjectsCreated()).isZero();
         assertThat(result.getSubProjectsCreated()).isZero();
-        assertThat(result.getFiles().get(0).getRowsSucceeded()).isEqualTo(1); // root only
-        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        assertThat(result.getFiles().get(0).getRowsSucceeded()).isZero();
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(2);
     }
 
     @Test
