@@ -64,7 +64,8 @@ public class SpringWebConfig {
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/api/**")
                         .allowedOrigins(allowedOrigins.split(","))
-                        .allowedMethods("GET", "HEAD", "POST") // expose only GET, HEAD, POST
+                        // PUT/DELETE are used by document_vault (addressbook, records, keys)
+                        .allowedMethods("GET", "HEAD", "POST", "PUT", "DELETE")
                         .allowedHeaders("*")
                         .allowCredentials(true);
             }

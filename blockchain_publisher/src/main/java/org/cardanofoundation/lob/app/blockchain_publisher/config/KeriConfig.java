@@ -19,12 +19,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.IdentifierConfig;
 import org.cardanofoundation.signify.app.aiding.CreateIdentifierArgs;
-import org.cardanofoundation.signify.app.aiding.EventResult;
 import org.cardanofoundation.signify.app.clienting.SignifyClient;
 import org.cardanofoundation.signify.app.coring.Coring;
-import org.cardanofoundation.signify.app.coring.Operation;
-import org.cardanofoundation.signify.cesr.Salter;
-import org.cardanofoundation.signify.core.States;
+import org.cardanofoundation.signify.generated.keria.model.AgentConfig;
+import org.cardanofoundation.signify.generated.keria.model.HabState;
+import org.cardanofoundation.signify.generated.keria.model.Tier;
 
 @Configuration
 @ConditionalOnProperty(name = "lob.blockchain-publisher.keri.enabled", havingValue = "true", matchIfMissing = false)
@@ -38,7 +37,7 @@ public class KeriConfig {
     public SignifyClient signifyClient(@Value("${lob.blockchain-publisher.keri.url}") String url,
         @Value("${lob.blockchain-publisher.keri.identifier.bran}") String bran,
         @Value("${lob.blockchain-publisher.keri.booturl}") String bootUrl) throws Exception {
-    SignifyClient client = new SignifyClient(url, bran, Salter.Tier.low, bootUrl, null);
+    SignifyClient client = new SignifyClient(url, bran, Tier.LOW, bootUrl, null);
     try {
         client.connect();
     } catch (Exception e) {
@@ -54,7 +53,7 @@ public class KeriConfig {
         @Value("${lob.blockchain-publisher.keri.identifier.role}") String role, SignifyClient client) throws Exception {
     String prefix;
 
-    Optional<States.HabState> habState = client.identifiers().get(identifierName);
+    Optional<HabState> habState = client.identifiers().get(identifierName);
     if (habState.isPresent()) {
         prefix = habState.get().getPrefix();
     } else {
@@ -81,41 +80,39 @@ public class KeriConfig {
         CreateIdentifierArgs kArgs = CreateIdentifierArgs.builder().build();
         kArgs.setToad(availableWitnesses.toad());
         kArgs.setWits(witnessIds);
-        Object op, ops;
-        Optional<States.HabState> optionalIdentifier = client.identifiers().get(name);
+        Optional<HabState> optionalIdentifier = client.identifiers().get(name);
         if (optionalIdentifier.isPresent()) {
             id = optionalIdentifier.get().getPrefix();
         } else {
-            EventResult result = client.identifiers().create(name, kArgs);
-            op = result.op();
-            op = client.operations().wait(Operation.fromObject(op));
-            LinkedHashMap<String, Object> resp = (LinkedHashMap<String, Object>) (Operation.fromObject(op).getResponse());
-
-            id = resp.get("i");
+            client.operations().wait(client.identifiers().create(name, kArgs).op());
+            // Read the prefix back off the identifier rather than out of the operation: operations are
+            // marker interfaces now and carry no response body.
+            id = client.identifiers().get(name)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Agent AID %s was created but cannot be read back.".formatted(name)))
+                    .getPrefix();
             if (client.getAgent() != null && client.getAgent().getPre() != null) {
                 eid = client.getAgent().getPre();
             } else {
                 throw new IllegalStateException("Agent or pre is null");
             }
             if (!hasEndRole(client, name, "agent", eid)) {
-                EventResult results = client.identifiers().addEndRole(name, "agent", eid, null);
-                ops = results.op();
-                ops = client.operations().wait(Operation.fromObject(ops));
+                client.operations().wait(client.identifiers().addEndRole(name, "agent", eid, null).op());
             }
         }
 
-        Object oobi = client.oobis().get(name, "agent").get();
-        String getOobi = ((LinkedHashMap) oobi).get("oobis").toString().replaceAll("[\\[\\]]", "");
+        // Typed OOBI now, not a map — the old cast threw ClassCastException at startup.
+        String getOobi = String.join(",", client.oobis().get(name, "agent").get().getOobis());
         log.info("Created new KERI Identifier with prefix {} and OOBI {}", id != null ? id.toString() : null, getOobi);
         return id != null ? id.toString() : null;
     }
 
     public static AvailableWitnesses getAvailableWitnesses(SignifyClient client) throws Exception {
-        @SuppressWarnings("unchecked")
-        Map<String, Object> config = (Map<String, Object>) new Coring.Config(client).get();
+        // Typed AgentConfig now, not a map — the old cast threw ClassCastException the first time an
+        // agent AID had to be created (i.e. on a fresh KERIA account), taking startup down with it.
+        AgentConfig config = new Coring.Config(client).get();
 
-        @SuppressWarnings("unchecked")
-        List<String> iurls = (List<String>) config.get("iurls");
+        List<String> iurls = config.getIurls();
         if (iurls == null) {
             throw new IllegalStateException("Agent configuration is missing iurls");
         }

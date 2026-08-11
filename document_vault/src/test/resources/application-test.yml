@@ -1,0 +1,14 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: none
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/postgresql/common
+keycloak:
+  enabled: false
+  token-url: ""
+  authorization-url: ""
+lob:
+  document_vault:
+    enabled: true
