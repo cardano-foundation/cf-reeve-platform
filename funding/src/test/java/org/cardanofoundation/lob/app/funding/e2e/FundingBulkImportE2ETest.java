@@ -74,16 +74,16 @@ class FundingBulkImportE2ETest {
 
     private static final String EVENTS_TEMPLATE_CSV = """
             Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Milestone Title,Allocated Amount
-            FUNDING,GRANT-2025-001,,Cardano Foundation,USD,2026-07-01,,,,,,,,,Sub One,Milestone One,20000.00
-            FUNDING,GRANT-2025-001,,Cardano Foundation,USD,2026-07-01,,,,,,,,,Sub One,Milestone Two,20000.00
+            FUNDING,GRANT-2025-001,,Cardano Foundation,USD,2026-07-01,,,,,,40000.00,,,Sub One,Milestone One,20000.00
+            FUNDING,GRANT-2025-001,,Cardano Foundation,USD,2026-07-01,,,,,,40000.00,,,Sub One,Milestone Two,20000.00
             SPENDING,GRANT-2025-001,,,USD,2026-07-20,Personnel,Vendor AB,36000.00,EUR,0.9,40000.00,,Invoice #INV-001,Sub One,Milestone One,20000.00
             SPENDING,GRANT-2025-001,,,USD,2026-07-20,Personnel,Vendor AB,36000.00,EUR,0.9,40000.00,,Invoice #INV-001,Sub One,Milestone Two,20000.00
             """;
 
     private static final String EVENTS_DUPLICATE_MILESTONE_ALLOCATION_CSV = """
             Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Milestone Title,Allocated Amount
-            FUNDING,GRANT-2025-Z,,Cardano Foundation,USD,2026-07-01,,,,,,,,Dup Project,Dup Milestone,2000.00
-            FUNDING,GRANT-2025-Z,,Cardano Foundation,USD,2026-07-01,,,,,,,,Dup Project,Dup Milestone,2000.00
+            FUNDING,GRANT-2025-Z,,Cardano Foundation,USD,2026-07-01,,,,,2000.00,,,Dup Project,Dup Milestone,2000.00
+            FUNDING,GRANT-2025-Z,,Cardano Foundation,USD,2026-07-01,,,,,2000.00,,,Dup Project,Dup Milestone,2000.00
             """;
 
     // Funding ID missing -> optional, root+sub row still succeeds.
@@ -237,7 +237,7 @@ class FundingBulkImportE2ETest {
         // Fund + spend the milestone's full 10000.00 so it has a real allocation on record.
         String eventsCsv = """
                 Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Milestone Title,Allocated Amount
-                FUNDING,GRANT-CHANGE,,Cardano Foundation,USD,2026-07-01,,,,,,,,,Change Project,Change Milestone,10000.00
+                FUNDING,GRANT-CHANGE,,Cardano Foundation,USD,2026-07-01,,,,,,10000.00,,,Change Project,Change Milestone,10000.00
                 """;
         MultipartFile eventsFile = new MockMultipartFile("file", "fund.csv", "text/csv", eventsCsv.getBytes());
         FundingBulkImportResult fundResult = bulkImportService.importFiles(BulkImportRequest.builder()
@@ -262,12 +262,13 @@ class FundingBulkImportE2ETest {
         when(organisationPublicApi.findByOrganisationId("org-events-single-funding")).thenReturn(Optional.of(new Organisation()));
         seedProjectAndMilestone("org-events-single-funding", "Seed Project X", "Seed Milestone X");
 
-        // A FUNDING row with the "Amount FCY" column absent entirely (not just blank) — spend-detail
-        // fields are only relevant to SPENDING events (FundingValidations.spendDetail), so this must
-        // import cleanly.
+        // A FUNDING row with the "Amount FCY" column absent entirely (not just blank) — the spend-only
+        // fields (category/vendor/amountFcy/currencyFcy/fxRate/hash/notes) are only relevant to SPENDING
+        // events (FundingValidations.spendDetail), so this must import cleanly. Amount RCY, however, is
+        // required for every event type and must equal the row's allocated amount (2000.00).
         String csv = """
                 Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Milestone Title,Allocated Amount
-                FUNDING,GRANT-SINGLE,,Cardano Foundation,USD,2026-07-01,,,,,,,,Seed Project X,Seed Milestone X,2000.00
+                FUNDING,GRANT-SINGLE,,Cardano Foundation,USD,2026-07-01,,,,,2000.00,,,Seed Project X,Seed Milestone X,2000.00
                 """;
         MultipartFile file = new MockMultipartFile("file", "single-funding-no-amountfcy.csv", "text/csv", csv.getBytes());
 
@@ -344,7 +345,7 @@ class FundingBulkImportE2ETest {
 
         String csv = """
                 Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Milestone Title,Allocated Amount
-                FUNDING,GRANT-TITLE,,Cardano Foundation,USD,2026-07-01,,,,,,,,,Never Seeded Project,Seed Milestone Z,2000.00
+                FUNDING,GRANT-TITLE,,Cardano Foundation,USD,2026-07-01,,,,,,2000.00,,,Never Seeded Project,Seed Milestone Z,2000.00
                 """;
         MultipartFile file = new MockMultipartFile("file", "events-unknown-title.csv", "text/csv", csv.getBytes());
 

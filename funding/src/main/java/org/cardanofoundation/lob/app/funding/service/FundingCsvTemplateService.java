@@ -82,12 +82,14 @@ public class FundingCsvTemplateService {
      * One/Sub Two's Milestone One+Two, and Project B's Milestone One — 100000.00 total, matching the
      * combined budget of Sub One + Sub Two + Project B), and one SPENDING event later spends the same
      * 100000.00 across the same five — total funded == total spent, and each event's allocations sum
-     * exactly to its own reporting-currency amount (required for SPENDING events). A milestone is
+     * exactly to its own reporting-currency amount (required for every event type). A milestone is
      * always referenced together with its owning Project Title, so the same milestone title under Sub
      * One and under Sub Two is never ambiguous.
      *
      * <p>Notes (like category/vendor/amounts) counts as spend detail and is rejected for non-SPENDING
-     * events (FundingValidations.spendDetail), so FUNDING rows must leave every spend-detail column blank.
+     * events (FundingValidations.spendDetail), so FUNDING rows must leave every spend-detail column
+     * blank — except Amount RCY, which is required for every event type and must equal the total of
+     * that event's allocations (100000.00 here, repeated on every row of the FUNDING group).
      */
     private void writeEventsTemplate(CSVWriter csvWriter) {
         csvWriter.writeNext(new String[]{
@@ -99,7 +101,7 @@ public class FundingCsvTemplateService {
                 {"Sub Two", "Milestone One"}, {"Sub Two", "Milestone Two"}, {"Project B", "Milestone One"}}) {
             csvWriter.writeNext(new String[]{
                     "FUNDING", EXAMPLE_FUNDING_ID, "", "Cardano Foundation", "USD", "2026-07-01",
-                    "", "", "", "", "", "", "", "",
+                    "", "", "", "", "", "100000.00", "", "",
                     target[0], target[1], MILESTONE_AMOUNT
             }, false);
         }

@@ -181,9 +181,22 @@ class FundingValidationsTest {
     }
 
     @Test
-    void spendDetail_allowed_whenNonSpendingEventHasNoSpendFields() {
+    void spendDetail_allowed_whenNonSpendingEventHasAmountRcyButNoSpendOnlyFields() {
         assertThat(FundingValidations.spendDetail(EventType.FUNDING,
-                null, null, null, null, null, null, null, null, null)).isEmpty();
+                null, null, null, null, null, new BigDecimal("100000"), null, null, null)).isEmpty();
+    }
+
+    @Test
+    void spendDetail_required_whenAmountRcyMissingOnNonSpendingEvent() {
+        assertThat(title(FundingValidations.spendDetail(EventType.FUNDING,
+                null, null, null, null, null, null, null, null, null)))
+                .isEqualTo(ErrorTitleConstants.SPEND_FIELDS_REQUIRED);
+    }
+
+    @Test
+    void spendDetail_allowed_whenRefundEventHasAmountRcyButNoSpendOnlyFields() {
+        assertThat(FundingValidations.spendDetail(EventType.REFUND,
+                null, null, null, null, null, new BigDecimal("50000"), null, null, null)).isEmpty();
     }
 
     @Test
@@ -264,9 +277,22 @@ class FundingValidationsTest {
     }
 
     @Test
-    void spendFullyAllocated_ignoredForNonSpending() {
+    void spendFullyAllocated_ignoredWhenAmountRcyAbsent() {
         assertThat(FundingValidations.spendFullyAllocated(
                 EventType.FUNDING, new BigDecimal("999999"), null)).isEmpty();
+    }
+
+    @Test
+    void spendFullyAllocated_appliesToFunding_rejectedWhenAllocatedTotalBelowAmountRcy() {
+        assertThat(title(FundingValidations.spendFullyAllocated(
+                EventType.FUNDING, new BigDecimal("40000"), new BigDecimal("50000"))))
+                .isEqualTo(ErrorTitleConstants.SPEND_NOT_FULLY_ALLOCATED);
+    }
+
+    @Test
+    void spendFullyAllocated_appliesToRefund_allowedWhenAllocatedTotalMatches() {
+        assertThat(FundingValidations.spendFullyAllocated(
+                EventType.REFUND, new BigDecimal("50000"), new BigDecimal("50000.00"))).isEmpty();
     }
 
     // --- eventAmountWithinBudget(eventType, amountRcy, summedMilestoneBudget, summedProjectBudget) ---

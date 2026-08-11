@@ -97,10 +97,13 @@ class FundingCsvTemplateServiceTest {
                 "Currency RCY", "Event Date", "Category", "Vendor", "Amount FCY", "Currency FCY", "FX Rate",
                 "Amount RCY", "Hash", "Notes", "Project Title", "Milestone Title", "Allocated Amount");
 
-        // FUNDING rows: every spend-detail column (including Notes) must stay blank —
-        // FundingValidations.spendDetail rejects any of them being set on a non-SPENDING event.
+        // FUNDING rows: every spend-only column (Category, Vendor, Amount FCY, Currency FCY, FX Rate,
+        // Hash, Notes) must stay blank — FundingValidations.spendDetail rejects any of them being set
+        // on a non-SPENDING event. Amount RCY is required for every event type, so it's populated with
+        // the event's total (100000.00) on every row of the FUNDING group.
         List<String[]> fundingRows = rows.subList(1, 6);
         assertThat(fundingRows).extracting(r -> r[0]).containsOnly("FUNDING");
+        assertThat(fundingRows).extracting(r -> r[11]).containsOnly("100000.00");
         assertThat(fundingRows).extracting(r -> new String[]{r[14], r[15]}).containsExactly(
                 new String[]{"Sub One", "Milestone One"}, new String[]{"Sub One", "Milestone Two"},
                 new String[]{"Sub Two", "Milestone One"}, new String[]{"Sub Two", "Milestone Two"},

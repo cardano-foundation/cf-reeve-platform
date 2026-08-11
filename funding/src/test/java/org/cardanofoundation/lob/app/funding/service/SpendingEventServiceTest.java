@@ -389,11 +389,29 @@ class SpendingEventServiceTest {
 
     @Test
     void create_returnsLeft_whenEventHasNoAllocations() {
+        // No allocations against a non-zero amountRcy (ALLOCATED, from fundingRequest's default) is
+        // caught by spendFullyAllocated (allocated total 0 != amountRcy) before eventTotal is ever reached.
         when(projectRepository.existsById(any())).thenReturn(true);
         when(projectRepository.findById(any())).thenReturn(Optional.of(projectEntity()));
 
         SpendingEventCreateRequest request = fundingRequest(EventProjectAllocationRequest.builder()
                 .externalProjectId("PROJ-AB").projectTitle("Project AB").milestones(List.of()).build());
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.SPEND_NOT_FULLY_ALLOCATED);
+    }
+
+    @Test
+    void create_returnsLeft_whenEventTotalIsZero_andAmountRcyIsAlsoZero() {
+        // amountRcy=0 passes spendFullyAllocated (0 allocated == 0 amountRcy) but eventTotal still
+        // rejects a zero total — guarding the case where amountRcy itself was (wrongly) recorded as zero.
+        when(projectRepository.existsById(any())).thenReturn(true);
+        when(projectRepository.findById(any())).thenReturn(Optional.of(projectEntity()));
+
+        SpendingEventCreateRequest request = fundingRequest(EventProjectAllocationRequest.builder()
+                .externalProjectId("PROJ-AB").projectTitle("Project AB").milestones(List.of()).build());
+        request.setAmountRcy(BigDecimal.ZERO);
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
 
@@ -965,7 +983,7 @@ class SpendingEventServiceTest {
     void createEvent_returnsErrorView_whenCreateFails() {
         SpendingEventView result = spendingEventService.createEvent(SpendingEventCreateRequest.builder()
                 .organisationId("org1").eventType(EventType.FUNDING).fundingId("GRANT-2025-001")
-                .fundingEntity("Cardano Foundation").currencyRcy("USD")
+                .fundingEntity("Cardano Foundation").currencyRcy("USD").amountRcy(ALLOCATED)
                 .allocations(List.of(EventProjectAllocationRequest.builder()
                         .milestones(List.of(fundingMilestone("MS-1", ALLOCATED))).build()))
                 .build());
@@ -1098,10 +1116,11 @@ class SpendingEventServiceTest {
                 .externalProjectId("PROJ-AB").projectTitle("Project AB").milestones(List.of(milestone)).build());
     }
 
+    /** amountRcy defaults to ALLOCATED — the value every single-milestone fundingMilestone() fixture allocates. */
     private SpendingEventCreateRequest fundingRequest(EventProjectAllocationRequest allocation) {
         return SpendingEventCreateRequest.builder()
                 .organisationId("org1").eventType(EventType.FUNDING).fundingId("GRANT-2025-001")
-                .fundingEntity("Cardano Foundation").currencyRcy("USD")
+                .fundingEntity("Cardano Foundation").currencyRcy("USD").amountRcy(ALLOCATED)
                 .allocations(List.of(allocation)).build();
     }
 
