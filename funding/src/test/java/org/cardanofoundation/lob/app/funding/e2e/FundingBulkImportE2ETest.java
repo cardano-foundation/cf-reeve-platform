@@ -246,8 +246,10 @@ class FundingBulkImportE2ETest {
 
         // Attempting to shrink the milestone below its already-allocated 10000.00 must still fail —
         // this is a real change, not a same-value resend.
-        String shrinkCsv = "Project Title,Milestone Title,Milestone Amount,Milestone Date\n"
-                + "Change Project,Change Milestone,5000.00,2026-06-30\n";
+        String shrinkCsv = """
+                Project Title,Milestone Title,Milestone Amount,Milestone Date
+                Change Project,Change Milestone,5000.00,2026-06-30
+                """;
         MultipartFile shrinkFile = new MockMultipartFile("file", "shrink.csv", "text/csv", shrinkCsv.getBytes());
         FundingBulkImportResult shrinkResult = bulkImportService.importFiles(BulkImportRequest.builder()
                 .organisationId(orgId).files(List.of(shrinkFile)).build());

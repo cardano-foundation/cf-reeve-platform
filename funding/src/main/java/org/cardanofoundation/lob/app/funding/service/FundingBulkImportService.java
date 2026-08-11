@@ -254,33 +254,52 @@ public class FundingBulkImportService {
         int milestonesUpdated = 0;
 
         for (int idx : idxs) {
-            ProjectMilestoneCsvLine line = lines.get(idx);
-            ProjectEntity target = root;
-
-            if (line.hasSubProject()) {
-                Either<ProblemDetail, UpsertOutcome<ProjectEntity>> subE = upsertSubProject(root, line);
-                if (subE.isLeft()) {
-                    errors.add(rowError(idx + 1, subE.getLeft()));
-                    continue; // nothing to attach a milestone to on this row
-                }
-                target = subE.get().entity();
-                resolvedProjectIds.put(line.getSubProjectTitle(), target.getId());
-                succeeded++;
-                if (subE.get().created()) projectsCreated++; else projectsUpdated++;
+            RowOutcome row = processGroupRow(root, idx, lines.get(idx), resolvedProjectIds);
+            if (row.error() != null) {
+                errors.add(row.error());
             }
-
-            if (line.hasMilestone()) {
-                Either<ProblemDetail, Boolean> msE = upsertMilestoneRow(target, line);
-                if (msE.isLeft()) {
-                    errors.add(rowError(idx + 1, msE.getLeft()));
-                    continue;
-                }
-                succeeded++;
-                if (msE.get()) milestonesCreated++; else milestonesUpdated++;
-            }
+            succeeded += row.succeeded();
+            projectsCreated += row.projectsCreated();
+            projectsUpdated += row.projectsUpdated();
+            milestonesCreated += row.milestonesCreated();
+            milestonesUpdated += row.milestonesUpdated();
         }
 
         return new ProjectMilestoneGroupOutcome(errors, succeeded, projectsCreated, projectsUpdated, milestonesCreated, milestonesUpdated);
+    }
+
+    /**
+     * Upserts one row's sub-project (if any) and milestone (if any). A failed sub-project upsert
+     * reports its error and skips the milestone — there is nothing to attach it to on this row.
+     */
+    private RowOutcome processGroupRow(ProjectEntity root, int idx, ProjectMilestoneCsvLine line, Map<String, String> resolvedProjectIds) {
+        ProjectEntity target = root;
+        int succeeded = 0;
+        int projectsCreated = 0;
+        int projectsUpdated = 0;
+
+        if (line.hasSubProject()) {
+            Either<ProblemDetail, UpsertOutcome<ProjectEntity>> subE = upsertSubProject(root, line);
+            if (subE.isLeft()) {
+                return new RowOutcome(rowError(idx + 1, subE.getLeft()), 0, 0, 0, 0, 0);
+            }
+            target = subE.get().entity();
+            resolvedProjectIds.put(line.getSubProjectTitle(), target.getId());
+            succeeded++;
+            if (subE.get().created()) projectsCreated++; else projectsUpdated++;
+        }
+
+        if (!line.hasMilestone()) {
+            return new RowOutcome(null, succeeded, projectsCreated, projectsUpdated, 0, 0);
+        }
+
+        Either<ProblemDetail, Boolean> msE = upsertMilestoneRow(target, line);
+        if (msE.isLeft()) {
+            return new RowOutcome(rowError(idx + 1, msE.getLeft()), succeeded, projectsCreated, projectsUpdated, 0, 0);
+        }
+        boolean milestoneCreated = msE.get();
+        return new RowOutcome(null, succeeded + 1, projectsCreated, projectsUpdated,
+                milestoneCreated ? 1 : 0, milestoneCreated ? 0 : 1);
     }
 
     private static ProjectMilestoneGroupOutcome groupFailure(List<Integer> idxs, ProblemDetail problem) {
@@ -845,6 +864,11 @@ public class FundingBulkImportService {
 
     private record ProjectMilestoneGroupOutcome(List<FundingRowError> errors, int succeeded, int projectsCreated,
             int projectsUpdated, int milestonesCreated, int milestonesUpdated) {
+    }
+
+    /** Outcome of upserting a single Projects+Milestones row's sub-project and/or milestone. */
+    private record RowOutcome(FundingRowError error, int succeeded, int projectsCreated, int projectsUpdated,
+            int milestonesCreated, int milestonesUpdated) {
     }
 
     private record EventsFileOutcome(FundingFileImportResult fileResult, int eventsCreated, int eventsUpdated,

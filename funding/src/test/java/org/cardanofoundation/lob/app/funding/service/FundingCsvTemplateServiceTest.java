@@ -45,8 +45,9 @@ class FundingCsvTemplateServiceTest {
                 "Sub Project Title", "Sub Funding ID", "Sub Total Amount", "Sub Currency",
                 "Milestone Title", "Milestone Amount", "Milestone Date");
 
-        // Root-only declaration row: no sub-project, no milestone.
-        assertThat(rows.get(1)).containsExactly("Project A", "GRANT-2025-001", "100000.00", "USD",
+        // Root-only declaration row: no sub-project, no milestone. Total matches its two sub-projects
+        // (40000 + 40000) exactly — no unreachable headroom in the example.
+        assertThat(rows.get(1)).containsExactly("Project A", "GRANT-2025-001", "80000.00", "USD",
                 "", "", "", "", "", "", "");
         // Sub One's two milestones — root columns left blank (already declared on row 1).
         assertThat(rows.get(2)).containsExactly("Project A", "", "", "",

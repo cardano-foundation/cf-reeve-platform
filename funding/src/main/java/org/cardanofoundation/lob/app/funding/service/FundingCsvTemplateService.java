@@ -27,6 +27,14 @@ public class FundingCsvTemplateService {
     private static final String COL_MILESTONE_TITLE = "Milestone Title";
     private static final String EXAMPLE_FUNDING_ID = "GRANT-2025-001";
     private static final String MILESTONE_AMOUNT = "20000.00";
+    private static final String PROJECT_A = "Project A";
+    private static final String PROJECT_B = "Project B";
+    private static final String SUB_ONE = "Sub One";
+    private static final String SUB_TWO = "Sub Two";
+    private static final String MILESTONE_ONE = "Milestone One";
+    private static final String MILESTONE_TWO = "Milestone Two";
+    private static final String MILESTONE_ONE_DUE_DATE = "2026-06-30";
+    private static final String TOTAL_EVENT_AMOUNT = "100000.00";
 
     public void writeTemplate(FundingCsvFileType type, OutputStream outputStream) {
         try (Writer writer = new OutputStreamWriter(outputStream)) {
@@ -57,22 +65,22 @@ public class FundingCsvTemplateService {
                 COL_MILESTONE_TITLE, "Milestone Amount", "Milestone Date"
         }, false);
         csvWriter.writeNext(new String[]{
-                "Project A", EXAMPLE_FUNDING_ID, "100000.00", "USD", "", "", "", "", "", "", ""
+                PROJECT_A, EXAMPLE_FUNDING_ID, "80000.00", "USD", "", "", "", "", "", "", ""
         }, false);
         csvWriter.writeNext(new String[]{
-                "Project A", "", "", "", "Sub One", "", "40000.00", "USD", "Milestone One", MILESTONE_AMOUNT, "2026-06-30"
+                PROJECT_A, "", "", "", SUB_ONE, "", "40000.00", "USD", MILESTONE_ONE, MILESTONE_AMOUNT, MILESTONE_ONE_DUE_DATE
         }, false);
         csvWriter.writeNext(new String[]{
-                "Project A", "", "", "", "Sub One", "", "", "", "Milestone Two", MILESTONE_AMOUNT, "2026-07-15"
+                PROJECT_A, "", "", "", SUB_ONE, "", "", "", MILESTONE_TWO, MILESTONE_AMOUNT, "2026-07-15"
         }, false);
         csvWriter.writeNext(new String[]{
-                "Project A", "", "", "", "Sub Two", "", "40000.00", "USD", "Milestone One", MILESTONE_AMOUNT, "2026-06-30"
+                PROJECT_A, "", "", "", SUB_TWO, "", "40000.00", "USD", MILESTONE_ONE, MILESTONE_AMOUNT, MILESTONE_ONE_DUE_DATE
         }, false);
         csvWriter.writeNext(new String[]{
-                "Project A", "", "", "", "Sub Two", "", "", "", "Milestone Two", MILESTONE_AMOUNT, "2026-07-15"
+                PROJECT_A, "", "", "", SUB_TWO, "", "", "", MILESTONE_TWO, MILESTONE_AMOUNT, "2026-07-15"
         }, false);
         csvWriter.writeNext(new String[]{
-                "Project B", "GRANT-2025-002", "20000.00", "USD", "", "", "", "", "Milestone One", MILESTONE_AMOUNT, "2026-06-30"
+                PROJECT_B, "GRANT-2025-002", MILESTONE_AMOUNT, "USD", "", "", "", "", MILESTONE_ONE, MILESTONE_AMOUNT, MILESTONE_ONE_DUE_DATE
         }, false);
     }
 
@@ -97,19 +105,19 @@ public class FundingCsvTemplateService {
                 "Category", "Vendor", "Amount FCY", "Currency FCY", "FX Rate", "Amount RCY", "Hash", "Notes",
                 COL_PROJECT_TITLE, COL_MILESTONE_TITLE, "Allocated Amount"
         }, false);
-        for (String[] target : new String[][]{{"Sub One", "Milestone One"}, {"Sub One", "Milestone Two"},
-                {"Sub Two", "Milestone One"}, {"Sub Two", "Milestone Two"}, {"Project B", "Milestone One"}}) {
+        String[][] allocationTargets = {{SUB_ONE, MILESTONE_ONE}, {SUB_ONE, MILESTONE_TWO},
+                {SUB_TWO, MILESTONE_ONE}, {SUB_TWO, MILESTONE_TWO}, {PROJECT_B, MILESTONE_ONE}};
+        for (String[] target : allocationTargets) {
             csvWriter.writeNext(new String[]{
                     "FUNDING", EXAMPLE_FUNDING_ID, "", "Cardano Foundation", "USD", "2026-07-01",
-                    "", "", "", "", "", "100000.00", "", "",
+                    "", "", "", "", "", TOTAL_EVENT_AMOUNT, "", "",
                     target[0], target[1], MILESTONE_AMOUNT
             }, false);
         }
-        for (String[] target : new String[][]{{"Sub One", "Milestone One"}, {"Sub One", "Milestone Two"},
-                {"Sub Two", "Milestone One"}, {"Sub Two", "Milestone Two"}, {"Project B", "Milestone One"}}) {
+        for (String[] target : allocationTargets) {
             csvWriter.writeNext(new String[]{
                     "SPENDING", EXAMPLE_FUNDING_ID, "", "", "USD", "2026-07-20",
-                    "Personnel", "Vendor AB", "90000.00", "EUR", "0.9", "100000.00", "Invoice #INV-001", "",
+                    "Personnel", "Vendor AB", "90000.00", "EUR", "0.9", TOTAL_EVENT_AMOUNT, "Invoice #INV-001", "",
                     target[0], target[1], MILESTONE_AMOUNT
             }, false);
         }
