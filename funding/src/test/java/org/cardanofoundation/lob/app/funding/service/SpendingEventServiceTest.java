@@ -889,14 +889,15 @@ class SpendingEventServiceTest {
         SpendingEventPublishView view = spendingEventService.toPublishView(event);
 
         SpendingEventPublishView.ProjectAllocation allocation = view.getProjectAllocations().get(0);
-        // The root project is published as is ...
-        assertThat(allocation.getExternalProjectId()).isEqualTo("PROJ-AB");
+        // The root project is published as is, keyed by its internal deterministic id (projects have
+        // no user-defined external id anymore) ...
+        assertThat(allocation.getProjectId()).isEqualTo("p1");
         assertThat(allocation.getProjectTitle()).isEqualTo("Project AB");
         // ... with no milestones at the project level ...
         assertThat(allocation.getMilestones()).isNull();
         // ... and the sub-project carries its own id, title and the milestone allocations.
         SpendingEventPublishView.SubProject sub = allocation.getSubProject();
-        assertThat(sub.getSubProjectId()).isEqualTo("SUB-1");
+        assertThat(sub.getSubProjectId()).isEqualTo("sub1");
         assertThat(sub.getSubProjectTitle()).isEqualTo("Sub Project One");
         assertThat(sub.getMilestones()).hasSize(1);
         assertThat(sub.getMilestones().get(0).getAllocatedAmount()).isEqualByComparingTo(ALLOCATED);

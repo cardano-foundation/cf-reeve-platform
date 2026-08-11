@@ -600,14 +600,16 @@ public class SpendingEventService {
                     // Publish the root project's id/title as is. A direct allocation carries its
                     // milestones at the project level; an allocation to a sub-project nests the
                     // sub-project's own id/title/milestones so it is unambiguous where the money went.
+                    // Projects have no user-defined external id anymore (title-based identity), so the
+                    // internal deterministic id is what downstream consumers (blockchain_publisher) get.
                     boolean isSubProject = project.getParentProject() != null;
                     ProjectEntity root = rootOf(project);
                     return SpendingEventPublishView.ProjectAllocation.builder()
-                            .externalProjectId(root.getExternalProjectId())
+                            .projectId(root.getId())
                             .projectTitle(root.getProjectTitle())
                             .subProject(isSubProject
                                     ? SpendingEventPublishView.SubProject.builder()
-                                            .subProjectId(project.getExternalProjectId())
+                                            .subProjectId(project.getId())
                                             .subProjectTitle(project.getProjectTitle())
                                             .milestones(milestones)
                                             .build()
