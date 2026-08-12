@@ -12,6 +12,9 @@ public interface FundingProjectRepository extends JpaRepository<ProjectEntity, S
 
     List<ProjectEntity> findByOrganisationId(String organisationId);
 
+    /** Resolves a project only when it actually belongs to the given organisation (ownership check). */
+    List<ProjectEntity> findByIdAndOrganisationId(String id, String organisationId);
+
     Page<ProjectEntity> findByOrganisationId(String organisationId, Pageable pageable);
 
     boolean existsByOrganisationIdAndExternalProjectId(String organisationId, String externalProjectId);

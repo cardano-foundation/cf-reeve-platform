@@ -105,6 +105,10 @@ public class ReportTemplateController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<List<ReportTemplateResponseDto>> templateCreateCsv(
             @ModelAttribute CreateCsvTemplateRequest csvTemplateRequest) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(csvTemplateRequest.getOrganisationId())) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(List.of(ReportTemplateResponseDto.builder().error(Optional.of(problem)).build()));
+        }
 
         return csvReportTemplateService.createCsvTemplates(csvTemplateRequest)
                 .fold(
@@ -135,7 +139,6 @@ public class ReportTemplateController {
     public ResponseEntity<?> update(
             @RequestBody(required = true) ReportTemplateDto template) {
         log.debug("PUT /api/report-templates - Updating template: {}", template.getName());
-
 
         Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.update(template);
 

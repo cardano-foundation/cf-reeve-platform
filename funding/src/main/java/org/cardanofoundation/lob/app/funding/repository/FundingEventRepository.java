@@ -16,6 +16,9 @@ public interface FundingEventRepository extends JpaRepository<FundingEventEntity
 
     Page<FundingEventEntity> findByOrganisationId(String organisationId, Pageable pageable);
 
+    /** Resolves an event only when it actually belongs to the given organisation (ownership check). */
+    Set<FundingEventEntity> findByIdAndOrganisationId(String id, String organisationId);
+
     @Query("""
             SELECT e FROM funding.FundingEventEntity e
             WHERE e.organisationId = :organisationId

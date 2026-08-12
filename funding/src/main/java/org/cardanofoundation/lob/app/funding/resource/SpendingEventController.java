@@ -102,8 +102,8 @@ public class SpendingEventController {
     })
     @GetMapping(value = "/events/{eventId}", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<SpendingEventView> getEvent(@PathVariable String eventId) {
-        return Responses.respond(spendingEventService.getEvent(eventId), HttpStatus.OK);
+    public ResponseEntity<SpendingEventView> getEvent(@PathVariable String eventId, @RequestParam String organisationId) {
+        return Responses.respond(spendingEventService.getEvent(eventId, organisationId), HttpStatus.OK);
     }
 
     @Operation(
@@ -318,8 +318,8 @@ public class SpendingEventController {
     })
     @PostMapping(value = "/events/{eventId}/publish", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<SpendingEventView> publishEvent(@PathVariable String eventId) {
-        return Responses.respond(spendingEventService.publishEvent(eventId), HttpStatus.OK);
+    public ResponseEntity<SpendingEventView> publishEvent(@PathVariable String eventId, @RequestParam String organisationId) {
+        return Responses.respond(spendingEventService.publishEvent(eventId, organisationId), HttpStatus.OK);
     }
 
     @Operation(summary = "Delete a draft event (published events cannot be deleted)", responses = {
@@ -331,8 +331,8 @@ public class SpendingEventController {
     })
     @DeleteMapping(value = "/events/{eventId}", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<ProblemDetail> deleteEvent(@PathVariable String eventId) {
-        return Responses.respondDelete(spendingEventService.deleteEvent(eventId));
+    public ResponseEntity<ProblemDetail> deleteEvent(@PathVariable String eventId, @RequestParam String organisationId) {
+        return Responses.respondDelete(spendingEventService.deleteEvent(eventId, organisationId));
     }
 
 }

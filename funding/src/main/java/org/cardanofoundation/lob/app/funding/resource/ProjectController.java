@@ -57,8 +57,11 @@ public class ProjectController {
     })
     @GetMapping(value = "/projects/{projectId}", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<ProjectView> getProject(@PathVariable String projectId) {
-        return Responses.respond(projectService.getProject(projectId), HttpStatus.OK);
+    public ResponseEntity<ProjectView> getProject(
+            @PathVariable String projectId,
+            @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
+            @RequestParam String organisationId) {
+        return Responses.respond(projectService.getProject(projectId, organisationId), HttpStatus.OK);
     }
 
     @Operation(description = "List sub-projects of a parent project. Use GET /projects/{id} to fetch a single sub-project.", responses = {
@@ -69,8 +72,10 @@ public class ProjectController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<PagedResponse<ProjectView>> listSubProjects(
             @PathVariable String parentProjectId,
+            @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
+            @RequestParam String organisationId,
             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-        return Responses.respond(projectService.listSubProjects(parentProjectId, pageable), HttpStatus.OK);
+        return Responses.respond(projectService.listSubProjects(parentProjectId, organisationId, pageable), HttpStatus.OK);
     }
 
     @Operation(description = "Create a new project together with its initial milestones in a single request", responses = {
@@ -102,8 +107,11 @@ public class ProjectController {
     })
     @DeleteMapping(value = "/projects/{projectId}", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<ProblemDetail> deleteProject(@PathVariable String projectId) {
-        return Responses.respondDelete(projectService.deleteProject(projectId));
+    public ResponseEntity<ProblemDetail> deleteProject(
+            @PathVariable String projectId,
+            @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
+            @RequestParam String organisationId) {
+        return Responses.respondDelete(projectService.deleteProject(projectId, organisationId));
     }
 
 }

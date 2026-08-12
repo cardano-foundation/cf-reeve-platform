@@ -198,9 +198,9 @@ class AccountingCorePresentationConverterTest {
         transactionEntity.setId(transactionId);
         transactionEntity.setExtractorType("NETSUITE");
 
-        when(transactionRepositoryGateway.findById(transactionId)).thenReturn(Optional.of(transactionEntity));
+        when(transactionRepositoryGateway.findByIdAndOrganisationId(transactionId, "org-id")).thenReturn(Set.of(transactionEntity));
 
-        Optional<TransactionView> result = accountingCorePresentationConverter.transactionDetailSpecific(transactionId);
+        Optional<TransactionView> result = accountingCorePresentationConverter.transactionDetailSpecific(transactionId, "org-id");
 
         assertEquals(true, result.isPresent());
         assertEquals(transactionId, result.get().getId());
@@ -260,10 +260,12 @@ class AccountingCorePresentationConverterTest {
         transaction1.setBatchId(batchId);
         transaction2.setBatchId(batchId);
 
-        when(transactionBatchRepositoryGateway.findById(batchId)).thenReturn(Optional.of(transactionBatchEntity));
+        BatchFilterRequest batchFilterRequest = new BatchFilterRequest();
+        batchFilterRequest.setOrganisationId("123");
+        when(transactionBatchRepositoryGateway.findByIdAndOrganisationId(batchId, "123")).thenReturn(List.of(transactionBatchEntity));
         when(transactionRepository.findAllByBatchId(batchId, null, null, null, null, null, null, null, null, null, null, null, null, LocalDate.of(1970, 1, 1).atStartOfDay(), LocalDate.now().atStartOfDay(), null, null, null, null, null, null, null, null, null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(transaction1, transaction2)));
 
-        Either<ProblemDetail, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail(batchId, null, Pageable.unpaged(), new BatchFilterRequest());
+        Either<ProblemDetail, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail(batchId, null, Pageable.unpaged(), batchFilterRequest);
         assertTrue(resultE.isRight());
         Optional<BatchView> result = resultE.get();
         assertEquals(true, result.isPresent());
@@ -313,7 +315,7 @@ class AccountingCorePresentationConverterTest {
     void testBatchDetail_batchNotFound() {
         when(jpaSortFieldValidator.convertPageable(any(Pageable.class), any(), eq(TransactionEntity.class)))
                 .thenReturn(Either.right(Pageable.unpaged()));
-        when(transactionBatchRepositoryGateway.findById("nonexistent-batch")).thenReturn(Optional.empty());
+        when(transactionBatchRepositoryGateway.findByIdAndOrganisationId("nonexistent-batch", null)).thenReturn(List.of());
 
         Either<ProblemDetail, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail("nonexistent-batch", null, Pageable.unpaged(), new BatchFilterRequest());
 
@@ -358,7 +360,7 @@ class AccountingCorePresentationConverterTest {
         txSet.add(transaction2);
         transactionBatchEntity.setTransactions(txSet);
 
-        when(transactionBatchRepositoryGateway.findById(batchId)).thenReturn(Optional.of(transactionBatchEntity));
+        when(transactionBatchRepositoryGateway.findByIdAndOrganisationId(eq(batchId), any())).thenReturn(List.of(transactionBatchEntity));
         when(transactionRepository.findAllByBatchId(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transaction1, transaction2), sortedPageable, 2));
 
@@ -398,7 +400,7 @@ class AccountingCorePresentationConverterTest {
         transactionBatchEntity.setTransactions(Set.of(transaction1));
 
         List<TransactionProcessingStatus> txStatus = List.of(TransactionProcessingStatus.PUBLISH);
-        when(transactionBatchRepositoryGateway.findById(batchId)).thenReturn(Optional.of(transactionBatchEntity));
+        when(transactionBatchRepositoryGateway.findByIdAndOrganisationId(eq(batchId), any())).thenReturn(List.of(transactionBatchEntity));
         when(transactionRepository.findAllByBatchId(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transaction1)));
 
@@ -458,9 +460,9 @@ class AccountingCorePresentationConverterTest {
     @Test
     void testBatchReprocess() {
 
-        Mockito.when(accountingCoreService.scheduleReIngestionForFailed("extractionRequest")).thenReturn(Either.right(null));
-        accountingCorePresentationConverter.scheduleReIngestionForFailed("extractionRequest");
-        Mockito.verify(accountingCoreService, Mockito.times(1)).scheduleReIngestionForFailed("extractionRequest");
+        Mockito.when(accountingCoreService.scheduleReIngestionForFailed("extractionRequest", "org-id")).thenReturn(Either.right(null));
+        accountingCorePresentationConverter.scheduleReIngestionForFailed("extractionRequest", "org-id");
+        Mockito.verify(accountingCoreService, Mockito.times(1)).scheduleReIngestionForFailed("extractionRequest", "org-id");
 
     }
 
@@ -468,9 +470,9 @@ class AccountingCorePresentationConverterTest {
     void testBatchReprocessNoExist() {
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Transaction batch with id: extractionRequest not found");
         problemDetail.setTitle("TX_BATCH_NOT_FOUND");
-        Mockito.when(accountingCoreService.scheduleReIngestionForFailed("extractionRequest")).thenReturn(Either.left(problemDetail));
-        accountingCorePresentationConverter.scheduleReIngestionForFailed("extractionRequest");
-        Mockito.verify(accountingCoreService, Mockito.times(1)).scheduleReIngestionForFailed("extractionRequest");
+        Mockito.when(accountingCoreService.scheduleReIngestionForFailed("extractionRequest", "org-id")).thenReturn(Either.left(problemDetail));
+        accountingCorePresentationConverter.scheduleReIngestionForFailed("extractionRequest", "org-id");
+        Mockito.verify(accountingCoreService, Mockito.times(1)).scheduleReIngestionForFailed("extractionRequest", "org-id");
     }
 
 }

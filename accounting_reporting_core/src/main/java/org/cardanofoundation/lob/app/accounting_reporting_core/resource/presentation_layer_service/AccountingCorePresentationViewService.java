@@ -204,9 +204,9 @@ public class AccountingCorePresentationViewService {
                 .toList();
     }
 
-    public Optional<TransactionView> transactionDetailSpecific(String transactionId) {
+    public Optional<TransactionView> transactionDetailSpecific(String transactionId, String organisationId) {
         Optional<TransactionEntity> transactionEntity =
-                transactionRepositoryGateway.findById(transactionId);
+                transactionRepositoryGateway.findByIdAndOrganisationId(transactionId, organisationId).stream().findFirst();
 
         return transactionEntity.map(this::getTransactionView);
     }
@@ -221,7 +221,8 @@ public class AccountingCorePresentationViewService {
             return Either.left(pageableEither.getLeft());
         }
         Pageable finalPage = pageableEither.get();
-        return Either.right(transactionBatchRepositoryGateway.findById(batchId)
+        return Either.right(transactionBatchRepositoryGateway.findByIdAndOrganisationId(batchId, batchFilterRequest.getOrganisationId())
+                .stream().findFirst()
                 .map(transactionBatchEntity -> {
                     Page<TransactionEntity> transactions = this.getTransaction(
                             transactionBatchEntity, txStatus, finalPage,
@@ -358,7 +359,9 @@ public class AccountingCorePresentationViewService {
     public TransactionItemsProcessRejectView rejectTransactionItems(
             TransactionItemsRejectionRequest transactionItemsRejectionRequest) {
         Optional<TransactionEntity> txM = transactionRepositoryGateway
-                .findById(transactionItemsRejectionRequest.getTransactionId());
+                .findByIdAndOrganisationId(transactionItemsRejectionRequest.getTransactionId(),
+                        transactionItemsRejectionRequest.getOrganisationId())
+                .stream().findFirst();
         if (txM.isEmpty()) {
             Either<IdentifiableProblem, TransactionEntity> errorE =
                     transactionNotFoundResponse(transactionItemsRejectionRequest
@@ -387,9 +390,9 @@ public class AccountingCorePresentationViewService {
     }
 
     @Transactional
-    public BatchReprocessView scheduleReIngestionForFailed(String batchId) {
+    public BatchReprocessView scheduleReIngestionForFailed(String batchId, String organisationId) {
         Either<ProblemDetail, Void> txM =
-                accountingCoreService.scheduleReIngestionForFailed(batchId);
+                accountingCoreService.scheduleReIngestionForFailed(batchId, organisationId);
 
         if (txM.isEmpty()) {
             return BatchReprocessView.createFail(batchId, txM.getLeft());
@@ -656,7 +659,8 @@ public class AccountingCorePresentationViewService {
                         .map(CommonEntity::getCreatedAt).orElse(null),
                 transactionEntity.getItemCount(),
                 getTransactionItemView(transactionEntity),
-                getViolations(transactionEntity)
+                getViolations(transactionEntity),
+                Optional.empty()
 
         );
     }

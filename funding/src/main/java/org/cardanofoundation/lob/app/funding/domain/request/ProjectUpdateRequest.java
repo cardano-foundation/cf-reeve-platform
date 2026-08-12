@@ -9,13 +9,14 @@ import lombok.experimental.SuperBuilder;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 @Getter
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
 @SuperBuilder
-public class ProjectUpdateRequest {
+public class ProjectUpdateRequest extends BaseRequest {
 
     @Nullable
     @Schema(example = "Updated Project Name")

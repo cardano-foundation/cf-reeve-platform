@@ -20,11 +20,15 @@ import org.junit.jupiter.api.Test;
 import org.cardanofoundation.lob.app.organisation.domain.request.ChartOfAccountUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.*;
 import org.cardanofoundation.lob.app.organisation.service.ChartOfAccountsService;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 class ChartOfAccountControllerTest {
 
     @Mock
     private ChartOfAccountsService chartOfAccountsService;
+
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
 
     @InjectMocks
     private ChartOfAccountController controller;
@@ -32,6 +36,7 @@ class ChartOfAccountControllerTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
+        lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
     }
 
     @Test
@@ -117,6 +122,68 @@ class ChartOfAccountControllerTest {
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).isEqualTo(view);
+    }
+
+    @Test
+    void getChartOfAccountTypes_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org-1")).thenReturn(false);
+
+        ResponseEntity<?> response = controller.getChartOfAccountTypes("org-1");
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        verifyNoInteractions(chartOfAccountsService);
+    }
+
+    @Test
+    void getChartOfAccounts_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org-1")).thenReturn(false);
+
+        ResponseEntity<?> response = controller.getChartOfAccounts("org-1", null, null, null, null, null, null, null, null, Pageable.unpaged());
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        verifyNoInteractions(chartOfAccountsService);
+    }
+
+    @Test
+    void downloadChartOfAccountsCsv_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org-1")).thenReturn(false);
+
+        ResponseEntity<?> response = controller.downloadChartOfAccountsCsv("org-1", null, null, null, null, null, null, null, null);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        verifyNoInteractions(chartOfAccountsService);
+    }
+
+    @Test
+    void insertChartOfAccount_noOrgAccess() {
+        ChartOfAccountUpdate update = mock(ChartOfAccountUpdate.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("org-1")).thenReturn(false);
+
+        ResponseEntity<?> response = controller.insertChartOfAccount("org-1", update);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        verifyNoInteractions(chartOfAccountsService);
+    }
+
+    @Test
+    void insertChartOfAccountByCsv_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org-1")).thenReturn(false);
+
+        ResponseEntity<?> response = controller.insertChartOfAccountByCsv("org-1", null);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        verifyNoInteractions(chartOfAccountsService);
+    }
+
+    @Test
+    void updateChartOfAccount_noOrgAccess() {
+        ChartOfAccountUpdate update = mock(ChartOfAccountUpdate.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("org-1")).thenReturn(false);
+
+        ResponseEntity<?> response = controller.updateChartOfAccount("org-1", update);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        verifyNoInteractions(chartOfAccountsService);
     }
 
 }

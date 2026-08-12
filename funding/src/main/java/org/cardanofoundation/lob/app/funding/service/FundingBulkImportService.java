@@ -365,6 +365,7 @@ public class FundingBulkImportService {
 
         // UPDATE — partial: a blank CSV cell means "leave this field unchanged".
         ProjectUpdateRequest updateRequest = ProjectUpdateRequest.builder()
+                .organisationId(existing.getOrganisationId())
                 .projectTitle(blankToNull(root.getProjectTitle()))
                 .totalAmount(totalAmount)
                 .currency(blankToNull(root.getCurrency()))
@@ -434,6 +435,7 @@ public class FundingBulkImportService {
             BigDecimal subAmount, Map<String, String> resolvedProjectIds) {
 
         ProjectUpdateRequest updateRequest = ProjectUpdateRequest.builder()
+                .organisationId(existing.getOrganisationId())
                 .projectTitle(blankToNull(line.getSubProjectTitle()))
                 .totalAmount(subAmount)
                 .currency(blankToNull(line.getSubCurrency()))
@@ -509,16 +511,16 @@ public class FundingBulkImportService {
         LocalDate date = dateE.get();
 
         if (!isBlank(line.getExternalMilestoneId())) {
-            Optional<Either<ProblemDetail, Boolean>> updateResult = tryUpdateExistingMilestone(projectId, line, amount, date);
+            Optional<Either<ProblemDetail, Boolean>> updateResult = tryUpdateExistingMilestone(organisationId, projectId, line, amount, date);
             if (updateResult.isPresent()) {
                 return updateResult.get();
             }
         }
-        return createNewMilestone(projectId, line, amount, date);
+        return createNewMilestone(organisationId, projectId, line, amount, date);
     }
 
     /** Empty when no milestone matches {@code line}'s externalMilestoneId — the caller should create one instead. */
-    private Optional<Either<ProblemDetail, Boolean>> tryUpdateExistingMilestone(String projectId, MilestoneCsvLine line,
+    private Optional<Either<ProblemDetail, Boolean>> tryUpdateExistingMilestone(String organisationId, String projectId, MilestoneCsvLine line,
             BigDecimal amount, LocalDate date) {
         Optional<MilestoneEntity> existing = milestoneService.findByProjectIdAndExternalMilestoneId(projectId, line.getExternalMilestoneId());
         if (existing.isEmpty()) {
@@ -531,7 +533,7 @@ public class FundingBulkImportService {
                 .currency(blankToNull(line.getCurrency()))
                 .milestoneDate(date)
                 .build();
-        MilestoneView view = milestoneService.updateMilestone(projectId, existing.get().getId(), updateRequest);
+        MilestoneView view = milestoneService.updateMilestone(projectId, existing.get().getId(), organisationId, updateRequest);
         Optional<ProblemDetail> error = view.getError();
         if (error.isPresent()) {
             return Optional.of(Either.left(error.get()));
@@ -539,7 +541,7 @@ public class FundingBulkImportService {
         return Optional.of(Either.right(false));
     }
 
-    private Either<ProblemDetail, Boolean> createNewMilestone(String projectId, MilestoneCsvLine line, BigDecimal amount, LocalDate date) {
+    private Either<ProblemDetail, Boolean> createNewMilestone(String organisationId, String projectId, MilestoneCsvLine line, BigDecimal amount, LocalDate date) {
         // CREATE — full data is required.
         if (isBlank(line.getMilestoneTitle()) || amount == null || isBlank(line.getCurrency()) || date == null) {
             return Either.left(Problems.badRequest(
@@ -564,7 +566,7 @@ public class FundingBulkImportService {
             }
             return Either.right(true);
         }
-        MilestoneView view = milestoneService.createMilestone(projectId, request);
+        MilestoneView view = milestoneService.createMilestone(projectId, organisationId, request);
         Optional<ProblemDetail> error = view.getError();
         if (error.isPresent()) {
             return Either.left(error.get());

@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.organisation.resource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -43,6 +44,7 @@ class OrganisationResourceTest {
     void organisationList_success() {
         Organisation org = mock(Organisation.class);
         OrganisationView view = mock(OrganisationView.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("123")).thenReturn(true);
         when(organisationService.findById("123")).thenReturn(Optional.of(org));
         when(organisationService.getOrganisationView(org)).thenReturn(view);
 
@@ -56,6 +58,7 @@ class OrganisationResourceTest {
 
     @Test
     void organsationDetailSpecificTest_error() {
+        when(keycloakSecurityHelper.canUserAccessOrg("123")).thenReturn(true);
         when(organisationService.findById("123")).thenReturn(Optional.empty());
 
         ResponseEntity<?> responseEntity = organisationResource.organisationDetailSpecific("123");
@@ -67,6 +70,7 @@ class OrganisationResourceTest {
     void organisationDetailSpecific_success() {
         Organisation org = mock(Organisation.class);
         OrganisationView view = mock(OrganisationView.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("123")).thenReturn(true);
         when(organisationService.findById("123")).thenReturn(Optional.of(org));
         when(organisationService.getOrganisationView(org)).thenReturn(view);
 
@@ -78,15 +82,18 @@ class OrganisationResourceTest {
 
     @Test
     void organisationEvent() {
+        when(keycloakSecurityHelper.canUserAccessOrg("123")).thenReturn(true);
         when(organisationService.getOrganisationEventCode("123")).thenReturn(Set.of(AccountEvent.builder()
                         .id(new AccountEvent.Id("123", "456", "789"))
                         .name("Test Event")
                         .customerCode("Test Code")
                 .build()));
-        ResponseEntity<List<EventView>> responseEntity = organisationResource.organisationEvent("123");
+        ResponseEntity<?> responseEntity = organisationResource.organisationEvent("123");
         assertEquals(200, responseEntity.getStatusCode().value());
-        assertEquals(1, Objects.requireNonNull(responseEntity.getBody()).size());
-        assertEquals("Test Event", responseEntity.getBody().getFirst().getName());
+        @SuppressWarnings("unchecked")
+        List<EventView> body = (List<EventView>) responseEntity.getBody();
+        assertEquals(1, Objects.requireNonNull(body).size());
+        assertEquals("Test Event", body.getFirst().getName());
 
     }
 
@@ -133,6 +140,7 @@ class OrganisationResourceTest {
     void organisationUpdate_organisationNotFound() {
         OrganisationUpdate request = mock(OrganisationUpdate.class);
         Organisation org = mock(Organisation.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("123")).thenReturn(true);
         when(organisationService.findById("123")).thenReturn(Optional.of(org));
 
         ResponseEntity<?> responseEntity = organisationResource.organisationUpdate("123", request);
@@ -144,6 +152,7 @@ class OrganisationResourceTest {
     void organisationUpdate_errorOnUpdate() {
         OrganisationUpdate request = mock(OrganisationUpdate.class);
         Organisation org = mock(Organisation.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("123")).thenReturn(true);
         when(organisationService.findById("123")).thenReturn(Optional.of(org));
         when(organisationService.updateOrganisation(org, request)).thenReturn(Optional.empty());
 
@@ -156,6 +165,7 @@ class OrganisationResourceTest {
         OrganisationUpdate request = mock(OrganisationUpdate.class);
         Organisation org = mock(Organisation.class);
         OrganisationView view = mock(OrganisationView.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("123")).thenReturn(true);
         when(organisationService.findById("123")).thenReturn(Optional.of(org));
         when(organisationService.updateOrganisation(org, request)).thenReturn(Optional.of(org));
         when(organisationService.getOrganisationView(org)).thenReturn(view);
@@ -170,7 +180,7 @@ class OrganisationResourceTest {
         when(keycloakSecurityHelper.canUserAccessOrg("123")).thenReturn(false);
 
         ResponseEntity<?> responseEntity = organisationResource.validateOrganisation("123");
-        assertEquals(403, responseEntity.getStatusCode().value());
+        assertEquals(401, responseEntity.getStatusCode().value());
     }
 
     @Test
@@ -194,5 +204,35 @@ class OrganisationResourceTest {
         assertEquals(validationView, responseEntity.getBody());
     }
 
+    @Test
+    void organisationDetailSpecific_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("123")).thenReturn(false);
+
+        ResponseEntity<?> responseEntity = organisationResource.organisationDetailSpecific("123");
+
+        assertEquals(401, responseEntity.getStatusCode().value());
+        verifyNoInteractions(organisationService);
+    }
+
+    @Test
+    void organisationEvent_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("123")).thenReturn(false);
+
+        ResponseEntity<?> responseEntity = organisationResource.organisationEvent("123");
+
+        assertEquals(401, responseEntity.getStatusCode().value());
+        verifyNoInteractions(organisationService);
+    }
+
+    @Test
+    void organisationUpdate_noOrgAccess() {
+        OrganisationUpdate request = mock(OrganisationUpdate.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("123")).thenReturn(false);
+
+        ResponseEntity<?> responseEntity = organisationResource.organisationUpdate("123", request);
+
+        assertEquals(401, responseEntity.getStatusCode().value());
+        verifyNoInteractions(organisationService);
+    }
 
 }
