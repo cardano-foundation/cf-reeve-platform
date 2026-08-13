@@ -12,7 +12,7 @@ import lombok.extern.slf4j.Slf4j;
  * DevSecurityConfiguration
  */
 @Configuration
-@Profile("local")
+@Profile("insecure")
 @Slf4j
 public class DevSecurityConfiguration {
 
