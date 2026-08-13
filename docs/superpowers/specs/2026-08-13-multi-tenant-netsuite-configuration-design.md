@@ -108,7 +108,7 @@ Established facts from the three repositories, which the design relies on.
 | D4 | Status and non-secret fields are readable; the private key is strictly write-only | Without it the admin form cannot show whether an organisation is configured or prefill anything |
 | D5 | The netsuite module is the sole owner of the configuration; the organisation module keeps only a projection | One authoritative copy of the secret |
 | D6 | Delivery via transactional outbox with an ACK event | A dropped event must not silently lose a tenant's credentials |
-| D7 | Credentials are validated synchronously against NetSuite before the write commits | Chosen explicitly; bad credentials never reach storage |
+| D7 | Credentials are validated **asynchronously**; the verdict is persisted on the projection as `netsuite_valid` | Any organisation pod may consume the reply, so an in-memory `CompletableFuture` cannot be relied on. Whichever pod receives the ACK writes the flag; the UI reads it on refresh |
 | D8 | Hard cutover — no environment-variable fallback | Chosen explicitly; avoids one tenant's credentials silently serving another organisation |
 | D9 | Credentials and instance id are per organisation; tuning parameters stay global | Batch sizes and debug flags are operator concerns, not tenant data |
 | D10 | The UI is scoped to the caller's own organisation | Chosen explicitly; no organisation picker needs to be built |
@@ -120,45 +120,55 @@ Established facts from the three repositories, which the design relies on.
 
 These follow from D6 + D7 and are accepted knowingly.
 
-1. **The encrypted credentials cross Kafka twice** — once for the pre-flight validation exchange, once for the
-   durable upsert. Both transmissions are ciphertext.
-2. **The admin write path depends on NetSuite being reachable.** A save cannot succeed while the netsuite module is
-   down or the NetSuite instance is unreachable; the endpoint returns `503` after the validation timeout.
+1. **Invalid credentials are stored, not rejected.** The write path cannot tell the admin whether the credentials
+   work, because the answer arrives later and possibly on a different pod. A configuration that fails verification is
+   persisted with `netsuite_valid = false`; ingestion for that organisation will fail until it is corrected.
+2. **The admin gets no immediate verdict.** `POST`/`PUT` returns `202 Accepted`. The outcome appears on the status
+   endpoint once the ACK is processed — typically sub-second, but the UI must be written for "not yet known".
 3. **Hard cutover breaks ingestion until every organisation is reconfigured.** With D8 there is no fallback, so the
-   upgrade window requires each organisation's admin to re-enter credentials, each save making a live NetSuite call.
+   upgrade window requires each organisation's admin to re-enter credentials.
 
 ## 6. Architecture
 
 ### 6.1 Write path
 
+Every step is asynchronous and every piece of state is persisted, so no request depends on which pod handles it.
+
 ```
 Admin (frontend)
   │  POST/PUT /api/v1/organisations/{orgId}/netsuite-configuration
   ▼
-organisation module
-  │  1. validate payload
-  │  2. encrypt secret fields (AES-256-GCM)
-  │  3. publish NetSuiteConfigValidationRequestEvent(correlationId)  ─── blocks on CompletableFuture (10s)
-  ▼                                                                        │
-[Kafka]  ──────────────────────────────────────────────────────────────────┤
-  ▼                                                                        │
-netsuite module                                                            │
-  │  decrypt into a throwaway client, testConnection()                     │
-  │  publish NetSuiteConfigValidationResponseEvent(correlationId, status) ─┘
+organisation module  (any pod)
+  │  1. validate payload shape
+  │  2. encrypt private key (AES-256-GCM)
+  │  3. COMMIT: outbox row + projection row
+  │            (syncState = PENDING, netsuiteValid = null)
+  │  4. return 202 Accepted with the current status view
   ▼
-organisation module
-  │  invalid   → 422, nothing stored
-  │  timeout   → 503, nothing stored
-  │  valid     → COMMIT: outbox row + projection row (syncState = PENDING) → 200/201
-  ▼
-outbox relay (@Scheduled)
+outbox relay (@Scheduled, any pod)
   │  publish NetSuiteConfigUpsertedEvent, mark row published
   ▼
-[Kafka] → netsuite module: upsert netsuite_adapter_organisation_config, bump revision
-  │  publish NetSuiteConfigAppliedEvent(organisationId, revision, status)
+[Kafka]
   ▼
-[Kafka] → organisation module: projection syncState = APPLIED, purge outbox payload
+netsuite module
+  │  1. upsert netsuite_adapter_organisation_config (idempotent on revision)
+  │  2. build a client from the stored config and call testConnection()
+  │  3. publish NetSuiteConfigAppliedEvent(organisationId, revision,
+  │                                        storeStatus, validationStatus, message)
+  ▼
+[Kafka]
+  ▼
+organisation module  (whichever pod is assigned the partition)
+  │  projection: syncState = APPLIED | FAILED
+  │              netsuiteValid = true | false
+  │              lastValidatedAt, validationMessage
+  │  outbox: acknowledged, payload purged
+  ▼
+Frontend polls / refetches GET .../status → shows the verdict
 ```
+
+The configuration is stored **before** it is verified. Storing is the durable act; verification is a report on it.
+That ordering is what lets any pod handle any step.
 
 ### 6.2 Ingestion path
 
@@ -173,8 +183,9 @@ POST /api/v1/extraction/  (unchanged)
           └─ config absent → TransactionBatchFailedEvent(NETSUITE_CONFIGURATION_NOT_FOUND)
 ```
 
-The same resolution applies to `NetSuiteReconcilationService` and to `NetSuiteExtractionService.validateIngestion`,
-which returns the problem directly because it already runs through the correlation-id reply channel.
+The same resolution applies to `NetSuiteReconcilationService` and to `NetSuiteExtractionService.validateIngestion`.
+The latter reports the missing configuration through the pre-existing `ValidateIngestionResponseEvent` channel it
+already uses — that channel is untouched by this work, and is unrelated to the configuration ACK described in §10.
 
 ## 7. Cryptography
 
@@ -208,13 +219,22 @@ Table `organisation_netsuite_config_state`, migration in
 | `organisation_id` | PK |
 | `base_url`, `token_url`, `client_id`, `certificate_id`, `netsuite_instance_id` | non-secret, returned by the status endpoint |
 | `private_key_fingerprint` | SHA3 digest, display only |
-| `sync_state` | `PENDING` \| `APPLIED` \| `FAILED` |
+| `sync_state` | `PENDING` \| `APPLIED` \| `FAILED` — did the netsuite module receive and store it |
 | `sync_message` | last ACK failure detail, nullable |
 | `revision` | monotonic, incremented per accepted write |
-| `last_validated_at`, `last_validation_status` | from the pre-flight validation |
+| `netsuite_valid` | `NULL` \| `TRUE` \| `FALSE` — do the credentials actually authenticate against NetSuite |
+| `last_validated_at`, `validation_message` | when the verdict was recorded, and why it failed |
 | `created_at`, `updated_at`, `updated_by` | audit, matching the module's `CommonEntity` convention |
 
 **No secret column.** This table never holds key material.
+
+`sync_state` and `netsuite_valid` answer two different questions and must not be collapsed into one column. A
+configuration can be stored successfully (`APPLIED`) and still not work (`netsuite_valid = false`) — that is the
+common case for a typo in a client id. `netsuite_valid` is `NULL` from the moment of the write until the ACK is
+processed, which is exactly the "not yet known" state the UI has to render.
+
+Both fields are written by whichever organisation pod consumes `NetSuiteConfigAppliedEvent`. Nothing about the write
+path depends on the pod that served the original HTTP request still being alive, or on it being the same pod.
 
 ### 8.2 `organisation` module — outbox
 
@@ -253,9 +273,14 @@ All under the existing `/api/v1` base, in a new
 
 | Method | Path | Success | Purpose |
 |---|---|---|---|
-| `POST` | `/organisations/{orgId}/netsuite-configuration` | `201` | create; `409` if a row already exists |
-| `PUT` | `/organisations/{orgId}/netsuite-configuration` | `200` | update; `404` if no row exists |
+| `POST` | `/organisations/{orgId}/netsuite-configuration` | `202` | create; `409` if a row already exists |
+| `PUT` | `/organisations/{orgId}/netsuite-configuration` | `202` | update; `404` if no row exists |
 | `GET` | `/organisations/{orgId}/netsuite-configuration/status` | `200` | non-secret fields + sync/validation state |
+
+`POST` and `PUT` return `202 Accepted` rather than `201`/`200`, because acceptance is all they can honestly report:
+the configuration has been recorded and queued, but whether NetSuite accepts the credentials is not known yet. The
+response body is the same `NetSuiteConfigurationStatusView` the `GET` returns, so the client can render the
+`PENDING` / `netsuiteValid: null` state immediately without a second call.
 
 Authorisation on every endpoint: `@PreAuthorize("hasRole(@securityConfig.getAdminRole())")` plus an explicit
 `KeycloakSecurityHelper.canUserAccessOrg(orgId)` check. This is the first admin-exclusive endpoint in the platform;
@@ -280,28 +305,33 @@ Errors use RFC 7807 `ProblemDetail`, consistent with the rest of the platform, w
 |---|---|---|
 | `NETSUITE_CONFIGURATION_ALREADY_EXISTS` | 409 | `POST` against an organisation that already has a row |
 | `NETSUITE_CONFIGURATION_NOT_FOUND` | 404 | `PUT` against an organisation with no row |
-| `NETSUITE_CREDENTIALS_INVALID` | 422 | pre-flight validation rejected the credentials |
-| `NETSUITE_VALIDATION_UNAVAILABLE` | 503 | validation timed out or the netsuite module is not deployed |
+
+There is no `422` for bad credentials and no `503` for an unreachable netsuite module. Neither condition is knowable
+at request time under D7; both surface later as `netsuiteValid = false` or a projection left at `PENDING`.
 
 `NETSUITE_CONFIGURATION_NOT_FOUND` is reused as the failure title on the ingestion path (§6.2), where it surfaces on
 a `TransactionBatchFailedEvent` rather than an HTTP response.
 
 ## 10. Events
 
-Four classes in `organisation/src/main/java/org/cardanofoundation/lob/app/organisation/domain/event/netsuite/`,
+Two classes in `organisation/src/main/java/org/cardanofoundation/lob/app/organisation/domain/event/netsuite/`,
 each carrying `EventMetadata` with a `VERSION` constant, per the platform convention.
 
 | Event | Direction | Payload |
 |---|---|---|
-| `NetSuiteConfigValidationRequestEvent` | organisation → netsuite | `correlationId`, `organisationId`, non-secret fields, encrypted private key |
-| `NetSuiteConfigValidationResponseEvent` | netsuite → organisation | `correlationId`, status, message |
-| `NetSuiteConfigUpsertedEvent` | organisation → netsuite | `organisationId`, `revision`, non-secret fields, encrypted private key |
-| `NetSuiteConfigAppliedEvent` | netsuite → organisation | `organisationId`, `revision`, status, message |
+| `NetSuiteConfigUpsertedEvent` | organisation → netsuite | `organisationId`, `revision`, non-secret fields, encrypted private key (nullable, see §10.2) |
+| `NetSuiteConfigAppliedEvent` | netsuite → organisation | `organisationId`, `revision`, `storeStatus`, `validationStatus`, `message` |
+
+A single round trip carries both outcomes. `storeStatus` reports whether the configuration was persisted and drives
+`sync_state`; `validationStatus` reports whether `testConnection()` succeeded and drives `netsuite_valid`. Folding
+them together means the credentials cross Kafka exactly once, and there is no separate validation exchange to keep
+consistent with the upsert.
+
+There is **no** correlation-id waiter and no `CompletableFuture` anywhere in this design. That is the point of D7:
+the reply may be delivered to any organisation pod, so the only durable place to put the answer is the database.
 
 `toString()` must exclude the encrypted key so it cannot reach logs — the publishers in `cf-reeve-application` log the
 whole event at INFO today.
-
-A `NetSuiteConfigResponseWaiter` in the organisation module mirrors `ValidateIngestionResponseWaiter`.
 
 ### 10.1 Kafka wiring (`cf-reeve-application`)
 
@@ -312,44 +342,41 @@ lob:
   organisation:
     consumer-group: lob-consumer-organisation
     topics:
-      netsuite-config-validation-response: organisation.domain.event.netsuite.NetSuiteConfigValidationResponseEvent
       netsuite-config-applied: organisation.domain.event.netsuite.NetSuiteConfigAppliedEvent
   netsuite:
     topics:
-      netsuite-config-validation-request: organisation.domain.event.netsuite.NetSuiteConfigValidationRequestEvent
       netsuite-config-upserted: organisation.domain.event.netsuite.NetSuiteConfigUpsertedEvent
 ```
 
 New `kafka/publisher/OrganisationKafkaPublisher.java` and `kafka/consumer/OrganisationKafkaConsumer.java`; the
-existing `NetsuiteKafkaPublisher` and `NetSuiteKafkaConsumer` gain one handler each per direction. All gated with the
-established `@ConditionalOnProperty({"lob.<module>.enabled", "spring.kafka.enabled"})`.
+existing `NetsuiteKafkaPublisher` and `NetSuiteKafkaConsumer` gain one handler each. All gated with the established
+`@ConditionalOnProperty({"lob.<module>.enabled", "spring.kafka.enabled"})`.
 
-**Consumer group scoping.** The applied-ACK listener uses the shared `lob-consumer-organisation` group — any instance
-may update the projection. The **validation-response listener must use a per-instance group**
-(`${lob.organisation.consumer-group}-${random UUID}`), because the `CompletableFuture` it completes lives in one JVM's
-heap. With a shared group the reply can be delivered to an instance that is not waiting, and the request hangs until
-timeout. Every instance therefore receives every reply and only the one holding the correlation id acts on it. The
-existing `ValidateIngestionResponseWaiter` has this same latent defect; fixing it there is out of scope but should be
-recorded.
+**Consumer group scoping.** Both listeners use their module's ordinary shared group — `lob-consumer-organisation` for
+the ACK, `lob-consumer-netsuite` for the upsert. Exactly one pod in each group receives a given message, does the
+work, and writes the result to the database. This is the normal, correct use of a consumer group, and it is only
+available because D7 removed the in-memory future: there is no longer any pod-affinity requirement to work around.
+
+Per the platform's group-scoping rule, these group ids must not be shared with listeners that have different topic
+subscriptions. `lob-consumer-organisation` is new and belongs solely to the organisation module's listeners.
 
 ### 10.2 Updating without re-entering the private key
 
 The organisation module keeps no copy of the key (D5, §8.1), so it cannot re-send one on a `PUT` where the admin left
 the field blank. The netsuite module owns the key, so it supplies it:
 
-- In both `NetSuiteConfigValidationRequestEvent` and `NetSuiteConfigUpsertedEvent`, a **null** `privateKeyEncrypted`
-  means *"reuse the key already stored for this organisation"*.
-- On validation, the netsuite module loads the stored ciphertext for that organisation, decrypts it, and tests the
-  connection using the **new** non-secret fields together with the **existing** key. This is what makes "change the
-  account URL without retyping the key" work.
-- On upsert, it writes the new non-secret fields and leaves `private_key_encrypted` untouched.
+- In `NetSuiteConfigUpsertedEvent`, a **null** `privateKeyEncrypted` means *"reuse the key already stored for this
+  organisation"*.
+- The netsuite module writes the new non-secret fields and leaves `private_key_encrypted` untouched, then verifies
+  using the **new** connection fields together with the **existing** key. This is what makes "change the account URL
+  without retyping the key" work.
 - If the field is null and the netsuite module has no stored configuration for that organisation — the projection and
-  the authoritative store having diverged — it replies with a validation failure carrying
-  `NETSUITE_CONFIGURATION_NOT_FOUND`, and the organisation module surfaces `422`. The admin recovers by supplying the
-  key explicitly.
+  the authoritative store having diverged — it ACKs with `storeStatus = FAILED` and a message of
+  `NETSUITE_CONFIGURATION_NOT_FOUND`. The projection lands on `syncState = FAILED`, and the admin recovers by
+  submitting the key explicitly.
 
-`privateKeyEncrypted` is mandatory on the create path; the controller rejects a `POST` without it before any event is
-published.
+`privateKeyEncrypted` is mandatory on the create path; the controller rejects a `POST` without it before anything is
+written.
 
 ## 11. NetSuite client resolution
 
@@ -359,8 +386,8 @@ published.
 - A new `NetSuiteClientRegistry` resolves and caches one client per organisation, each with its own token cache. It
   evicts an organisation's client when `NetSuiteConfigUpsertedEvent` is applied, so a credential change takes effect
   without a restart.
-- `NetSuiteConfigService` handles the upsert and lookup; `NetSuiteConfigEventHandler` listens for the two inbound
-  events and publishes the two outbound ones.
+- `NetSuiteConfigService` handles the upsert, the verification call and the lookup; `NetSuiteConfigEventHandler`
+  listens for `NetSuiteConfigUpsertedEvent` and publishes `NetSuiteConfigAppliedEvent` carrying both outcomes.
 - `NetSuiteExtractionService` and `NetSuiteReconcilationService` resolve through the registry by `organisationId`
   instead of holding an injected client.
 - `cf_netsuite_altavia_erp_connector/config/CFConfig.java` in the application repo stops constructing a
@@ -385,16 +412,35 @@ injected from configuration, unchanged.
 - **Private key field:** write-only. When a configuration exists the form shows the fingerprint and a "Replace key"
   affordance rather than a value; the field is submitted only when the admin types a new key. Reuses `FieldPassword` /
   `InputPassword`, or a masked multiline variant if a PEM does not fit the single-line control.
-- **Status chip:** `configured` / `pending` / `failed`, with `lastValidatedAt`.
 - **Wiring:** route in `settings.routes.tsx` wrapped in `<RequirePermission resource="netsuite_configuration"
   action="view">`, path constant in `consts/routes/routes.consts.ts`, nav entry in
   `NavigationSidebar.service.tsx`, strings in `libs/translations/en-US.json`.
-- **Error surfacing:** `422` shows the NetSuite validation message inline against the credential fields; `503` shows a
-  distinct "could not reach NetSuite to verify — try again" message, since the two mean different things to the admin.
+
+### 12.1 Rendering an asynchronous verdict
+
+The save returns `202` with no verdict, so the UI cannot render a simple success/failure. `syncState` and
+`netsuiteValid` combine into five states the admin can actually be in:
+
+| `syncState` | `netsuiteValid` | Chip                  | Meaning shown to the admin                                    |
+| ----------- | --------------- | --------------------- | ------------------------------------------------------------- |
+| no row      | n/a             | *Not configured*      | Nothing has been set up                                        |
+| `PENDING`   | `null`          | *Checking…*           | Saved, verification in progress                                |
+| `APPLIED`   | `true`          | *Connected*           | Stored and verified, with `lastValidatedAt`                    |
+| `APPLIED`   | `false`         | *Credentials rejected*| Stored but NetSuite refused them; shows `validationMessage`    |
+| `FAILED`    | any             | *Not applied*         | The netsuite module could not store it; shows `syncMessage`    |
+
+After a successful submit the form switches out of edit mode and shows *Checking…*. The verdict appears on the next
+fetch — a manual page refresh is sufficient and is the guaranteed path. As a convenience, the react-query hook sets
+`refetchInterval` while `syncState === 'PENDING'`, stopping once it resolves, so the chip usually settles on its own
+within a second or two without the admin doing anything. That polling is an enhancement, not the mechanism; the
+design is correct with it removed.
+
+Two error cases remain synchronous and are surfaced inline as before: `409` on a duplicate create and `404` on an
+update with no existing row. Credential rejection is **not** a form error — it is a status on a saved record.
 
 ## 13. Application repository
 
-- **`cf-application/src/main/resources/application.yml`** — add the four topics and `lob.organisation.consumer-group`;
+- **`cf-application/src/main/resources/application.yml`** — add the two topics and `lob.organisation.consumer-group`;
   add `lob.security.config-encryption.key: ${LOB_CONFIG_ENCRYPTION_KEY}`; **remove** the `lob.netsuite.client.*`
   credential block, keeping only the tuning keys.
 - **`docker-compose.yml`** — remove `LOB_NETSUITE_CLIENT_URL`, `_CERTIFICATE_ID`, `_CLIENT_ID`,
@@ -426,21 +472,28 @@ injected from configuration, unchanged.
 
 - **Crypto:** round-trip, tamper detection (GCM tag failure), IV uniqueness across encryptions, startup failure on a
   missing or malformed key, `v1:` prefix handling.
-- **Organisation service:** create/update happy paths; `409` on `POST` with an existing row in each `syncState`;
-  `404` on `PUT` with no row; `GET` returns `{"configured": false}` rather than `404` for a fresh organisation;
-  validation rejection leaves no row written; validation timeout leaves no row written; outbox and projection written
-  in the same transaction; `POST` without `privateKey` is rejected before any event is published.
+- **Organisation service:** create/update happy paths return `202` with `syncState = PENDING` and
+  `netsuiteValid = null`; `409` on `POST` with an existing row in each `syncState`; `404` on `PUT` with no row;
+  `GET` returns `{"configured": false}` rather than `404` for a fresh organisation; outbox and projection written in
+  the same transaction; `POST` without `privateKey` is rejected before anything is written.
+- **ACK handling (the pod-independence requirement):** a `NetSuiteConfigAppliedEvent` processed by an instance that
+  never served the original request still updates `netsuite_valid`, `sync_state`, `lastValidatedAt` and purges the
+  outbox payload. This is the behaviour D7 exists to guarantee, so it deserves a test that explicitly exercises the
+  handler in isolation from any request context.
+- **ACK for a stale revision** is ignored rather than overwriting a newer verdict.
 - **Outbox relay:** publishes unpublished rows, marks them, retries on failure, purges payload on ACK.
 - **Netsuite module:** upsert idempotency by `revision`, out-of-order event handling, registry caching and eviction on
-  update, `NETSUITE_CONFIGURATION_NOT_FOUND` when an ingestion runs for an unconfigured organisation.
-- **Null-key update path (§10.2):** `PUT` without `privateKey` validates against the stored key and the new non-secret
-  fields; the upsert leaves `private_key_encrypted` byte-identical; a null key with no stored configuration yields
-  `422` rather than writing a configuration with no key.
+  update, `NETSUITE_CONFIGURATION_NOT_FOUND` when an ingestion runs for an unconfigured organisation; a failed
+  `testConnection()` still stores the configuration and reports `validationStatus = INVALID`.
+- **Null-key update path (§10.2):** `PUT` without `privateKey` verifies against the stored key and the new non-secret
+  fields; the upsert leaves `private_key_encrypted` byte-identical; a null key with no stored configuration ACKs
+  `storeStatus = FAILED` rather than writing a configuration with no key.
 - **Boundary:** a test asserting no `organisation` package imports a `netsuite_altavia_erp_adapter` repository or
   entity. Since there is no ArchUnit in the repository today, this is the one place worth adding a focused check —
   D3 is otherwise unenforced.
 - **Frontend:** the private key is never rendered from a status response; the field submits only when dirty; the
-  route is inaccessible to non-admin roles.
+  route is inaccessible to non-admin roles; each of the five states in §12.1 renders its own chip, and *Checking…*
+  resolves to the right terminal state on refetch.
 
 ## 16. Rollout
 
@@ -448,8 +501,9 @@ Hard cutover, per D8. Sequence:
 
 1. Deploy the platform and application changes with `LOB_CONFIG_ENCRYPTION_KEY` set on both services. Ingestion for
    every organisation fails with `NETSUITE_CONFIGURATION_NOT_FOUND` from this point.
-2. Each organisation's admin enters credentials through the new UI. Each save performs a live NetSuite call.
-3. Confirm every organisation shows `APPLIED`.
+2. Each organisation's admin enters credentials through the new UI.
+3. Confirm every organisation reaches `syncState = APPLIED` **and** `netsuiteValid = true`. `APPLIED` alone is not
+   sufficient — it means stored, not working.
 4. Remove the now-unused `LOB_NETSUITE_CLIENT_*` credential variables and the PEM mount from deployment manifests.
 
 The window between steps 1 and 3 is a genuine outage for NetSuite ingestion. If that is unacceptable operationally,
@@ -457,13 +511,19 @@ the decision to revisit is D8, not the design.
 
 ## 17. Open items and follow-ups
 
-- `ValidateIngestionResponseWaiter` has the same multi-replica defect described in §10.1. Out of scope here; worth a
-  separate ticket.
+- **A re-verify action.** Credentials can be revoked or expire at NetSuite without anything changing on our side, so
+  `netsuite_valid` goes stale. Today it is only recomputed when a configuration is written. A "check connection now"
+  endpoint republishing the upsert event — or a periodic revalidation job — would keep it honest. Deliberately left
+  out of this scope.
+- `ValidateIngestionResponseWaiter` still uses an in-memory correlation-id future and therefore breaks with more than
+  one instance of the pod hosting `accounting_reporting_core` — the same defect D7 avoids here. This design no longer
+  depends on it, but the existing extraction-validation path does. Worth a separate ticket.
 - Encryption key rotation. The `v1:` envelope makes it possible; no tooling ships with this work.
 - Moving `LOB_CONFIG_ENCRYPTION_KEY` into a secret manager.
 - The Kafka layer has no DLQ or retry anywhere in the platform. The outbox covers the organisation → netsuite
-  direction, but a lost `NetSuiteConfigAppliedEvent` leaves the projection stuck at `PENDING` even though the
-  configuration was stored correctly. The status is then pessimistic rather than wrong; a resync/reconcile action
-  would close the gap.
+  direction, but a lost `NetSuiteConfigAppliedEvent` leaves the projection stuck at `PENDING` with
+  `netsuiteValid = null` even though the configuration was stored and verified. The status is then pessimistic rather
+  than wrong — ingestion still works — but the admin sees *Checking…* indefinitely. The re-verify action above is the
+  natural remedy, since republishing the upsert regenerates the ACK.
 - `NetSuite10Api` and `HMACSha256SignatureService` in the netsuite module appear to be dead OAuth1 code. Removing them
   is not required here but would reduce the surface being reasoned about.
