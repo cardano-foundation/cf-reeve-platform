@@ -6,7 +6,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -42,7 +44,8 @@ class NetSuiteClientRegistryTest {
     @BeforeEach
     void setUp() {
         registry = new NetSuiteClientRegistry(repository, secretCipher, new ObjectMapper(),
-                RestClient.create(), 100);
+                RestClient.create(), 100,
+                Clock.fixed(Instant.parse("2026-08-14T10:00:00Z"), ZoneOffset.UTC));
     }
 
     private NetSuiteConfigEntity config() {

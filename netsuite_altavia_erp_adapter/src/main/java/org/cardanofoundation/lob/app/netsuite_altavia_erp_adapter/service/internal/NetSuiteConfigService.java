@@ -49,6 +49,17 @@ public class NetSuiteConfigService {
 
         if (existingM.isPresent() && event.getRevision() <= existingM.orElseThrow().getRevision()) {
             NetSuiteConfigEntity existing = existingM.orElseThrow();
+            NetSuiteConfigStatus storedVerdict = storedValidationStatus(existing);
+
+            if (storedVerdict == null) {
+                // The configuration was stored but the verdict never was — the process died
+                // between the two writes. Replaying a null verdict here would leave the projection
+                // APPLIED with validity permanently unknown, so verify now instead.
+                log.info("No recorded verdict for organisation {} revision {}; verifying on replay",
+                        organisationId, existing.getRevision());
+
+                return verify(organisationId, existing.getRevision());
+            }
 
             log.info("Replaying stored verdict for already-applied NetSuiteConfigUpsertedEvent, organisation {} revision {}",
                     organisationId, event.getRevision());
@@ -57,7 +68,7 @@ public class NetSuiteConfigService {
             // SUCCESS here would let a redelivered event flip rejected credentials to valid.
             return ack(organisationId, existing.getRevision(),
                     NetSuiteConfigStatus.SUCCESS,
-                    storedValidationStatus(existing),
+                    storedVerdict,
                     existing.getValidationMessage());
         }
 
@@ -120,15 +131,16 @@ public class NetSuiteConfigService {
                                                     String rawMessage) {
         String message = truncate(rawMessage);
 
-        netSuiteConfigRepository.findById(organisationId).ifPresent(entity -> {
-            // Only record the verdict if this is still the current revision; a newer upsert may
-            // have overtaken us while NetSuite was being called.
-            if (entity.getRevision() == revision) {
-                entity.setValidationStatus(validationStatus.name());
-                entity.setValidationMessage(message);
-                netSuiteConfigRepository.save(entity);
-            }
-        });
+        // A conditional update, not read-mutate-save: the verdict is written after an outbound
+        // HTTP call, so a newer revision may have committed meanwhile. A full-row merge would
+        // restore this invocation's stale URL, client id and key over the newer configuration.
+        int updated = netSuiteConfigRepository.recordValidationVerdict(
+                organisationId, revision, validationStatus.name(), message);
+
+        if (updated == 0) {
+            log.info("Discarding verdict for organisation {} revision {} — superseded by a newer configuration",
+                    organisationId, revision);
+        }
 
         return ack(organisationId, revision, NetSuiteConfigStatus.SUCCESS, validationStatus, message);
     }

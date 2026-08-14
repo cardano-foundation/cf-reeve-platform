@@ -1,5 +1,8 @@
 package org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.service.internal;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -39,8 +42,24 @@ public class NetSuiteClientRegistry {
     private final ObjectMapper objectMapper;
     private final RestClient restClient;
     private final Integer recordsPerCall;
+    private final Clock clock;
 
-    private final Map<String, NetSuiteClient> cache = new ConcurrentHashMap<>();
+    /**
+     * Cached clients expire so a replica that did not consume the configuration event still picks
+     * up a credential change. Eviction only reaches the one replica whose consumer handled the
+     * event — the configuration topic uses a single shared group — so without an expiry the other
+     * replicas would serve revoked credentials indefinitely.
+     */
+    private static final Duration CACHE_TTL = Duration.ofMinutes(5);
+
+    private record CachedClient(NetSuiteClient client, Instant builtAt) {
+
+        boolean isFresh(Clock clock) {
+            return Duration.between(builtAt, Instant.now(clock)).compareTo(CACHE_TTL) < 0;
+        }
+    }
+
+    private final Map<String, CachedClient> cache = new ConcurrentHashMap<>();
 
     /**
      * Incremented on every eviction. A build that started before an eviction must not publish its
@@ -51,9 +70,9 @@ public class NetSuiteClientRegistry {
 
     @Transactional(readOnly = true)
     public Either<ProblemDetail, NetSuiteClient> forOrganisation(String organisationId) {
-        NetSuiteClient cached = cache.get(organisationId);
-        if (cached != null) {
-            return Either.right(cached);
+        CachedClient cached = cache.get(organisationId);
+        if (cached != null && cached.isFresh(clock)) {
+            return Either.right(cached.client());
         }
 
         long generation = generations.getOrDefault(organisationId, 0L);
@@ -94,7 +113,7 @@ public class NetSuiteClientRegistry {
                 return present;
             }
 
-            return client;
+            return new CachedClient(client, Instant.now(clock));
         });
 
         return Either.right(client);
