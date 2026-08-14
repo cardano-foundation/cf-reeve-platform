@@ -43,7 +43,7 @@ import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 public class NetSuiteReconcilationService {
 
     private final IngestionRepository ingestionRepository;
-    private final NetSuiteClient netSuiteClient;
+    private final NetSuiteClientRegistry netSuiteClientRegistry;
     private final TransactionConverter transactionConverter;
     private final ExtractionParametersFilteringService extractionParametersFilteringService;
     private final NetSuiteParser netSuiteParser;
@@ -64,6 +64,30 @@ public class NetSuiteReconcilationService {
         log.info("Running reconciliation...");
 
         String reconcilationRequestId = digestAsHex(UUID.randomUUID().toString());
+
+        Either<ProblemDetail, NetSuiteClient> clientE = netSuiteClientRegistry.forOrganisation(organisationId);
+        if (clientE.isLeft()) {
+            ProblemDetail problem = clientE.getLeft();
+            log.error("Cannot start reconciliation for organisation {}: {}", organisationId, problem.getDetail());
+
+            Map<String, Object> bag = Map.of(
+                    Constants.NETSUITE_BAG_ADAPTER_INSTANCE_ID, netsuiteInstanceId,
+                    Constants.NETSUITE_BAG_TECHNICAL_ERROR_TITLE, requireNonNull(problem.getTitle()),
+                    Constants.NETSUITE_BAG_TECHNICAL_ERROR_DETAIL, requireNonNull(problem.getDetail())
+            );
+
+            ReconcilationFailedEvent reconcilationFailedEvent = ReconcilationFailedEvent.builder()
+                    .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION, user))
+                    .reconciliationId(reconcilationRequestId)
+                    .organisationId(organisationId)
+                    .error(new FatalError(FatalError.Code.ADAPTER_ERROR,
+                            NetSuiteClientRegistry.CONFIGURATION_NOT_FOUND, bag))
+                    .build();
+
+            applicationEventPublisher.publishEvent(reconcilationFailedEvent);
+            return;
+        }
+        NetSuiteClient netSuiteClient = clientE.get();
 
         Either<ProblemDetail, Optional<List<String>>> netSuiteJsonE = netSuiteClient.retrieveLatestNetsuiteTransactionLines(reconcileFrom, reconcileTo);
 
