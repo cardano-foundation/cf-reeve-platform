@@ -7,12 +7,12 @@ import java.lang.reflect.Method;
 import java.security.KeyPairGenerator;
 import java.util.Base64;
 
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
-
 import org.springframework.web.client.RestClient;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 class NetSuiteClientTest {
 
