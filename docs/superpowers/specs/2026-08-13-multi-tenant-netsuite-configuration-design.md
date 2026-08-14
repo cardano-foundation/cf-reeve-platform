@@ -110,7 +110,7 @@ Established facts from the three repositories, which the design relies on.
 | D6 | The event is published directly after the projection commits; no outbox | The projection row is already the durable record of the write, so a lost event is visible as a stuck `PENDING` rather than a silent loss. An outbox would add a table, a relay job and retry/purge logic, and would be the only place key material lived on the organisation side |
 | D7 | Credentials are validated **asynchronously**; the verdict is persisted on the projection as `netsuite_valid` | Any organisation pod may consume the reply, so an in-memory `CompletableFuture` cannot be relied on. Whichever pod receives the ACK writes the flag; the UI reads it on refresh |
 | D8 | Hard cutover — no environment-variable fallback | Chosen explicitly; avoids one tenant's credentials silently serving another organisation |
-| D9 | Credentials and instance id are per organisation; tuning parameters stay global | Batch sizes and debug flags are operator concerns, not tenant data |
+| D9 | Credentials are per organisation; tuning parameters and the adapter instance id stay global | Batch sizes and debug flags are operator concerns, not tenant data. `netsuiteInstanceId` is adapter identity and a code-mapping key — see §17 |
 | D10 | The UI is scoped to the caller's own organisation | Chosen explicitly; no organisation picker needs to be built |
 | D11 | Encryption happens in the organisation service layer, not in a JPA `AttributeConverter` | The ciphertext must travel in the event payload, which sits above persistence; a converter fires only on write to a column the organisation module does not have, so it would leave plaintext in the event |
 | D12 | Event classes live in the `organisation` module | netsuite already depends on organisation, so no new shared module and no circular edge |
@@ -223,7 +223,7 @@ Table `organisation_netsuite_config_state`, migration in
 | Column | Notes |
 |---|---|
 | `organisation_id` | PK |
-| `base_url`, `token_url`, `client_id`, `certificate_id`, `netsuite_instance_id` | non-secret, returned by the status endpoint |
+| `base_url`, `token_url`, `client_id`, `certificate_id` | non-secret, returned by the status endpoint |
 | `private_key_fingerprint` | SHA3 digest, display only |
 | `sync_state` | `PENDING` \| `APPLIED` \| `FAILED` — did the netsuite module receive and store it |
 | `sync_message` | last ACK failure detail, nullable |
@@ -254,7 +254,7 @@ existing `netsuite_adapter_*` prefix convention.
 | Column | Notes |
 |---|---|
 | `organisation_id` | PK |
-| `base_url`, `token_url`, `client_id`, `certificate_id`, `netsuite_instance_id` | plaintext |
+| `base_url`, `token_url`, `client_id`, `certificate_id` | plaintext |
 | `private_key_encrypted` | `v1:`-prefixed envelope |
 | `revision` | from the event; used for idempotent, out-of-order-safe upsert |
 | `created_at`, `updated_at` | audit |
@@ -509,6 +509,17 @@ the decision to revisit is D8, not the design.
 
 ## 17. Open items and follow-ups
 
+- **`netsuiteInstanceId` stays global.** An earlier draft listed it as a per-organisation field. It is
+  `CFConfig.NETSUITE_CONNECTOR_ID`, and it is the first component of `netsuite_adapter_code_mapping`'s primary key —
+  `TransactionConverter.getOrganisationIdFromTxLine` looks up `(netsuiteInstanceId, subsidiary, ORGANISATION)` to
+  decide which organisation a transaction line belongs to. Making it per-organisation would orphan every existing
+  mapping row. It is adapter identity, not a credential.
+- **Per-organisation credentials do not make attribution per-organisation.** A single NetSuite account can already
+  serve many organisations: `TransactionConverter` resolves the owning organisation *per transaction line* from the
+  subsidiary mapping, independently of the organisation whose ingestion was triggered. This change controls *which
+  NetSuite account is called*, not *how lines are attributed*, so an ingestion triggered for org X can still emit
+  lines attributed to org Y if the mapping says so. Pre-existing behaviour; aligning the two is separate work and
+  should be scoped before the first tenant with its own NetSuite account goes live.
 - **A re-verify action.** Credentials can be revoked or expire at NetSuite without anything changing on our side, so
   `netsuite_valid` goes stale. Today it is only recomputed when a configuration is written. A "check connection now"
   endpoint republishing the upsert event — or a periodic revalidation job — would keep it honest. Deliberately left
