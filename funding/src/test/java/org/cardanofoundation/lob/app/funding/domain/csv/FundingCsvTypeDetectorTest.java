@@ -30,31 +30,21 @@ class FundingCsvTypeDetectorTest {
     }
 
     @Test
-    void detectsProjectsFile() {
-        String header = "External Project ID;Project Title;Funding ID;Total Amount;Currency;"
-                + "Parent External Project ID;Sub External Project ID;Sub Project Title;Sub Funding ID;"
-                + "Sub Total Amount;Sub Currency\n";
+    void detectsProjectsMilestonesFile() {
+        String header = "Project Title;Funding ID;Total Amount;Currency;"
+                + "Sub Project Title;Sub Funding ID;Sub Total Amount;Sub Currency;"
+                + "Milestone Title;Milestone Amount;Milestone Date\n";
 
         Optional<FundingCsvFileType> result = detector.detect(file(header));
 
-        assertThat(result).contains(FundingCsvFileType.PROJECTS);
-    }
-
-    @Test
-    void detectsMilestonesFile() {
-        String header = "External Project ID;External Milestone ID;Milestone Title;Milestone Amount;"
-                + "Currency;Milestone Date\n";
-
-        Optional<FundingCsvFileType> result = detector.detect(file(header));
-
-        assertThat(result).contains(FundingCsvFileType.MILESTONES);
+        assertThat(result).contains(FundingCsvFileType.PROJECTS_MILESTONES);
     }
 
     @Test
     void detectsEventsFile() {
         String header = "Event Type;Funding ID;Funding Hash;Funding Entity;Currency RCY;Event Date;"
                 + "Category;Vendor;Amount FCY;Currency FCY;FX Rate;Amount RCY;Hash;Notes;"
-                + "External Project ID;External Milestone ID;Allocated Amount\n";
+                + "Project Title;Milestone Title;Allocated Amount\n";
 
         Optional<FundingCsvFileType> result = detector.detect(file(header));
 
@@ -62,16 +52,12 @@ class FundingCsvTypeDetectorTest {
     }
 
     @Test
-    void detectsProjectsFileEvenWhenMandatoryColumnIsMissing() {
-        // "Project Title" (mandatory) is missing — the file must still be routed to the Projects
-        // parser so it gets a specific "missing required header" error, not dropped as unrecognized.
-        String header = "External Project ID;Funding ID;Total Amount;Currency;"
-                + "Parent External Project ID;Sub External Project ID;Sub Project Title;Sub Funding ID;"
-                + "Sub Total Amount;Sub Currency\n";
+    void detectsProjectsMilestonesFileEvenWhenOnlyMandatoryColumnIsPresent() {
+        // "Project Title" is the only mandatory column — a file with just that column (e.g. a
+        // minimal export) must still be routed to this parser, not dropped as unrecognized.
+        Optional<FundingCsvFileType> result = detector.detect(file("Project Title\n"));
 
-        Optional<FundingCsvFileType> result = detector.detect(file(header));
-
-        assertThat(result).contains(FundingCsvFileType.PROJECTS);
+        assertThat(result).contains(FundingCsvFileType.PROJECTS_MILESTONES);
     }
 
     @Test
@@ -79,11 +65,20 @@ class FundingCsvTypeDetectorTest {
         // "Funding ID" (mandatory) is missing.
         String header = "Event Type;Funding Hash;Funding Entity;Currency RCY;Event Date;"
                 + "Category;Vendor;Amount FCY;Currency FCY;FX Rate;Amount RCY;Hash;Notes;"
-                + "External Project ID;External Milestone ID;Allocated Amount\n";
+                + "Project Title;Milestone Title;Allocated Amount\n";
 
         Optional<FundingCsvFileType> result = detector.detect(file(header));
 
         assertThat(result).contains(FundingCsvFileType.EVENTS);
+    }
+
+    @Test
+    void projectsMilestonesFileWinsOverEventsFile_whenHeadersOverlapOnlyOnSharedColumns() {
+        // "Project Title" and "Milestone Title" alone are a subset of both templates' declared
+        // columns — the tighter-fitting (smaller declared column set) template wins.
+        Optional<FundingCsvFileType> result = detector.detect(file("Project Title;Milestone Title\n"));
+
+        assertThat(result).contains(FundingCsvFileType.PROJECTS_MILESTONES);
     }
 
     @Test

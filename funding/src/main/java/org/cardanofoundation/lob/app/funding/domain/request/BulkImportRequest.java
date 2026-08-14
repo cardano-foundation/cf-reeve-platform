@@ -23,7 +23,7 @@ import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 @SuperBuilder
 public class BulkImportRequest extends BaseRequest {
 
-    @Schema(description = "One CSV file per entity type (Projects, Milestones, Events). Type is auto-detected from headers.")
+    @Schema(description = "One CSV file per entity type (Projects+Milestones, Events). Type is auto-detected from headers.")
     @Builder.Default
     private List<MultipartFile> files = new ArrayList<>();
 

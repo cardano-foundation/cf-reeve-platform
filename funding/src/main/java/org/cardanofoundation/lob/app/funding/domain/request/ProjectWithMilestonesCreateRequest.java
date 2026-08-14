@@ -28,7 +28,7 @@ public class ProjectWithMilestonesCreateRequest extends BaseRequest {
     private String fundingId;
 
     @NotBlank
-    @Schema(example = "PROJ-AB")
+    @Schema(example = "PROJ-AB", description = "User-defined id. No longer used for lookups or id generation; kept for backward compatibility only.")
     private String externalProjectId;
 
     @NotBlank

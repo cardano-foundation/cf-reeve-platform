@@ -42,8 +42,9 @@ public class ProjectEntity extends CommonEntity implements Persistable<String> {
     @Column(name = "funding_id")
     private String fundingId;
 
-    @NotBlank
-    @Column(name = "external_project_id", nullable = false)
+    /** User-defined project identifier. No longer used for lookups or id generation; title-based now. */
+    @Nullable
+    @Column(name = "external_project_id")
     private String externalProjectId;
 
     @NotBlank
@@ -74,14 +75,14 @@ public class ProjectEntity extends CommonEntity implements Persistable<String> {
     @OneToMany(mappedBy = "project", cascade = CascadeType.ALL)
     private List<MilestoneEntity> milestones = new ArrayList<>();
 
-    /** Deterministic id for a root project — unique per organisation by its user-defined id. */
-    public static String id(String organisationId, String externalProjectId) {
-        return SHA3.digestAsHex("%s::%s".formatted(organisationId, externalProjectId));
+    /** Deterministic id for a root project — unique per organisation by its title. */
+    public static String id(String organisationId, String projectTitle) {
+        return SHA3.digestAsHex("%s::%s".formatted(organisationId, projectTitle));
     }
 
-    /** Deterministic id for a sub-project — unique within its parent. */
-    public static String subId(String parentProjectId, String subProjectId) {
-        return SHA3.digestAsHex("%s::%s".formatted(parentProjectId, subProjectId));
+    /** Deterministic id for a sub-project — unique within its parent by its title. */
+    public static String subId(String parentProjectId, String projectTitle) {
+        return SHA3.digestAsHex("%s::%s".formatted(parentProjectId, projectTitle));
     }
 
     @Override

@@ -77,7 +77,7 @@ public class SpendingEventConverter {
                     SpendingEventPublishView.SubProject subProject = allocation.getSubProject();
                     EventProjectAllocationEntity entity = EventProjectAllocationEntity.builder()
                             .event(event)
-                            .projectId(allocation.getExternalProjectId())
+                            .projectId(allocation.getProjectId())
                             .projectTitle(allocation.getProjectTitle())
                             .subProjectId(subProject != null ? subProject.getSubProjectId() : null)
                             .subProjectTitle(subProject != null ? subProject.getSubProjectTitle() : null)

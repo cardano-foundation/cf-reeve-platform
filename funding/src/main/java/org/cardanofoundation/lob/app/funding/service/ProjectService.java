@@ -104,7 +104,7 @@ public class ProjectService {
         // parent — through the same shared creation path the event-allocation flow uses.
         Either<ProblemDetail, ProjectEntity> created = request.getParentProjectId() != null
                 ? resolveParent(request).flatMap(parent -> projectStructureService.createSubProject(
-                        parent, request.getExternalProjectId(), request.getProjectTitle(),
+                        parent, request.getProjectTitle(),
                         request.getFundingId(), request.getTotalAmount(), request.getCurrency()))
                 : createRootProject(request);
         if (created.isLeft()) {
@@ -129,12 +129,6 @@ public class ProjectService {
         if (amountProblem.isPresent()) {
             return Either.left(amountProblem.get());
         }
-        if (projectRepository.existsByOrganisationIdAndExternalProjectId(
-                request.getOrganisationId(), request.getExternalProjectId())) {
-            return Either.left(Problems.conflict(
-                    "Project already exists for externalProjectId: " + request.getExternalProjectId(),
-                    ErrorTitleConstants.PROJECT_ALREADY_EXISTS));
-        }
         if (projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNull(
                 request.getOrganisationId(), request.getProjectTitle())) {
             return Either.left(Problems.conflict(
@@ -146,7 +140,7 @@ public class ProjectService {
         if (fundingIdProblem.isPresent()) {
             return Either.left(fundingIdProblem.get());
         }
-        String projectId = ProjectEntity.id(request.getOrganisationId(), request.getExternalProjectId());
+        String projectId = ProjectEntity.id(request.getOrganisationId(), request.getProjectTitle());
         return Either.right(projectRepository.saveAndFlush(toEntity(request, projectId)));
     }
 
@@ -197,7 +191,7 @@ public class ProjectService {
                 return nodeXor;
             }
             Either<ProblemDetail, ProjectEntity> subProject = projectStructureService.createSubProject(
-                    project, node.getExternalProjectId(), node.getProjectTitle(),
+                    project, node.getProjectTitle(),
                     node.getFundingId(), node.getTotalAmount(), node.getCurrency());
             if (subProject.isLeft()) {
                 return Optional.of(subProject.getLeft());
@@ -264,16 +258,21 @@ public class ProjectService {
                 return ProjectView.error(parentProblem.get());
             }
         }
-        // The title must stay unique in the final scope — re-check when the title changes OR the project
-        // is re-parented (a move can collide with a same-named sibling under the new parent).
-        if (request.getProjectTitle() != null || request.getParentProjectId() != null) {
-            String effectiveTitle = request.getProjectTitle() != null ? request.getProjectTitle() : project.getProjectTitle();
-            Optional<ProblemDetail> titleConflict = projectTitleConflict(project, effectiveTitle);
+        // projectTitle is immutable — the project's id is derived from it, so changing it would leave
+        // the id stale relative to its new title.
+        if (request.getProjectTitle() != null && !request.getProjectTitle().equals(project.getProjectTitle())) {
+            return ProjectView.error(Problems.badRequest(
+                    "projectTitle cannot be changed on update (id is derived from it)",
+                    ErrorTitleConstants.PROJECT_TITLE_IMMUTABLE));
+        }
+        // A re-parent can still collide with a same-named sibling under the new parent, even though
+        // the title itself doesn't change.
+        if (request.getParentProjectId() != null) {
+            Optional<ProblemDetail> titleConflict = projectTitleConflict(project, project.getProjectTitle());
             if (titleConflict.isPresent()) {
                 return ProjectView.error(titleConflict.get());
             }
         }
-        if (request.getProjectTitle() != null) project.setProjectTitle(request.getProjectTitle());
         if (request.getTotalAmount() != null) project.setTotalAmount(request.getTotalAmount());
         if (request.getCurrency() != null) project.setCurrency(request.getCurrency());
         return toView(projectRepository.saveAndFlush(project));
@@ -436,7 +435,6 @@ public class ProjectService {
                 .id(projectId)
                 .organisationId(request.getOrganisationId())
                 .fundingId(request.getFundingId())
-                .externalProjectId(request.getExternalProjectId())
                 .projectTitle(request.getProjectTitle())
                 .totalAmount(request.getTotalAmount())
                 .currency(request.getCurrency())

@@ -12,12 +12,12 @@ import com.opencsv.bean.CsvBindByName;
  * (everything except the allocation columns) are repeated on every row belonging to the same event;
  * consecutive rows sharing the same event natural key ({@code fundingId} + {@code eventType} +
  * {@code fundingHash} + {@code currencyRcy}) are grouped into one event with multiple allocations,
- * mirroring the Projects file's root/sub-project grouping.
+ * mirroring the Projects+Milestones file's project grouping.
  *
- * <p>Both {@code externalProjectId} and {@code externalMilestoneId} must reference an
- * <em>already-existing</em> project and milestone — this file carries only allocation data
- * (which milestone gets how much of this event), not enough data to create a project or milestone
- * from scratch. Create/update those first via the Projects and Milestones files.
+ * <p>Both {@code projectTitle} and {@code milestoneTitle} must reference an <em>already-existing</em>
+ * project and milestone — this file carries only allocation data (which milestone gets how much of
+ * this event), not enough data to create a project or milestone from scratch. Create/update those
+ * first via the Projects+Milestones file.
  */
 @Getter
 @Setter
@@ -71,11 +71,11 @@ public class EventCsvLine {
 
     // --- Allocation columns (one per row) — both references must already exist ---
 
-    @CsvBindByName(column = "External Project ID")
-    private String externalProjectId;
+    @CsvBindByName(column = "Project Title")
+    private String projectTitle;
 
-    @CsvBindByName(column = "External Milestone ID")
-    private String externalMilestoneId;
+    @CsvBindByName(column = "Milestone Title")
+    private String milestoneTitle;
 
     @CsvBindByName(column = "Allocated Amount")
     private String allocatedAmount;
