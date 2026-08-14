@@ -228,6 +228,7 @@ Table `organisation_netsuite_config_state`, migration in
 | `sync_state` | `PENDING` \| `APPLIED` \| `FAILED` — did the netsuite module receive and store it |
 | `sync_message` | last ACK failure detail, nullable |
 | `revision` | monotonic, incremented per accepted write |
+| `version` | JPA optimistic lock — see below |
 | `netsuite_valid` | `NULL` \| `TRUE` \| `FALSE` — do the credentials actually authenticate against NetSuite |
 | `last_validated_at`, `validation_message` | when the verdict was recorded, and why it failed |
 | `created_at`, `updated_at`, `updated_by` | audit, matching the module's `CommonEntity` convention |
@@ -241,6 +242,19 @@ processed, which is exactly the "not yet known" state the UI has to render.
 
 Both fields are written by whichever organisation pod consumes `NetSuiteConfigAppliedEvent`. Nothing about the write
 path depends on the pod that served the original HTTP request still being alive, or on it being the same pod.
+
+**Optimistic locking is required, not optional.** Revisions are allocated as `current + 1` after a read, and both
+writers — the admin update and the acknowledgement handler — read, mutate and save. Two consequences follow without a
+`@Version`:
+
+- Two API replicas updating the same organisation both mint revision *n+1* and publish conflicting events under it.
+  The netsuite module accepts the first and drops the second as already-applied, so the projection can describe a
+  configuration that is not the one in use.
+- An acknowledgement in flight for revision *n* is written back after an admin has committed revision *n+1*. Hibernate
+  writes every column, so the stale snapshot silently reverts the URL, client id and fingerprint the admin just saved.
+
+A conflicting admin update returns `409` with `NETSUITE_CONFIGURATION_CONFLICT`. A conflicting acknowledgement is
+discarded — the newer revision has its own acknowledgement in flight.
 
 This is the **only** table the organisation module adds. There is no outbox (D6): the encrypted key is held just long
 enough to build the event and is never written to the organisation schema, so key material exists in exactly one
@@ -257,10 +271,16 @@ existing `netsuite_adapter_*` prefix convention.
 | `base_url`, `token_url`, `client_id`, `certificate_id` | plaintext |
 | `private_key_encrypted` | `v1:`-prefixed envelope |
 | `revision` | from the event; used for idempotent, out-of-order-safe upsert |
+| `validation_status`, `validation_message` | verdict recorded for this revision |
 | `created_at`, `updated_at` | audit |
 
 Upsert is idempotent: an event whose `revision` is not greater than the stored one is acknowledged and ignored. This
 makes at-least-once delivery safe.
+
+**The verdict must be persisted, not recomputed or assumed.** A redelivered event is acknowledged with the
+`validation_status` recorded for that revision. Acknowledging a replay with a synthetic success would let Kafka
+redelivery flip credentials that NetSuite rejected into `netsuiteValid = true` — the projection would claim a
+working configuration that cannot authenticate.
 
 ## 9. API surface
 
@@ -348,13 +368,22 @@ New `kafka/publisher/OrganisationKafkaPublisher.java` and `kafka/consumer/Organi
 existing `NetsuiteKafkaPublisher` and `NetSuiteKafkaConsumer` gain one handler each. All gated with the established
 `@ConditionalOnProperty({"lob.<module>.enabled", "spring.kafka.enabled"})`.
 
-**Consumer group scoping.** Both listeners use their module's ordinary shared group — `lob-consumer-organisation` for
-the ACK, `lob-consumer-netsuite` for the upsert. Exactly one pod in each group receives a given message, does the
-work, and writes the result to the database. This is the normal, correct use of a consumer group, and it is only
-available because D7 removed the in-memory future: there is no longer any pod-affinity requirement to work around.
+**Consumer group scoping.** The ACK listener uses `lob-consumer-organisation`; the upsert listener uses a **dedicated
+`lob-consumer-netsuite-config` group in its own consumer bean**, gated on `lob.netsuite.enabled` alone. It must not
+join `lob-consumer-netsuite`: that consumer is enabled for `lob.netsuite.enabled || lob.csv.enabled`, so a CSV-only
+worker would join the group, receive a tenant's configuration, republish it locally where no NetSuite handler exists,
+and commit the offset — consuming and discarding the configuration silently.
 
-Per the platform's group-scoping rule, these group ids must not be shared with listeners that have different topic
-subscriptions. `lob-consumer-organisation` is new and belongs solely to the organisation module's listeners.
+Exactly one pod in each group receives a given message, does the work, and writes the result to the database. That is
+the normal use of a consumer group, and it is only available because D7 removed the in-memory future: there is no
+pod-affinity requirement left to work around.
+
+Per the platform's group-scoping rule, a group id must map to one (topic-subscription, service) pair. Both new groups
+belong solely to the listeners described here.
+
+**Bean gating.** `NetsuiteModuleConfig` component-scans the organisation package as well as its own, so a NetSuite-only
+pod would otherwise instantiate the admin service, the ACK handler and the admin HTTP endpoints. All three are gated on
+`lob.organisation.enabled` so they exist only on the organisation tier.
 
 ### 10.2 Updating without re-entering the private key
 
@@ -460,6 +489,12 @@ update with no existing row. Credential rejection is **not** a form error — it
   follow-up and is listed in §17.
 - Event `toString()` must exclude ciphertext because the application repository's publishers log entire events at INFO.
 - The status endpoint is deliberately narrow: identifiers and state, never key material.
+- NetSuite error bodies are unbounded and can carry upstream or proxy content. They are truncated before being logged,
+  stored as `validation_message`, or returned by the status endpoint.
+- `lob.security.config-encryption` must sit inside the **existing** `lob.security` block. A second sibling
+  `lob.security:` key is rejected by Spring Boot's YAML loader and takes down every service at startup; a test loads
+  each configuration file with `allowDuplicateKeys=false` to catch it. SnakeYAML's default constructor accepts
+  duplicates, so that option is what makes the test meaningful.
 - Admin-exclusive authorisation is new in this codebase. The permission table entry and the `@PreAuthorize` must be
   reviewed together — the frontend gate is cosmetic, the backend gate is the control.
 - At-least-once delivery plus the `revision` guard means a replayed event cannot downgrade a newer configuration.

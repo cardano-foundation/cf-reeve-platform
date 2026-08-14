@@ -2,7 +2,10 @@ package org.cardanofoundation.lob.app.organisation.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -10,7 +13,6 @@ import static org.mockito.Mockito.when;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,7 +21,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import org.cardanofoundation.lob.app.organisation.domain.entity.NetSuiteConfigState;
 import org.cardanofoundation.lob.app.organisation.domain.entity.NetSuiteSyncState;
 import org.cardanofoundation.lob.app.organisation.domain.event.netsuite.NetSuiteConfigAppliedEvent;
 import org.cardanofoundation.lob.app.organisation.domain.event.netsuite.NetSuiteConfigStatus;
@@ -42,17 +43,6 @@ class NetSuiteConfigAckHandlerTest {
         handler = new NetSuiteConfigAckHandler(repository, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
-    private NetSuiteConfigState pendingState(long revision) {
-        return NetSuiteConfigState.builder()
-                .organisationId(ORG)
-                .baseUrl("https://base").tokenUrl("https://token")
-                .clientId("client").certificateId("cert").privateKeyFingerprint("fp")
-                .syncState(NetSuiteSyncState.PENDING)
-                .revision(revision)
-                .createdAt(NOW).updatedAt(NOW).updatedBy("admin")
-                .build();
-    }
-
     private NetSuiteConfigAppliedEvent ack(long revision,
                                            NetSuiteConfigStatus store,
                                            NetSuiteConfigStatus validation,
@@ -67,71 +57,69 @@ class NetSuiteConfigAckHandlerTest {
                 .build();
     }
 
+    private void stubUpdated(int rows) {
+        when(repository.applyAcknowledgement(anyString(), anyLong(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(rows);
+    }
+
     @Test
     void marksAppliedAndValidWhenBothSucceeded() {
-        when(repository.findById(ORG)).thenReturn(Optional.of(pendingState(3L)));
+        stubUpdated(1);
 
         handler.handleNetSuiteConfigApplied(
                 ack(3L, NetSuiteConfigStatus.SUCCESS, NetSuiteConfigStatus.SUCCESS, null));
 
-        ArgumentCaptor<NetSuiteConfigState> saved = ArgumentCaptor.forClass(NetSuiteConfigState.class);
-        verify(repository).save(saved.capture());
-        assertThat(saved.getValue().getSyncState()).isEqualTo(NetSuiteSyncState.APPLIED);
-        assertThat(saved.getValue().getNetsuiteValid()).isTrue();
-        assertThat(saved.getValue().getLastValidatedAt()).isEqualTo(NOW);
+        verify(repository).applyAcknowledgement(eq(ORG), eq(3L), eq(NetSuiteSyncState.APPLIED),
+                eq(null), eq(Boolean.TRUE), eq(null), eq(NOW), eq(NOW));
     }
 
     @Test
     void marksAppliedButInvalidWhenCredentialsAreRejected() {
-        when(repository.findById(ORG)).thenReturn(Optional.of(pendingState(3L)));
+        stubUpdated(1);
 
         handler.handleNetSuiteConfigApplied(
                 ack(3L, NetSuiteConfigStatus.SUCCESS, NetSuiteConfigStatus.FAILED, "401 Unauthorized"));
 
-        ArgumentCaptor<NetSuiteConfigState> saved = ArgumentCaptor.forClass(NetSuiteConfigState.class);
-        verify(repository).save(saved.capture());
-        assertThat(saved.getValue().getSyncState()).isEqualTo(NetSuiteSyncState.APPLIED);
-        assertThat(saved.getValue().getNetsuiteValid()).isFalse();
-        assertThat(saved.getValue().getValidationMessage()).isEqualTo("401 Unauthorized");
+        verify(repository).applyAcknowledgement(eq(ORG), eq(3L), eq(NetSuiteSyncState.APPLIED),
+                eq(null), eq(Boolean.FALSE), eq("401 Unauthorized"), eq(NOW), eq(NOW));
     }
 
     @Test
     void marksFailedWhenTheConfigurationCouldNotBeStored() {
-        when(repository.findById(ORG)).thenReturn(Optional.of(pendingState(3L)));
+        stubUpdated(1);
 
         handler.handleNetSuiteConfigApplied(
                 ack(3L, NetSuiteConfigStatus.FAILED, null, "NETSUITE_CONFIGURATION_NOT_FOUND"));
 
-        ArgumentCaptor<NetSuiteConfigState> saved = ArgumentCaptor.forClass(NetSuiteConfigState.class);
-        verify(repository).save(saved.capture());
-        assertThat(saved.getValue().getSyncState()).isEqualTo(NetSuiteSyncState.FAILED);
-        assertThat(saved.getValue().getSyncMessage()).isEqualTo("NETSUITE_CONFIGURATION_NOT_FOUND");
-        assertThat(saved.getValue().getNetsuiteValid()).isNull();
+        verify(repository).applyAcknowledgement(eq(ORG), eq(3L), eq(NetSuiteSyncState.FAILED),
+                eq("NETSUITE_CONFIGURATION_NOT_FOUND"), eq(null), eq(null), eq(null), eq(NOW));
     }
 
     @Test
-    void ignoresAnAcknowledgementForAnOlderRevision() {
-        when(repository.findById(ORG)).thenReturn(Optional.of(pendingState(5L)));
+    void scopesTheWriteToTheAcknowledgedRevisionSoASupersededAckCannotRevertNewerConfiguration() {
+        // Zero rows updated means the stored revision has moved on. The handler must treat that
+        // as a no-op rather than writing anything.
+        stubUpdated(0);
 
         handler.handleNetSuiteConfigApplied(
                 ack(4L, NetSuiteConfigStatus.SUCCESS, NetSuiteConfigStatus.SUCCESS, null));
 
-        verify(repository, never()).save(any());
+        verify(repository).applyAcknowledgement(eq(ORG), eq(4L), any(), any(), any(), any(), any(), any());
     }
 
     @Test
-    void ignoresAnAcknowledgementForAnUnknownOrganisation() {
-        when(repository.findById(ORG)).thenReturn(Optional.empty());
+    void toleratesAnAcknowledgementForAnUnknownOrganisation() {
+        stubUpdated(0);
 
         handler.handleNetSuiteConfigApplied(
                 ack(1L, NetSuiteConfigStatus.SUCCESS, NetSuiteConfigStatus.SUCCESS, null));
 
-        verify(repository, never()).save(any());
+        verify(repository).applyAcknowledgement(eq(ORG), eq(1L), any(), any(), any(), any(), any(), any());
     }
 
     @Test
     void isIdempotentSoRedeliveryOfTheSameAckIsHarmless() {
-        when(repository.findById(ORG)).thenReturn(Optional.of(pendingState(3L)));
+        stubUpdated(1);
 
         NetSuiteConfigAppliedEvent event =
                 ack(3L, NetSuiteConfigStatus.SUCCESS, NetSuiteConfigStatus.SUCCESS, null);
@@ -139,12 +127,10 @@ class NetSuiteConfigAckHandlerTest {
         handler.handleNetSuiteConfigApplied(event);
         handler.handleNetSuiteConfigApplied(event);
 
-        ArgumentCaptor<NetSuiteConfigState> saved = ArgumentCaptor.forClass(NetSuiteConfigState.class);
-        verify(repository, times(2)).save(saved.capture());
-        assertThat(saved.getAllValues()).allSatisfy(state -> {
-            assertThat(state.getSyncState()).isEqualTo(NetSuiteSyncState.APPLIED);
-            assertThat(state.getNetsuiteValid()).isTrue();
-        });
+        ArgumentCaptor<Boolean> valid = ArgumentCaptor.forClass(Boolean.class);
+        verify(repository, times(2)).applyAcknowledgement(eq(ORG), eq(3L), eq(NetSuiteSyncState.APPLIED),
+                any(), valid.capture(), any(), any(), any());
+        assertThat(valid.getAllValues()).containsExactly(Boolean.TRUE, Boolean.TRUE);
     }
 
 }
