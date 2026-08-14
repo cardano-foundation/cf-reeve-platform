@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
@@ -34,6 +35,7 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
  * known at request time — the verdict arrives asynchronously and lands on the status endpoint.
  */
 @RestController
+@ConditionalOnProperty(name = "lob.organisation.enabled", havingValue = "true", matchIfMissing = false)
 @RequestMapping("/api/v1")
 @Tag(name = "NetSuite Configuration", description = "Per-organisation NetSuite configuration")
 @CrossOrigin(origins = "http://localhost:3000")

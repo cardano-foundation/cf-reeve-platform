@@ -106,8 +106,11 @@ public class NetSuiteExtractionService {
                         .extractorType(ExtractorType.NETSUITE)
                         .organisationId(organisationId)
                         .userExtractionParameters(userExtractionParameters)
-                        .error(new FatalError(ADAPTER_ERROR, NetSuiteClientRegistry.CONFIGURATION_NOT_FOUND,
-                                ErrorUtils.getBag(problem, NetSuiteClientRegistry.CONFIGURATION_NOT_FOUND)))
+                        // Use the problem's own title: an undecryptable configuration reports
+                        // CONFIGURATION_UNREADABLE, which needs a different remediation (restore the
+                        // encryption key) than a missing one (re-enter credentials).
+                        .error(new FatalError(ADAPTER_ERROR, problem.getTitle(),
+                                ErrorUtils.getBag(problem, problem.getTitle())))
                         .build();
 
                 applicationEventPublisher.publishEvent(batchFailedEvent);

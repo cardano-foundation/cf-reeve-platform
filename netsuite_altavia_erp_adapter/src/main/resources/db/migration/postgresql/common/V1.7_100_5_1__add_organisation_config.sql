@@ -6,6 +6,8 @@ CREATE TABLE netsuite_adapter_organisation_config (
     certificate_id        VARCHAR(255) NOT NULL,
     private_key_encrypted TEXT         NOT NULL,
     revision              BIGINT       NOT NULL DEFAULT 0,
+    validation_status     VARCHAR(16),
+    validation_message    TEXT,
     created_at            TIMESTAMP WITHOUT TIME ZONE NOT NULL,
     updated_at            TIMESTAMP WITHOUT TIME ZONE NOT NULL,
 
@@ -20,3 +22,6 @@ COMMENT ON COLUMN netsuite_adapter_organisation_config.private_key_encrypted IS
 
 COMMENT ON COLUMN netsuite_adapter_organisation_config.revision IS
     'Assigned by the organisation module. An event whose revision is not greater than this one is ignored.';
+
+COMMENT ON COLUMN netsuite_adapter_organisation_config.validation_status IS
+    'Verdict of the last verification for this revision. Replayed events are acknowledged with this stored value rather than a fabricated success.';

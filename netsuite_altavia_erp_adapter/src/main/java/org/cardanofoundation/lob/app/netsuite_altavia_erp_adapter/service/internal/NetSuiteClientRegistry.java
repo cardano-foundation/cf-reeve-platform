@@ -42,12 +42,21 @@ public class NetSuiteClientRegistry {
 
     private final Map<String, NetSuiteClient> cache = new ConcurrentHashMap<>();
 
+    /**
+     * Incremented on every eviction. A build that started before an eviction must not publish its
+     * now-stale client over the freshly rebuilt one, which would pin the cache to revoked
+     * credentials until the next configuration change.
+     */
+    private final Map<String, Long> generations = new ConcurrentHashMap<>();
+
     @Transactional(readOnly = true)
     public Either<ProblemDetail, NetSuiteClient> forOrganisation(String organisationId) {
         NetSuiteClient cached = cache.get(organisationId);
         if (cached != null) {
             return Either.right(cached);
         }
+
+        long generation = generations.getOrDefault(organisationId, 0L);
 
         Optional<NetSuiteConfigEntity> configM = netSuiteConfigRepository.findById(organisationId);
         if (configM.isEmpty()) {
@@ -76,14 +85,25 @@ public class NetSuiteClientRegistry {
                 config.getBaseUrl(), config.getTokenUrl(), pem,
                 config.getCertificateId(), config.getClientId(), recordsPerCall);
 
-        // computeIfAbsent would re-run the (expensive) build under contention; a racing thread
-        // simply wins here and both callers get a usable client.
-        cache.put(organisationId, client);
+        // Publish only if no eviction happened while we were loading and decrypting. If one did,
+        // this client was built from superseded configuration; the caller still gets it for the
+        // operation already in flight, but it must not become the cached one.
+        cache.compute(organisationId, (key, present) -> {
+            if (generations.getOrDefault(key, 0L) != generation) {
+                log.info("Discarding NetSuite client for organisation {} built against superseded configuration", key);
+                return present;
+            }
+
+            return client;
+        });
 
         return Either.right(client);
     }
 
     public void evict(String organisationId) {
+        // Bump the generation before removing, so a build already in flight cannot re-publish.
+        generations.merge(organisationId, 1L, Long::sum);
+
         if (cache.remove(organisationId) != null) {
             log.info("Evicted cached NetSuite client for organisation {}", organisationId);
         }

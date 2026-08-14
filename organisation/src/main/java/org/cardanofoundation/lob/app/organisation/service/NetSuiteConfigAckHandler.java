@@ -7,7 +7,9 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.event.EventListener;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +30,7 @@ import org.cardanofoundation.lob.app.organisation.repository.NetSuiteConfigState
  * deployment) and again from Kafka.
  */
 @Service
+@ConditionalOnProperty(name = "lob.organisation.enabled", havingValue = "true", matchIfMissing = false)
 @Slf4j
 @RequiredArgsConstructor
 public class NetSuiteConfigAckHandler {
@@ -71,7 +74,17 @@ public class NetSuiteConfigAckHandler {
 
         state.setUpdatedAt(now);
 
-        netSuiteConfigStateRepository.save(state);
+        try {
+            netSuiteConfigStateRepository.save(state);
+        } catch (OptimisticLockingFailureException e) {
+            // An admin update committed a newer revision while this acknowledgement was being
+            // processed. Hibernate writes every column, so persisting this stale snapshot would
+            // roll the projection back to the previous configuration. Drop it: the newer
+            // revision has its own acknowledgement in flight.
+            log.info("Discarding NetSuiteConfigAppliedEvent for organisation {} revision {} — superseded by a concurrent update",
+                    event.getOrganisationId(), event.getRevision());
+            return;
+        }
 
         log.info("Applied NetSuiteConfigAppliedEvent for organisation {}: syncState={}, netsuiteValid={}",
                 event.getOrganisationId(), state.getSyncState(), state.getNetsuiteValid());

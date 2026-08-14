@@ -53,6 +53,19 @@ public class NetSuiteConfigEntity {
     @Column(name = "revision", nullable = false)
     private long revision;
 
+    /**
+     * Outcome of the last verification against NetSuite for this revision.
+     * <p>
+     * Persisted so a redelivered event can be acknowledged with the real verdict instead of a
+     * fabricated success — otherwise a replay of a revision whose credentials were rejected
+     * would flip the organisation projection to valid.
+     */
+    @Column(name = "validation_status", length = 16)
+    private String validationStatus;
+
+    @Column(name = "validation_message")
+    private String validationMessage;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 

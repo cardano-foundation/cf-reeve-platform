@@ -80,8 +80,9 @@ public class NetSuiteReconcilationService {
                     .metadata(EventMetadata.create(ReconcilationFailedEvent.VERSION, user))
                     .reconciliationId(reconcilationRequestId)
                     .organisationId(organisationId)
-                    .error(new FatalError(FatalError.Code.ADAPTER_ERROR,
-                            NetSuiteClientRegistry.CONFIGURATION_NOT_FOUND, bag))
+                    // Use the problem's own title so an undecryptable configuration is
+                    // distinguishable from a missing one.
+                    .error(new FatalError(FatalError.Code.ADAPTER_ERROR, problem.getTitle(), bag))
                     .build();
 
             applicationEventPublisher.publishEvent(reconcilationFailedEvent);

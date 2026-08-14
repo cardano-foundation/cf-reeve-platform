@@ -8,7 +8,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.http.ProblemDetail;
-import org.springframework.transaction.annotation.Transactional;
 
 import io.vavr.control.Either;
 
@@ -26,26 +25,40 @@ import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
  * Storing happens before verification: storing is the durable act, verification is a report on
  * it. A configuration whose credentials NetSuite rejects is still stored, and the acknowledgement
  * carries {@code validationStatus = FAILED} so the organisation projection can show it.
+ * <p>
+ * <b>No {@code @Transactional} on {@link #apply}.</b> Verification makes an outbound HTTP call to
+ * NetSuite, which must not happen while a database connection is held — a slow or hanging NetSuite
+ * would otherwise pin connections from the pool for the duration. Each repository call carries its
+ * own transaction, which is sufficient here because Kafka keys configuration events by
+ * organisationId, so events for one organisation are processed in order by a single consumer.
  */
 @Slf4j
 @RequiredArgsConstructor
 public class NetSuiteConfigService {
 
+    /** Upstream error text is attacker-influenced and unbounded; cap what we persist and echo. */
+    private static final int MAX_VALIDATION_MESSAGE_LENGTH = 500;
+
     private final NetSuiteConfigRepository netSuiteConfigRepository;
     private final NetSuiteClientRegistry netSuiteClientRegistry;
     private final Clock clock;
 
-    @Transactional
     public NetSuiteConfigAppliedEvent apply(NetSuiteConfigUpsertedEvent event) {
         String organisationId = event.getOrganisationId();
         Optional<NetSuiteConfigEntity> existingM = netSuiteConfigRepository.findById(organisationId);
 
         if (existingM.isPresent() && event.getRevision() <= existingM.orElseThrow().getRevision()) {
-            log.info("Ignoring already-applied NetSuiteConfigUpsertedEvent for organisation {} revision {}",
+            NetSuiteConfigEntity existing = existingM.orElseThrow();
+
+            log.info("Replaying stored verdict for already-applied NetSuiteConfigUpsertedEvent, organisation {} revision {}",
                     organisationId, event.getRevision());
 
-            return ack(organisationId, event.getRevision(), NetSuiteConfigStatus.SUCCESS,
-                    NetSuiteConfigStatus.SUCCESS, null);
+            // Replay the verdict actually recorded for this configuration. Returning a synthetic
+            // SUCCESS here would let a redelivered event flip rejected credentials to valid.
+            return ack(organisationId, existing.getRevision(),
+                    NetSuiteConfigStatus.SUCCESS,
+                    storedValidationStatus(existing),
+                    existing.getValidationMessage());
         }
 
         String encryptedKey = event.getPrivateKeyEncrypted();
@@ -70,6 +83,8 @@ public class NetSuiteConfigService {
                 .certificateId(event.getCertificateId())
                 .privateKeyEncrypted(encryptedKey)
                 .revision(event.getRevision())
+                .validationStatus(null)
+                .validationMessage(null)
                 .createdAt(existingM.map(NetSuiteConfigEntity::getCreatedAt).orElse(now))
                 .updatedAt(now)
                 .build());
@@ -79,23 +94,72 @@ public class NetSuiteConfigService {
         return verify(organisationId, event.getRevision());
     }
 
+    /**
+     * Runs outside any transaction — see the class javadoc. Records the verdict so a later replay
+     * can be answered without calling NetSuite again.
+     */
     private NetSuiteConfigAppliedEvent verify(String organisationId, long revision) {
         Either<ProblemDetail, NetSuiteClient> clientE = netSuiteClientRegistry.forOrganisation(organisationId);
         if (clientE.isLeft()) {
-            return ack(organisationId, revision, NetSuiteConfigStatus.SUCCESS, NetSuiteConfigStatus.FAILED,
-                    clientE.getLeft().getDetail());
+            return recordAndAck(organisationId, revision, NetSuiteConfigStatus.FAILED, clientE.getLeft().getDetail());
         }
 
         Either<ProblemDetail, Void> connection = clientE.get().testConnection();
         if (connection.isLeft()) {
-            log.warn("NetSuite credentials for organisation {} were stored but rejected: {}",
-                    organisationId, connection.getLeft().getDetail());
+            log.warn("NetSuite credentials for organisation {} were stored but rejected", organisationId);
 
-            return ack(organisationId, revision, NetSuiteConfigStatus.SUCCESS, NetSuiteConfigStatus.FAILED,
-                    connection.getLeft().getDetail());
+            return recordAndAck(organisationId, revision, NetSuiteConfigStatus.FAILED, connection.getLeft().getDetail());
         }
 
-        return ack(organisationId, revision, NetSuiteConfigStatus.SUCCESS, NetSuiteConfigStatus.SUCCESS, null);
+        return recordAndAck(organisationId, revision, NetSuiteConfigStatus.SUCCESS, null);
+    }
+
+    private NetSuiteConfigAppliedEvent recordAndAck(String organisationId,
+                                                    long revision,
+                                                    NetSuiteConfigStatus validationStatus,
+                                                    String rawMessage) {
+        String message = truncate(rawMessage);
+
+        netSuiteConfigRepository.findById(organisationId).ifPresent(entity -> {
+            // Only record the verdict if this is still the current revision; a newer upsert may
+            // have overtaken us while NetSuite was being called.
+            if (entity.getRevision() == revision) {
+                entity.setValidationStatus(validationStatus.name());
+                entity.setValidationMessage(message);
+                netSuiteConfigRepository.save(entity);
+            }
+        });
+
+        return ack(organisationId, revision, NetSuiteConfigStatus.SUCCESS, validationStatus, message);
+    }
+
+    private NetSuiteConfigStatus storedValidationStatus(NetSuiteConfigEntity entity) {
+        if (entity.getValidationStatus() == null) {
+            return null;
+        }
+
+        try {
+            return NetSuiteConfigStatus.valueOf(entity.getValidationStatus());
+        } catch (IllegalArgumentException e) {
+            log.warn("Unrecognised stored validation status '{}' for organisation {}",
+                    entity.getValidationStatus(), entity.getOrganisationId());
+
+            return null;
+        }
+    }
+
+    /**
+     * NetSuite error bodies are unbounded and can carry upstream/proxy content. Cap the length
+     * before it is logged, persisted and returned by the status endpoint.
+     */
+    private String truncate(String message) {
+        if (message == null) {
+            return null;
+        }
+
+        return message.length() <= MAX_VALIDATION_MESSAGE_LENGTH
+                ? message
+                : message.substring(0, MAX_VALIDATION_MESSAGE_LENGTH) + "…";
     }
 
     private NetSuiteConfigAppliedEvent ack(String organisationId,

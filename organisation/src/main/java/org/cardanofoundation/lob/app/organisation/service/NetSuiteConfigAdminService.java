@@ -7,11 +7,15 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import io.vavr.control.Either;
 
@@ -42,6 +46,7 @@ import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
  * whose projection row was later rolled back.
  */
 @Service
+@ConditionalOnProperty(name = "lob.organisation.enabled", havingValue = "true", matchIfMissing = false)
 @Slf4j
 @RequiredArgsConstructor
 public class NetSuiteConfigAdminService {
@@ -104,14 +109,44 @@ public class NetSuiteConfigAdminService {
                 ? SHA3.digestAsHex(request.getPrivateKey())
                 : existing.getPrivateKeyFingerprint();
 
-        NetSuiteConfigState state = build(organisationId, request.getBaseUrl(), request.getTokenUrl(),
-                request.getClientId(), request.getCertificateId(), fingerprint, user, Optional.of(existing));
+        Instant now = Instant.now(clock);
 
-        netSuiteConfigStateRepository.save(state);
+        // Mutate the loaded entity rather than building a fresh one: that keeps the @Version
+        // populated so the save is a version-checked update. Building a detached entity with a
+        // null version would make Spring Data treat it as new and attempt an insert.
+        existing.setBaseUrl(request.getBaseUrl());
+        existing.setTokenUrl(request.getTokenUrl());
+        existing.setClientId(request.getClientId());
+        existing.setCertificateId(request.getCertificateId());
+        existing.setPrivateKeyFingerprint(fingerprint);
+        existing.setSyncState(NetSuiteSyncState.PENDING);
+        existing.setSyncMessage(null);
+        existing.setRevision(existing.getRevision() + 1);
+        existing.setNetsuiteValid(null);
+        existing.setLastValidatedAt(null);
+        existing.setValidationMessage(null);
+        existing.setUpdatedAt(now);
+        existing.setUpdatedBy(user);
 
-        publish(state, encryptedKey, user);
+        try {
+            netSuiteConfigStateRepository.save(existing);
+        } catch (OptimisticLockingFailureException e) {
+            // Another replica updated this organisation concurrently and already claimed this
+            // revision number. Publishing now would emit a second event under the same revision,
+            // one of which the netsuite module would silently drop.
+            log.warn("Concurrent NetSuite configuration update for organisation {}", organisationId);
 
-        return Either.right(NetSuiteConfigurationStatusView.of(state));
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                    "The NetSuite configuration for organisation %s was modified concurrently. Reload and try again."
+                            .formatted(organisationId));
+            problem.setTitle("NETSUITE_CONFIGURATION_CONFLICT");
+
+            return Either.left(problem);
+        }
+
+        publish(existing, encryptedKey, user);
+
+        return Either.right(NetSuiteConfigurationStatusView.of(existing));
     }
 
     private NetSuiteConfigState build(String organisationId,
@@ -144,7 +179,36 @@ public class NetSuiteConfigAdminService {
     }
 
     private void publish(NetSuiteConfigState state, String encryptedKey, String user) {
-        applicationEventPublisher.publishEvent(NetSuiteConfigUpsertedEvent.builder()
+        NetSuiteConfigUpsertedEvent event = buildEvent(state, encryptedKey, user);
+
+        // The Kafka bridge listens with a plain @EventListener, which fires synchronously inside
+        // publishEvent. Normally there is no ambient transaction here (see the class javadoc), so
+        // the projection has already committed. But if a future caller wraps this service in
+        // @Transactional, publishing immediately would let the netsuite module store a
+        // configuration whose projection row is then rolled back. Defer to after commit instead
+        // of relying on call order.
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    doPublish(event);
+                }
+            });
+            return;
+        }
+
+        doPublish(event);
+    }
+
+    private void doPublish(NetSuiteConfigUpsertedEvent event) {
+        applicationEventPublisher.publishEvent(event);
+
+        log.info("Published NetSuiteConfigUpsertedEvent for organisation {} revision {}",
+                event.getOrganisationId(), event.getRevision());
+    }
+
+    private NetSuiteConfigUpsertedEvent buildEvent(NetSuiteConfigState state, String encryptedKey, String user) {
+        return NetSuiteConfigUpsertedEvent.builder()
                 .metadata(EventMetadata.create(NetSuiteConfigUpsertedEvent.VERSION, user))
                 .organisationId(state.getOrganisationId())
                 .revision(state.getRevision())
@@ -153,10 +217,7 @@ public class NetSuiteConfigAdminService {
                 .clientId(state.getClientId())
                 .certificateId(state.getCertificateId())
                 .privateKeyEncrypted(encryptedKey)
-                .build());
-
-        log.info("Published NetSuiteConfigUpsertedEvent for organisation {} revision {}",
-                state.getOrganisationId(), state.getRevision());
+                .build();
     }
 
     private ProblemDetail alreadyExists(String organisationId) {

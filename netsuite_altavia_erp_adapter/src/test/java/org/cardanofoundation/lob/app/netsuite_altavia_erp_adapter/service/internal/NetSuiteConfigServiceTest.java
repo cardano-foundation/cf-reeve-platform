@@ -2,8 +2,10 @@ package org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.service.inter
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -90,8 +92,8 @@ class NetSuiteConfigServiceTest {
         assertThat(ack.getRevision()).isEqualTo(1L);
 
         ArgumentCaptor<NetSuiteConfigEntity> saved = ArgumentCaptor.forClass(NetSuiteConfigEntity.class);
-        verify(repository).save(saved.capture());
-        assertThat(saved.getValue().getPrivateKeyEncrypted()).isEqualTo("v1:ENVELOPE");
+        verify(repository, atLeastOnce()).save(saved.capture());
+        assertThat(saved.getAllValues().get(0).getPrivateKeyEncrypted()).isEqualTo("v1:ENVELOPE");
     }
 
     @Test
@@ -114,9 +116,9 @@ class NetSuiteConfigServiceTest {
         assertThat(ack.getStoreStatus()).isEqualTo(NetSuiteConfigStatus.SUCCESS);
 
         ArgumentCaptor<NetSuiteConfigEntity> saved = ArgumentCaptor.forClass(NetSuiteConfigEntity.class);
-        verify(repository).save(saved.capture());
-        assertThat(saved.getValue().getPrivateKeyEncrypted()).isEqualTo("v1:OLDENVELOPE");
-        assertThat(saved.getValue().getBaseUrl()).isEqualTo("https://base");
+        verify(repository, atLeastOnce()).save(saved.capture());
+        assertThat(saved.getAllValues().get(0).getPrivateKeyEncrypted()).isEqualTo("v1:OLDENVELOPE");
+        assertThat(saved.getAllValues().get(0).getBaseUrl()).isEqualTo("https://base");
     }
 
     @Test
@@ -144,27 +146,81 @@ class NetSuiteConfigServiceTest {
         assertThat(ack.getStoreStatus()).isEqualTo(NetSuiteConfigStatus.SUCCESS);
         assertThat(ack.getValidationStatus()).isEqualTo(NetSuiteConfigStatus.FAILED);
         assertThat(ack.getMessage()).contains("invalid credentials");
-        verify(repository).save(any());
+        verify(repository, atLeastOnce()).save(any());
     }
 
     @Test
-    void ignoresAnEventWhoseRevisionIsNotNewerButStillAcknowledges() {
-        when(repository.findById(ORG)).thenReturn(Optional.of(stored(5L)));
+    void replayOfTheSameRevisionRepeatsTheStoredVerdictInsteadOfFabricatingSuccess() {
+        NetSuiteConfigEntity rejected = stored(5L);
+        rejected.setValidationStatus(NetSuiteConfigStatus.FAILED.name());
+        rejected.setValidationMessage("401 Unauthorized");
+        when(repository.findById(ORG)).thenReturn(Optional.of(rejected));
 
         NetSuiteConfigAppliedEvent ack = service.apply(event(5L, "v1:ENVELOPE"));
 
         assertThat(ack.getStoreStatus()).isEqualTo(NetSuiteConfigStatus.SUCCESS);
+        // Without this, a Kafka redelivery would flip rejected credentials to valid.
+        assertThat(ack.getValidationStatus()).isEqualTo(NetSuiteConfigStatus.FAILED);
+        assertThat(ack.getMessage()).isEqualTo("401 Unauthorized");
         verify(repository, never()).save(any());
     }
 
     @Test
-    void ignoresAnOutOfOrderOlderRevision() {
-        when(repository.findById(ORG)).thenReturn(Optional.of(stored(5L)));
+    void replayOfTheSameRevisionRepeatsAStoredSuccess() {
+        NetSuiteConfigEntity accepted = stored(5L);
+        accepted.setValidationStatus(NetSuiteConfigStatus.SUCCESS.name());
+        when(repository.findById(ORG)).thenReturn(Optional.of(accepted));
+
+        NetSuiteConfigAppliedEvent ack = service.apply(event(5L, "v1:ENVELOPE"));
+
+        assertThat(ack.getValidationStatus()).isEqualTo(NetSuiteConfigStatus.SUCCESS);
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void ignoresAnOutOfOrderOlderRevisionAndReportsTheCurrentRevision() {
+        NetSuiteConfigEntity current = stored(5L);
+        current.setValidationStatus(NetSuiteConfigStatus.SUCCESS.name());
+        when(repository.findById(ORG)).thenReturn(Optional.of(current));
 
         NetSuiteConfigAppliedEvent ack = service.apply(event(3L, "v1:ENVELOPE"));
 
         assertThat(ack.getStoreStatus()).isEqualTo(NetSuiteConfigStatus.SUCCESS);
+        assertThat(ack.getRevision()).isEqualTo(5L);
         verify(repository, never()).save(any());
+    }
+
+    @Test
+    void recordsTheValidationVerdictSoItSurvivesARedelivery() {
+        when(repository.findById(ORG))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(stored(1L)));
+        NetSuiteClient client = mock(NetSuiteClient.class);
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "invalid credentials");
+        when(client.testConnection()).thenReturn(Either.left(problem));
+        when(registry.forOrganisation(ORG)).thenReturn(Either.right(client));
+
+        service.apply(event(1L, "v1:ENVELOPE"));
+
+        ArgumentCaptor<NetSuiteConfigEntity> saved = ArgumentCaptor.forClass(NetSuiteConfigEntity.class);
+        verify(repository, times(2)).save(saved.capture());
+        assertThat(saved.getAllValues().get(1).getValidationStatus()).isEqualTo(NetSuiteConfigStatus.FAILED.name());
+        assertThat(saved.getAllValues().get(1).getValidationMessage()).isEqualTo("invalid credentials");
+    }
+
+    @Test
+    void boundsAnUnreasonablyLongUpstreamErrorBeforeStoringOrReturningIt() {
+        when(repository.findById(ORG))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(stored(1L)));
+        NetSuiteClient client = mock(NetSuiteClient.class);
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, "x".repeat(5000));
+        when(client.testConnection()).thenReturn(Either.left(problem));
+        when(registry.forOrganisation(ORG)).thenReturn(Either.right(client));
+
+        NetSuiteConfigAppliedEvent ack = service.apply(event(1L, "v1:ENVELOPE"));
+
+        assertThat(ack.getMessage()).hasSizeLessThan(600);
     }
 
     @Test
@@ -175,9 +231,9 @@ class NetSuiteConfigServiceTest {
         service.apply(event(2L, "v1:NEW"));
 
         ArgumentCaptor<NetSuiteConfigEntity> saved = ArgumentCaptor.forClass(NetSuiteConfigEntity.class);
-        verify(repository).save(saved.capture());
-        assertThat(saved.getValue().getCreatedAt()).isEqualTo(Instant.EPOCH);
-        assertThat(saved.getValue().getUpdatedAt()).isEqualTo(Instant.parse("2026-08-14T10:00:00Z"));
+        verify(repository, atLeastOnce()).save(saved.capture());
+        assertThat(saved.getAllValues().get(0).getCreatedAt()).isEqualTo(Instant.EPOCH);
+        assertThat(saved.getAllValues().get(0).getUpdatedAt()).isEqualTo(Instant.parse("2026-08-14T10:00:00Z"));
     }
 
 }

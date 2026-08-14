@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.service.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -135,6 +136,29 @@ class NetSuiteClientRegistryTest {
 
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo("NETSUITE_CONFIGURATION_UNREADABLE");
+    }
+
+    @Test
+    void doesNotCacheAClientBuiltAgainstConfigurationThatWasEvictedMidBuild() {
+        // Simulate an eviction landing while the client is being built: the decrypt call is the
+        // slow step, so evict there. The caller still gets a usable client for the work already
+        // in flight, but it must not be pinned into the cache over the newer configuration.
+        when(repository.findById(ORG)).thenReturn(Optional.of(config()));
+        when(secretCipher.decrypt("v1:ENVELOPE")).thenAnswer(invocation -> {
+            registry.evict(ORG);
+            return "PEM";
+        });
+
+        NetSuiteClient first = registry.forOrganisation(ORG).get();
+
+        assertThat(first).isNotNull();
+
+        // A subsequent lookup must rebuild rather than serve the stale client.
+        reset(secretCipher);
+        when(secretCipher.decrypt("v1:ENVELOPE")).thenReturn("PEM");
+        NetSuiteClient second = registry.forOrganisation(ORG).get();
+
+        assertThat(second).isNotSameAs(first);
     }
 
 }

@@ -8,6 +8,7 @@ CREATE TABLE organisation_netsuite_config_state (
     sync_state              VARCHAR(16)  NOT NULL,
     sync_message            TEXT,
     revision                BIGINT       NOT NULL DEFAULT 0,
+    version                 BIGINT,
     netsuite_valid          BOOLEAN,
     last_validated_at       TIMESTAMP WITHOUT TIME ZONE,
     validation_message      TEXT,

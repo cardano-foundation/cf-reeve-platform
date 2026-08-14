@@ -8,6 +8,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -63,6 +64,17 @@ public class NetSuiteConfigState {
 
     @Column(name = "revision", nullable = false)
     private long revision;
+
+    /**
+     * Optimistic lock. Revisions are allocated as {@code current + 1}, so two API replicas
+     * updating the same organisation concurrently would otherwise both mint the same revision
+     * and emit two conflicting events under it — the netsuite module would accept one and
+     * silently reject the other, leaving the projection describing a configuration that is not
+     * the one in use.
+     */
+    @Version
+    @Column(name = "version")
+    private Long version;
 
     /**
      * Whether the credentials actually authenticate against NetSuite. Distinct from
