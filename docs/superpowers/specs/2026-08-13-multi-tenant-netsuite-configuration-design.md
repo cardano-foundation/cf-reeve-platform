@@ -107,12 +107,12 @@ Established facts from the three repositories, which the design relies on.
 | D3 | The organisation module never reads netsuite tables | In a decentralized deployment the netsuite tables hold no data on the organisation tier; the boundary must hold by construction |
 | D4 | Status and non-secret fields are readable; the private key is strictly write-only | Without it the admin form cannot show whether an organisation is configured or prefill anything |
 | D5 | The netsuite module is the sole owner of the configuration; the organisation module keeps only a projection | One authoritative copy of the secret |
-| D6 | Delivery via transactional outbox with an ACK event | A dropped event must not silently lose a tenant's credentials |
+| D6 | The event is published directly after the projection commits; no outbox | The projection row is already the durable record of the write, so a lost event is visible as a stuck `PENDING` rather than a silent loss. An outbox would add a table, a relay job and retry/purge logic, and would be the only place key material lived on the organisation side |
 | D7 | Credentials are validated **asynchronously**; the verdict is persisted on the projection as `netsuite_valid` | Any organisation pod may consume the reply, so an in-memory `CompletableFuture` cannot be relied on. Whichever pod receives the ACK writes the flag; the UI reads it on refresh |
 | D8 | Hard cutover — no environment-variable fallback | Chosen explicitly; avoids one tenant's credentials silently serving another organisation |
 | D9 | Credentials and instance id are per organisation; tuning parameters stay global | Batch sizes and debug flags are operator concerns, not tenant data |
 | D10 | The UI is scoped to the caller's own organisation | Chosen explicitly; no organisation picker needs to be built |
-| D11 | Encryption happens in the organisation service layer, not in a JPA `AttributeConverter` | The ciphertext must travel in the outbox row and the event payload, both of which sit above persistence; a converter would leave plaintext in the event |
+| D11 | Encryption happens in the organisation service layer, not in a JPA `AttributeConverter` | The ciphertext must travel in the event payload, which sits above persistence; a converter fires only on write to a column the organisation module does not have, so it would leave plaintext in the event |
 | D12 | Event classes live in the `organisation` module | netsuite already depends on organisation, so no new shared module and no circular edge |
 | D13 | The netsuite module gains no REST controller | Consistent with `blockchain_publisher` / `blockchain_reader` |
 
@@ -125,7 +125,11 @@ These follow from D6 + D7 and are accepted knowingly.
    persisted with `netsuite_valid = false`; ingestion for that organisation will fail until it is corrected.
 2. **The admin gets no immediate verdict.** `POST`/`PUT` returns `202 Accepted`. The outcome appears on the status
    endpoint once the ACK is processed — typically sub-second, but the UI must be written for "not yet known".
-3. **Hard cutover breaks ingestion until every organisation is reconfigured.** With D8 there is no fallback, so the
+3. **A lost upsert event is recovered manually, not automatically.** If the process dies between the projection
+   commit and the Kafka publish, the row stays `PENDING` and nothing reaches the netsuite module. Because the
+   organisation module holds no copy of the key (D5), it cannot retransmit; the admin re-submits the form. The failure
+   is visible rather than silent, which is what makes this acceptable.
+4. **Hard cutover breaks ingestion until every organisation is reconfigured.** With D8 there is no fallback, so the
    upgrade window requires each organisation's admin to re-enter credentials.
 
 ## 6. Architecture
@@ -141,12 +145,9 @@ Admin (frontend)
 organisation module  (any pod)
   │  1. validate payload shape
   │  2. encrypt private key (AES-256-GCM)
-  │  3. COMMIT: outbox row + projection row
-  │            (syncState = PENDING, netsuiteValid = null)
-  │  4. return 202 Accepted with the current status view
-  ▼
-outbox relay (@Scheduled, any pod)
-  │  publish NetSuiteConfigUpsertedEvent, mark row published
+  │  3. COMMIT projection row (syncState = PENDING, netsuiteValid = null)
+  │  4. publish NetSuiteConfigUpsertedEvent  — after commit, never before
+  │  5. return 202 Accepted with the current status view
   ▼
 [Kafka]
   ▼
@@ -162,13 +163,18 @@ organisation module  (whichever pod is assigned the partition)
   │  projection: syncState = APPLIED | FAILED
   │              netsuiteValid = true | false
   │              lastValidatedAt, validationMessage
-  │  outbox: acknowledged, payload purged
   ▼
 Frontend polls / refetches GET .../status → shows the verdict
 ```
 
 The configuration is stored **before** it is verified. Storing is the durable act; verification is a report on it.
 That ordering is what lets any pod handle any step.
+
+**Publish strictly after commit.** The `cf-reeve-application` bridge listens with a plain `@EventListener`, which fires
+synchronously at `publishEvent()` — that is, *before* the surrounding transaction commits. Publishing from inside the
+transactional method would therefore let the netsuite module store a configuration whose projection row was
+subsequently rolled back, leaving the admin looking at "not configured" for an organisation that is in fact
+configured. The service must commit the projection first and publish after the transactional method returns.
 
 ### 6.2 Ingestion path
 
@@ -236,21 +242,11 @@ processed, which is exactly the "not yet known" state the UI has to render.
 Both fields are written by whichever organisation pod consumes `NetSuiteConfigAppliedEvent`. Nothing about the write
 path depends on the pod that served the original HTTP request still being alive, or on it being the same pod.
 
-### 8.2 `organisation` module — outbox
+This is the **only** table the organisation module adds. There is no outbox (D6): the encrypted key is held just long
+enough to build the event and is never written to the organisation schema, so key material exists in exactly one
+place — the netsuite module's table below.
 
-Table `organisation_netsuite_config_outbox`.
-
-| Column | Notes |
-|---|---|
-| `id` | PK |
-| `organisation_id`, `revision` | identifies the payload |
-| `payload` | JSON serialisation of `NetSuiteConfigUpsertedEvent`, with the private key already ciphertext |
-| `created_at`, `published_at`, `acknowledged_at` | lifecycle |
-| `attempts`, `last_error` | relay diagnostics |
-
-The `payload` column is set to `NULL` once `NetSuiteConfigAppliedEvent` arrives, so ciphertext does not linger.
-
-### 8.3 `netsuite_altavia_erp_adapter` module — authoritative store
+### 8.2 `netsuite_altavia_erp_adapter` module — authoritative store
 
 Table `netsuite_adapter_organisation_config`, migration in the netsuite module's `common` folder, following the
 existing `netsuite_adapter_*` prefix convention.
@@ -421,13 +417,13 @@ injected from configuration, unchanged.
 The save returns `202` with no verdict, so the UI cannot render a simple success/failure. `syncState` and
 `netsuiteValid` combine into five states the admin can actually be in:
 
-| `syncState` | `netsuiteValid` | Chip                  | Meaning shown to the admin                                    |
-| ----------- | --------------- | --------------------- | ------------------------------------------------------------- |
-| no row      | n/a             | *Not configured*      | Nothing has been set up                                        |
-| `PENDING`   | `null`          | *Checking…*           | Saved, verification in progress                                |
-| `APPLIED`   | `true`          | *Connected*           | Stored and verified, with `lastValidatedAt`                    |
-| `APPLIED`   | `false`         | *Credentials rejected*| Stored but NetSuite refused them; shows `validationMessage`    |
-| `FAILED`    | any             | *Not applied*         | The netsuite module could not store it; shows `syncMessage`    |
+| `syncState` | `netsuiteValid` | Chip | Meaning shown to the admin |
+|---|---|---|---|
+| no row | n/a | *Not configured* | Nothing has been set up |
+| `PENDING` | `null` | *Checking…* | Saved, verification in progress |
+| `APPLIED` | `true` | *Connected* | Stored and verified, with `lastValidatedAt` |
+| `APPLIED` | `false` | *Credentials rejected* | Stored but NetSuite refused them; shows `validationMessage` |
+| `FAILED` | any | *Not applied* | The netsuite module could not store it; shows `syncMessage` |
 
 After a successful submit the form switches out of edit mode and shows *Checking…*. The verdict appears on the next
 fetch — a manual page refresh is sufficient and is the guaranteed path. As a convenience, the react-query hook sets
@@ -457,8 +453,8 @@ update with no existing row. Credential rejection is **not** a form error — it
 
 ## 14. Security considerations
 
-- The key material is protected in transit and at rest by D1. The Kafka topic, the outbox row and the netsuite table
-  all hold ciphertext only.
+- The key material is protected in transit and at rest by D1. The Kafka topic and the netsuite table hold ciphertext
+  only, and with D6 the organisation schema holds no key material at all — encrypted or otherwise.
 - `LOB_CONFIG_ENCRYPTION_KEY` is a plain environment variable, consistent with every other secret in the deployment.
   It is a single point of compromise for all tenants' NetSuite keys; moving it to a real secret manager is the natural
   follow-up and is listed in §17.
@@ -474,14 +470,16 @@ update with no existing row. Credential rejection is **not** a form error — it
   missing or malformed key, `v1:` prefix handling.
 - **Organisation service:** create/update happy paths return `202` with `syncState = PENDING` and
   `netsuiteValid = null`; `409` on `POST` with an existing row in each `syncState`; `404` on `PUT` with no row;
-  `GET` returns `{"configured": false}` rather than `404` for a fresh organisation; outbox and projection written in
-  the same transaction; `POST` without `privateKey` is rejected before anything is written.
+  `GET` returns `{"configured": false}` rather than `404` for a fresh organisation; `POST` without `privateKey` is
+  rejected before anything is written.
+- **Publish ordering (D6):** the event is published only after the projection transaction commits. A rolled-back
+  transaction must publish nothing — worth an explicit test, since the default `@EventListener` bridge would
+  otherwise fire before commit.
 - **ACK handling (the pod-independence requirement):** a `NetSuiteConfigAppliedEvent` processed by an instance that
-  never served the original request still updates `netsuite_valid`, `sync_state`, `lastValidatedAt` and purges the
-  outbox payload. This is the behaviour D7 exists to guarantee, so it deserves a test that explicitly exercises the
-  handler in isolation from any request context.
+  never served the original request still updates `netsuite_valid`, `sync_state` and `lastValidatedAt`. This is the
+  behaviour D7 exists to guarantee, so it deserves a test that explicitly exercises the handler in isolation from any
+  request context.
 - **ACK for a stale revision** is ignored rather than overwriting a newer verdict.
-- **Outbox relay:** publishes unpublished rows, marks them, retries on failure, purges payload on ACK.
 - **Netsuite module:** upsert idempotency by `revision`, out-of-order event handling, registry caching and eviction on
   update, `NETSUITE_CONFIGURATION_NOT_FOUND` when an ingestion runs for an unconfigured organisation; a failed
   `testConnection()` still stores the configuration and reports `validationStatus = INVALID`.
@@ -520,10 +518,16 @@ the decision to revisit is D8, not the design.
   depends on it, but the existing extraction-validation path does. Worth a separate ticket.
 - Encryption key rotation. The `v1:` envelope makes it possible; no tooling ships with this work.
 - Moving `LOB_CONFIG_ENCRYPTION_KEY` into a secret manager.
-- The Kafka layer has no DLQ or retry anywhere in the platform. The outbox covers the organisation → netsuite
-  direction, but a lost `NetSuiteConfigAppliedEvent` leaves the projection stuck at `PENDING` with
-  `netsuiteValid = null` even though the configuration was stored and verified. The status is then pessimistic rather
-  than wrong — ingestion still works — but the admin sees *Checking…* indefinitely. The re-verify action above is the
-  natural remedy, since republishing the upsert regenerates the ACK.
+- The Kafka layer has no DLQ or retry anywhere in the platform, and with D6 there is no outbox either, so a lost
+  event in **either** direction leaves the projection stuck at `PENDING` / `netsuiteValid = null`. The two cases
+  differ in seriousness and the UI cannot tell them apart:
+  - a lost `NetSuiteConfigUpsertedEvent` means the configuration never arrived — ingestion will fail, and the admin
+    must re-submit including the private key;
+  - a lost `NetSuiteConfigAppliedEvent` means it arrived and works — ingestion succeeds, but the admin sees
+    *Checking…* forever.
+
+  The re-verify action above resolves both: republishing the upsert re-delivers the configuration if it was missing
+  and regenerates the ACK if it was not. That makes it the highest-value follow-up rather than a nicety, and it is
+  the first thing to add if stuck-`PENDING` reports appear in practice.
 - `NetSuite10Api` and `HMACSha256SignatureService` in the netsuite module appear to be dead OAuth1 code. Removing them
   is not required here but would reduce the surface being reasoned about.
