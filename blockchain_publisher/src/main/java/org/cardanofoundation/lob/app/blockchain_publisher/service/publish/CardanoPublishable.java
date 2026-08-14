@@ -35,8 +35,17 @@ public interface CardanoPublishable<E extends PublishableEntity> {
 
     // --- dispatch side ---------------------------------------------------------------------------------------
 
-    /** Entities ready to be (re)dispatched (STORED / ROLLBACKED), respecting any locking window. */
-    Set<E> findReadyToDispatch(String organisationId, int batchSize);
+    /**
+     * Atomically claims entities ready to be (re)dispatched (STORED / ROLLBACKED): the locking read
+     * ({@code FOR UPDATE SKIP LOCKED}) and the lockedAt write must commit together, in their own transaction,
+     * before this method returns - so two dispatcher instances can never claim the same rows. Returns the
+     * claimed ids in dispatch order; the claim is released via {@link #unlock} or expires after the configured
+     * lock timeout if the claiming instance dies.
+     */
+    Set<String> claimReadyToDispatch(String organisationId, int batchSize);
+
+    /** Loads previously claimed entities into the calling persistence context, preserving claim order. */
+    Set<E> loadByIds(Set<String> ids);
 
     /**
      * Split the entities to dispatch into independent units, each of which becomes ONE Cardano transaction.
@@ -59,17 +68,8 @@ public interface CardanoPublishable<E extends PublishableEntity> {
 
     void storeAll(Set<E> entities);
 
-    default boolean supportsLocking() {
-        return false;
-    }
-
-    default void lock(Set<E> entities) {
-        // no-op for types without a locking window (e.g. reports)
-    }
-
-    default void unlock(Set<E> entities) {
-        // no-op for types without a locking window (e.g. reports)
-    }
+    /** Releases the dispatch claim taken by {@link #claimReadyToDispatch}. */
+    void unlock(Set<E> entities);
 
     // --- notification ----------------------------------------------------------------------------------------
 

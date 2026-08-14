@@ -1,5 +1,8 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.repository;
 
+import static java.util.function.Function.identity;
+import static java.util.stream.Collectors.toCollection;
+import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus.notFinalisedButVisibleOnChain;
 
@@ -7,7 +10,10 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -19,6 +25,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.google.common.collect.Sets;
@@ -27,6 +34,7 @@ import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.Blockchain
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionItemEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.dispatch.DispatchingStrategy;
 
 @Service
 @RequiredArgsConstructor
@@ -53,20 +61,42 @@ public class TransactionEntityRepositoryGateway {
         return transactionEntityRepository.findAllById(txIds);
     }
 
-    public Set<TransactionEntity> findTransactionsReadyToBeDispatched(String organisationId, int pullTransactionsBatchSize) {
+    /**
+     * Atomically claims transactions ready for dispatch: the locking read (FOR UPDATE SKIP LOCKED) and the
+     * lockedAt write commit together, before this method returns (REQUIRES_NEW), so a concurrent dispatcher
+     * instance can never claim the same rows. Rows read but not selected by the strategy are released at commit
+     * without ever being marked. Returns the claimed ids in dispatch order.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Set<String> claimTransactionsReadyToBeDispatched(String organisationId,
+                                                            int pullTransactionsBatchSize,
+                                                            DispatchingStrategy<TransactionEntity> dispatchingStrategy) {
         Set<BlockchainPublishStatus> dispatchStatuses = BlockchainPublishStatus.toDispatchStatuses();
-        Limit limit = Limit.of(pullTransactionsBatchSize);
 
-        Set<TransactionEntity> transactionsByStatus = transactionEntityRepository.findFreeTransactionsByStatus(
+        Set<TransactionEntity> free = transactionEntityRepository.findFreeTransactionsByStatus(
                 organisationId,
                 dispatchStatuses,
                 LocalDateTime.now(clock).minus(lockTimeoutDuration),
-                limit);
-        if (transactionsByStatus.isEmpty()) {
-            return transactionsByStatus;
-        }
+                Limit.of(pullTransactionsBatchSize));
 
-        return transactionsByStatus;
+        Set<TransactionEntity> toDispatch = dispatchingStrategy.apply(organisationId, free);
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        toDispatch.forEach(tx -> tx.setLockedAt(now));
+
+        return toDispatch.stream()
+                .map(TransactionEntity::getId)
+                .collect(toCollection(LinkedHashSet::new));
+    }
+
+    public Set<TransactionEntity> findAllByIdsPreservingOrder(Set<String> ids) {
+        Map<String, TransactionEntity> byId = transactionEntityRepository.findAllById(ids).stream()
+                .collect(toMap(TransactionEntity::getId, identity()));
+
+        return ids.stream()
+                .map(byId::get)
+                .filter(Objects::nonNull)
+                .collect(toCollection(LinkedHashSet::new));
     }
 
     public Set<TransactionEntity> findDispatchedTransactionsThatAreNotFinalizedYet(String organisationId, Limit limit) {
@@ -187,12 +217,6 @@ public class TransactionEntityRepositoryGateway {
     public void unlockTransactions(Set<TransactionEntity> transactionsBatch) {
         transactionsBatch.forEach(transactionEntity ->
                 transactionEntity.setLockedAt(null));
-        transactionEntityRepository.saveAll(transactionsBatch);
-    }
-
-    public void lockTransactions(Set<TransactionEntity> transactionsBatch) {
-        transactionsBatch.forEach(transactionEntity ->
-                transactionEntity.setLockedAt(LocalDateTime.now(clock)));
         transactionEntityRepository.saveAll(transactionsBatch);
     }
 

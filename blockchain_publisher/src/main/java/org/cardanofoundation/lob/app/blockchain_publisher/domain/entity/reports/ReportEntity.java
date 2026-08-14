@@ -33,7 +33,7 @@ import org.cardanofoundation.lob.app.blockchain_publisher.domain.publish.Publish
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.IntervalType;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
-import org.cardanofoundation.lob.app.support.spring_audit.CommonDateOnlyEntity;
+import org.cardanofoundation.lob.app.support.spring_audit.CommonDateOnlyLockableEntity;
 
 @Entity(name = "blockchain_publisher.report.ReportEntityV2")
 @Table(name = "blockchain_publisher_report_v2")
@@ -43,7 +43,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonDateOnlyEntity;
 @Getter
 @Setter
 @EntityListeners({AuditingEntityListener.class})
-public class ReportEntity extends CommonDateOnlyEntity implements Persistable<String>, PublishableEntity {
+public class ReportEntity extends CommonDateOnlyLockableEntity implements Persistable<String>, PublishableEntity {
 
     @Id
     private String id;
