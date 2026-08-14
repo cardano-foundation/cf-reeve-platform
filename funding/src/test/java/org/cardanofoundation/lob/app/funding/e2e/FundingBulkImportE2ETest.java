@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.funding.e2e;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -27,6 +28,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -40,6 +42,7 @@ import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository
 import org.cardanofoundation.lob.app.funding.service.FundingBulkImportService;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 /**
  * Real end-to-end regression tests for the bulk CSV importer, run against a real Postgres
@@ -139,11 +142,6 @@ class FundingBulkImportE2ETest {
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "none");
         // The real CSV files used here are comma-separated; the app-wide default is ';'.
         registry.add("lob.csv.delimiter", () -> ",");
-        // MilestoneService.createMilestone/updateMilestone gate on KeycloakSecurityHelper.canUserAccessOrg,
-        // which needs a JWT Authentication in the SecurityContext (present on a real authenticated
-        // request through the controller, absent here). Disabling Keycloak makes canUserAccessOrg a
-        // no-op pass-through, matching what a real authenticated caller would already satisfy.
-        registry.add("keycloak.enabled", () -> "false");
     }
 
     @Autowired
@@ -152,6 +150,13 @@ class FundingBulkImportE2ETest {
     private FundingProjectRepository projectRepository;
     @MockitoBean
     private OrganisationPublicApiIF organisationPublicApi;
+    @MockitoBean
+    private KeycloakSecurityHelper keycloakSecurityHelper;
+
+    @BeforeEach
+    void allowOrganisationAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg(anyString())).thenReturn(true);
+    }
 
     @Test
     void eventsTemplateCsv_seededWithMatchingProjectsAndMilestones_importsCleanly() {
@@ -391,10 +396,9 @@ class FundingBulkImportE2ETest {
     @EnableAutoConfiguration
     @ComponentScan(basePackages = {
             "org.cardanofoundation.lob.app.funding",
-            // KeycloakSecurityHelper/AuthenticationUserService (MilestoneService, ProjectService, ...)
-            // and ClamAVService (the AntiVirusScanner CsvParser needs) — all trivially constructible
-            // with their defaults (keycloak.enabled defaults true but only gates a runtime check, not
-            // construction; clamav.enabled defaults false so no real AV daemon is needed).
+            // AuthenticationUserService (MilestoneService, ProjectService, ...) and ClamAVService
+            // (the AntiVirusScanner CsvParser needs). ClamAV defaults to disabled, so no real AV
+            // daemon is needed.
             "org.cardanofoundation.lob.app.support.security",
             // CsvParser<T> must come from a component scan (not a @Bean factory method returning some
             // concrete CsvParser<Object>): Spring only does its lenient "unresolved generic matches any
