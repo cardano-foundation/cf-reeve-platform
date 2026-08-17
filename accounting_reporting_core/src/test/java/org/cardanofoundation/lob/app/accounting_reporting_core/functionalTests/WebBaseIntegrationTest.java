@@ -49,7 +49,7 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 @Slf4j
 @Testcontainers
 @ActiveProfiles("test")
-class WebBaseIntegrationTest {
+abstract class WebBaseIntegrationTest {
 
     @LocalServerPort
     protected int serverPort;
