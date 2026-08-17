@@ -1,11 +1,14 @@
 package org.cardanofoundation.lob.app.funding.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 
 import java.math.BigDecimal;
 import java.util.List;
+
+import org.springframework.http.ProblemDetail;
 
 import io.vavr.control.Either;
 import org.mockito.Mock;
@@ -14,6 +17,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
@@ -33,7 +38,7 @@ class ProjectStructureServiceTest {
         projectStructureService = new ProjectStructureService(projectRepository, milestoneService);
         lenient().when(milestoneService.hasMilestones(anyString())).thenReturn(false);
         lenient().when(projectRepository.findByParentProjectId(anyString())).thenReturn(List.of());
-        lenient().when(projectRepository.saveAndFlush(org.mockito.ArgumentMatchers.any(ProjectEntity.class)))
+        lenient().when(projectRepository.saveAndFlush(any(ProjectEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
     }
 
@@ -47,44 +52,27 @@ class ProjectStructureServiceTest {
                 .build();
     }
 
-    @Test
-    void subProjectCurrency_explicitlyGiven_isUsedAsIs() {
+    @ParameterizedTest(name = "sub-project currency \"{0}\" resolves to \"{1}\"")
+    @CsvSource(nullValues = "NULL", value = {
+            "EUR,  EUR",
+            "NULL, USD",
+            "'  ', USD",
+    })
+    void subProjectCurrency_resolvesToExpectedValue(String givenCurrency, String expectedCurrency) {
         ProjectEntity parent = root("USD");
 
-        Either<org.springframework.http.ProblemDetail, ProjectEntity> result = projectStructureService.createSubProject(
-                parent, "Sub One", null, new BigDecimal("40000.00"), "EUR");
+        Either<ProblemDetail, ProjectEntity> result = projectStructureService.createSubProject(
+                parent, "Sub One", null, new BigDecimal("40000.00"), givenCurrency);
 
         assertThat(result.isRight()).isTrue();
-        assertThat(result.get().getCurrency()).isEqualTo("EUR");
-    }
-
-    @Test
-    void subProjectCurrency_null_defaultsToParentCurrency() {
-        ProjectEntity parent = root("USD");
-
-        Either<org.springframework.http.ProblemDetail, ProjectEntity> result = projectStructureService.createSubProject(
-                parent, "Sub One", null, new BigDecimal("40000.00"), null);
-
-        assertThat(result.isRight()).isTrue();
-        assertThat(result.get().getCurrency()).isEqualTo("USD");
-    }
-
-    @Test
-    void subProjectCurrency_blank_defaultsToParentCurrency() {
-        ProjectEntity parent = root("USD");
-
-        Either<org.springframework.http.ProblemDetail, ProjectEntity> result = projectStructureService.createSubProject(
-                parent, "Sub One", null, new BigDecimal("40000.00"), "  ");
-
-        assertThat(result.isRight()).isTrue();
-        assertThat(result.get().getCurrency()).isEqualTo("USD");
+        assertThat(result.get().getCurrency()).isEqualTo(expectedCurrency);
     }
 
     @Test
     void whenCreated_isDeterministicSubIdOfParent() {
         ProjectEntity parent = root("USD");
 
-        Either<org.springframework.http.ProblemDetail, ProjectEntity> result = projectStructureService.createSubProject(
+        Either<ProblemDetail, ProjectEntity> result = projectStructureService.createSubProject(
                 parent, "Sub One", null, new BigDecimal("40000.00"), null);
 
         assertThat(result.get().getId()).isEqualTo(ProjectEntity.subId(parent.getId(), "Sub One"));

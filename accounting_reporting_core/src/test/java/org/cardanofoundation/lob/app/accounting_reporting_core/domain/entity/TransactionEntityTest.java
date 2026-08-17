@@ -15,7 +15,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Trans
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionViolationCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Violation;
 
-public class TransactionEntityTest {
+class TransactionEntityTest {
 
     private final AtomicInteger idSequence = new AtomicInteger();
 
@@ -41,7 +41,7 @@ public class TransactionEntityTest {
     // Journal transactions
 
     @Test
-    public void journal_withDebitItems_sumsDebitItemsOnly() {
+    void journal_withDebitItems_sumsDebitItemsOnly() {
         Set<TransactionItemEntity> items = new LinkedHashSet<>();
         items.add(item(BigDecimal.valueOf(100), OperationType.DEBIT));
         items.add(item(BigDecimal.valueOf(50), OperationType.DEBIT));
@@ -59,7 +59,7 @@ public class TransactionEntityTest {
     }
 
     @Test
-    public void journal_withNoDebitItems_fallsBackToCreditItems() {
+    void journal_withNoDebitItems_fallsBackToCreditItems() {
         // Regression test for LOB-12007: Total Amount displayed 0 even though
         // line items (all CREDIT, no DEBIT) contained values.
         Set<TransactionItemEntity> items = new LinkedHashSet<>();
@@ -78,7 +78,7 @@ public class TransactionEntityTest {
     }
 
     @Test
-    public void journal_withNoItemsAtAll_returnsZero() {
+    void journal_withNoItemsAtAll_returnsZero() {
         TransactionEntity tx = TransactionEntity.builder()
                 .id("tx3")
                 .transactionType(TransactionType.Journal)
@@ -91,7 +91,7 @@ public class TransactionEntityTest {
     }
 
     @Test
-    public void journal_withNetOffViolation_returnsZeroRegardlessOfItems() {
+    void journal_withNetOffViolation_returnsZeroRegardlessOfItems() {
         Set<TransactionItemEntity> items = new LinkedHashSet<>();
         items.add(item(BigDecimal.valueOf(100), OperationType.DEBIT));
 
@@ -113,7 +113,7 @@ public class TransactionEntityTest {
     // FxRevaluation transactions
 
     @Test
-    public void fxRevaluation_returnsAbsoluteDifferenceBetweenCreditAndDebit() {
+    void fxRevaluation_returnsAbsoluteDifferenceBetweenCreditAndDebit() {
         Set<TransactionItemEntity> items = new LinkedHashSet<>();
         items.add(item(BigDecimal.valueOf(120), OperationType.CREDIT));
         items.add(item(BigDecimal.valueOf(50), OperationType.DEBIT));
@@ -130,7 +130,7 @@ public class TransactionEntityTest {
     }
 
     @Test
-    public void fxRevaluation_debitGreaterThanCredit_returnsAbsoluteValue() {
+    void fxRevaluation_debitGreaterThanCredit_returnsAbsoluteValue() {
         Set<TransactionItemEntity> items = new LinkedHashSet<>();
         items.add(item(BigDecimal.valueOf(30), OperationType.CREDIT));
         items.add(item(BigDecimal.valueOf(90), OperationType.DEBIT));
@@ -149,7 +149,7 @@ public class TransactionEntityTest {
     // Other transaction types (default branch)
 
     @Test
-    public void otherTransactionType_sumsAllItemsAbsolute() {
+    void otherTransactionType_sumsAllItemsAbsolute() {
         Set<TransactionItemEntity> items = new LinkedHashSet<>();
         items.add(item(BigDecimal.valueOf(40), OperationType.DEBIT));
         items.add(item(BigDecimal.valueOf(-10), OperationType.CREDIT));
@@ -166,7 +166,7 @@ public class TransactionEntityTest {
     }
 
     @Test
-    public void updateTotalAmountLcy_setsTotalAmountLcyField() {
+    void updateTotalAmountLcy_setsTotalAmountLcyField() {
         Set<TransactionItemEntity> items = new LinkedHashSet<>();
         items.add(item(BigDecimal.valueOf(15), OperationType.CREDIT));
 
