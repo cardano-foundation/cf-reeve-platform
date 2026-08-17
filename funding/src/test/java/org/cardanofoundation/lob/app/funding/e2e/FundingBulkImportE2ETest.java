@@ -102,8 +102,8 @@ class FundingBulkImportE2ETest {
             GRANT-2025-001,100000.00,USD,Sub One,40000.00,USD
             """;
 
-    // Sub Currency missing -> required to create a new sub-project; the sub-project row fails, but
-    // (unlike the old design) the root is independent and still succeeds.
+    // Sub Currency missing -> optional; the sub-project inherits the root's currency (USD) and is
+    // created successfully, same as if Sub Currency had been explicitly set to "USD".
     private static final String MISSING_SUB_CURRENCY_CSV = """
             Project Title,Funding ID,Total Amount,Currency,Sub Project Title,Sub Total Amount
             Project D,GRANT-2025-003,100000.00,USD,Sub One,40000.00
@@ -420,11 +420,12 @@ class FundingBulkImportE2ETest {
     }
 
     /**
-     * Sweeps the "missing-*"/edge-case fixtures for the merged Projects+Milestones row shape. Only
-     * Funding ID is genuinely optional; Project Title is mandatory at the CSV-header level (its
-     * absence fails to parse at all); Sub Total Amount / Sub Currency are required to <em>create</em> a
-     * new sub-project (their absence fails only that row, the root is unaffected); a blank Sub Project
-     * Title is treated as "no sub-project on this row" (the trigger column itself, not an error).
+     * Sweeps the "missing-*"/edge-case fixtures for the merged Projects+Milestones row shape. Funding
+     * ID and Sub Currency are genuinely optional (Sub Currency defaults to the root's own currency);
+     * Project Title is mandatory at the CSV-header level (its absence fails to parse at all); Sub
+     * Total Amount is required to <em>create</em> a new sub-project (its absence fails only that row,
+     * the root is unaffected); a blank Sub Project Title is treated as "no sub-project on this row"
+     * (the trigger column itself, not an error).
      * Each case uses its own organisationId so the runs can't collide with each other in the shared
      * database.
      */
@@ -465,7 +466,7 @@ class FundingBulkImportE2ETest {
         return Stream.of(
                 arguments("missing-funding-id", MISSING_FUNDING_ID_CSV, "org-missing-funding-id", "Project A", true, true, false),
                 arguments("missing-project-title", MISSING_PROJECT_TITLE_CSV, "org-missing-project-title", "Project A", false, false, true),
-                arguments("missing-sub-currency", MISSING_SUB_CURRENCY_CSV, "org-missing-sub-currency", "Project D", true, false, true),
+                arguments("missing-sub-currency", MISSING_SUB_CURRENCY_CSV, "org-missing-sub-currency", "Project D", true, true, false),
                 // A blank Sub Project Title means "no sub-project declared on this row" (the trigger
                 // column itself) — the other Sub* columns are simply unused, no error at all.
                 arguments("blank-sub-project-title", BLANK_SUB_PROJECT_TITLE_CSV, "org-blank-sub-project-title", "Project E", true, false, false),

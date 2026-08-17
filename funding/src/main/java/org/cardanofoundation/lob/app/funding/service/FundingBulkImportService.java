@@ -354,17 +354,14 @@ public class FundingBulkImportService {
         if (existing.isPresent()) {
             return updateProjectEntity(existing.get(), line.getSubCurrency(), subAmountE.get());
         }
-        // CREATE — full data is required.
+        // CREATE — full data is required, except Sub Currency: when left blank it defaults to the
+        // root's own currency (see ProjectStructureService.createSubProject).
         if (subAmountE.get() == null) {
             return Either.left(Problems.badRequest(
                     "Sub Total Amount is required to create sub-project: " + line.getSubProjectTitle(), ErrorTitleConstants.PROJECT_AMOUNT_INVALID));
         }
-        if (isBlank(line.getSubCurrency())) {
-            return Either.left(Problems.badRequest(
-                    "Sub Currency is required to create sub-project: " + line.getSubProjectTitle(), ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
-        }
         Either<ProblemDetail, ProjectEntity> created = projectStructureService.createSubProject(
-                root, line.getSubProjectTitle(), blankToNull(line.getSubFundingId()), subAmountE.get(), line.getSubCurrency());
+                root, line.getSubProjectTitle(), blankToNull(line.getSubFundingId()), subAmountE.get(), blankToNull(line.getSubCurrency()));
         if (created.isLeft()) {
             return Either.left(created.getLeft());
         }

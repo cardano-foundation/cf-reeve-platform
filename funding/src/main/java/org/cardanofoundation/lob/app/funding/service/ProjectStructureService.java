@@ -37,11 +37,18 @@ public class ProjectStructureService {
     /**
      * Creates a sub-project of {@code parent} after applying the structural and budget rules.
      * The new project's id is the deterministic {@code (parentId, projectTitle)} sub-id and
-     * its organisation is inherited from the parent.
+     * its organisation is inherited from the parent. When {@code currency} is null/blank, it
+     * defaults to the parent's currency — mirroring how a milestone's currency is always taken
+     * from its owning project rather than specified independently. The parent's own currency is
+     * always populated by this point (a root project requires it to be created, and every
+     * sub-project resolves and stores its own effective currency the same way), so this default
+     * is available at any depth.
      */
     @Transactional
     public Either<ProblemDetail, ProjectEntity> createSubProject(ProjectEntity parent,
             String projectTitle, @Nullable String fundingId, @Nullable BigDecimal totalAmount, @Nullable String currency) {
+
+        String effectiveCurrency = (currency != null && !currency.isBlank()) ? currency : parent.getCurrency();
 
         Optional<ProblemDetail> structure = FundingValidations.subProjectAllowed(
                 milestoneService.hasMilestones(parent.getId()));
@@ -78,7 +85,7 @@ public class ProjectStructureService {
                 .fundingId(fundingId)
                 .projectTitle(projectTitle)
                 .totalAmount(totalAmount)
-                .currency(currency)
+                .currency(effectiveCurrency)
                 .parentProject(parent)
                 .build()));
     }

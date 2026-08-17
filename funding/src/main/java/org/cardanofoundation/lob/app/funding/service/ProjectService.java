@@ -125,6 +125,14 @@ public class ProjectService {
     }
 
     private Either<ProblemDetail, ProjectEntity> createRootProject(ProjectWithMilestonesCreateRequest request) {
+        // Unlike a sub-project (which defaults to its parent's currency — see
+        // ProjectStructureService.createSubProject), a root project has no parent to inherit from, so
+        // its currency must be given explicitly. The DTO itself no longer enforces this via @NotBlank
+        // since the same field is also used for sub-project creation, where it's optional.
+        if (request.getCurrency() == null || request.getCurrency().isBlank()) {
+            return Either.left(Problems.badRequest(
+                    "Currency is required to create a root project: " + request.getProjectTitle(), ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
+        }
         Optional<ProblemDetail> amountProblem = FundingValidations.projectAmount(request.getTotalAmount());
         if (amountProblem.isPresent()) {
             return Either.left(amountProblem.get());

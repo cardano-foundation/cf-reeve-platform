@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.funding.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -429,7 +430,10 @@ class FundingBulkImportServiceTest {
     }
 
     @Test
-    void subProjectMissingCurrencyOnCreate_reportsError() {
+    void subProjectMissingCurrencyOnCreate_inheritsRootCurrency() {
+        // Sub Currency is optional: ProjectStructureService.createSubProject defaults it to the
+        // parent's currency when null, so a sub-project row with no Sub Currency of its own must
+        // still succeed — passing null through rather than failing the row.
         MultipartFile file = file("import.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
         ProjectMilestoneCsvLine line = rootLine("Project A", "100000.00", "USD");
@@ -442,14 +446,15 @@ class FundingBulkImportServiceTest {
         ProjectEntity root = projectEntity("p1", "Project A", "USD");
         when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
         when(projectRepository.findByParentProjectIdAndProjectTitle("p1", "Sub One")).thenReturn(Optional.empty());
+        when(projectStructureService.createSubProject(eq(root), eq("Sub One"), any(), any(), isNull()))
+                .thenReturn(Either.right(subProjectEntity("s1", "Sub One", "USD", root)));
 
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
-        assertThat(result.getProjectsCreated()).isEqualTo(1); // root only
-        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
-        assertThat(result.getFiles().get(0).getRowErrors().get(0).getReason()).contains("Sub Currency");
-        verify(projectStructureService, never()).createSubProject(any(), any(), any(), any(), any());
+        assertThat(result.getFiles().get(0).getRowErrors()).isEmpty();
+        assertThat(result.getProjectsCreated()).isEqualTo(2); // root + sub
+        verify(projectStructureService).createSubProject(eq(root), eq("Sub One"), any(), any(), isNull());
     }
 
     @Test
