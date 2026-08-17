@@ -60,27 +60,27 @@ public class FundingCsvTemplateService {
      */
     private void writeProjectsMilestonesTemplate(CSVWriter csvWriter) {
         csvWriter.writeNext(new String[]{
-                COL_PROJECT_TITLE, "Funding ID", "Total Amount", "Currency",
-                "Sub Project Title", "Sub Funding ID", "Sub Total Amount", "Sub Currency",
+                COL_PROJECT_TITLE, "Total Amount", "Currency",
+                "Sub Project Title", "Sub Total Amount", "Sub Currency",
                 COL_MILESTONE_TITLE, "Milestone Amount", "Milestone Date"
         }, false);
         csvWriter.writeNext(new String[]{
-                PROJECT_A, EXAMPLE_FUNDING_ID, "80000.00", "USD", "", "", "", "", "", "", ""
+                PROJECT_A, "80000.00", "USD", "", "", "", "", "", ""
         }, false);
         csvWriter.writeNext(new String[]{
-                PROJECT_A, "", "", "", SUB_ONE, "", "40000.00", "USD", MILESTONE_ONE, MILESTONE_AMOUNT, MILESTONE_ONE_DUE_DATE
+                PROJECT_A, "", "", SUB_ONE, "40000.00", "USD", MILESTONE_ONE, MILESTONE_AMOUNT, MILESTONE_ONE_DUE_DATE
         }, false);
         csvWriter.writeNext(new String[]{
-                PROJECT_A, "", "", "", SUB_ONE, "", "", "", MILESTONE_TWO, MILESTONE_AMOUNT, "2026-07-15"
+                PROJECT_A, "", "", SUB_ONE, "", "", MILESTONE_TWO, MILESTONE_AMOUNT, "2026-07-15"
         }, false);
         csvWriter.writeNext(new String[]{
-                PROJECT_A, "", "", "", SUB_TWO, "", "40000.00", "USD", MILESTONE_ONE, MILESTONE_AMOUNT, MILESTONE_ONE_DUE_DATE
+                PROJECT_A, "", "", SUB_TWO, "40000.00", "USD", MILESTONE_ONE, MILESTONE_AMOUNT, MILESTONE_ONE_DUE_DATE
         }, false);
         csvWriter.writeNext(new String[]{
-                PROJECT_A, "", "", "", SUB_TWO, "", "", "", MILESTONE_TWO, MILESTONE_AMOUNT, "2026-07-15"
+                PROJECT_A, "", "", SUB_TWO, "", "", MILESTONE_TWO, MILESTONE_AMOUNT, "2026-07-15"
         }, false);
         csvWriter.writeNext(new String[]{
-                PROJECT_B, "GRANT-2025-002", MILESTONE_AMOUNT, "USD", "", "", "", "", MILESTONE_ONE, MILESTONE_AMOUNT, MILESTONE_ONE_DUE_DATE
+                PROJECT_B, MILESTONE_AMOUNT, "USD", "", "", "", MILESTONE_ONE, MILESTONE_AMOUNT, MILESTONE_ONE_DUE_DATE
         }, false);
     }
 
@@ -98,27 +98,33 @@ public class FundingCsvTemplateService {
      * events (FundingValidations.spendDetail), so FUNDING rows must leave every spend-detail column
      * blank — except Amount RCY, which is required for every event type and must equal the total of
      * that event's allocations (100000.00 here, repeated on every row of the FUNDING group).
+     *
+     * <p>Sub One/Sub Two's rows always carry {@code Sub Project Title} alongside their root's {@code
+     * Project Title} — the recommended shape, since it resolves the sub-project deterministically
+     * under that specific root instead of relying on {@code Sub One}/{@code Sub Two} happening to be
+     * unique across the whole organisation. Project B's row leaves {@code Sub Project Title} blank
+     * since it's referencing a root project directly.
      */
     private void writeEventsTemplate(CSVWriter csvWriter) {
         csvWriter.writeNext(new String[]{
                 "Event Type", "Funding ID", "Funding Hash", "Funding Entity", "Currency RCY", "Event Date",
                 "Category", "Vendor", "Amount FCY", "Currency FCY", "FX Rate", "Amount RCY", "Hash", "Notes",
-                COL_PROJECT_TITLE, COL_MILESTONE_TITLE, "Allocated Amount"
+                COL_PROJECT_TITLE, "Sub Project Title", COL_MILESTONE_TITLE, "Allocated Amount"
         }, false);
-        String[][] allocationTargets = {{SUB_ONE, MILESTONE_ONE}, {SUB_ONE, MILESTONE_TWO},
-                {SUB_TWO, MILESTONE_ONE}, {SUB_TWO, MILESTONE_TWO}, {PROJECT_B, MILESTONE_ONE}};
+        String[][] allocationTargets = {{PROJECT_A, SUB_ONE, MILESTONE_ONE}, {PROJECT_A, SUB_ONE, MILESTONE_TWO},
+                {PROJECT_A, SUB_TWO, MILESTONE_ONE}, {PROJECT_A, SUB_TWO, MILESTONE_TWO}, {PROJECT_B, "", MILESTONE_ONE}};
         for (String[] target : allocationTargets) {
             csvWriter.writeNext(new String[]{
                     "FUNDING", EXAMPLE_FUNDING_ID, "", "Cardano Foundation", "USD", "2026-07-01",
                     "", "", "", "", "", TOTAL_EVENT_AMOUNT, "", "",
-                    target[0], target[1], MILESTONE_AMOUNT
+                    target[0], target[1], target[2], MILESTONE_AMOUNT
             }, false);
         }
         for (String[] target : allocationTargets) {
             csvWriter.writeNext(new String[]{
                     "SPENDING", EXAMPLE_FUNDING_ID, "", "", "USD", "2026-07-20",
                     "Personnel", "Vendor AB", "90000.00", "EUR", "0.9", TOTAL_EVENT_AMOUNT, "Invoice #INV-001", "",
-                    target[0], target[1], MILESTONE_AMOUNT
+                    target[0], target[1], target[2], MILESTONE_AMOUNT
             }, false);
         }
     }

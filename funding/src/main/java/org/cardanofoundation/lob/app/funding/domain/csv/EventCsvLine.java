@@ -69,10 +69,22 @@ public class EventCsvLine {
     @CsvBindByName(column = "Notes", profiles = "optional")
     private String notes;
 
-    // --- Allocation columns (one per row) — both references must already exist ---
+    // --- Allocation columns (one per row) — all references must already exist ---
 
     @CsvBindByName(column = "Project Title")
     private String projectTitle;
+
+    /**
+     * Disambiguates which sub-project {@code Project Title} + this column refers to, when a
+     * sub-project title alone isn't unique across the organisation (sub-project titles are only
+     * guaranteed unique within their parent). When set, {@code Project Title} is resolved as the
+     * root project (unique per organisation) and this column names its immediate sub-project;
+     * when left blank, {@code Project Title} is resolved by title alone at any depth, exactly as
+     * before — so existing files that only ever named a globally-unique title keep working
+     * unchanged.
+     */
+    @CsvBindByName(column = "Sub Project Title", profiles = "optional")
+    private String subProjectTitle;
 
     @CsvBindByName(column = "Milestone Title")
     private String milestoneTitle;

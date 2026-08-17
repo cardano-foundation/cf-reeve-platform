@@ -29,9 +29,6 @@ public class ProjectMilestoneCsvLine {
     @CsvBindByName(column = "Project Title")
     private String projectTitle;
 
-    @CsvBindByName(column = "Funding ID", profiles = "optional")
-    private String fundingId;
-
     @CsvBindByName(column = "Total Amount", profiles = "optional")
     private String totalAmount;
 
@@ -40,9 +37,6 @@ public class ProjectMilestoneCsvLine {
 
     @CsvBindByName(column = "Sub Project Title", profiles = "optional")
     private String subProjectTitle;
-
-    @CsvBindByName(column = "Sub Funding ID", profiles = "optional")
-    private String subFundingId;
 
     @CsvBindByName(column = "Sub Total Amount", profiles = "optional")
     private String subTotalAmount;
@@ -65,7 +59,7 @@ public class ProjectMilestoneCsvLine {
 
     /** Whether this row carries any of the root project's own creation/update columns. */
     public boolean hasRootProjectData() {
-        return notBlank(fundingId) || notBlank(totalAmount) || notBlank(currency);
+        return notBlank(totalAmount) || notBlank(currency);
     }
 
     public boolean hasMilestone() {

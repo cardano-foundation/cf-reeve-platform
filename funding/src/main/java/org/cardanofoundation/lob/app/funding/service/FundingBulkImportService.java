@@ -68,8 +68,8 @@ import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
  *
  * <p><b>Upsert semantics</b> (so re-uploading a file with one changed row is safe):
  * <ul>
- *   <li>Projects+Milestones file: a root project's columns ({@code Project Title}, {@code Funding ID},
- *   {@code Total Amount}, {@code Currency}) and, optionally on the same row, one sub-project's columns
+ *   <li>Projects+Milestones file: a root project's columns ({@code Project Title}, {@code Total Amount},
+ *   {@code Currency}) and, optionally on the same row, one sub-project's columns
  *   ({@code Sub *}) and/or one milestone's columns ({@code Milestone *}) — the milestone belongs to the
  *   sub-project when one is present on the row, otherwise to the root. Consecutive rows sharing the same
  *   root {@code Project Title} are grouped into one project; the root is resolved/created once per group
@@ -331,7 +331,6 @@ public class FundingBulkImportService {
         ProjectView view = projectService.createWithMilestones(ProjectWithMilestonesCreateRequest.builder()
                 .organisationId(organisationId)
                 .projectTitle(rootLine.getProjectTitle())
-                .fundingId(blankToNull(rootLine.getFundingId()))
                 .totalAmount(totalAmountE.get())
                 .currency(rootLine.getCurrency())
                 .build());
@@ -361,7 +360,7 @@ public class FundingBulkImportService {
                     "Sub Total Amount is required to create sub-project: " + line.getSubProjectTitle(), ErrorTitleConstants.PROJECT_AMOUNT_INVALID));
         }
         Either<ProblemDetail, ProjectEntity> created = projectStructureService.createSubProject(
-                root, line.getSubProjectTitle(), blankToNull(line.getSubFundingId()), subAmountE.get(), blankToNull(line.getSubCurrency()));
+                root, line.getSubProjectTitle(), null, subAmountE.get(), blankToNull(line.getSubCurrency()));
         if (created.isLeft()) {
             return Either.left(created.getLeft());
         }
@@ -599,9 +598,19 @@ public class FundingBulkImportService {
                 return Either.left(Problems.badRequest("Project Title is required for every allocation row",
                         ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
             }
-            byProject.computeIfAbsent(line.getProjectTitle(), k -> new ArrayList<>()).add(line);
+            byProject.computeIfAbsent(allocationTargetKey(line), k -> new ArrayList<>()).add(line);
         }
         return Either.right(byProject);
+    }
+
+    /**
+     * Identifies an allocation row's target: {@code Project Title} alone, plus {@code Sub Project
+     * Title} when set. Two rows only share a target when both match — so allocations to two
+     * different, same-titled sub-projects under the same root (disambiguated by their own {@code Sub
+     * Project Title}) never merge into one group.
+     */
+    private static String allocationTargetKey(EventCsvLine line) {
+        return line.getProjectTitle() + "||" + nullToEmpty(line.getSubProjectTitle());
     }
 
     /**
@@ -618,9 +627,10 @@ public class FundingBulkImportService {
         LinkedHashMap<String, List<EventSubProjectAllocationRequest>> subAllocationsByRoot = new LinkedHashMap<>();
 
         for (List<EventCsvLine> projectLines : byProject.values()) {
+            EventCsvLine first = projectLines.get(0);
             // Validation only — the project must already exist, this file never creates one.
             Either<ProblemDetail, ProjectEntity> projectE =
-                    resolveExistingProjectEntity(organisationId, projectLines.get(0).getProjectTitle(), resolvedProjectIds);
+                    resolveExistingProjectEntity(organisationId, first.getProjectTitle(), first.getSubProjectTitle(), resolvedProjectIds);
             if (projectE.isLeft()) {
                 return Either.left(projectE.getLeft());
             }
@@ -747,24 +757,44 @@ public class FundingBulkImportService {
     }
 
     /**
-     * Resolves a CSV projectTitle reference (Events file) to its project entity — first against
-     * projects created/updated earlier in this same import call (cache write-through, not read —
-     * every call still confirms against the database), then against the database. Returns an error
-     * when no project matches, or when more than one project in the organisation shares that title
-     * (a bare title is only guaranteed unique within its sibling scope, not organisation-wide). Never
-     * creates anything.
+     * Resolves a CSV project reference (Events file) to its project entity — never creates anything.
+     * When {@code subProjectTitle} is blank, {@code projectTitle} is resolved by title alone at any
+     * depth (root or sub-project), exactly as before: an error when no project matches, or when more
+     * than one project in the organisation shares that title (a bare title is only guaranteed unique
+     * within its sibling scope, not organisation-wide) — see {@link #findExistingProjectByTitle}.
+     * When {@code subProjectTitle} is set, {@code projectTitle} is instead resolved as the <em>root</em>
+     * project (unique per organisation), and {@code subProjectTitle} is resolved as that root's
+     * immediate sub-project — this scoped lookup can never be ambiguous, since the parent is fixed by
+     * the root lookup, so it's the way to disambiguate two same-titled sub-projects under different
+     * roots.
      */
-    private Either<ProblemDetail, ProjectEntity> resolveExistingProjectEntity(String organisationId, String projectTitle, Map<String, String> resolvedProjectIds) {
-        Either<ProblemDetail, Optional<ProjectEntity>> existingE = findExistingProjectByTitle(organisationId, projectTitle);
-        if (existingE.isLeft()) {
-            return Either.left(existingE.getLeft());
+    private Either<ProblemDetail, ProjectEntity> resolveExistingProjectEntity(String organisationId, String projectTitle,
+            String subProjectTitle, Map<String, String> resolvedProjectIds) {
+
+        if (isBlank(subProjectTitle)) {
+            Either<ProblemDetail, Optional<ProjectEntity>> existingE = findExistingProjectByTitle(organisationId, projectTitle);
+            if (existingE.isLeft()) {
+                return Either.left(existingE.getLeft());
+            }
+            return existingE.get()
+                    .map(project -> {
+                        resolvedProjectIds.put(projectTitle, project.getId());
+                        return Either.<ProblemDetail, ProjectEntity>right(project);
+                    })
+                    .orElseGet(() -> Either.left(Problems.projectReferenceNotFound(projectTitle)));
         }
-        return existingE.get()
-                .map(project -> {
-                    resolvedProjectIds.put(projectTitle, project.getId());
-                    return Either.<ProblemDetail, ProjectEntity>right(project);
-                })
-                .orElseGet(() -> Either.left(Problems.projectReferenceNotFound(projectTitle)));
+
+        Optional<ProjectEntity> root = projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(
+                organisationId, projectTitle);
+        if (root.isEmpty()) {
+            return Either.left(Problems.projectReferenceNotFound(projectTitle));
+        }
+        Optional<ProjectEntity> sub = projectRepository.findByParentProjectIdAndProjectTitle(root.get().getId(), subProjectTitle);
+        if (sub.isEmpty()) {
+            return Either.left(Problems.subProjectReferenceNotFound(projectTitle, subProjectTitle));
+        }
+        resolvedProjectIds.put(subProjectTitle, sub.get().getId());
+        return Either.right(sub.get());
     }
 
     /** Looks up a project by title (any level) without erroring on "not found" — the caller decides what a missing project means. */

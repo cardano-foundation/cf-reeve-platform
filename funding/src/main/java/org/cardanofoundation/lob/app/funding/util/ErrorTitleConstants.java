@@ -56,6 +56,7 @@ public final class ErrorTitleConstants {
     public static final String UNRECOGNIZED_CSV_FILE_TYPE = "UNRECOGNIZED_CSV_FILE_TYPE";
     public static final String AMBIGUOUS_PROJECT_REFERENCE = "AMBIGUOUS_PROJECT_REFERENCE";
     public static final String PROJECT_REFERENCE_NOT_FOUND = "PROJECT_REFERENCE_NOT_FOUND";
+    public static final String SUBPROJECT_REFERENCE_NOT_FOUND = "SUBPROJECT_REFERENCE_NOT_FOUND";
     public static final String CSV_ROW_INVALID = "CSV_ROW_INVALID";
     public static final String NO_FILES_UPLOADED = "NO_FILES_UPLOADED";
     public static final String PROJECT_NOT_CREATED_NO_SUBPROJECT = "PROJECT_NOT_CREATED_NO_SUBPROJECT";
