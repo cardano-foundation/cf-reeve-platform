@@ -6,7 +6,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import org.cardanofoundation.lob.app.organisation.domain.entity.NetSuiteConfigState;
 import org.cardanofoundation.lob.app.organisation.domain.entity.NetSuiteSyncState;
@@ -24,9 +26,17 @@ public interface NetSuiteConfigStateRepository extends JpaRepository<NetSuiteCon
      * failure, which would mark the transaction rollback-only and surface as an
      * {@code UnexpectedRollbackException} at commit.
      *
+     * <p>
+     * {@code @Transactional} makes this self-sufficient rather than dependent on the caller. Today
+     * NetSuiteConfigAckHandler is itself transactional so this simply joins that transaction, but a
+     * {@code @Modifying} query that inherits {@code SimpleJpaRepository}'s class-level
+     * {@code @Transactional(readOnly = true)} fails with {@code TransactionRequiredException} — the
+     * netsuite module's equivalent query hit exactly that.
+     *
      * @return the number of rows updated: 0 means unknown organisation or superseded revision
      */
     @Modifying
+    @Transactional
     @Query("""
             UPDATE NetSuiteConfigState s
                SET s.syncState = :syncState,
@@ -41,10 +51,10 @@ public interface NetSuiteConfigStateRepository extends JpaRepository<NetSuiteCon
     int applyAcknowledgement(@Param("organisationId") String organisationId,
                              @Param("revision") long revision,
                              @Param("syncState") NetSuiteSyncState syncState,
-                             @Param("syncMessage") String syncMessage,
-                             @Param("netsuiteValid") Boolean netsuiteValid,
-                             @Param("validationMessage") String validationMessage,
-                             @Param("lastValidatedAt") Instant lastValidatedAt,
+                             @Param("syncMessage") @Nullable String syncMessage,
+                             @Param("netsuiteValid") @Nullable Boolean netsuiteValid,
+                             @Param("validationMessage") @Nullable String validationMessage,
+                             @Param("lastValidatedAt") @Nullable Instant lastValidatedAt,
                              @Param("updatedAt") Instant updatedAt);
 
 }

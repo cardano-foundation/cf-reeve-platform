@@ -28,7 +28,8 @@ import org.cardanofoundation.lob.app.organisation.service.NetSuiteConfigAdminSer
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 /**
- * Admin-only NetSuite credential administration.
+ * NetSuite credential administration, restricted to the roles that may already change an
+ * organisation's settings — admin and account manager, matching {@code OrganisationResource}.
  * <p>
  * There is deliberately no DELETE, and the private key is never returned by any endpoint.
  * Writes return {@code 202 Accepted} because whether NetSuite accepts the credentials is not
@@ -52,7 +53,7 @@ public class NetSuiteConfigurationController {
                             {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = NetSuiteConfigurationStatusView.class))})
             })
     @GetMapping(value = "/organisations/{orgId}/netsuite-configuration/status", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> status(@PathVariable("orgId") String orgId) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return forbidden(orgId);
@@ -70,7 +71,7 @@ public class NetSuiteConfigurationController {
             })
     @PostMapping(value = "/organisations/{orgId}/netsuite-configuration",
             produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> create(@PathVariable("orgId") String orgId,
                                     @Valid @RequestBody NetSuiteConfigurationCreate body) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
@@ -91,7 +92,7 @@ public class NetSuiteConfigurationController {
             })
     @PutMapping(value = "/organisations/{orgId}/netsuite-configuration",
             produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<?> update(@PathVariable("orgId") String orgId,
                                     @Valid @RequestBody NetSuiteConfigurationUpdate body) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
