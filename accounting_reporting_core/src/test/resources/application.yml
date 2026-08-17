@@ -62,9 +62,5 @@ lob:
     enabled: false
 
 #spring.profiles.active=dev--yaci-dev-kit
-keycloak:
-  enabled: false
-  token-url: ""
-  authorization-url: ""
 testcontainers:
   enabled: true

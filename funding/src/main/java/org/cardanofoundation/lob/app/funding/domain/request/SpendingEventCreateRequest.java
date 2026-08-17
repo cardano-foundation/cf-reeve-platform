@@ -57,7 +57,8 @@ public class SpendingEventCreateRequest extends BaseRequest {
     @Schema(example = "2025-04-03", description = "Event date. Applies to all event types (FUNDING, SPENDING, REFUND). For a SPENDING event this is the spend date.")
     private LocalDate eventDate;
 
-    // --- Spend detail: SPENDING events only (omitted for FUNDING/REFUND) ---
+    // --- Spend detail: category/vendor/amountFcy/currencyFcy/fxRate/hash/notes are SPENDING events
+    // only (omitted for FUNDING/REFUND); amountRcy is required for every event type. ---
 
     @Nullable
     @Schema(example = "Personnel", description = "SPENDING events only.")
@@ -80,7 +81,7 @@ public class SpendingEventCreateRequest extends BaseRequest {
     private BigDecimal fxRate;
 
     @Nullable
-    @Schema(example = "85000.00", description = "Reporting-currency amount spent. SPENDING events only.")
+    @Schema(example = "85000.00", description = "Reporting-currency amount (spent, funded, or refunded). Required for every event type; the milestone allocations must sum to exactly this value.")
     private BigDecimal amountRcy;
 
     @Nullable

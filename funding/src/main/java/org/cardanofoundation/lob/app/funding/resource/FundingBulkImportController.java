@@ -43,12 +43,13 @@ public class FundingBulkImportController {
 
     @Operation(
             summary = "Bulk-import projects, milestones and/or events from CSV files",
-            description = "Accepts up to three CSV files — Projects (with sub-projects), Milestones and Events — " +
-                    "whose type is auto-detected from their headers. Files are always processed in the order " +
-                    "Projects, then Milestones, then Events, regardless of upload order, so newly-created projects " +
-                    "are visible to later files. Each file is processed independently: valid rows/groups are saved " +
-                    "immediately, invalid ones are skipped and reported, and a failure in one file never blocks " +
-                    "another. Set dryRun to validate and preview counts without persisting anything.",
+            description = "Accepts up to two CSV files — Projects+Milestones (with arbitrary-depth sub-projects) " +
+                    "and Events — whose type is auto-detected from their headers. Files are always processed in " +
+                    "the order Projects+Milestones, then Events, regardless of upload order, so newly-created " +
+                    "projects are visible to the Events file. Each file is processed independently: valid " +
+                    "rows/groups are saved immediately, invalid ones are skipped and reported, and a failure in " +
+                    "one file never blocks another. Set dryRun to validate and preview counts without persisting " +
+                    "anything.",
             responses = {
                     @ApiResponse(responseCode = "200", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
                             schema = @Schema(implementation = FundingBulkImportResult.class))}),

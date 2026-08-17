@@ -22,7 +22,7 @@ public class EventProjectAllocationRequest {
 
     @Nullable
     @Schema(example = "PROJ-AB",
-            description = "User-defined project ID (externalProjectId field). When externalProjectId maps to an existing project, all new-project fields below are ignored.")
+            description = "User-defined project ID. No longer used to match an existing project — projects are matched by projectTitle. Accepted and stored for backward compatibility only.")
     private String externalProjectId;
 
     // --- New project: supply the fields below when creating a new project ---
@@ -32,7 +32,7 @@ public class EventProjectAllocationRequest {
     private String fundingId;
 
     @Nullable
-    @Schema(example = "Project AB")
+    @Schema(example = "Project AB", description = "Required. Matches an existing root project by (organisationId, projectTitle), or names a new one.")
     private String projectTitle;
 
     @Nullable

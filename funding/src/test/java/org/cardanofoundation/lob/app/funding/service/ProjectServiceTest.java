@@ -172,20 +172,8 @@ class ProjectServiceTest {
     // --- createWithMilestones ---
 
     @Test
-    void create_conflict_whenAlreadyExists() {
-        ProjectWithMilestonesCreateRequest request = createRequest();
-        when(projectRepository.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(true);
-
-        ProjectView result = projectService.createWithMilestones(request);
-
-        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_ALREADY_EXISTS);
-        verify(projectRepository, never()).saveAndFlush(any());
-    }
-
-    @Test
     void create_conflict_whenFundingIdAlreadyUsed() {
         ProjectWithMilestonesCreateRequest request = createRequest(); // fundingId GRANT-2025-001
-        when(projectRepository.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(false);
         when(projectRepository.existsByOrganisationIdAndFundingId("org1", "GRANT-2025-001")).thenReturn(true);
 
         ProjectView result = projectService.createWithMilestones(request);
@@ -197,7 +185,6 @@ class ProjectServiceTest {
     @Test
     void create_conflict_whenProjectTitleAlreadyExists() {
         ProjectWithMilestonesCreateRequest request = createRequest(); // title "Project AB"
-        when(projectRepository.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(false);
         when(projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNull("org1", "Project AB")).thenReturn(true);
 
         ProjectView result = projectService.createWithMilestones(request);
@@ -212,7 +199,6 @@ class ProjectServiceTest {
                 .totalAmount(new BigDecimal("200000.00")).currency("USD").build();
         when(projectRepository.findById("parent1")).thenReturn(Optional.of(parent));
         when(milestoneService.hasMilestones("parent1")).thenReturn(false);
-        when(projectRepository.existsById(any())).thenReturn(false);
         when(projectRepository.existsByParentProjectIdAndProjectTitle("parent1", "Work Package 1")).thenReturn(true);
 
         ProjectView result = projectService.createWithMilestones(ProjectWithMilestonesCreateRequest.builder()
@@ -228,7 +214,6 @@ class ProjectServiceTest {
     void create_success() {
         ProjectWithMilestonesCreateRequest request = createRequest();
         ProjectEntity saved = projectEntity();
-        when(projectRepository.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(false);
         when(projectRepository.saveAndFlush(any())).thenReturn(saved);
 
         ProjectView result = projectService.createWithMilestones(request);
@@ -244,7 +229,6 @@ class ProjectServiceTest {
                 .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Project AB")
                 .fundingId("GRANT-2025-001").totalAmount(new BigDecimal("200000.00")).currency("USD")
                 .milestones(List.of(milestoneReq)).build();
-        when(projectRepository.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(false);
         when(projectRepository.saveAndFlush(any())).thenReturn(projectEntity());
         when(milestoneService.create(eq("p1"), any()))
                 .thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
@@ -258,9 +242,7 @@ class ProjectServiceTest {
 
     @Test
     void createTree_success_projectWithSubProjectsEachWithMilestones() {
-        when(projectRepository.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(false);
         when(projectRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
-        when(projectRepository.existsById(any())).thenReturn(false);
         when(milestoneService.create(any(), any())).thenReturn(Either.right(mock(MilestoneEntity.class)));
 
         ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
@@ -296,7 +278,6 @@ class ProjectServiceTest {
 
     @Test
     void createTree_returns400_whenSubProjectNodeHasBothMilestonesAndSubProjects() {
-        when(projectRepository.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(false);
         when(projectRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         ProjectTreeNodeRequest badNode = node("WP-1", new BigDecimal("100000.00"),
@@ -314,7 +295,6 @@ class ProjectServiceTest {
 
     @Test
     void createTree_returns409_whenSiblingSubProjectsShareTitle() {
-        when(projectRepository.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(false);
         when(projectRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
@@ -338,7 +318,6 @@ class ProjectServiceTest {
 
     @Test
     void createTree_returns400_whenSubProjectTotalExceedsParent() {
-        when(projectRepository.existsByOrganisationIdAndExternalProjectId("org1", "PROJ-AB")).thenReturn(false);
         when(projectRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
@@ -361,7 +340,6 @@ class ProjectServiceTest {
                 .totalAmount(new BigDecimal("200000.00")).currency("USD").build();
         when(projectRepository.findById("parent1")).thenReturn(Optional.of(parent));
         when(milestoneService.hasMilestones("parent1")).thenReturn(false);
-        when(projectRepository.existsById(any())).thenReturn(false);
         when(projectRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         ProjectView result = projectService.createWithMilestones(ProjectWithMilestonesCreateRequest.builder()
@@ -371,7 +349,8 @@ class ProjectServiceTest {
 
         assertThat(result.getError()).isEmpty();
         assertThat(result.getParentProjectId()).isEqualTo("parent1");
-        assertThat(result.getProjectId()).isEqualTo(ProjectEntity.subId("parent1", "WP-1"));
+        // The sub-project's deterministic id is derived from (parentId, projectTitle) — not externalProjectId.
+        assertThat(result.getProjectId()).isEqualTo(ProjectEntity.subId("parent1", "Work Package 1"));
     }
 
     @Test
@@ -475,10 +454,25 @@ class ProjectServiceTest {
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(projectRepository.saveAndFlush(project)).thenReturn(project);
 
-        ProjectView result = projectService.updateProject("p1", ProjectUpdateRequest.builder().projectTitle("New").build());
+        ProjectView result = projectService.updateProject("p1", ProjectUpdateRequest.builder().currency("EUR").build());
 
         assertThat(result.getError()).isEmpty();
         assertThat(result.getProjectId()).isEqualTo("p1");
+        assertThat(project.getCurrency()).isEqualTo("EUR");
+    }
+
+    @Test
+    void update_success_whenProjectTitleResentUnchanged() {
+        // Sending the same (unchanged) title back is not a "change" — it's a no-op, not rejected.
+        ProjectEntity project = projectEntity(); // title "Project AB"
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
+        when(projectRepository.saveAndFlush(project)).thenReturn(project);
+
+        ProjectView result = projectService.updateProject("p1",
+                ProjectUpdateRequest.builder().projectTitle("Project AB").build());
+
+        assertThat(result.getError()).isEmpty();
     }
 
     @Test
@@ -499,16 +493,16 @@ class ProjectServiceTest {
     }
 
     @Test
-    void update_conflict_whenProjectTitleAlreadyExists() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+    void update_returns400_whenProjectTitleChanged() {
+        // projectTitle is immutable — the project's id is derived from it. Attempting to change it is
+        // rejected outright, regardless of whether the new title would itself conflict with anything.
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity())); // title "Project AB"
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
-        when(projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNullAndIdNot("org1", "Existing", "p1"))
-                .thenReturn(true);
 
         ProjectView result = projectService.updateProject("p1",
-                ProjectUpdateRequest.builder().projectTitle("Existing").build());
+                ProjectUpdateRequest.builder().projectTitle("Renamed").build());
 
-        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS);
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_TITLE_IMMUTABLE);
         verify(projectRepository, never()).saveAndFlush(any());
     }
 

@@ -65,8 +65,8 @@ public class SpendingEventPublishView {
      * One project this event is allocated to. Exactly one of two shapes, so it is unambiguous where
      * the money is booked:
      * <ul>
-     *   <li>direct allocation — {@code externalProjectId}/{@code projectTitle} plus {@code milestones};</li>
-     *   <li>sub-project allocation — {@code externalProjectId}/{@code projectTitle} carry the root
+     *   <li>direct allocation — {@code projectId}/{@code projectTitle} plus {@code milestones};</li>
+     *   <li>sub-project allocation — {@code projectId}/{@code projectTitle} carry the root
      *       project, and {@code subProject} carries the actually-allocated sub-project with
      *       <em>its</em> id, title and milestones ({@code milestones} is null at this level).</li>
      * </ul>
@@ -77,8 +77,12 @@ public class SpendingEventPublishView {
     @AllArgsConstructor
     @NoArgsConstructor
     public static class ProjectAllocation {
-        /** User-defined id of the root project (the top-level ancestor for sub-project allocations). */
-        private String externalProjectId;
+        /**
+         * Internal deterministic id ({@link org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity#getId()})
+         * of the root project (the top-level ancestor for sub-project allocations). Projects are no
+         * longer assigned a user-defined external id, so this is the only stable identifier available.
+         */
+        private String projectId;
         /** Title of the root project. */
         @Nullable
         private String projectTitle;
@@ -97,7 +101,7 @@ public class SpendingEventPublishView {
     @AllArgsConstructor
     @NoArgsConstructor
     public static class SubProject {
-        /** User-defined id of the sub-project. */
+        /** Internal deterministic id of the sub-project (see {@link ProjectAllocation#getProjectId()}). */
         private String subProjectId;
         @Nullable
         private String subProjectTitle;

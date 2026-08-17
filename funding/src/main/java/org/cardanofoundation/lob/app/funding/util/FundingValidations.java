@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.funding.util;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -125,11 +126,13 @@ public final class FundingValidations {
     private static final BigDecimal FX_TOLERANCE = new BigDecimal("0.01");
 
     /**
-     * Validates the spend detail on a milestone allocation. Spend fields are only permitted for
-     * SPENDING events; for SPENDING they are required and must be internally consistent
-     * ({@code amountFcy = amountRcy * fxRate}) with the allocated amount not exceeding the
-     * reporting-currency spend ({@code amountRcy}). The event date is a general field (all event
-     * types) and is validated separately, not here.
+     * Validates the spend detail on a milestone allocation. {@code category}/{@code vendor}/
+     * {@code amountFcy}/{@code currencyFcy}/{@code fxRate}/{@code hash}/{@code notes} are only
+     * permitted for SPENDING events (where they are also required) — they describe a foreign-currency
+     * purchase being reconciled, which FUNDING/REFUND events have no equivalent of. {@code amountRcy}
+     * is required for every event type: it's the recorded amount (spent, funded, or refunded) that the
+     * milestone allocations must fully cover — see {@link #spendFullyAllocated}. The event date is a
+     * general field (all event types) and is validated separately, not here.
      */
     public static Optional<ProblemDetail> spendDetail(
             EventType eventType,
@@ -137,22 +140,29 @@ public final class FundingValidations {
             BigDecimal amountFcy, String currencyFcy, BigDecimal fxRate, BigDecimal amountRcy, String currencyRcy,
             String hash, String notes) {
 
-        boolean anySpendField = category != null || vendor != null || amountFcy != null || currencyFcy != null
-                || fxRate != null || amountRcy != null || hash != null || notes != null;
+        boolean anySpendOnlyField = category != null || vendor != null || amountFcy != null || currencyFcy != null
+                || fxRate != null || hash != null || notes != null;
 
-        if (eventType != EventType.SPENDING) {
-            if (anySpendField) {
-                return Optional.of(Problems.badRequest(
-                        "Spend detail (amounts, vendor, fxRate, ...) is only allowed for SPENDING events",
-                        ErrorTitleConstants.SPEND_FIELDS_NOT_ALLOWED));
-            }
-            return Optional.empty();
+        if (eventType != EventType.SPENDING && anySpendOnlyField) {
+            return Optional.of(Problems.badRequest(
+                    "Category, vendor, amountFcy, currencyFcy, fxRate, hash and notes are only allowed for SPENDING events",
+                    ErrorTitleConstants.SPEND_FIELDS_NOT_ALLOWED));
         }
 
-        // SPENDING: the amount fields are required to record the spend.
-        if (amountFcy == null || amountRcy == null || fxRate == null || currencyRcy == null || currencyFcy == null) {
+        // Name only the fields that are actually missing — a blanket list is misleading when just one is
+        // absent. Order matches the field list above (amountFcy, amountRcy, currencyRcy, currencyFcy,
+        // fxRate) regardless of which subset applies to eventType.
+        List<String> missing = new ArrayList<>();
+        if (eventType == EventType.SPENDING && amountFcy == null) missing.add("amountFcy");
+        if (amountRcy == null) missing.add("amountRcy");
+        if (eventType == EventType.SPENDING) {
+            if (currencyRcy == null) missing.add("currencyRcy");
+            if (currencyFcy == null) missing.add("currencyFcy");
+            if (fxRate == null) missing.add("fxRate");
+        }
+        if (!missing.isEmpty()) {
             return Optional.of(Problems.badRequest(
-                    "amountFcy, amountRcy, currencyRcy, currencyFcy and fxRate are required for SPENDING events",
+                    "Missing required field(s) for a %s event: ".formatted(eventType) + String.join(", ", missing),
                     ErrorTitleConstants.SPEND_FIELDS_REQUIRED));
         }
 
@@ -160,23 +170,24 @@ public final class FundingValidations {
     }
 
     /**
-     * A SPENDING event's spend ({@code amountRcy}) must be fully allocated: the milestone allocations
-     * must sum to exactly the spent amount — no more (you can't allocate what wasn't spent) and no
-     * less (every spent unit must be booked against a milestone).
+     * An event's recorded amount ({@code amountRcy}) must be fully allocated: the milestone
+     * allocations must sum to exactly that amount — no more (you can't allocate what wasn't
+     * spent/funded/refunded) and no less (every unit must be booked against a milestone). Applies to
+     * every event type; {@code eventType} is only used to phrase the error.
      */
     public static Optional<ProblemDetail> spendFullyAllocated(EventType eventType, BigDecimal totalAllocated, BigDecimal amountRcy) {
-        if (eventType != EventType.SPENDING || amountRcy == null || totalAllocated == null) {
+        if (amountRcy == null || totalAllocated == null) {
             return Optional.empty();
         }
         if (totalAllocated.compareTo(amountRcy) > 0) {
             return Optional.of(Problems.badRequest(
-                    "Allocated total %s exceeds the event's spent amount (amountRcy) %s".formatted(totalAllocated, amountRcy),
+                    "Allocated total %s exceeds the %s event's amount (amountRcy) %s".formatted(totalAllocated, eventType, amountRcy),
                     ErrorTitleConstants.ALLOCATION_EXCEEDS_SPEND));
         }
         if (totalAllocated.compareTo(amountRcy) < 0) {
             return Optional.of(Problems.badRequest(
-                    "Allocated total %s does not fully allocate the event's spent amount (amountRcy) %s"
-                            .formatted(totalAllocated, amountRcy),
+                    "Allocated total %s does not fully allocate the %s event's amount (amountRcy) %s"
+                            .formatted(totalAllocated, eventType, amountRcy),
                     ErrorTitleConstants.SPEND_NOT_FULLY_ALLOCATED));
         }
         return Optional.empty();

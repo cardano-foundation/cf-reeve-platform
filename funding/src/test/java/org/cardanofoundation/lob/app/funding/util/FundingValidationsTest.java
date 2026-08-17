@@ -29,6 +29,10 @@ class FundingValidationsTest {
         return p.orElseThrow().getTitle();
     }
 
+    private String detail(Optional<ProblemDetail> p) {
+        return p.orElseThrow().getDetail();
+    }
+
     // --- milestone(amount, project, otherTotal) ---
 
     @Test
@@ -177,9 +181,22 @@ class FundingValidationsTest {
     }
 
     @Test
-    void spendDetail_allowed_whenNonSpendingEventHasNoSpendFields() {
+    void spendDetail_allowed_whenNonSpendingEventHasAmountRcyButNoSpendOnlyFields() {
         assertThat(FundingValidations.spendDetail(EventType.FUNDING,
-                null, null, null, null, null, null, null, null, null)).isEmpty();
+                null, null, null, null, null, new BigDecimal("100000"), null, null, null)).isEmpty();
+    }
+
+    @Test
+    void spendDetail_required_whenAmountRcyMissingOnNonSpendingEvent() {
+        assertThat(title(FundingValidations.spendDetail(EventType.FUNDING,
+                null, null, null, null, null, null, null, null, null)))
+                .isEqualTo(ErrorTitleConstants.SPEND_FIELDS_REQUIRED);
+    }
+
+    @Test
+    void spendDetail_allowed_whenRefundEventHasAmountRcyButNoSpendOnlyFields() {
+        assertThat(FundingValidations.spendDetail(EventType.REFUND,
+                null, null, null, null, null, new BigDecimal("50000"), null, null, null)).isEmpty();
     }
 
     @Test
@@ -204,6 +221,22 @@ class FundingValidationsTest {
                 "Personnel", "Vendor", new BigDecimal("100000"), null, new BigDecimal("2"),
                 new BigDecimal("50000"), "USD", null, null)))
                 .isEqualTo(ErrorTitleConstants.SPEND_FIELDS_REQUIRED);
+    }
+
+    @Test
+    void spendDetail_message_namesOnlyTheActuallyMissingField() {
+        // Only currencyFcy is absent — the message must not claim the other four are missing too.
+        assertThat(detail(FundingValidations.spendDetail(EventType.SPENDING,
+                "Personnel", "Vendor", new BigDecimal("100000"), null, new BigDecimal("2"),
+                new BigDecimal("50000"), "USD", null, null)))
+                .isEqualTo("Missing required field(s) for a SPENDING event: currencyFcy");
+    }
+
+    @Test
+    void spendDetail_message_listsEveryMissingField_whenSeveralAreAbsent() {
+        assertThat(detail(FundingValidations.spendDetail(EventType.SPENDING,
+                "Personnel", "Vendor", null, null, null, null, "USD", null, null)))
+                .isEqualTo("Missing required field(s) for a SPENDING event: amountFcy, amountRcy, currencyFcy, fxRate");
     }
 
     @Test
@@ -244,9 +277,22 @@ class FundingValidationsTest {
     }
 
     @Test
-    void spendFullyAllocated_ignoredForNonSpending() {
+    void spendFullyAllocated_ignoredWhenAmountRcyAbsent() {
         assertThat(FundingValidations.spendFullyAllocated(
                 EventType.FUNDING, new BigDecimal("999999"), null)).isEmpty();
+    }
+
+    @Test
+    void spendFullyAllocated_appliesToFunding_rejectedWhenAllocatedTotalBelowAmountRcy() {
+        assertThat(title(FundingValidations.spendFullyAllocated(
+                EventType.FUNDING, new BigDecimal("40000"), new BigDecimal("50000"))))
+                .isEqualTo(ErrorTitleConstants.SPEND_NOT_FULLY_ALLOCATED);
+    }
+
+    @Test
+    void spendFullyAllocated_appliesToRefund_allowedWhenAllocatedTotalMatches() {
+        assertThat(FundingValidations.spendFullyAllocated(
+                EventType.REFUND, new BigDecimal("50000"), new BigDecimal("50000.00"))).isEmpty();
     }
 
     // --- eventAmountWithinBudget(eventType, amountRcy, summedMilestoneBudget, summedProjectBudget) ---

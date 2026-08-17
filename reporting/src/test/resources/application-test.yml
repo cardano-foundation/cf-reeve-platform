@@ -19,11 +19,6 @@ spring:
   kafka:
     enabled: false
 
-keycloak:
-  enabled: false
-  token-url: ""
-  authorization-url: ""
-
 lob:
   # Test-only key. The organisation module's SecretCipher fails fast without one,
   # and these tests boot a context that includes that module.
