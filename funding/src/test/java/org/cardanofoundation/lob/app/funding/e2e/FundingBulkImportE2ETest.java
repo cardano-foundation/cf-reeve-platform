@@ -103,9 +103,10 @@ class FundingBulkImportE2ETest {
             Project D,100000.00,USD,Sub One,40000.00
             """;
 
-    // Sub Project Title blank, but Sub Total Amount filled -> hasSubProject() is gated on the title
-    // column alone, so this row is treated as "no sub-project on this row" — the other Sub* columns
-    // are simply unused, no error, no sub-project created, root still succeeds.
+    // Sub Project Title blank, but Sub Total Amount filled -> this is an orphaned amount with no
+    // title to attach it to (see ProjectMilestoneCsvLine#hasOrphanedSubProjectData), so the row
+    // reports an error instead of silently discarding the amount; the root, being on an independent
+    // row, still succeeds and no sub-project is created.
     private static final String BLANK_SUB_PROJECT_TITLE_CSV = """
             Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount
             Project E,100000.00,USD,,40000.00
@@ -470,8 +471,9 @@ class FundingBulkImportE2ETest {
      * Currency is genuinely optional (defaults to the root's own currency); Project Title is
      * mandatory at the CSV-header level (its absence fails to parse at all); Sub Total Amount is
      * required to <em>create</em> a new sub-project (its absence fails only that row, the root is
-     * unaffected); a blank Sub Project Title is treated as "no sub-project on this row" (the trigger
-     * column itself, not an error).
+     * unaffected); a blank Sub Project Title with a Sub Total Amount also present is an orphaned
+     * amount with nothing to attach it to, so it's a row error too (the root, on its own row, is
+     * still unaffected).
      * Each case uses its own organisationId so the runs can't collide with each other in the shared
      * database.
      */
@@ -512,9 +514,9 @@ class FundingBulkImportE2ETest {
         return Stream.of(
                 arguments("missing-project-title", MISSING_PROJECT_TITLE_CSV, "org-missing-project-title", "Project A", false, false, true),
                 arguments("missing-sub-currency", MISSING_SUB_CURRENCY_CSV, "org-missing-sub-currency", "Project D", true, true, false),
-                // A blank Sub Project Title means "no sub-project declared on this row" (the trigger
-                // column itself) — the other Sub* columns are simply unused, no error at all.
-                arguments("blank-sub-project-title", BLANK_SUB_PROJECT_TITLE_CSV, "org-blank-sub-project-title", "Project E", true, false, false),
+                // A blank Sub Project Title with a Sub Total Amount present is an orphaned amount —
+                // reported as a row error, not silently dropped.
+                arguments("blank-sub-project-title", BLANK_SUB_PROJECT_TITLE_CSV, "org-blank-sub-project-title", "Project E", true, false, true),
                 arguments("missing-sub-total-amount", MISSING_SUB_TOTAL_AMOUNT_CSV, "org-missing-sub-total-amount", "Project C", true, false, true)
         );
     }
