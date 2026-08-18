@@ -63,6 +63,28 @@ public class ProjectMilestoneCsvLine {
         return milestoneTitle != null && !milestoneTitle.isBlank();
     }
 
+    /**
+     * True when this row carries a sub-project amount with no sub-project title to attach it to —
+     * either the row's own {@code Sub Project Title} cell was left blank while {@code Sub Total
+     * Amount} was filled in, or (less obviously) the {@code Sub Project Title} column is missing
+     * from the file's header entirely, which binds {@link #subProjectTitle} to {@code null} for
+     * every row without opencsv raising any error (it's an {@code optional} column so a fully
+     * absent header doesn't fail {@code CsvParser}'s required-headers check either). Either way the
+     * amount can't be silently attached to the root project instead — it names a sub-project.
+     */
+    public boolean hasOrphanedSubProjectData() {
+        return !hasSubProject() && notBlank(subTotalAmount);
+    }
+
+    /**
+     * Same idea as {@link #hasOrphanedSubProjectData()} but for a milestone: an amount and/or date
+     * present with no {@code Milestone Title} to create/update, whether that's a blank cell on this
+     * row or the whole column missing from the header.
+     */
+    public boolean hasOrphanedMilestoneData() {
+        return !hasMilestone() && (notBlank(milestoneAmount) || notBlank(milestoneDate));
+    }
+
     private static boolean notBlank(String s) {
         return s != null && !s.isBlank();
     }
