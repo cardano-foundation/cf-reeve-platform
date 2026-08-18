@@ -70,9 +70,9 @@ class FundingBulkImportE2ETest {
     private static final String ORG_ID = "org1";
 
     private static final String PROJECTS_MILESTONES_TEMPLATE_CSV = """
-            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Sub Currency,Milestone Title,Milestone Amount,Milestone Date
-            Project A,100000.00,USD,Sub One,40000.00,USD,Milestone One,20000.00,2026-06-30
-            Project A,,,Sub One,,,Milestone Two,20000.00,2026-07-15
+            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
+            Project A,100000.00,USD,Sub One,40000.00,Milestone One,20000.00,2026-06-30
+            Project A,,,Sub One,,Milestone Two,20000.00,2026-07-15
             """;
 
     private static final String EVENTS_TEMPLATE_CSV = """
@@ -92,30 +92,30 @@ class FundingBulkImportE2ETest {
     // Root Project Title column entirely absent -> mandatory; the file fails to parse (a file-level
     // error via CsvParser.checkHeaders), nothing persisted.
     private static final String MISSING_PROJECT_TITLE_CSV = """
-            Total Amount,Currency,Sub Project Title,Sub Total Amount,Sub Currency
-            100000.00,USD,Sub One,40000.00,USD
+            Total Amount,Currency,Sub Project Title,Sub Total Amount
+            100000.00,USD,Sub One,40000.00
             """;
 
-    // Sub Currency missing -> optional; the sub-project inherits the root's currency (USD) and is
-    // created successfully, same as if Sub Currency had been explicitly set to "USD".
+    // There is no "Sub Currency" column at all -> a sub-project always inherits the root's currency
+    // (USD), and is created successfully.
     private static final String MISSING_SUB_CURRENCY_CSV = """
             Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount
             Project D,100000.00,USD,Sub One,40000.00
             """;
 
-    // Sub Project Title blank, but Sub Total Amount/Currency filled -> hasSubProject() is gated on the
-    // title column alone, so this row is treated as "no sub-project on this row" — the other Sub*
-    // columns are simply unused, no error, no sub-project created, root still succeeds.
+    // Sub Project Title blank, but Sub Total Amount filled -> hasSubProject() is gated on the title
+    // column alone, so this row is treated as "no sub-project on this row" — the other Sub* columns
+    // are simply unused, no error, no sub-project created, root still succeeds.
     private static final String BLANK_SUB_PROJECT_TITLE_CSV = """
-            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Sub Currency
-            Project E,100000.00,USD,,40000.00,USD
+            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount
+            Project E,100000.00,USD,,40000.00
             """;
 
     // Sub Total Amount missing -> required to create a new sub-project; the sub-project row fails, the
     // root is independent and still succeeds.
     private static final String MISSING_SUB_TOTAL_AMOUNT_CSV = """
-            Project Title,Total Amount,Currency,Sub Project Title,Sub Currency
-            Project C,100000.00,USD,Sub One,USD
+            Project Title,Total Amount,Currency,Sub Project Title
+            Project C,100000.00,USD,Sub One
             """;
 
     @Container
@@ -373,12 +373,12 @@ class FundingBulkImportE2ETest {
         when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
 
         String seedRootX = """
-                Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Sub Currency,Milestone Title,Milestone Amount,Milestone Date
-                Root X,50000.00,USD,Twin Sub,50000.00,USD,Wrong Milestone,10000.00,2026-06-30
+                Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
+                Root X,50000.00,USD,Twin Sub,50000.00,Wrong Milestone,10000.00,2026-06-30
                 """;
         String seedRootY = """
-                Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Sub Currency,Milestone Title,Milestone Amount,Milestone Date
-                Root Y,50000.00,USD,Twin Sub,50000.00,USD,Milestone One,10000.00,2026-06-30
+                Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
+                Root Y,50000.00,USD,Twin Sub,50000.00,Milestone One,10000.00,2026-06-30
                 """;
         FundingBulkImportResult seedXResult = bulkImportService.importFiles(BulkImportRequest.builder()
                 .organisationId(orgId).files(List.of(new MockMultipartFile("file", "x.csv", "text/csv", seedRootX.getBytes()))).build());

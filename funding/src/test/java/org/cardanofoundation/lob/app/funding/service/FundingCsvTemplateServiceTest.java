@@ -42,37 +42,38 @@ class FundingCsvTemplateServiceTest {
 
         assertThat(rows).hasSize(7); // header + root-only + 2x Sub One + 2x Sub Two + Project B
         assertThat(rows.get(0)).containsExactly("Project Title", "Total Amount", "Currency",
-                "Sub Project Title", "Sub Total Amount", "Sub Currency",
+                "Sub Project Title", "Sub Total Amount",
                 "Milestone Title", "Milestone Amount", "Milestone Date");
 
         // Root-only declaration row: no sub-project, no milestone. Total matches its two sub-projects
         // (40000 + 40000) exactly — no unreachable headroom in the example.
         assertThat(rows.get(1)).containsExactly("Project A", "80000.00", "USD",
-                "", "", "", "", "", "");
-        // Sub One's two milestones — root columns left blank (already declared on row 1).
+                "", "", "", "", "");
+        // Sub One's two milestones — root columns left blank (already declared on row 1). There is no
+        // "Sub Currency" column: a sub-project always takes the root's currency.
         assertThat(rows.get(2)).containsExactly("Project A", "", "",
-                "Sub One", "40000.00", "USD", "Milestone One", "20000.00", "2026-06-30");
+                "Sub One", "40000.00", "Milestone One", "20000.00", "2026-06-30");
         assertThat(rows.get(3)).containsExactly("Project A", "", "",
-                "Sub One", "", "", "Milestone Two", "20000.00", "2026-07-15");
+                "Sub One", "", "Milestone Two", "20000.00", "2026-07-15");
         // Sub Two reuses the same milestone titles as Sub One — allowed, since uniqueness is per project.
         assertThat(rows.get(4)).containsExactly("Project A", "", "",
-                "Sub Two", "40000.00", "USD", "Milestone One", "20000.00", "2026-06-30");
+                "Sub Two", "40000.00", "Milestone One", "20000.00", "2026-06-30");
         assertThat(rows.get(5)).containsExactly("Project A", "", "",
-                "Sub Two", "", "", "Milestone Two", "20000.00", "2026-07-15");
+                "Sub Two", "", "Milestone Two", "20000.00", "2026-07-15");
         // Project B: standalone root with a milestone directly on it, no sub-project.
         assertThat(rows.get(6)).containsExactly("Project B", "20000.00", "USD",
-                "", "", "", "Milestone One", "20000.00", "2026-06-30");
+                "", "", "Milestone One", "20000.00", "2026-06-30");
     }
 
     @Test
     void projectsMilestonesTemplate_subProjectMilestonesSumToTheirOwnBudget() throws Exception {
         List<String[]> rows = readRows(FundingCsvFileType.PROJECTS_MILESTONES);
 
-        // column indices: 4=Sub Total Amount, 7=Milestone Amount
+        // column indices: 4=Sub Total Amount, 6=Milestone Amount
         double subOneTotal = Double.parseDouble(rows.get(2)[4]);
-        double subOneMilestonesSum = Double.parseDouble(rows.get(2)[7]) + Double.parseDouble(rows.get(3)[7]);
+        double subOneMilestonesSum = Double.parseDouble(rows.get(2)[6]) + Double.parseDouble(rows.get(3)[6]);
         double subTwoTotal = Double.parseDouble(rows.get(4)[4]);
-        double subTwoMilestonesSum = Double.parseDouble(rows.get(4)[7]) + Double.parseDouble(rows.get(5)[7]);
+        double subTwoMilestonesSum = Double.parseDouble(rows.get(4)[6]) + Double.parseDouble(rows.get(5)[6]);
 
         assertThat(subOneMilestonesSum).isEqualTo(subOneTotal);
         assertThat(subTwoMilestonesSum).isEqualTo(subTwoTotal);
@@ -86,7 +87,7 @@ class FundingCsvTemplateServiceTest {
         // belong to different (sibling) sub-projects — demonstrating this is allowed.
         assertThat(rows.get(2)[3]).isEqualTo("Sub One");
         assertThat(rows.get(4)[3]).isEqualTo("Sub Two");
-        assertThat(rows.get(2)[6]).isEqualTo(rows.get(4)[6]).isEqualTo("Milestone One");
+        assertThat(rows.get(2)[5]).isEqualTo(rows.get(4)[5]).isEqualTo("Milestone One");
     }
 
     @Test

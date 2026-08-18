@@ -41,9 +41,6 @@ public class ProjectMilestoneCsvLine {
     @CsvBindByName(column = "Sub Total Amount", profiles = "optional")
     private String subTotalAmount;
 
-    @CsvBindByName(column = "Sub Currency", profiles = "optional")
-    private String subCurrency;
-
     @CsvBindByName(column = "Milestone Title", profiles = "optional")
     private String milestoneTitle;
 
