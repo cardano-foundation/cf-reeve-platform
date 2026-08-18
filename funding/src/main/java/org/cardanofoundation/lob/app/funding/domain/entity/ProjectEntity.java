@@ -56,7 +56,12 @@ public class ProjectEntity extends CommonEntity implements Persistable<String> {
     @Column(name = "total_amount")
     private BigDecimal totalAmount;
 
-    /** Null for sub-projects (they inherit their parent's currency context). */
+    /**
+     * Always populated after creation. For a root project it's required at creation time; for a
+     * sub-project it defaults to its parent's currency when not explicitly given (see
+     * {@code ProjectStructureService.createSubProject}) — nullable only because a sub-project's
+     * default is resolved from its parent rather than enforced at the column level.
+     */
     @Nullable
     @Column(name = "currency")
     private String currency;

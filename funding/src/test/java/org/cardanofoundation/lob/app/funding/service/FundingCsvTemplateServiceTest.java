@@ -41,38 +41,38 @@ class FundingCsvTemplateServiceTest {
         List<String[]> rows = readRows(FundingCsvFileType.PROJECTS_MILESTONES);
 
         assertThat(rows).hasSize(7); // header + root-only + 2x Sub One + 2x Sub Two + Project B
-        assertThat(rows.get(0)).containsExactly("Project Title", "Funding ID", "Total Amount", "Currency",
-                "Sub Project Title", "Sub Funding ID", "Sub Total Amount", "Sub Currency",
+        assertThat(rows.get(0)).containsExactly("Project Title", "Total Amount", "Currency",
+                "Sub Project Title", "Sub Total Amount", "Sub Currency",
                 "Milestone Title", "Milestone Amount", "Milestone Date");
 
         // Root-only declaration row: no sub-project, no milestone. Total matches its two sub-projects
         // (40000 + 40000) exactly — no unreachable headroom in the example.
-        assertThat(rows.get(1)).containsExactly("Project A", "GRANT-2025-001", "80000.00", "USD",
-                "", "", "", "", "", "", "");
+        assertThat(rows.get(1)).containsExactly("Project A", "80000.00", "USD",
+                "", "", "", "", "", "");
         // Sub One's two milestones — root columns left blank (already declared on row 1).
-        assertThat(rows.get(2)).containsExactly("Project A", "", "", "",
-                "Sub One", "", "40000.00", "USD", "Milestone One", "20000.00", "2026-06-30");
-        assertThat(rows.get(3)).containsExactly("Project A", "", "", "",
-                "Sub One", "", "", "", "Milestone Two", "20000.00", "2026-07-15");
+        assertThat(rows.get(2)).containsExactly("Project A", "", "",
+                "Sub One", "40000.00", "USD", "Milestone One", "20000.00", "2026-06-30");
+        assertThat(rows.get(3)).containsExactly("Project A", "", "",
+                "Sub One", "", "", "Milestone Two", "20000.00", "2026-07-15");
         // Sub Two reuses the same milestone titles as Sub One — allowed, since uniqueness is per project.
-        assertThat(rows.get(4)).containsExactly("Project A", "", "", "",
-                "Sub Two", "", "40000.00", "USD", "Milestone One", "20000.00", "2026-06-30");
-        assertThat(rows.get(5)).containsExactly("Project A", "", "", "",
-                "Sub Two", "", "", "", "Milestone Two", "20000.00", "2026-07-15");
+        assertThat(rows.get(4)).containsExactly("Project A", "", "",
+                "Sub Two", "40000.00", "USD", "Milestone One", "20000.00", "2026-06-30");
+        assertThat(rows.get(5)).containsExactly("Project A", "", "",
+                "Sub Two", "", "", "Milestone Two", "20000.00", "2026-07-15");
         // Project B: standalone root with a milestone directly on it, no sub-project.
-        assertThat(rows.get(6)).containsExactly("Project B", "GRANT-2025-002", "20000.00", "USD",
-                "", "", "", "", "Milestone One", "20000.00", "2026-06-30");
+        assertThat(rows.get(6)).containsExactly("Project B", "20000.00", "USD",
+                "", "", "", "Milestone One", "20000.00", "2026-06-30");
     }
 
     @Test
     void projectsMilestonesTemplate_subProjectMilestonesSumToTheirOwnBudget() throws Exception {
         List<String[]> rows = readRows(FundingCsvFileType.PROJECTS_MILESTONES);
 
-        // column indices: 6=Sub Total Amount, 9=Milestone Amount
-        double subOneTotal = Double.parseDouble(rows.get(2)[6]);
-        double subOneMilestonesSum = Double.parseDouble(rows.get(2)[9]) + Double.parseDouble(rows.get(3)[9]);
-        double subTwoTotal = Double.parseDouble(rows.get(4)[6]);
-        double subTwoMilestonesSum = Double.parseDouble(rows.get(4)[9]) + Double.parseDouble(rows.get(5)[9]);
+        // column indices: 4=Sub Total Amount, 7=Milestone Amount
+        double subOneTotal = Double.parseDouble(rows.get(2)[4]);
+        double subOneMilestonesSum = Double.parseDouble(rows.get(2)[7]) + Double.parseDouble(rows.get(3)[7]);
+        double subTwoTotal = Double.parseDouble(rows.get(4)[4]);
+        double subTwoMilestonesSum = Double.parseDouble(rows.get(4)[7]) + Double.parseDouble(rows.get(5)[7]);
 
         assertThat(subOneMilestonesSum).isEqualTo(subOneTotal);
         assertThat(subTwoMilestonesSum).isEqualTo(subTwoTotal);
@@ -84,9 +84,9 @@ class FundingCsvTemplateServiceTest {
 
         // Sub One's "Milestone One" (row 2) and Sub Two's "Milestone One" (row 4) share a title but
         // belong to different (sibling) sub-projects — demonstrating this is allowed.
-        assertThat(rows.get(2)[4]).isEqualTo("Sub One");
-        assertThat(rows.get(4)[4]).isEqualTo("Sub Two");
-        assertThat(rows.get(2)[8]).isEqualTo(rows.get(4)[8]).isEqualTo("Milestone One");
+        assertThat(rows.get(2)[3]).isEqualTo("Sub One");
+        assertThat(rows.get(4)[3]).isEqualTo("Sub Two");
+        assertThat(rows.get(2)[6]).isEqualTo(rows.get(4)[6]).isEqualTo("Milestone One");
     }
 
     @Test
@@ -96,7 +96,7 @@ class FundingCsvTemplateServiceTest {
         assertThat(rows).hasSize(11); // header + 5 FUNDING + 5 SPENDING
         assertThat(rows.get(0)).containsExactly("Event Type", "Funding ID", "Funding Hash", "Funding Entity",
                 "Currency RCY", "Event Date", "Category", "Vendor", "Amount FCY", "Currency FCY", "FX Rate",
-                "Amount RCY", "Hash", "Notes", "Project Title", "Milestone Title", "Allocated Amount");
+                "Amount RCY", "Hash", "Notes", "Project Title", "Sub Project Title", "Milestone Title", "Allocated Amount");
 
         // FUNDING rows: every spend-only column (Category, Vendor, Amount FCY, Currency FCY, FX Rate,
         // Hash, Notes) must stay blank — FundingValidations.spendDetail rejects any of them being set
@@ -105,25 +105,25 @@ class FundingCsvTemplateServiceTest {
         List<String[]> fundingRows = rows.subList(1, 6);
         assertThat(fundingRows).extracting(r -> r[0]).containsOnly("FUNDING");
         assertThat(fundingRows).extracting(r -> r[11]).containsOnly("100000.00");
-        assertThat(fundingRows).extracting(r -> new String[]{r[14], r[15]}).containsExactly(
-                new String[]{"Sub One", "Milestone One"}, new String[]{"Sub One", "Milestone Two"},
-                new String[]{"Sub Two", "Milestone One"}, new String[]{"Sub Two", "Milestone Two"},
-                new String[]{"Project B", "Milestone One"});
+        assertThat(fundingRows).extracting(r -> new String[]{r[14], r[15], r[16]}).containsExactly(
+                new String[]{"Project A", "Sub One", "Milestone One"}, new String[]{"Project A", "Sub One", "Milestone Two"},
+                new String[]{"Project A", "Sub Two", "Milestone One"}, new String[]{"Project A", "Sub Two", "Milestone Two"},
+                new String[]{"Project B", "", "Milestone One"});
 
         List<String[]> spendingRows = rows.subList(6, 11);
         assertThat(spendingRows).extracting(r -> r[0]).containsOnly("SPENDING");
-        assertThat(spendingRows).extracting(r -> new String[]{r[14], r[15]}).containsExactly(
-                new String[]{"Sub One", "Milestone One"}, new String[]{"Sub One", "Milestone Two"},
-                new String[]{"Sub Two", "Milestone One"}, new String[]{"Sub Two", "Milestone Two"},
-                new String[]{"Project B", "Milestone One"});
+        assertThat(spendingRows).extracting(r -> new String[]{r[14], r[15], r[16]}).containsExactly(
+                new String[]{"Project A", "Sub One", "Milestone One"}, new String[]{"Project A", "Sub One", "Milestone Two"},
+                new String[]{"Project A", "Sub Two", "Milestone One"}, new String[]{"Project A", "Sub Two", "Milestone Two"},
+                new String[]{"Project B", "", "Milestone One"});
     }
 
     @Test
     void eventsTemplate_totalFundedMatchesTotalSpent_andMatchesTheProjectTree() throws Exception {
         List<String[]> rows = readRows(FundingCsvFileType.EVENTS);
 
-        double totalFunded = rows.subList(1, 6).stream().mapToDouble(r -> Double.parseDouble(r[16])).sum();
-        double totalSpent = rows.subList(6, 11).stream().mapToDouble(r -> Double.parseDouble(r[16])).sum();
+        double totalFunded = rows.subList(1, 6).stream().mapToDouble(r -> Double.parseDouble(r[17])).sum();
+        double totalSpent = rows.subList(6, 11).stream().mapToDouble(r -> Double.parseDouble(r[17])).sum();
         // The SPENDING event's own reporting-currency amount must also equal what's allocated —
         // required by FundingValidations.spendFullyAllocated.
         double spendingEventAmountRcy = Double.parseDouble(rows.get(6)[11]);

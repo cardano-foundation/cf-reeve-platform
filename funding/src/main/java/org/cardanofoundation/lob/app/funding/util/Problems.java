@@ -55,9 +55,15 @@ public final class Problems {
                 ErrorTitleConstants.PROJECT_REFERENCE_NOT_FOUND);
     }
 
+    public static ProblemDetail subProjectReferenceNotFound(String projectTitle, String subProjectTitle) {
+        return notFound("Sub-project not found for Sub Project Title: %s under Project Title (root): %s"
+                        .formatted(subProjectTitle, projectTitle),
+                ErrorTitleConstants.SUBPROJECT_REFERENCE_NOT_FOUND);
+    }
+
     public static ProblemDetail ambiguousProjectReference(String projectTitle) {
         return badRequest(
-                "projectTitle %s matches more than one project in this organisation; use the JSON API to disambiguate"
+                "projectTitle %s matches more than one project in this organisation; set Sub Project Title to name a specific one"
                         .formatted(projectTitle),
                 ErrorTitleConstants.AMBIGUOUS_PROJECT_REFERENCE);
     }

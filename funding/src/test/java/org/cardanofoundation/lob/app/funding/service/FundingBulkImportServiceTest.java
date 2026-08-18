@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.funding.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -429,7 +430,10 @@ class FundingBulkImportServiceTest {
     }
 
     @Test
-    void subProjectMissingCurrencyOnCreate_reportsError() {
+    void subProjectMissingCurrencyOnCreate_inheritsRootCurrency() {
+        // Sub Currency is optional: ProjectStructureService.createSubProject defaults it to the
+        // parent's currency when null, so a sub-project row with no Sub Currency of its own must
+        // still succeed — passing null through rather than failing the row.
         MultipartFile file = file("import.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
         ProjectMilestoneCsvLine line = rootLine("Project A", "100000.00", "USD");
@@ -442,14 +446,15 @@ class FundingBulkImportServiceTest {
         ProjectEntity root = projectEntity("p1", "Project A", "USD");
         when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
         when(projectRepository.findByParentProjectIdAndProjectTitle("p1", "Sub One")).thenReturn(Optional.empty());
+        when(projectStructureService.createSubProject(eq(root), eq("Sub One"), any(), any(), isNull()))
+                .thenReturn(Either.right(subProjectEntity("s1", "Sub One", "USD", root)));
 
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
-        assertThat(result.getProjectsCreated()).isEqualTo(1); // root only
-        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
-        assertThat(result.getFiles().get(0).getRowErrors().get(0).getReason()).contains("Sub Currency");
-        verify(projectStructureService, never()).createSubProject(any(), any(), any(), any(), any());
+        assertThat(result.getFiles().get(0).getRowErrors()).isEmpty();
+        assertThat(result.getProjectsCreated()).isEqualTo(2); // root + sub
+        verify(projectStructureService).createSubProject(eq(root), eq("Sub One"), any(), any(), isNull());
     }
 
     @Test
@@ -1075,6 +1080,81 @@ class FundingBulkImportServiceTest {
     }
 
     @Test
+    void eventsFile_subProjectTitleDisambiguatesAmongSameTitledSubProjects() {
+        // "Sub One" exists under two different roots — a bare Project Title reference would be
+        // ambiguous (see eventsFile_ambiguousProjectReference_reportsError), but naming the specific
+        // root via Project Title + the sub-project via Sub Project Title resolves it deterministically,
+        // without ever touching the org-wide broad search.
+        MultipartFile file = file("events.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.EVENTS));
+        EventCsvLine row = eventLine("SPENDING", "GRANT-1", "USD", "Root Y", "Sub One", "Milestone One", "10000.00");
+
+        ProjectEntity rootY = projectEntity("rootY", "Root Y", "USD");
+        ProjectEntity subUnderY = subProjectEntity("subY", "Sub One", "USD", rootY);
+
+        when(eventCsvParser.parseCsv(file, EventCsvLine.class)).thenReturn(Either.right(List.of(row)));
+        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Root Y"))
+                .thenReturn(Optional.of(rootY));
+        when(projectRepository.findByParentProjectIdAndProjectTitle("rootY", "Sub One")).thenReturn(Optional.of(subUnderY));
+        when(projectRepository.findById("rootY")).thenReturn(Optional.of(rootY));
+        when(milestoneService.findByProjectIdAndMilestoneTitle("subY", "Milestone One"))
+                .thenReturn(Optional.of(MilestoneEntity.builder().id("m1").build()));
+        when(spendingEventService.createEvent(any())).thenReturn(SpendingEventView.builder().eventId("e1").build());
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getFiles().get(0).getRowErrors()).isEmpty();
+        assertThat(result.getEventsCreated()).isEqualTo(1);
+        verify(projectRepository, never()).findByOrganisationIdAndProjectTitle(any(), any());
+
+        ArgumentCaptor<SpendingEventCreateRequest> captor = ArgumentCaptor.forClass(SpendingEventCreateRequest.class);
+        verify(spendingEventService).createEvent(captor.capture());
+        List<EventProjectAllocationRequest> allocations = captor.getValue().getAllocations();
+        assertThat(allocations).hasSize(1);
+        assertThat(allocations.get(0).getProjectTitle()).isEqualTo("Root Y");
+        assertThat(allocations.get(0).getSubProjects()).hasSize(1);
+        assertThat(allocations.get(0).getSubProjects().get(0).getProjectTitle()).isEqualTo("Sub One");
+    }
+
+    @Test
+    void eventsFile_subProjectTitleSet_rootNotFound_reportsError() {
+        MultipartFile file = file("events.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.EVENTS));
+        EventCsvLine row = eventLine("SPENDING", "GRANT-1", "USD", "No Such Root", "Sub One", "Milestone One", "10000.00");
+        when(eventCsvParser.parseCsv(file, EventCsvLine.class)).thenReturn(Either.right(List.of(row)));
+        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "No Such Root"))
+                .thenReturn(Optional.empty());
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getReason()).contains("No Such Root");
+        verify(spendingEventService, never()).createEvent(any());
+    }
+
+    @Test
+    void eventsFile_subProjectTitleSet_subNotFoundUnderThatRoot_reportsError() {
+        MultipartFile file = file("events.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.EVENTS));
+        EventCsvLine row = eventLine("SPENDING", "GRANT-1", "USD", "Root Y", "No Such Sub", "Milestone One", "10000.00");
+        ProjectEntity rootY = projectEntity("rootY", "Root Y", "USD");
+        when(eventCsvParser.parseCsv(file, EventCsvLine.class)).thenReturn(Either.right(List.of(row)));
+        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Root Y"))
+                .thenReturn(Optional.of(rootY));
+        when(projectRepository.findByParentProjectIdAndProjectTitle("rootY", "No Such Sub")).thenReturn(Optional.empty());
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getReason())
+                .contains("No Such Sub").contains("Root Y");
+        verify(spendingEventService, never()).createEvent(any());
+    }
+
+    @Test
     void eventsFile_blankProjectTitleInAllocationRow_reportsError() {
         MultipartFile file = file("events.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.EVENTS));
@@ -1272,11 +1352,17 @@ class FundingBulkImportServiceTest {
 
     private static EventCsvLine eventLine(String eventType, String fundingId, String currencyRcy,
             String projectTitle, String milestoneTitle, String allocatedAmount) {
+        return eventLine(eventType, fundingId, currencyRcy, projectTitle, null, milestoneTitle, allocatedAmount);
+    }
+
+    private static EventCsvLine eventLine(String eventType, String fundingId, String currencyRcy,
+            String projectTitle, String subProjectTitle, String milestoneTitle, String allocatedAmount) {
         EventCsvLine line = new EventCsvLine();
         line.setEventType(eventType);
         line.setFundingId(fundingId);
         line.setCurrencyRcy(currencyRcy);
         line.setProjectTitle(projectTitle);
+        line.setSubProjectTitle(subProjectTitle);
         line.setMilestoneTitle(milestoneTitle);
         line.setAllocatedAmount(allocatedAmount);
         return line;

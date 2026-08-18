@@ -70,9 +70,9 @@ class FundingBulkImportE2ETest {
     private static final String ORG_ID = "org1";
 
     private static final String PROJECTS_MILESTONES_TEMPLATE_CSV = """
-            Project Title,Funding ID,Total Amount,Currency,Sub Project Title,Sub Funding ID,Sub Total Amount,Sub Currency,Milestone Title,Milestone Amount,Milestone Date
-            Project A,GRANT-2025-001,100000.00,USD,Sub One,,40000.00,USD,Milestone One,20000.00,2026-06-30
-            Project A,,,,Sub One,,,,Milestone Two,20000.00,2026-07-15
+            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Sub Currency,Milestone Title,Milestone Amount,Milestone Date
+            Project A,100000.00,USD,Sub One,40000.00,USD,Milestone One,20000.00,2026-06-30
+            Project A,,,Sub One,,,Milestone Two,20000.00,2026-07-15
             """;
 
     private static final String EVENTS_TEMPLATE_CSV = """
@@ -89,39 +89,33 @@ class FundingBulkImportE2ETest {
             FUNDING,GRANT-2025-Z,,Cardano Foundation,USD,2026-07-01,,,,,2000.00,,,Dup Project,Dup Milestone,2000.00
             """;
 
-    // Funding ID missing -> optional, root+sub row still succeeds.
-    private static final String MISSING_FUNDING_ID_CSV = """
-            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Sub Currency
-            Project A,100000.00,USD,Sub One,40000.00,USD
-            """;
-
     // Root Project Title column entirely absent -> mandatory; the file fails to parse (a file-level
     // error via CsvParser.checkHeaders), nothing persisted.
     private static final String MISSING_PROJECT_TITLE_CSV = """
-            Funding ID,Total Amount,Currency,Sub Project Title,Sub Total Amount,Sub Currency
-            GRANT-2025-001,100000.00,USD,Sub One,40000.00,USD
+            Total Amount,Currency,Sub Project Title,Sub Total Amount,Sub Currency
+            100000.00,USD,Sub One,40000.00,USD
             """;
 
-    // Sub Currency missing -> required to create a new sub-project; the sub-project row fails, but
-    // (unlike the old design) the root is independent and still succeeds.
+    // Sub Currency missing -> optional; the sub-project inherits the root's currency (USD) and is
+    // created successfully, same as if Sub Currency had been explicitly set to "USD".
     private static final String MISSING_SUB_CURRENCY_CSV = """
-            Project Title,Funding ID,Total Amount,Currency,Sub Project Title,Sub Total Amount
-            Project D,GRANT-2025-003,100000.00,USD,Sub One,40000.00
+            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount
+            Project D,100000.00,USD,Sub One,40000.00
             """;
 
     // Sub Project Title blank, but Sub Total Amount/Currency filled -> hasSubProject() is gated on the
     // title column alone, so this row is treated as "no sub-project on this row" — the other Sub*
     // columns are simply unused, no error, no sub-project created, root still succeeds.
     private static final String BLANK_SUB_PROJECT_TITLE_CSV = """
-            Project Title,Funding ID,Total Amount,Currency,Sub Project Title,Sub Total Amount,Sub Currency
-            Project E,GRANT-2025-004,100000.00,USD,,40000.00,USD
+            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Sub Currency
+            Project E,100000.00,USD,,40000.00,USD
             """;
 
     // Sub Total Amount missing -> required to create a new sub-project; the sub-project row fails, the
     // root is independent and still succeeds.
     private static final String MISSING_SUB_TOTAL_AMOUNT_CSV = """
-            Project Title,Funding ID,Total Amount,Currency,Sub Project Title,Sub Currency
-            Project C,GRANT-2025-002,100000.00,USD,Sub One,USD
+            Project Title,Total Amount,Currency,Sub Project Title,Sub Currency
+            Project C,100000.00,USD,Sub One,USD
             """;
 
     @Container
@@ -367,6 +361,58 @@ class FundingBulkImportE2ETest {
         assertThat(result.getEventsCreated()).isZero();
     }
 
+    @Test
+    void eventsCsv_sameSubProjectTitleUnderTwoRoots_ambiguousWithoutDisambiguation_resolvedWithSubProjectTitle() {
+        // Two different roots each have a sub-project titled "Twin Sub" — a bare Project Title
+        // reference to "Twin Sub" alone cannot tell which one is meant. Root X's Twin Sub and Root Y's
+        // Twin Sub deliberately have differently-named milestones, so a correct resolution to Root Y's
+        // Twin Sub is provable: if disambiguation picked the wrong one (Root X's), "Milestone One"
+        // wouldn't exist under it and the import would fail with "milestone not found" instead of
+        // succeeding.
+        String orgId = "org-events-subproject-disambiguation";
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+
+        String seedRootX = """
+                Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Sub Currency,Milestone Title,Milestone Amount,Milestone Date
+                Root X,50000.00,USD,Twin Sub,50000.00,USD,Wrong Milestone,10000.00,2026-06-30
+                """;
+        String seedRootY = """
+                Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Sub Currency,Milestone Title,Milestone Amount,Milestone Date
+                Root Y,50000.00,USD,Twin Sub,50000.00,USD,Milestone One,10000.00,2026-06-30
+                """;
+        FundingBulkImportResult seedXResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(new MockMultipartFile("file", "x.csv", "text/csv", seedRootX.getBytes()))).build());
+        assertThat(reasons(seedXResult)).isEmpty();
+        FundingBulkImportResult seedYResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(new MockMultipartFile("file", "y.csv", "text/csv", seedRootY.getBytes()))).build());
+        assertThat(reasons(seedYResult)).isEmpty();
+
+        // Without Sub Project Title: ambiguous, since "Twin Sub" alone matches two projects.
+        String ambiguousCsv = """
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
+                FUNDING,GRANT-AMBIG,,Cardano Foundation,USD,2026-07-01,,,,,,10000.00,,,Twin Sub,,Milestone One,10000.00
+                """;
+        MultipartFile ambiguousFile = new MockMultipartFile("file", "ambiguous.csv", "text/csv", ambiguousCsv.getBytes());
+        FundingBulkImportResult ambiguousResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(ambiguousFile)).build());
+        assertThat(reasons(ambiguousResult)).hasSize(1);
+        assertThat(reasons(ambiguousResult).get(0)).contains("Twin Sub").contains("more than one project");
+        assertThat(ambiguousResult.getEventsCreated()).isZero();
+
+        // With Root Y named via Project Title and Twin Sub named via Sub Project Title: resolved
+        // deterministically to Root Y's Twin Sub, where "Milestone One" actually exists.
+        String disambiguatedCsv = """
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
+                FUNDING,GRANT-DISAMBIG,,Cardano Foundation,USD,2026-07-01,,,,,,10000.00,,,Root Y,Twin Sub,Milestone One,10000.00
+                """;
+        MultipartFile disambiguatedFile = new MockMultipartFile("file", "disambiguated.csv", "text/csv", disambiguatedCsv.getBytes());
+        FundingBulkImportResult disambiguatedResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(disambiguatedFile)).build());
+
+        assertThat(reasons(disambiguatedResult)).isEmpty();
+        assertThat(disambiguatedResult.getEventsCreated()).isEqualTo(1);
+    }
+
     /** Seeds Project A/Sub One + Milestone One/Two exactly as the downloadable template does. */
     private void seedProjectsAndMilestonesTemplate(String orgId) {
         MultipartFile file = new MockMultipartFile("file", "funding_projects_milestones_template.csv", "text/csv",
@@ -420,11 +466,12 @@ class FundingBulkImportE2ETest {
     }
 
     /**
-     * Sweeps the "missing-*"/edge-case fixtures for the merged Projects+Milestones row shape. Only
-     * Funding ID is genuinely optional; Project Title is mandatory at the CSV-header level (its
-     * absence fails to parse at all); Sub Total Amount / Sub Currency are required to <em>create</em> a
-     * new sub-project (their absence fails only that row, the root is unaffected); a blank Sub Project
-     * Title is treated as "no sub-project on this row" (the trigger column itself, not an error).
+     * Sweeps the "missing-*"/edge-case fixtures for the merged Projects+Milestones row shape. Sub
+     * Currency is genuinely optional (defaults to the root's own currency); Project Title is
+     * mandatory at the CSV-header level (its absence fails to parse at all); Sub Total Amount is
+     * required to <em>create</em> a new sub-project (its absence fails only that row, the root is
+     * unaffected); a blank Sub Project Title is treated as "no sub-project on this row" (the trigger
+     * column itself, not an error).
      * Each case uses its own organisationId so the runs can't collide with each other in the shared
      * database.
      */
@@ -463,9 +510,8 @@ class FundingBulkImportE2ETest {
 
     static Stream<Arguments> edgeCaseCsvCases() {
         return Stream.of(
-                arguments("missing-funding-id", MISSING_FUNDING_ID_CSV, "org-missing-funding-id", "Project A", true, true, false),
                 arguments("missing-project-title", MISSING_PROJECT_TITLE_CSV, "org-missing-project-title", "Project A", false, false, true),
-                arguments("missing-sub-currency", MISSING_SUB_CURRENCY_CSV, "org-missing-sub-currency", "Project D", true, false, true),
+                arguments("missing-sub-currency", MISSING_SUB_CURRENCY_CSV, "org-missing-sub-currency", "Project D", true, true, false),
                 // A blank Sub Project Title means "no sub-project declared on this row" (the trigger
                 // column itself) — the other Sub* columns are simply unused, no error at all.
                 arguments("blank-sub-project-title", BLANK_SUB_PROJECT_TITLE_CSV, "org-blank-sub-project-title", "Project E", true, false, false),
