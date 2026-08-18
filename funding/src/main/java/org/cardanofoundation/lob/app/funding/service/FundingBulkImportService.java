@@ -271,12 +271,25 @@ public class FundingBulkImportService {
     /**
      * Upserts one row's sub-project (if any) and milestone (if any). A failed sub-project upsert
      * reports its error and skips the milestone — there is nothing to attach it to on this row.
+     *
+     * <p>A row whose {@code Sub Total Amount} (or {@code Milestone Amount}/{@code Milestone Date})
+     * is filled in but whose matching title is missing — see {@link
+     * ProjectMilestoneCsvLine#hasOrphanedSubProjectData()} / {@link
+     * ProjectMilestoneCsvLine#hasOrphanedMilestoneData()} — is reported as a row error instead of
+     * being silently dropped or (for a sub-project amount with no sub-project title) attached to
+     * the wrong project.
      */
     private RowOutcome processGroupRow(ProjectEntity root, int idx, ProjectMilestoneCsvLine line, Map<String, String> resolvedProjectIds) {
         ProjectEntity target = root;
         int succeeded = 0;
         int projectsCreated = 0;
         int projectsUpdated = 0;
+
+        if (line.hasOrphanedSubProjectData()) {
+            return new RowOutcome(rowError(idx + 1, Problems.badRequest(
+                    "Sub Project Title is required when Sub Total Amount is provided",
+                    ErrorTitleConstants.PROJECT_FIELDS_REQUIRED)), 0, 0, 0, 0, 0);
+        }
 
         if (line.hasSubProject()) {
             Either<ProblemDetail, UpsertOutcome<ProjectEntity>> subE = upsertSubProject(root, line);
@@ -287,6 +300,12 @@ public class FundingBulkImportService {
             resolvedProjectIds.put(line.getSubProjectTitle(), target.getId());
             succeeded++;
             if (subE.get().created()) projectsCreated++; else projectsUpdated++;
+        }
+
+        if (line.hasOrphanedMilestoneData()) {
+            return new RowOutcome(rowError(idx + 1, Problems.badRequest(
+                    "Milestone Title is required when Milestone Amount or Milestone Date is provided",
+                    ErrorTitleConstants.MILESTONE_FIELDS_REQUIRED)), succeeded, projectsCreated, projectsUpdated, 0, 0);
         }
 
         if (!line.hasMilestone()) {
@@ -351,16 +370,16 @@ public class FundingBulkImportService {
         }
 
         if (existing.isPresent()) {
-            return updateProjectEntity(existing.get(), line.getSubCurrency(), subAmountE.get());
+            return updateProjectEntity(existing.get(), null, subAmountE.get());
         }
-        // CREATE — full data is required, except Sub Currency: when left blank it defaults to the
-        // root's own currency (see ProjectStructureService.createSubProject).
+        // CREATE — full data is required. There is no "Sub Currency" column: a sub-project always
+        // takes the root's currency (see ProjectStructureService.createSubProject).
         if (subAmountE.get() == null) {
             return Either.left(Problems.badRequest(
                     "Sub Total Amount is required to create sub-project: " + line.getSubProjectTitle(), ErrorTitleConstants.PROJECT_AMOUNT_INVALID));
         }
         Either<ProblemDetail, ProjectEntity> created = projectStructureService.createSubProject(
-                root, line.getSubProjectTitle(), null, subAmountE.get(), blankToNull(line.getSubCurrency()));
+                root, line.getSubProjectTitle(), null, subAmountE.get(), null);
         if (created.isLeft()) {
             return Either.left(created.getLeft());
         }

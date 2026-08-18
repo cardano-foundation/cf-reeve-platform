@@ -314,7 +314,6 @@ class FundingBulkImportServiceTest {
         ProjectMilestoneCsvLine subRowFirst = continuationLine("Project A");
         subRowFirst.setSubProjectTitle("Sub One");
         subRowFirst.setSubTotalAmount("40000.00");
-        subRowFirst.setSubCurrency("USD");
 
         ProjectMilestoneCsvLine rootRowSecond = rootLine("Project A", "100000.00", "USD");
 
@@ -352,7 +351,6 @@ class FundingBulkImportServiceTest {
         ProjectMilestoneCsvLine line = rootLine("Project A", "100000.00", "USD");
         line.setSubProjectTitle("Sub One");
         line.setSubTotalAmount("40000.00");
-        line.setSubCurrency("USD");
 
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
@@ -408,7 +406,6 @@ class FundingBulkImportServiceTest {
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
         ProjectMilestoneCsvLine line = rootLine("Project A", "100000.00", "USD");
         line.setSubProjectTitle("Sub One");
-        line.setSubCurrency("USD"); // no sub total amount supplied
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
                 .thenReturn(Optional.empty());
@@ -430,10 +427,41 @@ class FundingBulkImportServiceTest {
     }
 
     @Test
+    void subTotalAmountWithNoSubProjectTitle_reportsErrorInsteadOfAttachingToRoot() {
+        // Reproduces uploading a CSV whose "Sub Project Title" column is missing entirely: opencsv
+        // (an optional column) leaves subProjectTitle null on every row with no parsing error, so
+        // without this guard a Sub Total Amount left on the row would be silently dropped and any
+        // milestone on the same row would be misattached to the root instead of the intended
+        // sub-project. The row must fail instead of doing either.
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+        ProjectMilestoneCsvLine line = rootLine("Project A", "100000.00", "USD");
+        line.setSubTotalAmount("40000.00"); // Sub Project Title left blank/absent
+        line.setMilestoneTitle("Milestone One");
+        line.setMilestoneAmount("20000.00");
+        line.setMilestoneDate("2026-06-30");
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
+        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
+                .thenReturn(Optional.empty());
+        when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
+        ProjectEntity root = projectEntity("p1", "Project A", "USD");
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getProjectsCreated()).isEqualTo(1); // root only, no sub-project
+        assertThat(result.getMilestonesCreated()).isZero();
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getReason()).contains("Sub Project Title");
+        verify(projectStructureService, never()).createSubProject(any(), any(), any(), any(), any());
+        verify(milestoneService, never()).createMilestone(any(), any());
+    }
+
+    @Test
     void subProjectMissingCurrencyOnCreate_inheritsRootCurrency() {
-        // Sub Currency is optional: ProjectStructureService.createSubProject defaults it to the
-        // parent's currency when null, so a sub-project row with no Sub Currency of its own must
-        // still succeed — passing null through rather than failing the row.
+        // There is no "Sub Currency" column: ProjectStructureService.createSubProject always
+        // receives null for a sub-project's currency and defaults it to the parent's currency.
         MultipartFile file = file("import.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
         ProjectMilestoneCsvLine line = rootLine("Project A", "100000.00", "USD");
@@ -467,12 +495,10 @@ class FundingBulkImportServiceTest {
         ProjectMilestoneCsvLine badSubRow = rootLine("Project A", "100000.00", "USD");
         badSubRow.setSubProjectTitle("Sub Bad");
         badSubRow.setSubTotalAmount("40000.00");
-        badSubRow.setSubCurrency("USD");
 
         ProjectMilestoneCsvLine goodSubRow = continuationLine("Project A");
         goodSubRow.setSubProjectTitle("Sub Good");
         goodSubRow.setSubTotalAmount("30000.00");
-        goodSubRow.setSubCurrency("USD");
 
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class))
                 .thenReturn(Either.right(List.of(badSubRow, goodSubRow)));
@@ -559,7 +585,6 @@ class FundingBulkImportServiceTest {
         ProjectMilestoneCsvLine line = rootLine("Project A", "100000.00", "USD");
         line.setSubProjectTitle("Sub One");
         line.setSubTotalAmount("40000.00");
-        line.setSubCurrency("USD");
         line.setMilestoneTitle("Milestone One");
         line.setMilestoneAmount("20000.00");
         line.setMilestoneDate("2026-06-30");
@@ -689,6 +714,40 @@ class FundingBulkImportServiceTest {
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
         assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        verify(milestoneService, never()).createMilestone(any(), any());
+    }
+
+    @Test
+    void milestoneAmountWithNoMilestoneTitle_reportsErrorInsteadOfSilentlyDropping() {
+        // Reproduces uploading a CSV whose "Milestone Title" column is missing entirely: opencsv
+        // (an optional column) leaves milestoneTitle null on every row with no parsing error, so
+        // without this guard the Milestone Amount/Date left on the row would just be silently
+        // dropped — no milestone created, no error reported. The sub-project on the same row is
+        // still created normally; only the orphaned milestone data fails.
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+        ProjectMilestoneCsvLine line = rootLine("Project A", "100000.00", "USD");
+        line.setSubProjectTitle("Sub One");
+        line.setSubTotalAmount("40000.00");
+        line.setMilestoneAmount("20000.00"); // Milestone Title left blank/absent
+        line.setMilestoneDate("2026-06-30");
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
+        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
+                .thenReturn(Optional.empty());
+        when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
+        ProjectEntity root = projectEntity("p1", "Project A", "USD");
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
+        when(projectRepository.findByParentProjectIdAndProjectTitle("p1", "Sub One")).thenReturn(Optional.empty());
+        when(projectStructureService.createSubProject(eq(root), eq("Sub One"), any(), any(), isNull()))
+                .thenReturn(Either.right(subProjectEntity("s1", "Sub One", "USD", root)));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getProjectsCreated()).isEqualTo(2); // root + sub-project still created
+        assertThat(result.getMilestonesCreated()).isZero();
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getReason()).contains("Milestone Title");
         verify(milestoneService, never()).createMilestone(any(), any());
     }
 
@@ -829,7 +888,6 @@ class FundingBulkImportServiceTest {
         ProjectMilestoneCsvLine subOneRow = rootLine("Project A", "100000.00", "USD");
         subOneRow.setSubProjectTitle("Sub One");
         subOneRow.setSubTotalAmount("40000.00");
-        subOneRow.setSubCurrency("USD");
         subOneRow.setMilestoneTitle("Milestone One");
         subOneRow.setMilestoneAmount("20000.00");
         subOneRow.setMilestoneDate("2026-06-30");
@@ -837,7 +895,6 @@ class FundingBulkImportServiceTest {
         ProjectMilestoneCsvLine subTwoRow = continuationLine("Project A");
         subTwoRow.setSubProjectTitle("Sub Two");
         subTwoRow.setSubTotalAmount("40000.00");
-        subTwoRow.setSubCurrency("USD");
         subTwoRow.setMilestoneTitle("Milestone One"); // same title, different (sub-)project
         subTwoRow.setMilestoneAmount("20000.00");
         subTwoRow.setMilestoneDate("2026-06-30");
@@ -879,7 +936,6 @@ class FundingBulkImportServiceTest {
         ProjectMilestoneCsvLine row1 = rootLine("Project A", "100000.00", "USD");
         row1.setSubProjectTitle("Sub One");
         row1.setSubTotalAmount("40000.00");
-        row1.setSubCurrency("USD");
         row1.setMilestoneTitle("Milestone One");
         row1.setMilestoneAmount("20000.00");
         row1.setMilestoneDate("2026-06-30");

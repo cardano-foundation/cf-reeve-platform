@@ -61,26 +61,26 @@ public class FundingCsvTemplateService {
     private void writeProjectsMilestonesTemplate(CSVWriter csvWriter) {
         csvWriter.writeNext(new String[]{
                 COL_PROJECT_TITLE, "Total Amount", "Currency",
-                "Sub Project Title", "Sub Total Amount", "Sub Currency",
+                "Sub Project Title", "Sub Total Amount",
                 COL_MILESTONE_TITLE, "Milestone Amount", "Milestone Date"
         }, false);
         csvWriter.writeNext(new String[]{
-                PROJECT_A, "80000.00", "USD", "", "", "", "", "", ""
+                PROJECT_A, "80000.00", "USD", "", "", "", "", ""
         }, false);
         csvWriter.writeNext(new String[]{
-                PROJECT_A, "", "", SUB_ONE, "40000.00", "USD", MILESTONE_ONE, MILESTONE_AMOUNT, MILESTONE_ONE_DUE_DATE
+                PROJECT_A, "", "", SUB_ONE, "40000.00", MILESTONE_ONE, MILESTONE_AMOUNT, MILESTONE_ONE_DUE_DATE
         }, false);
         csvWriter.writeNext(new String[]{
-                PROJECT_A, "", "", SUB_ONE, "", "", MILESTONE_TWO, MILESTONE_AMOUNT, "2026-07-15"
+                PROJECT_A, "", "", SUB_ONE, "", MILESTONE_TWO, MILESTONE_AMOUNT, "2026-07-15"
         }, false);
         csvWriter.writeNext(new String[]{
-                PROJECT_A, "", "", SUB_TWO, "40000.00", "USD", MILESTONE_ONE, MILESTONE_AMOUNT, MILESTONE_ONE_DUE_DATE
+                PROJECT_A, "", "", SUB_TWO, "40000.00", MILESTONE_ONE, MILESTONE_AMOUNT, MILESTONE_ONE_DUE_DATE
         }, false);
         csvWriter.writeNext(new String[]{
-                PROJECT_A, "", "", SUB_TWO, "", "", MILESTONE_TWO, MILESTONE_AMOUNT, "2026-07-15"
+                PROJECT_A, "", "", SUB_TWO, "", MILESTONE_TWO, MILESTONE_AMOUNT, "2026-07-15"
         }, false);
         csvWriter.writeNext(new String[]{
-                PROJECT_B, MILESTONE_AMOUNT, "USD", "", "", "", MILESTONE_ONE, MILESTONE_AMOUNT, MILESTONE_ONE_DUE_DATE
+                PROJECT_B, MILESTONE_AMOUNT, "USD", "", "", MILESTONE_ONE, MILESTONE_AMOUNT, MILESTONE_ONE_DUE_DATE
         }, false);
     }
 

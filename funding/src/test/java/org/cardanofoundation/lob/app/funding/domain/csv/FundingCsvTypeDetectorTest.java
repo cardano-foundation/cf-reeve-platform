@@ -32,7 +32,7 @@ class FundingCsvTypeDetectorTest {
     @Test
     void detectsProjectsMilestonesFile() {
         String header = "Project Title;Total Amount;Currency;"
-                + "Sub Project Title;Sub Total Amount;Sub Currency;"
+                + "Sub Project Title;Sub Total Amount;"
                 + "Milestone Title;Milestone Amount;Milestone Date\n";
 
         Optional<FundingCsvFileType> result = detector.detect(file(header));
