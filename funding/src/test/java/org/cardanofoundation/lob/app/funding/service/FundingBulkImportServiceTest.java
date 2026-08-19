@@ -441,13 +441,43 @@ class FundingBulkImportServiceTest {
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
-        // The root is unaffected by the sub-project's failure — this is the key behavior change from
-        // the old "orphan root rollback": each row is now independent, no group-wide rollback.
-        assertThat(result.getProjectsCreated()).isEqualTo(1); // root only
-        assertThat(result.getFiles().get(0).getRowsSucceeded()).isEqualTo(1); // root row
+        // The whole group — including the root, which did succeed on its own — is reported as rolled
+        // back along with the sub-project's failure: a group is all-or-nothing, so its create/update
+        // counts must not claim anything persisted when part of the group failed.
+        assertThat(result.getProjectsCreated()).isZero();
+        assertThat(result.getFiles().get(0).getRowsSucceeded()).isZero();
         assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
-        assertThat(result.getFiles().get(0).getRowErrors().get(0).getReason()).contains("Sub Total Amount");
+        String reason = result.getFiles().get(0).getRowErrors().get(0).getReason();
+        assertThat(reason).contains("Sub Total Amount");
+        // The reported message must make the rollback itself visible, naming the project it applies to.
+        assertThat(reason).contains("rolled back").contains("Project A");
         verify(projectStructureService, never()).createSubProject(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void groupFailure_rollbackNoteSurvivesUnderDryRunToo() {
+        // processGroupAtomically's error-annotation and count-zeroing don't branch on dryRun — they key
+        // purely on whether the group produced any row error — so the same message/count shape must
+        // appear whether this is a real import or a preview.
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+        ProjectMilestoneCsvLine line = rootLine("Project A", "100000.00", "USD");
+        line.setSubProjectTitle("Sub One");
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
+        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
+                .thenReturn(Optional.empty());
+        when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
+        when(projectRepository.findByParentProjectIdAndProjectTitle("p1", "Sub One")).thenReturn(Optional.empty());
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).dryRun(true).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.isDryRun()).isTrue();
+        assertThat(result.getProjectsCreated()).isZero();
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getReason())
+                .contains("rolled back").contains("Project A");
     }
 
     @Test
@@ -474,7 +504,9 @@ class FundingBulkImportServiceTest {
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
-        assertThat(result.getProjectsCreated()).isEqualTo(1); // root only, no sub-project
+        // The group (just the root here) is rolled back along with the row's error — a group is
+        // all-or-nothing.
+        assertThat(result.getProjectsCreated()).isZero();
         assertThat(result.getMilestonesCreated()).isZero();
         assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
         assertThat(result.getFiles().get(0).getRowErrors().get(0).getReason()).contains("Sub Project Title");
@@ -510,9 +542,10 @@ class FundingBulkImportServiceTest {
     }
 
     @Test
-    void subProjectCreateFails_reportsRowErrorAndContinuesToNextRow() {
-        // Exactly the requested behavior: a failing sub-project row reports its own error and
-        // processing continues — the root, and any other independent row, are unaffected.
+    void subProjectCreateFails_stillProcessesEveryRowButRollsBackTheWholeGroup() {
+        // Every row in the group is still attempted (Sub Good's own create call still fires below), so
+        // every row's own error is reported individually — but the group as a whole is all-or-nothing:
+        // Sub Bad's failure rolls back the root and Sub Good along with it.
         MultipartFile file = file("import.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
 
@@ -541,15 +574,17 @@ class FundingBulkImportServiceTest {
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
-        assertThat(result.getProjectsCreated()).isEqualTo(2); // root + Sub Good (Sub Bad failed)
-        assertThat(result.getFiles().get(0).getRowsSucceeded()).isEqualTo(2); // root row + Sub Good row
+        // Sub Good's create call still happened (verified below) — it's rolled back along with
+        // everything else in the group, so the reported counts must show nothing persisted.
+        assertThat(result.getProjectsCreated()).isZero();
+        assertThat(result.getFiles().get(0).getRowsSucceeded()).isZero();
         assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
         assertThat(result.getFiles().get(0).getRowErrors().get(0).getRowNumber()).isEqualTo(1);
         verify(projectStructureService).createSubProject(eq(root), eq("Sub Good"), any(), any(), any());
     }
 
     @Test
-    void subProjectUpdateFails_reportsErrorButOtherRowsUnaffected() {
+    void subProjectUpdateFails_rollsBackTheRootUpdateFromTheSameGroup() {
         MultipartFile file = file("import.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
         ProjectMilestoneCsvLine line = continuationLine("Project A");
@@ -568,8 +603,79 @@ class FundingBulkImportServiceTest {
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
-        assertThat(result.getProjectsUpdated()).isEqualTo(1); // root only
+        // The root's own update did happen (verified via the mock above returning success), but it's
+        // rolled back along with the sub-project's failure — a group is all-or-nothing.
+        assertThat(result.getProjectsUpdated()).isZero();
         assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+    }
+
+    @Test
+    void oneGroupFails_anIndependentGroupInTheSameFileIsUnaffectedAndItsRollbackNoteNamesTheRightProject() {
+        // Two unrelated root projects in one file: "Project Good" (a single, valid root-only row) and
+        // "Project Bad" (a root plus a sub-project row that fails). Atomicity is per group, not per
+        // file, so Project Good's create must survive, and the rollback note on Project Bad's row error
+        // must name Project Bad — not accidentally leak Project Good's title (or vice versa).
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+
+        ProjectMilestoneCsvLine goodRoot = rootLine("Project Good", "50000.00", "USD");
+        ProjectMilestoneCsvLine badRoot = rootLine("Project Bad", "100000.00", "USD");
+        badRoot.setSubProjectTitle("Sub One"); // Sub Total Amount left blank -> fails to create
+
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class))
+                .thenReturn(Either.right(List.of(goodRoot, badRoot)));
+
+        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project Good"))
+                .thenReturn(Optional.empty());
+        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project Bad"))
+                .thenReturn(Optional.empty());
+        when(projectService.createWithMilestones(any())).thenAnswer(invocation -> {
+            ProjectWithMilestonesCreateRequest req = invocation.getArgument(0);
+            return successProjectView(req.getProjectTitle().equals("Project Good") ? "pGood" : "pBad");
+        });
+        when(projectRepository.findById("pGood")).thenReturn(Optional.of(projectEntity("pGood", "Project Good", "USD")));
+        when(projectRepository.findById("pBad")).thenReturn(Optional.of(projectEntity("pBad", "Project Bad", "USD")));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        // Only Project Bad's group is discarded — Project Good's create is untouched.
+        assertThat(result.getProjectsCreated()).isEqualTo(1);
+        assertThat(result.getFiles().get(0).getRowsSucceeded()).isEqualTo(1);
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        String reason = result.getFiles().get(0).getRowErrors().get(0).getReason();
+        assertThat(reason).contains("Project Bad").doesNotContain("Project Good");
+    }
+
+    @Test
+    void multipleFailingRowsInTheSameGroup_eachErrorIsAnnotatedWithThatGroupsProject() {
+        // Two independently-bad rows within the very same "Project A" group: a sub-project row with a
+        // missing amount, and a milestone row with an orphaned amount (no title). Both errors must carry
+        // the same group's rollback note.
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+
+        ProjectMilestoneCsvLine badSubRow = rootLine("Project A", "100000.00", "USD");
+        badSubRow.setSubProjectTitle("Sub One"); // Sub Total Amount left blank -> fails
+
+        ProjectMilestoneCsvLine badMilestoneRow = continuationLine("Project A");
+        badMilestoneRow.setMilestoneAmount("20000.00"); // Milestone Title left blank -> orphaned data
+
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class))
+                .thenReturn(Either.right(List.of(badSubRow, badMilestoneRow)));
+        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
+                .thenReturn(Optional.empty());
+        when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getProjectsCreated()).isZero();
+        assertThat(result.getFiles().get(0).getRowsSucceeded()).isZero();
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(2);
+        assertThat(result.getFiles().get(0).getRowErrors())
+                .allSatisfy(error -> assertThat(error.getReason()).contains("rolled back").contains("Project A"));
     }
 
     // -------------------------------------------------------------------------
@@ -746,8 +852,9 @@ class FundingBulkImportServiceTest {
         // Reproduces uploading a CSV whose "Milestone Title" column is missing entirely: opencsv
         // (an optional column) leaves milestoneTitle null on every row with no parsing error, so
         // without this guard the Milestone Amount/Date left on the row would just be silently
-        // dropped — no milestone created, no error reported. The sub-project on the same row is
-        // still created normally; only the orphaned milestone data fails.
+        // dropped — no milestone created, no error reported. The sub-project's own create call still
+        // fires (verified below), but the group as a whole rolls back along with the orphaned
+        // milestone data's error.
         MultipartFile file = file("import.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
         ProjectMilestoneCsvLine line = rootLine("Project A", "100000.00", "USD");
@@ -768,7 +875,7 @@ class FundingBulkImportServiceTest {
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
-        assertThat(result.getProjectsCreated()).isEqualTo(2); // root + sub-project still created
+        assertThat(result.getProjectsCreated()).isZero();
         assertThat(result.getMilestonesCreated()).isZero();
         assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
         assertThat(result.getFiles().get(0).getRowErrors().get(0).getReason()).contains("Milestone Title");
@@ -866,7 +973,7 @@ class FundingBulkImportServiceTest {
     }
 
     @Test
-    void milestoneFailure_doesNotBlockOtherRowsInTheSameGroup() {
+    void milestoneFailure_stillProcessesTheGoodRowButRollsBackTheWholeGroup() {
         MultipartFile file = file("import.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
 
@@ -891,11 +998,14 @@ class FundingBulkImportServiceTest {
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
-        assertThat(result.getProjectsCreated()).isEqualTo(1);
-        assertThat(result.getMilestonesCreated()).isEqualTo(1);
-        assertThat(result.getFiles().get(0).getRowsSucceeded()).isEqualTo(2); // root row + Milestone Good row
+        // Milestone Good's own create call still happened (verified below) — it's rolled back along
+        // with the rest of the group because Milestone Bad, earlier in the same group, failed.
+        assertThat(result.getProjectsCreated()).isZero();
+        assertThat(result.getMilestonesCreated()).isZero();
+        assertThat(result.getFiles().get(0).getRowsSucceeded()).isZero();
         assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
         assertThat(result.getFiles().get(0).getRowErrors().get(0).getRowNumber()).isEqualTo(1);
+        verify(milestoneService).createMilestone(eq("p1"), any());
     }
 
     // -------------------------------------------------------------------------
