@@ -9,10 +9,12 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -167,6 +169,28 @@ class FundingBulkImportServiceTest {
         FundingFileImportResult fileResult = result.getFiles().get(0);
         assertThat(fileResult.getFileType()).isNull();
         assertThat(fileResult.getRowErrors()).hasSize(1);
+    }
+
+    @Test
+    void fileMissingAColumnFromItsTemplate_reportsFileLevelErrorNamingIt_insteadOfParsing() {
+        // A column entirely absent from the header row (not merely blank on the data rows) — e.g.
+        // "Amount FCY" trimmed out of an Events file — must be rejected up front with a clear message,
+        // rather than silently parsing every row's amountFcy as null and only surfacing confusion much
+        // later via an unrelated business-rule error.
+        MultipartFile file = file("funding-event.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.EVENTS));
+        when(csvTypeDetector.missingHeaders(file, FundingCsvFileType.EVENTS)).thenReturn(Set.of("Amount FCY"));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getFiles()).hasSize(1);
+        FundingFileImportResult fileResult = result.getFiles().get(0);
+        assertThat(fileResult.getFileType()).isEqualTo(FundingCsvFileType.EVENTS);
+        assertThat(fileResult.getRowsSucceeded()).isZero();
+        assertThat(fileResult.getRowErrors()).hasSize(1);
+        assertThat(fileResult.getRowErrors().get(0).getReason()).contains("Amount FCY");
+        verifyNoInteractions(eventCsvParser);
     }
 
     // -------------------------------------------------------------------------
