@@ -502,10 +502,12 @@ class FundingBulkImportE2ETest {
         assertThat(result.getFiles()).hasSize(1);
         assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
         String reason = result.getFiles().get(0).getRowErrors().get(0).getReason();
-        assertThat(reason).contains("exceeds the parent project total");
         // The message must make the rollback itself visible, not just the validation failure — otherwise
         // there's no hint that row 2's already-succeeded sub-project and milestone were undone too.
-        assertThat(reason).contains("rolled back").contains("Project Cascade");
+        assertThat(reason)
+                .contains("exceeds the parent project total")
+                .contains("rolled back")
+                .contains("Project Cascade");
         // Nothing from the group survives — not the root, not the first (successful-on-its-own)
         // sub-project, not its milestone.
         assertThat(result.getProjectsCreated()).isZero();
@@ -521,14 +523,14 @@ class FundingBulkImportE2ETest {
     void midGroupSubProjectAmountChange_rollsBackTheEarlierCleanMilestoneItKnockedOver() {
         // Reproduces the JIRA-reported edge case exactly: a project with one sub-project and three
         // milestone rows, where:
-        //  - row 1 (Milestone One) fails outright: its Sub One amount (150000) exceeds the parent's
-        //    total (100000), so Sub One isn't created yet on this row;
+        //  - row 1 (Milestone One) fails outright: its Sub One amount of 150000 exceeds the parent's
+        //    total of 100000, so Sub One isn't created yet on this row
         //  - row 2 (Milestone Two) is entirely clean on its own: Sub One (50000, within budget) gets
-        //    created here instead, and Milestone Two (20000) fits under it;
+        //    created here instead, and Milestone Two (20000) fits under it
         //  - row 3 (Milestone Three) is also individually valid data, but it re-supplies a *different*
         //    Sub One amount (30000) than row 2 did — a legitimate-looking update — which knocks Sub
-        //    One's budget below what Milestone Two + Milestone Three now need (45000 > 30000), so
-        //    Milestone Three's own creation fails.
+        //    One's budget below what Milestone Two and Milestone Three together now need (45000 over
+        //    a 30000 budget), so Milestone Three's own creation fails
         // Before the group-atomicity fix, this produced exactly the reported bug: Project Test, Sub One
         // (at the amount row 3 silently changed it to), and Milestone Two were left permanently
         // persisted, Milestone Three was missing, and there was no direct signal that Sub One's amount
@@ -553,14 +555,15 @@ class FundingBulkImportE2ETest {
 
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
-        // Both underlying issues are reported...
+        // Both underlying issues are reported, and every one of them is annotated with the rollback
+        // note for this project's group.
         assertThat(result.getFiles()).hasSize(1);
         List<String> reasons = reasons(result);
-        assertThat(reasons).hasSize(2);
-        assertThat(reasons).anySatisfy(reason -> assertThat(reason).contains("exceeds the parent project total"));
-        assertThat(reasons).anySatisfy(reason -> assertThat(reason).contains("exceeds the project total"));
-        // ...and every one of them is annotated with the rollback note for this project's group.
-        assertThat(reasons).allSatisfy(reason -> assertThat(reason).contains("rolled back").contains("Project Test"));
+        assertThat(reasons)
+                .hasSize(2)
+                .anySatisfy(reason -> assertThat(reason).contains("exceeds the parent project total"))
+                .anySatisfy(reason -> assertThat(reason).contains("exceeds the project total"))
+                .allSatisfy(reason -> assertThat(reason).contains("rolled back").contains("Project Test"));
         // Nothing from the group survives — not the root, not Sub One (regardless of which amount it
         // was ever set to), not Milestone Two, which was individually clean and would have persisted
         // under the old, row-independent behavior.

@@ -448,9 +448,11 @@ class FundingBulkImportServiceTest {
         assertThat(result.getFiles().get(0).getRowsSucceeded()).isZero();
         assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
         String reason = result.getFiles().get(0).getRowErrors().get(0).getReason();
-        assertThat(reason).contains("Sub Total Amount");
         // The reported message must make the rollback itself visible, naming the project it applies to.
-        assertThat(reason).contains("rolled back").contains("Project A");
+        assertThat(reason)
+                .contains("Sub Total Amount")
+                .contains("rolled back")
+                .contains("Project A");
         verify(projectStructureService, never()).createSubProject(any(), any(), any(), any(), any());
     }
 
