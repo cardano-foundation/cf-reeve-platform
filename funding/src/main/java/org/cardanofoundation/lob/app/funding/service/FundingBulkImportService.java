@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 
 import lombok.RequiredArgsConstructor;
@@ -141,26 +142,37 @@ public class FundingBulkImportService {
         FundingTotals totals = new FundingTotals();
 
         for (FileWithType f : filesInOrder) {
-            Optional<FundingCsvFileType> maybeType = f.type();
-            if (maybeType.isEmpty()) {
-                fileResults.add(unrecognizedFileResult(f.file()));
-                continue;
-            }
-            switch (maybeType.get()) {
-                case PROJECTS_MILESTONES -> {
-                    ProjectsMilestonesFileOutcome outcome = processProjectsMilestonesFile(organisationId, f.file(), resolvedProjectIds);
-                    fileResults.add(outcome.fileResult());
-                    totals.addProjectsMilestones(outcome);
-                }
-                case EVENTS -> {
-                    EventsFileOutcome outcome = processEventsFile(organisationId, f.file(), resolvedProjectIds);
-                    fileResults.add(outcome.fileResult());
-                    totals.addEvents(outcome);
-                }
-            }
+            fileResults.add(processFile(organisationId, f, resolvedProjectIds, totals));
         }
 
         return totals.toResult(request.isDryRun(), fileResults);
+    }
+
+    private FundingFileImportResult processFile(String organisationId,
+                                                  FileWithType f,
+                                                  Map<String, String> resolvedProjectIds,
+                                                  FundingTotals totals) {
+        Optional<FundingCsvFileType> maybeType = f.type();
+        if (maybeType.isEmpty()) {
+            return unrecognizedFileResult(f.file());
+        }
+        FundingCsvFileType type = maybeType.get();
+        Set<String> missingHeaders = csvTypeDetector.missingHeaders(f.file(), type);
+        if (!missingHeaders.isEmpty()) {
+            return missingHeadersResult(f.file(), type, missingHeaders);
+        }
+        return switch (type) {
+            case PROJECTS_MILESTONES -> {
+                ProjectsMilestonesFileOutcome outcome = processProjectsMilestonesFile(organisationId, f.file(), resolvedProjectIds);
+                totals.addProjectsMilestones(outcome);
+                yield outcome.fileResult();
+            }
+            case EVENTS -> {
+                EventsFileOutcome outcome = processEventsFile(organisationId, f.file(), resolvedProjectIds);
+                totals.addEvents(outcome);
+                yield outcome.fileResult();
+            }
+        };
     }
 
     private static FundingFileImportResult unrecognizedFileResult(MultipartFile file) {
@@ -171,6 +183,26 @@ public class FundingBulkImportService {
                 .rowErrors(List.of(FundingRowError.builder()
                         .rowNumber(0)
                         .reason("Unable to determine file type from its headers — check it matches one of the downloadable templates")
+                        .build()))
+                .build();
+    }
+
+    /**
+     * A column entirely missing from the header row parses silently as null on every row (opencsv
+     * binds by header name, not position), which can otherwise surface much later as a confusing,
+     * unrelated business-rule error instead of pointing at the real cause. Caught here, once the file's
+     * type is already resolved, so the message can name exactly which column(s) the template requires
+     * — the value in that column may still be blank, only the header itself is mandatory.
+     */
+    private static FundingFileImportResult missingHeadersResult(MultipartFile file, FundingCsvFileType type, Set<String> missingHeaders) {
+        return FundingFileImportResult.builder()
+                .fileName(file.getOriginalFilename())
+                .fileType(type)
+                .rowsSucceeded(0)
+                .rowErrors(List.of(FundingRowError.builder()
+                        .rowNumber(0)
+                        .reason("CSV header is missing column(s) required by the %s template: %s".formatted(
+                                type, String.join(", ", missingHeaders)))
                         .build()))
                 .build();
     }

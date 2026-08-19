@@ -76,17 +76,17 @@ class FundingBulkImportE2ETest {
             """;
 
     private static final String EVENTS_TEMPLATE_CSV = """
-            Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Milestone Title,Allocated Amount
-            FUNDING,GRANT-2025-001,,Cardano Foundation,USD,2026-07-01,,,,,,40000.00,,,Sub One,Milestone One,20000.00
-            FUNDING,GRANT-2025-001,,Cardano Foundation,USD,2026-07-01,,,,,,40000.00,,,Sub One,Milestone Two,20000.00
-            SPENDING,GRANT-2025-001,,,USD,2026-07-20,Personnel,Vendor AB,36000.00,EUR,0.9,40000.00,,Invoice #INV-001,Sub One,Milestone One,20000.00
-            SPENDING,GRANT-2025-001,,,USD,2026-07-20,Personnel,Vendor AB,36000.00,EUR,0.9,40000.00,,Invoice #INV-001,Sub One,Milestone Two,20000.00
+            Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
+            FUNDING,GRANT-2025-001,,Cardano Foundation,USD,2026-07-01,,,,,,40000.00,,,Sub One,,Milestone One,20000.00
+            FUNDING,GRANT-2025-001,,Cardano Foundation,USD,2026-07-01,,,,,,40000.00,,,Sub One,,Milestone Two,20000.00
+            SPENDING,GRANT-2025-001,,,USD,2026-07-20,Personnel,Vendor AB,36000.00,EUR,0.9,40000.00,,Invoice #INV-001,Sub One,,Milestone One,20000.00
+            SPENDING,GRANT-2025-001,,,USD,2026-07-20,Personnel,Vendor AB,36000.00,EUR,0.9,40000.00,,Invoice #INV-001,Sub One,,Milestone Two,20000.00
             """;
 
     private static final String EVENTS_DUPLICATE_MILESTONE_ALLOCATION_CSV = """
-            Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Milestone Title,Allocated Amount
-            FUNDING,GRANT-2025-Z,,Cardano Foundation,USD,2026-07-01,,,,,2000.00,,,Dup Project,Dup Milestone,2000.00
-            FUNDING,GRANT-2025-Z,,Cardano Foundation,USD,2026-07-01,,,,,2000.00,,,Dup Project,Dup Milestone,2000.00
+            Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
+            FUNDING,GRANT-2025-Z,,Cardano Foundation,USD,2026-07-01,,,,,,2000.00,,,Dup Project,,Dup Milestone,2000.00
+            FUNDING,GRANT-2025-Z,,Cardano Foundation,USD,2026-07-01,,,,,,2000.00,,,Dup Project,,Dup Milestone,2000.00
             """;
 
     // Root Project Title column entirely absent -> mandatory; the file fails to parse (a file-level
@@ -96,11 +96,13 @@ class FundingBulkImportE2ETest {
             100000.00,USD,Sub One,40000.00
             """;
 
-    // There is no "Sub Currency" column at all -> a sub-project always inherits the root's currency
-    // (USD), and is created successfully.
+    // Every column of the template is present in the header, but this row leaves Milestone Title/
+    // Amount/Date blank (no milestone on this row) -> a sub-project always inherits the root's
+    // currency (USD; there is no "Sub Currency" column in the template at all), and is created
+    // successfully.
     private static final String MISSING_SUB_CURRENCY_CSV = """
-            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount
-            Project D,100000.00,USD,Sub One,40000.00
+            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
+            Project D,100000.00,USD,Sub One,40000.00,,,
             """;
 
     // Sub Project Title blank, but Sub Total Amount filled -> this is an orphaned amount with no
@@ -108,15 +110,15 @@ class FundingBulkImportE2ETest {
     // reports an error instead of silently discarding the amount; the root, being on an independent
     // row, still succeeds and no sub-project is created.
     private static final String BLANK_SUB_PROJECT_TITLE_CSV = """
-            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount
-            Project E,100000.00,USD,,40000.00
+            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
+            Project E,100000.00,USD,,40000.00,,,
             """;
 
-    // Sub Total Amount missing -> required to create a new sub-project; the sub-project row fails, the
-    // root is independent and still succeeds.
+    // Sub Total Amount's header is present but its value is blank on this row -> required to create a
+    // new sub-project; the sub-project row fails, the root is independent and still succeeds.
     private static final String MISSING_SUB_TOTAL_AMOUNT_CSV = """
-            Project Title,Total Amount,Currency,Sub Project Title
-            Project C,100000.00,USD,Sub One
+            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
+            Project C,100000.00,USD,Sub One,,,,
             """;
 
     @Container
@@ -236,8 +238,8 @@ class FundingBulkImportE2ETest {
 
         // Fund + spend the milestone's full 10000.00 so it has a real allocation on record.
         String eventsCsv = """
-                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Milestone Title,Allocated Amount
-                FUNDING,GRANT-CHANGE,,Cardano Foundation,USD,2026-07-01,,,,,,10000.00,,,Change Project,Change Milestone,10000.00
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
+                FUNDING,GRANT-CHANGE,,Cardano Foundation,USD,2026-07-01,,,,,,10000.00,,,Change Project,,Change Milestone,10000.00
                 """;
         MultipartFile eventsFile = new MockMultipartFile("file", "fund.csv", "text/csv", eventsCsv.getBytes());
         FundingBulkImportResult fundResult = bulkImportService.importFiles(BulkImportRequest.builder()
@@ -245,10 +247,12 @@ class FundingBulkImportE2ETest {
         assertThat(reasons(fundResult)).isEmpty();
 
         // Attempting to shrink the milestone below its already-allocated 10000.00 must still fail —
-        // this is a real change, not a same-value resend.
+        // this is a real change, not a same-value resend. Total Amount/Currency/Sub Project
+        // Title/Sub Total Amount are present in the header but left blank: this row only touches the
+        // milestone, not the root project.
         String shrinkCsv = """
-                Project Title,Milestone Title,Milestone Amount,Milestone Date
-                Change Project,Change Milestone,5000.00,2026-06-30
+                Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
+                Change Project,,,,,Change Milestone,5000.00,2026-06-30
                 """;
         MultipartFile shrinkFile = new MockMultipartFile("file", "shrink.csv", "text/csv", shrinkCsv.getBytes());
         FundingBulkImportResult shrinkResult = bulkImportService.importFiles(BulkImportRequest.builder()
@@ -260,19 +264,20 @@ class FundingBulkImportE2ETest {
     }
 
     @Test
-    void fundingEventSingleRow_noAmountFcyColumnAtAll_importsCleanly() {
+    void fundingEventSingleRow_blankAmountFcyValue_importsCleanly() {
         when(organisationPublicApi.findByOrganisationId("org-events-single-funding")).thenReturn(Optional.of(new Organisation()));
         seedProjectAndMilestone("org-events-single-funding", "Seed Project X", "Seed Milestone X");
 
-        // A FUNDING row with the "Amount FCY" column absent entirely (not just blank) — the spend-only
-        // fields (category/vendor/amountFcy/currencyFcy/fxRate/hash/notes) are only relevant to SPENDING
-        // events (FundingValidations.spendDetail), so this must import cleanly. Amount RCY, however, is
-        // required for every event type and must equal the row's allocated amount (2000.00).
+        // Every column of the template is present in the header, but a FUNDING row leaves "Amount FCY"
+        // blank — the spend-only fields (category/vendor/amountFcy/currencyFcy/fxRate/hash/notes) are
+        // only relevant to SPENDING events (FundingValidations.spendDetail), so this must import
+        // cleanly. Amount RCY, however, is required for every event type and must equal the row's
+        // allocated amount (2000.00).
         String csv = """
-                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Milestone Title,Allocated Amount
-                FUNDING,GRANT-SINGLE,,Cardano Foundation,USD,2026-07-01,,,,,2000.00,,,Seed Project X,Seed Milestone X,2000.00
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
+                FUNDING,GRANT-SINGLE,,Cardano Foundation,USD,2026-07-01,,,,,,2000.00,,,Seed Project X,,Seed Milestone X,2000.00
                 """;
-        MultipartFile file = new MockMultipartFile("file", "single-funding-no-amountfcy.csv", "text/csv", csv.getBytes());
+        MultipartFile file = new MockMultipartFile("file", "single-funding-blank-amountfcy.csv", "text/csv", csv.getBytes());
 
         BulkImportRequest request = BulkImportRequest.builder()
                 .organisationId("org-events-single-funding")
@@ -290,14 +295,15 @@ class FundingBulkImportE2ETest {
         when(organisationPublicApi.findByOrganisationId("org-events-single-spending")).thenReturn(Optional.of(new Organisation()));
         seedProjectAndMilestone("org-events-single-spending", "Seed Project Y", "Seed Milestone Y");
 
-        // A SPENDING event with Category/Vendor/Amount FCY/FX Rate/Amount RCY columns entirely absent
-        // from the header (not just blank) — these ARE required for SPENDING per FundingValidations.spendDetail,
-        // and must fail with a clean 400-shaped row error, not an exception.
+        // Every column of the template is present in the header, but a SPENDING event leaves
+        // Category/Vendor/Amount FCY/Currency FCY/FX Rate/Amount RCY blank — these ARE required for
+        // SPENDING per FundingValidations.spendDetail, and must fail with a clean 400-shaped row error,
+        // not an exception.
         String csv = """
-                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Hash,Notes,Project Title,Milestone Title,Allocated Amount
-                SPENDING,GRANT-SINGLE-2,,,USD,2026-07-20,,,Seed Project Y,Seed Milestone Y,2000.00
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
+                SPENDING,GRANT-SINGLE-2,,,USD,2026-07-20,,,,,,,,,Seed Project Y,,Seed Milestone Y,2000.00
                 """;
-        MultipartFile file = new MockMultipartFile("file", "single-spending-missing-cols.csv", "text/csv", csv.getBytes());
+        MultipartFile file = new MockMultipartFile("file", "single-spending-blank-cols.csv", "text/csv", csv.getBytes());
 
         BulkImportRequest request = BulkImportRequest.builder()
                 .organisationId("org-events-single-spending")
@@ -346,8 +352,8 @@ class FundingBulkImportE2ETest {
         seedProjectAndMilestone(orgId, "Seed Project Z", "Seed Milestone Z");
 
         String csv = """
-                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Milestone Title,Allocated Amount
-                FUNDING,GRANT-TITLE,,Cardano Foundation,USD,2026-07-01,,,,,,2000.00,,,Never Seeded Project,Seed Milestone Z,2000.00
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
+                FUNDING,GRANT-TITLE,,Cardano Foundation,USD,2026-07-01,,,,,,2000.00,,,Never Seeded Project,,Seed Milestone Z,2000.00
                 """;
         MultipartFile file = new MockMultipartFile("file", "events-unknown-title.csv", "text/csv", csv.getBytes());
 
@@ -425,8 +431,8 @@ class FundingBulkImportE2ETest {
 
     /** Seeds a root project and one milestone directly on it, via the real Projects+Milestones CSV path. */
     private void seedProjectAndMilestone(String orgId, String projectTitle, String milestoneTitle) {
-        String csv = "Project Title,Total Amount,Currency,Milestone Title,Milestone Amount,Milestone Date\n"
-                + projectTitle + ",50000.00,USD," + milestoneTitle + ",10000.00,2026-06-30\n";
+        String csv = "Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date\n"
+                + projectTitle + ",50000.00,USD,,," + milestoneTitle + ",10000.00,2026-06-30\n";
         MultipartFile file = new MockMultipartFile("file", "seed.csv", "text/csv", csv.getBytes());
         FundingBulkImportResult result = bulkImportService.importFiles(BulkImportRequest.builder()
                 .organisationId(orgId).files(List.of(file)).build());
@@ -467,13 +473,15 @@ class FundingBulkImportE2ETest {
     }
 
     /**
-     * Sweeps the "missing-*"/edge-case fixtures for the merged Projects+Milestones row shape. Sub
-     * Currency is genuinely optional (defaults to the root's own currency); Project Title is
-     * mandatory at the CSV-header level (its absence fails to parse at all); Sub Total Amount is
-     * required to <em>create</em> a new sub-project (its absence fails only that row, the root is
-     * unaffected); a blank Sub Project Title with a Sub Total Amount also present is an orphaned
-     * amount with nothing to attach it to, so it's a row error too (the root, on its own row, is
-     * still unaffected).
+     * Sweeps the "missing-*"/edge-case fixtures for the merged Projects+Milestones row shape. Every
+     * fixture's header carries the full template — only the {@code value} in a given cell is missing
+     * (blank), never the column itself (a column absent from the header row is now a file-level error,
+     * see {@link FundingCsvTypeDetector#missingHeaders}). There is no "Sub Currency" column in the
+     * template at all — a sub-project always defaults to the root's own currency; Project Title is
+     * mandatory (its absence fails to parse at all); Sub Total Amount is required to <em>create</em> a
+     * new sub-project (a blank value fails only that row, the root is unaffected); a blank Sub Project
+     * Title with a Sub Total Amount also present is an orphaned amount with nothing to attach it to, so
+     * it's a row error too (the root, on its own row, is still unaffected).
      * Each case uses its own organisationId so the runs can't collide with each other in the shared
      * database.
      */

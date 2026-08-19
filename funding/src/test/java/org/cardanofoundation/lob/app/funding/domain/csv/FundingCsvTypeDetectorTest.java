@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -103,6 +104,40 @@ class FundingCsvTypeDetectorTest {
         Optional<FundingCsvFileType> result = detector.detect(unreadable);
 
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    void missingHeadersIsEmpty_whenFileMatchesTemplateExactly() {
+        String header = "Event Type;Funding ID;Funding Hash;Funding Entity;Currency RCY;Event Date;"
+                + "Category;Vendor;Amount FCY;Currency FCY;FX Rate;Amount RCY;Hash;Notes;"
+                + "Project Title;Sub Project Title;Milestone Title;Allocated Amount\n";
+
+        Set<String> missing = detector.missingHeaders(file(header), FundingCsvFileType.EVENTS);
+
+        assertThat(missing).isEmpty();
+    }
+
+    @Test
+    void missingHeadersNamesTheOmittedOptionalColumn() {
+        // "Amount FCY" (optional — only required for SPENDING events) is entirely absent from the
+        // header row, not just blank on the data rows.
+        String header = "Event Type;Funding ID;Funding Hash;Funding Entity;Currency RCY;Event Date;"
+                + "Category;Vendor;Currency FCY;FX Rate;Amount RCY;Hash;Notes;"
+                + "Project Title;Sub Project Title;Milestone Title;Allocated Amount\n";
+
+        Set<String> missing = detector.missingHeaders(file(header), FundingCsvFileType.EVENTS);
+
+        assertThat(missing).containsExactly("Amount FCY");
+    }
+
+    @Test
+    void missingHeadersNamesEveryOmittedColumn_forProjectsMilestonesTemplate() {
+        String header = "Project Title;Total Amount;Currency\n";
+
+        Set<String> missing = detector.missingHeaders(file(header), FundingCsvFileType.PROJECTS_MILESTONES);
+
+        assertThat(missing).containsExactlyInAnyOrder(
+                "Sub Project Title", "Sub Total Amount", "Milestone Title", "Milestone Amount", "Milestone Date");
     }
 
 }
