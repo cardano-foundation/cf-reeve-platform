@@ -142,31 +142,37 @@ public class FundingBulkImportService {
         FundingTotals totals = new FundingTotals();
 
         for (FileWithType f : filesInOrder) {
-            Optional<FundingCsvFileType> maybeType = f.type();
-            if (maybeType.isEmpty()) {
-                fileResults.add(unrecognizedFileResult(f.file()));
-                continue;
-            }
-            Set<String> missingHeaders = csvTypeDetector.missingHeaders(f.file(), maybeType.get());
-            if (!missingHeaders.isEmpty()) {
-                fileResults.add(missingHeadersResult(f.file(), maybeType.get(), missingHeaders));
-                continue;
-            }
-            switch (maybeType.get()) {
-                case PROJECTS_MILESTONES -> {
-                    ProjectsMilestonesFileOutcome outcome = processProjectsMilestonesFile(organisationId, f.file(), resolvedProjectIds);
-                    fileResults.add(outcome.fileResult());
-                    totals.addProjectsMilestones(outcome);
-                }
-                case EVENTS -> {
-                    EventsFileOutcome outcome = processEventsFile(organisationId, f.file(), resolvedProjectIds);
-                    fileResults.add(outcome.fileResult());
-                    totals.addEvents(outcome);
-                }
-            }
+            fileResults.add(processFile(organisationId, f, resolvedProjectIds, totals));
         }
 
         return totals.toResult(request.isDryRun(), fileResults);
+    }
+
+    private FundingFileImportResult processFile(String organisationId,
+                                                  FileWithType f,
+                                                  Map<String, String> resolvedProjectIds,
+                                                  FundingTotals totals) {
+        Optional<FundingCsvFileType> maybeType = f.type();
+        if (maybeType.isEmpty()) {
+            return unrecognizedFileResult(f.file());
+        }
+        FundingCsvFileType type = maybeType.get();
+        Set<String> missingHeaders = csvTypeDetector.missingHeaders(f.file(), type);
+        if (!missingHeaders.isEmpty()) {
+            return missingHeadersResult(f.file(), type, missingHeaders);
+        }
+        return switch (type) {
+            case PROJECTS_MILESTONES -> {
+                ProjectsMilestonesFileOutcome outcome = processProjectsMilestonesFile(organisationId, f.file(), resolvedProjectIds);
+                totals.addProjectsMilestones(outcome);
+                yield outcome.fileResult();
+            }
+            case EVENTS -> {
+                EventsFileOutcome outcome = processEventsFile(organisationId, f.file(), resolvedProjectIds);
+                totals.addEvents(outcome);
+                yield outcome.fileResult();
+            }
+        };
     }
 
     private static FundingFileImportResult unrecognizedFileResult(MultipartFile file) {
