@@ -56,12 +56,12 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
  * CI and made every one of these tests fail there.
  *
  * <p>Covers: every reference (project, sub-project, milestone) is by <b>title</b>, not by any
- * external/user-defined id; a root project is independent of its sub-project rows — a failing
- * sub-project row is reported and skipped, the root is never rolled back on account of it (unlike the
- * old design's "orphan root" rollback, which this format's same-row shape makes structurally
- * impossible: the root's own columns are never split across a different row than a sub-project's);
- * the Events file's event-type-conditional column validation; and the duplicate-milestone-allocation
- * crash fix.
+ * external/user-defined id; a root project's group is atomic — a failing sub-project or milestone row
+ * anywhere in the group rolls back everything the group itself wrote (the root project, and any
+ * sub-project or milestone from an earlier row in the same group), so a CSV group with one bad row
+ * never leaves a partial project tree behind; a different, independent group (a different root
+ * {@code Project Title}) earlier in the same file/request is unaffected; the Events file's
+ * event-type-conditional column validation; and the duplicate-milestone-allocation crash fix.
  */
 @SpringBootTest(classes = FundingBulkImportE2ETest.TestConfig.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @Testcontainers
@@ -259,7 +259,8 @@ class FundingBulkImportE2ETest {
                 .organisationId(orgId).files(List.of(shrinkFile)).build());
 
         assertThat(reasons(shrinkResult)).containsExactly(
-                "Milestone amount 5000.00 is below the total already allocated to it 10000.0000000000");
+                "Milestone amount 5000.00 is below the total already allocated to it 10000.0000000000. "
+                        + "All changes for project \"Change Project\" in this request were rolled back because of this error.");
         assertThat(shrinkResult.getMilestonesUpdated()).isZero();
     }
 
@@ -444,11 +445,12 @@ class FundingBulkImportE2ETest {
     }
 
     @Test
-    void subProjectRowFailure_neverRollsBackTheIndependentlyPersistedRoot() {
-        // The defining behavior change from the old design: a root's own columns are never split
-        // across a different row than its sub-project's, so there is no "orphan root" concept left to
-        // roll back — the root persists regardless of whether a sub-project row on the same group
-        // succeeds or fails.
+    void subProjectRowFailure_rollsBackTheRootFromTheSameGroup() {
+        // A root's own columns are never split across a different row than its sub-project's (this
+        // format's row shape makes an "orphan root" impossible by construction) — but the group as a
+        // whole is atomic: a failing sub-project row still rolls back the root that was
+        // resolved/created earlier in the very same group, so nothing is left half-built. The CSV can
+        // be fixed and safely re-uploaded in full.
         when(organisationPublicApi.findByOrganisationId(ORG_ID)).thenReturn(Optional.of(new Organisation()));
 
         MultipartFile file = new MockMultipartFile(
@@ -464,12 +466,113 @@ class FundingBulkImportE2ETest {
         // The sub-project row error is still reported...
         assertThat(result.getFiles()).hasSize(1);
         assertThat(result.getFiles().get(0).getRowErrors()).isNotEmpty();
-        // ...but the root, unlike the sub-project, was persisted — this is the part the Mockito-based
-        // unit test cannot observe, since it has no real transaction to roll back.
-        assertThat(result.getProjectsCreated()).isEqualTo(1);
+        // ...and now the root's own write is rolled back along with it — this is the part the
+        // Mockito-based unit test cannot observe, since it has no real transaction to roll back.
+        assertThat(result.getProjectsCreated()).isZero();
         assertThat(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project C"))
-                .isPresent();
+                .isEmpty();
         assertThat(projectRepository.findByOrganisationIdAndProjectTitle(ORG_ID, "Sub One")).isEmpty();
+    }
+
+    @Test
+    void secondSubProjectExceedingParentBudget_rollsBackTheRootAndTheFirstSubProjectAndItsMilestone() {
+        // Reproduces the reported bug exactly: a root project, then two sub-projects each with one
+        // milestone, where only the second sub-project fails validation (its total, combined with the
+        // first sub-project's, exceeds the parent's budget). Before this fix, the root, the first
+        // sub-project, and its milestone were left permanently persisted even though the request as a
+        // whole reported a failure — this proves the whole group is now discarded together.
+        String orgId = "org-cascade-budget-rollback";
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+
+        String csv = """
+                Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
+                Project Cascade,200,CHF,,,,,
+                Project Cascade,,,Sub 1,190,Milestone 1,190,2026-10-08
+                Project Cascade,,,Sub 2,190,Milestone 1,190,2026-09-24
+                """;
+        MultipartFile file = new MockMultipartFile("file", "funding-project_milestone.csv", "text/csv", csv.getBytes());
+
+        BulkImportRequest request = BulkImportRequest.builder()
+                .organisationId(orgId)
+                .files(List.of(file))
+                .build();
+
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getFiles()).hasSize(1);
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        String reason = result.getFiles().get(0).getRowErrors().get(0).getReason();
+        // The message must make the rollback itself visible, not just the validation failure — otherwise
+        // there's no hint that row 2's already-succeeded sub-project and milestone were undone too.
+        assertThat(reason)
+                .contains("exceeds the parent project total")
+                .contains("rolled back")
+                .contains("Project Cascade");
+        // Nothing from the group survives — not the root, not the first (successful-on-its-own)
+        // sub-project, not its milestone.
+        assertThat(result.getProjectsCreated()).isZero();
+        assertThat(result.getMilestonesCreated()).isZero();
+        assertThat(result.getFiles().get(0).getRowsSucceeded()).isZero();
+        assertThat(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(orgId, "Project Cascade"))
+                .isEmpty();
+        assertThat(projectRepository.findByOrganisationIdAndProjectTitle(orgId, "Sub 1")).isEmpty();
+        assertThat(projectRepository.findByOrganisationIdAndProjectTitle(orgId, "Sub 2")).isEmpty();
+    }
+
+    @Test
+    void midGroupSubProjectAmountChange_rollsBackTheEarlierCleanMilestoneItKnockedOver() {
+        // Reproduces the JIRA-reported edge case exactly: a project with one sub-project and three
+        // milestone rows, where:
+        //  - row 1 (Milestone One) fails outright: its Sub One amount of 150000 exceeds the parent's
+        //    total of 100000, so Sub One isn't created yet on this row
+        //  - row 2 (Milestone Two) is entirely clean on its own: Sub One (50000, within budget) gets
+        //    created here instead, and Milestone Two (20000) fits under it
+        //  - row 3 (Milestone Three) is also individually valid data, but it re-supplies a *different*
+        //    Sub One amount (30000) than row 2 did — a legitimate-looking update — which knocks Sub
+        //    One's budget below what Milestone Two and Milestone Three together now need (45000 over
+        //    a 30000 budget), so Milestone Three's own creation fails
+        // Before the group-atomicity fix, this produced exactly the reported bug: Project Test, Sub One
+        // (at the amount row 3 silently changed it to), and Milestone Two were left permanently
+        // persisted, Milestone Three was missing, and there was no direct signal that Sub One's amount
+        // had been mutated as a side effect — a state re-uploading the file couldn't cleanly fix. Now
+        // the whole group — root, Sub One, and Milestone Two included — must roll back together.
+        String orgId = "org-midgroup-subamount-change";
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+
+        String csv = """
+                Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
+                Project Test,100000.00,USD,,,,,
+                Project Test,,,Sub One,150000.00,Milestone One,20000.00,2026-06-30
+                Project Test,,,Sub One,50000.00,Milestone Two,20000.00,2026-07-15
+                Project Test,,,Sub One,30000.00,Milestone Three,25000.00,2026-08-01
+                """;
+        MultipartFile file = new MockMultipartFile("file", "funding-project_test_3_milestones.csv", "text/csv", csv.getBytes());
+
+        BulkImportRequest request = BulkImportRequest.builder()
+                .organisationId(orgId)
+                .files(List.of(file))
+                .build();
+
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        // Both underlying issues are reported, and every one of them is annotated with the rollback
+        // note for this project's group.
+        assertThat(result.getFiles()).hasSize(1);
+        List<String> reasons = reasons(result);
+        assertThat(reasons)
+                .hasSize(2)
+                .anySatisfy(reason -> assertThat(reason).contains("exceeds the parent project total"))
+                .anySatisfy(reason -> assertThat(reason).contains("exceeds the project total"))
+                .allSatisfy(reason -> assertThat(reason).contains("rolled back").contains("Project Test"));
+        // Nothing from the group survives — not the root, not Sub One (regardless of which amount it
+        // was ever set to), not Milestone Two, which was individually clean and would have persisted
+        // under the old, row-independent behavior.
+        assertThat(result.getProjectsCreated()).isZero();
+        assertThat(result.getMilestonesCreated()).isZero();
+        assertThat(result.getFiles().get(0).getRowsSucceeded()).isZero();
+        assertThat(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(orgId, "Project Test"))
+                .isEmpty();
+        assertThat(projectRepository.findByOrganisationIdAndProjectTitle(orgId, "Sub One")).isEmpty();
     }
 
     /**
@@ -479,9 +582,9 @@ class FundingBulkImportE2ETest {
      * see {@link FundingCsvTypeDetector#missingHeaders}). There is no "Sub Currency" column in the
      * template at all — a sub-project always defaults to the root's own currency; Project Title is
      * mandatory (its absence fails to parse at all); Sub Total Amount is required to <em>create</em> a
-     * new sub-project (a blank value fails only that row, the root is unaffected); a blank Sub Project
-     * Title with a Sub Total Amount also present is an orphaned amount with nothing to attach it to, so
-     * it's a row error too (the root, on its own row, is still unaffected).
+     * new sub-project, and a blank Sub Project Title with a Sub Total Amount present is an orphaned
+     * amount with nothing to attach it to — both are row errors that now roll back the root too, since
+     * a group is all-or-nothing.
      * Each case uses its own organisationId so the runs can't collide with each other in the shared
      * database.
      */
@@ -523,9 +626,10 @@ class FundingBulkImportE2ETest {
                 arguments("missing-project-title", MISSING_PROJECT_TITLE_CSV, "org-missing-project-title", "Project A", false, false, true),
                 arguments("missing-sub-currency", MISSING_SUB_CURRENCY_CSV, "org-missing-sub-currency", "Project D", true, true, false),
                 // A blank Sub Project Title with a Sub Total Amount present is an orphaned amount —
-                // reported as a row error, not silently dropped.
-                arguments("blank-sub-project-title", BLANK_SUB_PROJECT_TITLE_CSV, "org-blank-sub-project-title", "Project E", true, false, true),
-                arguments("missing-sub-total-amount", MISSING_SUB_TOTAL_AMOUNT_CSV, "org-missing-sub-total-amount", "Project C", true, false, true)
+                // reported as a row error, not silently dropped — which now rolls back the root too
+                // (a group is all-or-nothing).
+                arguments("blank-sub-project-title", BLANK_SUB_PROJECT_TITLE_CSV, "org-blank-sub-project-title", "Project E", false, false, true),
+                arguments("missing-sub-total-amount", MISSING_SUB_TOTAL_AMOUNT_CSV, "org-missing-sub-total-amount", "Project C", false, false, true)
         );
     }
 

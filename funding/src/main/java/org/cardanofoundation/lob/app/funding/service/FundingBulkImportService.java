@@ -19,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
@@ -84,11 +85,16 @@ import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
  *   enough data to create a project or milestone from scratch.</li>
  * </ul>
  *
- * <p><b>Partial-save semantics:</b> this orchestrator is deliberately <em>not</em> {@code @Transactional}.
- * Each call into {@code ProjectService}/{@code ProjectStructureService}/{@code MilestoneService}/
- * {@code SpendingEventService} is a call to another Spring-proxied bean, each already
- * {@code @Transactional} on its own — so every project, milestone, and event group commits (or rolls
- * back) independently. A bad row anywhere never undoes rows that already succeeded.
+ * <p><b>Partial-save semantics:</b> this orchestrator is deliberately <em>not</em> {@code @Transactional}
+ * as a whole. The unit of atomicity is one <em>group</em> — one root {@code Project Title} and
+ * everything upserted under it (its sub-projects and milestones) for the Projects+Milestones file, or
+ * one event and its allocations for the Events file — not the whole file or request. Each group commits
+ * or rolls back independently: a bad row anywhere in a group undoes every write that group itself made
+ * (see {@link #processGroupAtomically}), but never touches a different group that already succeeded,
+ * earlier in the same file or request. An Events-file group is already atomic for free — it validates
+ * and builds its whole request before making the single, already-{@code @Transactional}
+ * {@code SpendingEventService.createEvent}/{@code updateEvent} call — so only the Projects+Milestones
+ * file needs the explicit wrapping in {@link #processGroupAtomically}.
  *
  * <p><b>Dry run:</b> there is no "validate without saving" mode on the underlying services (they
  * persist eagerly as they resolve-or-create). Reusing the exact same code path for previews (rather
@@ -232,7 +238,7 @@ public class FundingBulkImportService {
         int milestonesUpdated = 0;
 
         for (List<Integer> idxs : groups.values()) {
-            ProjectMilestoneGroupOutcome outcome = processProjectMilestoneGroup(organisationId, lines, idxs, resolvedProjectIds);
+            ProjectMilestoneGroupOutcome outcome = processGroupAtomically(organisationId, lines, idxs, resolvedProjectIds);
             errors.addAll(outcome.errors());
             succeeded += outcome.succeeded();
             projectsCreated += outcome.projectsCreated();
@@ -249,6 +255,55 @@ public class FundingBulkImportService {
                         .rowErrors(errors)
                         .build(),
                 projectsCreated, projectsUpdated, milestonesCreated, milestonesUpdated);
+    }
+
+    /**
+     * Runs one root-project group so that a row error anywhere in it rolls back every write the group
+     * itself made — the root project, and any sub-project or milestone from an earlier row in the same
+     * group — instead of leaving a partially-built project tree behind (e.g. a root project and its
+     * first milestone persisted while a later sibling sub-project fails the "sub-projects total exceeds
+     * parent total" check). This is per-group atomicity, not per-file: a different group (a different
+     * root {@code Project Title}) that already succeeded, earlier in this same file/request, is
+     * unaffected by a later group's failure — see the class-level Javadoc.
+     *
+     * <p>Only wraps the group in its own transaction for a real (non dry-run) import. A dry run already
+     * runs the whole request inside {@link FundingBulkImportTransactionRunner#runAndRollBack}'s one
+     * transaction, unconditionally rolled back at the end regardless of any group's outcome — see
+     * {@link FundingBulkImportTransactionRunner#runGroupAndRollBackOnFailure} for why nesting another
+     * transactional call there would be actively harmful (risks {@code UnexpectedRollbackException}).
+     *
+     * <p>When the group has any row error, its create/update counts are zeroed out before being
+     * returned — those operations were rolled back along with everything else in the group, so
+     * reporting them as if they'd persisted (the raw counts {@link #processProjectMilestoneGroup}
+     * returns, which reflect what was attempted before the failure, not what survived it) would mislead
+     * the caller into thinking part of the group is safely in the database when none of it is. Each row
+     * error's own message is also annotated with which project's group got rolled back because of it —
+     * without that, a message like "Sub-projects total ... exceeds the parent project total ..." on row
+     * 3 gives no hint that row 2's already-succeeded sub-project and milestone were undone too.
+     */
+    private ProjectMilestoneGroupOutcome processGroupAtomically(String organisationId, List<ProjectMilestoneCsvLine> lines,
+            List<Integer> idxs, Map<String, String> resolvedProjectIds) {
+        ProjectMilestoneGroupOutcome outcome = TransactionSynchronizationManager.isActualTransactionActive()
+                ? processProjectMilestoneGroup(organisationId, lines, idxs, resolvedProjectIds)
+                : transactionRunner.runGroupAndRollBackOnFailure(
+                        () -> processProjectMilestoneGroup(organisationId, lines, idxs, resolvedProjectIds),
+                        o -> !o.errors().isEmpty());
+        if (!outcome.errors().isEmpty()) {
+            String rootProjectTitle = lines.get(idxs.get(0)).getProjectTitle();
+            List<FundingRowError> annotatedErrors = outcome.errors().stream()
+                    .map(error -> withRollbackNote(error, rootProjectTitle))
+                    .toList();
+            return new ProjectMilestoneGroupOutcome(annotatedErrors, 0, 0, 0, 0, 0);
+        }
+        return outcome;
+    }
+
+    private static FundingRowError withRollbackNote(FundingRowError error, String rootProjectTitle) {
+        return FundingRowError.builder()
+                .rowNumber(error.getRowNumber())
+                .reason(error.getReason() + ". All changes for project \"" + rootProjectTitle
+                        + "\" in this request were rolled back because of this error.")
+                .build();
     }
 
     /**
