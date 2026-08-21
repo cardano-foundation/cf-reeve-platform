@@ -219,11 +219,18 @@ public class SpendingEventService {
         Optional<ProblemDetail> entityProblem = FundingValidations.fundingEntity(event.getEventType(), event.getFundingEntity());
         if (entityProblem.isPresent()) return Either.left(entityProblem.get());
 
+        Optional<ProblemDetail> eventDateRequiredProblem = FundingValidations.eventDateRequired(event.getEventDate());
+        if (eventDateRequiredProblem.isPresent()) return Either.left(eventDateRequiredProblem.get());
+
         Optional<ProblemDetail> eventDateProblem = FundingValidations.eventDateNotInFuture(event.getEventDate());
         if (eventDateProblem.isPresent()) return Either.left(eventDateProblem.get());
 
         Optional<ProblemDetail> spendProblem = validateEventSpendDetail(event);
         if (spendProblem.isPresent()) return Either.left(spendProblem.get());
+
+        Optional<ProblemDetail> spendAmountsProblem = FundingValidations.spendAmountsPositive(
+                event.getEventType(), event.getAmountFcy(), event.getFxRate());
+        if (spendAmountsProblem.isPresent()) return Either.left(spendAmountsProblem.get());
 
         Either<ProblemDetail, Void> allocResult = populateMilestoneAllocations(event, request.getAllocations(), request.getOrganisationId());
         if (allocResult.isLeft()) return Either.left(allocResult.getLeft());

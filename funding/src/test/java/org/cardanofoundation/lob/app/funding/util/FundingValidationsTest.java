@@ -502,4 +502,62 @@ class FundingValidationsTest {
         assertThat(title(FundingValidations.eventDateNotInFuture(LocalDate.now().plusDays(1))))
                 .isEqualTo(ErrorTitleConstants.EVENT_DATE_IN_FUTURE);
     }
+
+    // --- eventDateRequired(eventDate) ---
+
+    @Test
+    void eventDateRequired_present_isAllowed() {
+        assertThat(FundingValidations.eventDateRequired(LocalDate.now())).isEmpty();
+    }
+
+    @Test
+    void eventDateRequired_null_isRejected() {
+        assertThat(title(FundingValidations.eventDateRequired(null)))
+                .isEqualTo(ErrorTitleConstants.EVENT_DATE_REQUIRED);
+    }
+
+    // --- spendAmountsPositive(eventType, amountFcy, fxRate) ---
+
+    @Test
+    void spendAmountsPositive_positiveValues_isAllowed() {
+        assertThat(FundingValidations.spendAmountsPositive(EventType.SPENDING, new BigDecimal("100"), new BigDecimal("1.1")))
+                .isEmpty();
+    }
+
+    @Test
+    void spendAmountsPositive_zeroAmountFcy_isRejected() {
+        assertThat(title(FundingValidations.spendAmountsPositive(EventType.SPENDING, BigDecimal.ZERO, new BigDecimal("1.1"))))
+                .isEqualTo(ErrorTitleConstants.AMOUNT_FCY_INVALID);
+    }
+
+    @Test
+    void spendAmountsPositive_negativeAmountFcy_isRejected() {
+        assertThat(title(FundingValidations.spendAmountsPositive(EventType.SPENDING, new BigDecimal("-1"), new BigDecimal("1.1"))))
+                .isEqualTo(ErrorTitleConstants.AMOUNT_FCY_INVALID);
+    }
+
+    @Test
+    void spendAmountsPositive_zeroFxRate_isRejected() {
+        assertThat(title(FundingValidations.spendAmountsPositive(EventType.SPENDING, new BigDecimal("100"), BigDecimal.ZERO)))
+                .isEqualTo(ErrorTitleConstants.FX_RATE_INVALID);
+    }
+
+    @Test
+    void spendAmountsPositive_negativeFxRate_isRejected() {
+        assertThat(title(FundingValidations.spendAmountsPositive(EventType.SPENDING, new BigDecimal("100"), new BigDecimal("-1.1"))))
+                .isEqualTo(ErrorTitleConstants.FX_RATE_INVALID);
+    }
+
+    @Test
+    void spendAmountsPositive_nullValues_areAllowed() {
+        // Presence is enforced separately by spendDetail(); this only guards against a supplied
+        // zero/negative value.
+        assertThat(FundingValidations.spendAmountsPositive(EventType.SPENDING, null, null)).isEmpty();
+    }
+
+    @Test
+    void spendAmountsPositive_ignoredForNonSpendingEvents() {
+        assertThat(FundingValidations.spendAmountsPositive(EventType.FUNDING, BigDecimal.ZERO, BigDecimal.ZERO)).isEmpty();
+        assertThat(FundingValidations.spendAmountsPositive(EventType.REFUND, new BigDecimal("-1"), new BigDecimal("-1"))).isEmpty();
+    }
 }

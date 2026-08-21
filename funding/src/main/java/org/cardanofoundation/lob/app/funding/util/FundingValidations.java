@@ -365,6 +365,45 @@ public final class FundingValidations {
         return Optional.empty();
     }
 
+    /**
+     * Every event must carry a date — applies to all event types (FUNDING, SPENDING, REFUND). A
+     * dateless event cannot be placed in a reporting period, so it must be rejected rather than
+     * silently persisted without one (this is what the CSV import path did before this check existed,
+     * since a blank {@code Event Date} cell parses to {@code null} rather than a parse error).
+     */
+    public static Optional<ProblemDetail> eventDateRequired(LocalDate eventDate) {
+        if (eventDate == null) {
+            return Optional.of(Problems.badRequest(
+                    "eventDate is required",
+                    ErrorTitleConstants.EVENT_DATE_REQUIRED));
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * A SPENDING event's {@code amountFcy} and {@code fxRate} describe a real foreign-currency
+     * purchase converted at a real rate, so both must be strictly positive when present. (Their
+     * presence itself is enforced separately by {@link #spendDetail}; this only guards against a
+     * supplied zero/negative value — e.g. a CSV cell containing {@code 0} rather than being left
+     * blank.) Not applicable to FUNDING/REFUND events, which carry neither field.
+     */
+    public static Optional<ProblemDetail> spendAmountsPositive(EventType eventType, BigDecimal amountFcy, BigDecimal fxRate) {
+        if (eventType != EventType.SPENDING) {
+            return Optional.empty();
+        }
+        if (amountFcy != null && amountFcy.signum() <= 0) {
+            return Optional.of(Problems.badRequest(
+                    "amountFcy must be greater than zero for a SPENDING event",
+                    ErrorTitleConstants.AMOUNT_FCY_INVALID));
+        }
+        if (fxRate != null && fxRate.signum() <= 0) {
+            return Optional.of(Problems.badRequest(
+                    "fxRate must be greater than zero for a SPENDING event",
+                    ErrorTitleConstants.FX_RATE_INVALID));
+        }
+        return Optional.empty();
+    }
+
     /** A project's total budget, when supplied, must be strictly positive. */
     public static Optional<ProblemDetail> projectAmount(BigDecimal totalAmount) {
         if (totalAmount != null && totalAmount.signum() <= 0) {
