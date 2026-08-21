@@ -441,6 +441,10 @@ public class SpendingEventService {
                             ErrorTitleConstants.DUPLICATE_MILESTONE_ALLOCATION));
                 }
 
+                Optional<ProblemDetail> currencyProblem = FundingValidations.eventCurrencyMatchesMilestone(
+                        event.getCurrencyRcy(), milestone);
+                if (currencyProblem.isPresent()) return currencyProblem;
+
                 Optional<ProblemDetail> allocationProblem = FundingValidations.allocation(
                         milestoneReq.getAllocatedAmount(), milestone, event.getEventType());
                 if (allocationProblem.isPresent()) return allocationProblem;

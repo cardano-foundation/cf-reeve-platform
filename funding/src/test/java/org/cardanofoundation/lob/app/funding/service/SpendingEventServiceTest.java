@@ -245,6 +245,19 @@ class SpendingEventServiceTest {
         assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.ALLOCATION_TOTAL_EXCEEDS_PROJECT);
     }
 
+    @Test
+    void create_returnsLeft_whenEventCurrencyDoesNotMatchMilestoneCurrency() {
+        stubExistingProjectAndMilestone("MS-1"); // project/milestone currency is USD
+
+        SpendingEventCreateRequest request = fundingRequest(fundingMilestone("MS-1", ALLOCATED));
+        request.setCurrencyRcy("EUR");
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_CURRENCY_MISMATCH);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
     // --- create: spend-detail validations ---
 
     @Test

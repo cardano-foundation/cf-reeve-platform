@@ -171,6 +171,39 @@ class FundingValidationsTest {
                 .isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_INVALID);
     }
 
+    // --- eventCurrencyMatchesMilestone(eventCurrencyRcy, milestone) ---
+
+    @Test
+    void eventCurrencyMatchesMilestone_matching_isAllowed() {
+        assertThat(FundingValidations.eventCurrencyMatchesMilestone("USD", milestone(new BigDecimal("50000"))))
+                .isEmpty();
+    }
+
+    @Test
+    void eventCurrencyMatchesMilestone_mismatched_isRejected() {
+        assertThat(title(FundingValidations.eventCurrencyMatchesMilestone("EUR", milestone(new BigDecimal("50000")))))
+                .isEqualTo(ErrorTitleConstants.EVENT_CURRENCY_MISMATCH);
+    }
+
+    @Test
+    void eventCurrencyMatchesMilestone_caseSensitive_isRejected() {
+        assertThat(title(FundingValidations.eventCurrencyMatchesMilestone("usd", milestone(new BigDecimal("50000")))))
+                .isEqualTo(ErrorTitleConstants.EVENT_CURRENCY_MISMATCH);
+    }
+
+    @Test
+    void eventCurrencyMatchesMilestone_nullEventCurrency_isAllowed() {
+        assertThat(FundingValidations.eventCurrencyMatchesMilestone(null, milestone(new BigDecimal("50000"))))
+                .isEmpty();
+    }
+
+    @Test
+    void eventCurrencyMatchesMilestone_nullMilestoneCurrency_isAllowed() {
+        MilestoneEntity milestoneWithoutCurrency = MilestoneEntity.builder().id("m1").milestoneAmount(new BigDecimal("50000")).build();
+        assertThat(FundingValidations.eventCurrencyMatchesMilestone("USD", milestoneWithoutCurrency))
+                .isEmpty();
+    }
+
     // --- spendDetail(eventType, category, vendor, amountFcy, currencyFcy, fxRate, amountRcy, currencyRcy, hash, notes) ---
 
     @Test

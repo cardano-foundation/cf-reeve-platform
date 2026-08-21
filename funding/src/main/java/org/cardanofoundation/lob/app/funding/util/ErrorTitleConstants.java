@@ -38,6 +38,7 @@ public final class ErrorTitleConstants {
     public static final String SPEND_FIELDS_NOT_ALLOWED = "SPEND_FIELDS_NOT_ALLOWED";
     public static final String SPEND_FIELDS_REQUIRED = "SPEND_FIELDS_REQUIRED";
     public static final String FX_RATE_MISMATCH = "FX_RATE_MISMATCH";
+    public static final String EVENT_CURRENCY_MISMATCH = "EVENT_CURRENCY_MISMATCH";
     public static final String EVENT_AMOUNT_INVALID = "EVENT_AMOUNT_INVALID";
     public static final String EVENT_AMOUNT_EXCEEDS_MILESTONES = "EVENT_AMOUNT_EXCEEDS_MILESTONES";
     public static final String EVENT_AMOUNT_EXCEEDS_PROJECT = "EVENT_AMOUNT_EXCEEDS_PROJECT";

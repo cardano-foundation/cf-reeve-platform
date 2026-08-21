@@ -110,6 +110,26 @@ public final class FundingValidations {
     }
 
     /**
+     * An event is booked in a single recording currency ({@code currencyRcy}), and a milestone's
+     * currency always matches its owning project's (root projects require it explicitly; sub-projects
+     * and milestones inherit it — see {@link org.cardanofoundation.lob.app.funding.service.ProjectStructureService}
+     * and {@code FundingBulkImportService#upsertMilestoneRow}). So an event allocating to a milestone
+     * whose currency differs from the event's would silently record amounts in the wrong currency
+     * (e.g. a USD spend booked against a EUR milestone) — this rejects that up front, for both the
+     * REST API and CSV import (they share this validation pipeline).
+     */
+    public static Optional<ProblemDetail> eventCurrencyMatchesMilestone(String eventCurrencyRcy, MilestoneEntity milestone) {
+        if (eventCurrencyRcy != null && milestone.getCurrency() != null
+                && !eventCurrencyRcy.equals(milestone.getCurrency())) {
+            return Optional.of(Problems.badRequest(
+                    "currencyRcy %s does not match milestone '%s' currency %s".formatted(
+                            eventCurrencyRcy, milestone.getMilestoneTitle(), milestone.getCurrency()),
+                    ErrorTitleConstants.EVENT_CURRENCY_MISMATCH));
+        }
+        return Optional.empty();
+    }
+
+    /**
      * An event's total is the sum of its milestone allocations, so it must end up strictly positive —
      * guarding against an event whose allocations are absent or sum to zero (e.g. when no milestones
      * were supplied).
