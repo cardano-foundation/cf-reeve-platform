@@ -404,6 +404,28 @@ public final class FundingValidations {
         return Optional.empty();
     }
 
+    /**
+     * A currency (project, sub-project or milestone) must be a real ISO 4217 code — e.g. CSV import
+     * previously accepted a typo'd or made-up code (such as {@code ABC}) and silently stored it. A
+     * code already in the qualified {@code ISO_xxx:...} form (see
+     * {@code SpendingEventService#toCurrency}) is left unchecked — that form isn't produced by any
+     * current input path, but existing data in it must not be rejected on re-validation. Null/blank
+     * is left unchecked; callers that require a currency enforce that separately.
+     */
+    public static Optional<ProblemDetail> currencyCode(String currency) {
+        if (currency == null || currency.isBlank() || currency.startsWith("ISO_")) {
+            return Optional.empty();
+        }
+        try {
+            java.util.Currency.getInstance(currency);
+        } catch (IllegalArgumentException e) {
+            return Optional.of(Problems.badRequest(
+                    "Currency %s is not a valid ISO 4217 currency code".formatted(currency),
+                    ErrorTitleConstants.CURRENCY_INVALID));
+        }
+        return Optional.empty();
+    }
+
     /** A project's total budget, when supplied, must be strictly positive. */
     public static Optional<ProblemDetail> projectAmount(BigDecimal totalAmount) {
         if (totalAmount != null && totalAmount.signum() <= 0) {

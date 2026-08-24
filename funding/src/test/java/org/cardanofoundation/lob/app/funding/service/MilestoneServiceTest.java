@@ -163,6 +163,22 @@ class MilestoneServiceTest {
     }
 
     @Test
+    void create_rejected_whenCurrencyIsNotAValidIsoCode() {
+        ProjectEntity project = projectEntity("p1");
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+
+        MilestoneCreateRequest request = MilestoneCreateRequest.builder()
+                .milestoneTitle("Milestone AB").milestoneAmount(new BigDecimal("50000.00"))
+                .currency("ABC").milestoneDate(FUTURE_DATE)
+                .build();
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.CURRENCY_INVALID);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void create_derivesIdFromProjectAndTitle_notFromAnyExternalId() {
         ProjectEntity project = projectEntity("p1");
         when(projectRepository.findById("p1")).thenReturn(Optional.of(project));

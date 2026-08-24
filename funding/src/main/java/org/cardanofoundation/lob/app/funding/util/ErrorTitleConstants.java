@@ -11,6 +11,7 @@ public final class ErrorTitleConstants {
     public static final String PROJECT_FUNDING_ID_ALREADY_USED = "PROJECT_FUNDING_ID_ALREADY_USED";
     public static final String PROJECT_FIELDS_REQUIRED = "PROJECT_FIELDS_REQUIRED";
     public static final String PROJECT_AMOUNT_INVALID = "PROJECT_AMOUNT_INVALID";
+    public static final String CURRENCY_INVALID = "CURRENCY_INVALID";
     public static final String PROJECT_AMOUNT_BELOW_MILESTONES = "PROJECT_AMOUNT_BELOW_MILESTONES";
     public static final String PROJECT_AMOUNT_BELOW_SUBPROJECTS = "PROJECT_AMOUNT_BELOW_SUBPROJECTS";
     public static final String PARENT_PROJECT_NOT_FOUND = "PARENT_PROJECT_NOT_FOUND";
@@ -46,6 +47,7 @@ public final class ErrorTitleConstants {
     public static final String SPENDING_EVENT_NOT_FOUND = "SPENDING_EVENT_NOT_FOUND";
     public static final String SPENDING_EVENT_ALREADY_EXISTS = "SPENDING_EVENT_ALREADY_EXISTS";
     public static final String SPENDING_EVENT_ALREADY_PUBLISHED = "SPENDING_EVENT_ALREADY_PUBLISHED";
+    public static final String CURRENCY_CHANGE_HAS_ALLOCATIONS = "CURRENCY_CHANGE_HAS_ALLOCATIONS";
     public static final String EVENT_TYPE_IMMUTABLE = "EVENT_TYPE_IMMUTABLE";
     public static final String FUNDING_ENTITY_REQUIRED = "FUNDING_ENTITY_REQUIRED";
     public static final String EVENT_DATE_IN_FUTURE = "EVENT_DATE_IN_FUTURE";

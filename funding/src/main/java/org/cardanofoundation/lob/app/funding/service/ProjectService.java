@@ -133,6 +133,10 @@ public class ProjectService {
             return Either.left(Problems.badRequest(
                     "Currency is required to create a root project: " + request.getProjectTitle(), ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
+        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(request.getCurrency());
+        if (currencyProblem.isPresent()) {
+            return Either.left(currencyProblem.get());
+        }
         Optional<ProblemDetail> amountProblem = FundingValidations.projectAmount(request.getTotalAmount());
         if (amountProblem.isPresent()) {
             return Either.left(amountProblem.get());
@@ -235,6 +239,23 @@ public class ProjectService {
         if (amountProblem.isPresent()) {
             return ProjectView.error(amountProblem.get());
         }
+        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(request.getCurrency());
+        if (currencyProblem.isPresent()) {
+            return ProjectView.error(currencyProblem.get());
+        }
+
+        // A currency change cascades to every descendant sub-project and milestone (see
+        // cascadeCurrency), which would silently redenominate any funding/spending already recorded
+        // against them — so it's rejected outright once any allocation exists anywhere in the
+        // subtree, draft or published (published is also covered by the lock above, but a draft
+        // allocation isn't).
+        boolean currencyChanging = request.getCurrency() != null && !request.getCurrency().equals(project.getCurrency());
+        if (currencyChanging && allocationRepository.existsByMilestoneProjectIdIn(
+                ProjectTreeSupport.subtreeProjectIds(projectRepository, projectId))) {
+            return ProjectView.error(Problems.conflict(
+                    "Cannot change currency: project or a descendant sub-project already has funding/spending allocated against it",
+                    ErrorTitleConstants.CURRENCY_CHANGE_HAS_ALLOCATIONS));
+        }
 
         // The budget the project ends up with — parent-fit and child-coverage checks validate this value.
         BigDecimal effectiveTotal = request.getTotalAmount() != null ? request.getTotalAmount() : project.getTotalAmount();
@@ -282,8 +303,28 @@ public class ProjectService {
             }
         }
         if (request.getTotalAmount() != null) project.setTotalAmount(request.getTotalAmount());
-        if (request.getCurrency() != null) project.setCurrency(request.getCurrency());
+        if (currencyChanging) {
+            cascadeCurrency(project, request.getCurrency());
+        }
         return toView(projectRepository.saveAndFlush(project));
+    }
+
+    /**
+     * Sets {@code project}'s currency to {@code currency} and propagates it down the whole subtree:
+     * every descendant sub-project (recursively) and every milestone belonging to {@code project} or
+     * any of those sub-projects. A sub-project's currency always mirrors its root's, and a
+     * milestone's always mirrors its owning project's — there is no independent currency at either
+     * level (see {@code ProjectStructureService#createSubProject} and CSV import's {@code Currency}
+     * column, which only exists on the root row) — so once a currency changes, this must be the only
+     * value left standing anywhere in the tree.
+     */
+    private void cascadeCurrency(ProjectEntity project, String currency) {
+        project.setCurrency(currency);
+        projectRepository.saveAndFlush(project);
+        milestoneService.updateCurrencyForProject(project.getId(), currency);
+        for (ProjectEntity child : projectRepository.findByParentProjectId(project.getId())) {
+            cascadeCurrency(child, currency);
+        }
     }
 
     /**

@@ -560,4 +560,39 @@ class FundingValidationsTest {
         assertThat(FundingValidations.spendAmountsPositive(EventType.FUNDING, BigDecimal.ZERO, BigDecimal.ZERO)).isEmpty();
         assertThat(FundingValidations.spendAmountsPositive(EventType.REFUND, new BigDecimal("-1"), new BigDecimal("-1"))).isEmpty();
     }
+
+    // --- currencyCode(currency) ---
+
+    @Test
+    void currencyCode_validIsoCode_isAllowed() {
+        assertThat(FundingValidations.currencyCode("USD")).isEmpty();
+        assertThat(FundingValidations.currencyCode("EUR")).isEmpty();
+    }
+
+    @Test
+    void currencyCode_nonExistentCode_isRejected() {
+        assertThat(title(FundingValidations.currencyCode("ABC")))
+                .isEqualTo(ErrorTitleConstants.CURRENCY_INVALID);
+    }
+
+    @Test
+    void currencyCode_lowercaseValidCode_isRejected() {
+        // java.util.Currency requires the exact uppercase ISO 4217 code.
+        assertThat(title(FundingValidations.currencyCode("usd")))
+                .isEqualTo(ErrorTitleConstants.CURRENCY_INVALID);
+    }
+
+    @Test
+    void currencyCode_nullOrBlank_isAllowed() {
+        // Presence is enforced separately by callers that require a currency.
+        assertThat(FundingValidations.currencyCode(null)).isEmpty();
+        assertThat(FundingValidations.currencyCode("")).isEmpty();
+        assertThat(FundingValidations.currencyCode("  ")).isEmpty();
+    }
+
+    @Test
+    void currencyCode_qualifiedIsoForm_isAllowed() {
+        // Already-qualified ISO_xxx:... codes (see SpendingEventService#toCurrency) are left unchecked.
+        assertThat(FundingValidations.currencyCode("ISO_24165:ADA")).isEmpty();
+    }
 }

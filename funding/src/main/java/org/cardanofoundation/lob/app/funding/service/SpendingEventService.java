@@ -525,6 +525,10 @@ public class SpendingEventService {
         if (amountProblem.isPresent()) {
             return Either.left(amountProblem.get());
         }
+        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(req.getCurrency());
+        if (currencyProblem.isPresent()) {
+            return Either.left(currencyProblem.get());
+        }
         Optional<ProblemDetail> fundingIdProblem = projectStructureService.fundingIdAvailable(organisationId, req.getFundingId());
         if (fundingIdProblem.isPresent()) {
             return Either.left(fundingIdProblem.get());
