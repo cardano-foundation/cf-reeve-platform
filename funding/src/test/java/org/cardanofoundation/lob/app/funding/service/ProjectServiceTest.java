@@ -223,6 +223,19 @@ class ProjectServiceTest {
     }
 
     @Test
+    void create_rejected_whenCurrencyIsNotAValidIsoCode() {
+        ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
+                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Project AB")
+                .fundingId("GRANT-2025-001").totalAmount(new BigDecimal("200000.00")).currency("ABC")
+                .milestones(List.of()).build();
+
+        ProjectView result = projectService.createWithMilestones(request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.CURRENCY_INVALID);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void create_returnsError_whenMilestoneFails() {
         MilestoneCreateRequest milestoneReq = MilestoneCreateRequest.builder().milestoneTitle("MS").build();
         ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()

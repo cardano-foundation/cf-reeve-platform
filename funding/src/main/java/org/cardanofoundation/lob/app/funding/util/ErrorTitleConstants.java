@@ -11,6 +11,7 @@ public final class ErrorTitleConstants {
     public static final String PROJECT_FUNDING_ID_ALREADY_USED = "PROJECT_FUNDING_ID_ALREADY_USED";
     public static final String PROJECT_FIELDS_REQUIRED = "PROJECT_FIELDS_REQUIRED";
     public static final String PROJECT_AMOUNT_INVALID = "PROJECT_AMOUNT_INVALID";
+    public static final String CURRENCY_INVALID = "CURRENCY_INVALID";
     public static final String PROJECT_AMOUNT_BELOW_MILESTONES = "PROJECT_AMOUNT_BELOW_MILESTONES";
     public static final String PROJECT_AMOUNT_BELOW_SUBPROJECTS = "PROJECT_AMOUNT_BELOW_SUBPROJECTS";
     public static final String PARENT_PROJECT_NOT_FOUND = "PARENT_PROJECT_NOT_FOUND";

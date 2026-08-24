@@ -133,6 +133,10 @@ public class ProjectService {
             return Either.left(Problems.badRequest(
                     "Currency is required to create a root project: " + request.getProjectTitle(), ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
+        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(request.getCurrency());
+        if (currencyProblem.isPresent()) {
+            return Either.left(currencyProblem.get());
+        }
         Optional<ProblemDetail> amountProblem = FundingValidations.projectAmount(request.getTotalAmount());
         if (amountProblem.isPresent()) {
             return Either.left(amountProblem.get());
@@ -234,6 +238,10 @@ public class ProjectService {
         Optional<ProblemDetail> amountProblem = FundingValidations.projectAmount(request.getTotalAmount());
         if (amountProblem.isPresent()) {
             return ProjectView.error(amountProblem.get());
+        }
+        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(request.getCurrency());
+        if (currencyProblem.isPresent()) {
+            return ProjectView.error(currencyProblem.get());
         }
 
         // The budget the project ends up with — parent-fit and child-coverage checks validate this value.

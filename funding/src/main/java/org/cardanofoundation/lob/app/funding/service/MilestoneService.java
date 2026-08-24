@@ -204,6 +204,10 @@ public class MilestoneService {
                     "Milestone title already exists in this project: " + entity.getMilestoneTitle(),
                     ErrorTitleConstants.MILESTONE_TITLE_ALREADY_EXISTS));
         }
+        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(request.getCurrency());
+        if (currencyProblem.isPresent()) {
+            return Either.left(currencyProblem.get());
+        }
         BigDecimal otherMilestonesTotal = FundingValidations.sumMilestoneAmounts(
                 milestoneRepository.findByProjectId(project.getId()), null);
         Optional<ProblemDetail> validation = FundingValidations.milestone(
@@ -261,6 +265,10 @@ public class MilestoneService {
                 request.getMilestoneAmount(), project, otherMilestonesTotal);
         if (validation.isPresent()) {
             return Either.left(validation.get());
+        }
+        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(request.getCurrency());
+        if (currencyProblem.isPresent()) {
+            return Either.left(currencyProblem.get());
         }
 
         if (request.getMilestoneAmount() != null) {
