@@ -34,11 +34,13 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.request.BulkImportRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingBulkImportResult;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingRowError;
 import org.cardanofoundation.lob.app.funding.job.EventPublishJob;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
+import org.cardanofoundation.lob.app.funding.repository.MilestoneRepository;
 import org.cardanofoundation.lob.app.funding.service.FundingBulkImportService;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
@@ -121,6 +123,22 @@ class FundingBulkImportE2ETest {
             Project C,100000.00,USD,Sub One,,,,
             """;
 
+    // Root with one sub-project, which itself carries one milestone — seeds the tree used by the
+    // currency-cascade regression test below. The root can't carry a milestone of its own here: a
+    // project holds either milestones or sub-projects, never both.
+    private static final String CASCADE_SEED_CSV = """
+            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
+            Project Cascade,100000.00,USD,Sub One,40000.00,Sub Milestone,20000.00,2026-06-30
+            """;
+
+    // Only the root row's Currency cell changes; Sub Project/Milestone columns are left entirely
+    // blank, so nothing here directly touches the sub-project or its milestone — any change to them
+    // can only come from the root's currency change cascading down.
+    private static final String CASCADE_CURRENCY_UPDATE_CSV = """
+            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
+            Project Cascade,100000.00,EUR,,,,,
+            """;
+
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16.3");
 
@@ -145,6 +163,8 @@ class FundingBulkImportE2ETest {
     private FundingBulkImportService bulkImportService;
     @Autowired
     private FundingProjectRepository projectRepository;
+    @Autowired
+    private MilestoneRepository milestoneRepository;
     @MockitoBean
     private OrganisationPublicApiIF organisationPublicApi;
     @MockitoBean
@@ -262,6 +282,37 @@ class FundingBulkImportE2ETest {
                 "Milestone amount 5000.00 is below the total already allocated to it 10000.0000000000. "
                         + "All changes for project \"Change Project\" in this request were rolled back because of this error.");
         assertThat(shrinkResult.getMilestonesUpdated()).isZero();
+    }
+
+    @Test
+    void rootCurrencyUpdate_cascadesToSubProjectAndItsMilestone() {
+        // Regression test: updating a root project's currency via CSV used to leave descendant
+        // sub-projects — and, transitively, their milestones — stuck on the old currency, even though
+        // the root project's own record was correctly updated.
+        String orgId = "org-currency-cascade";
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+
+        MultipartFile seedFile = new MockMultipartFile("file", "seed.csv", "text/csv", CASCADE_SEED_CSV.getBytes());
+        FundingBulkImportResult seedResult = bulkImportService.importFiles(
+                BulkImportRequest.builder().organisationId(orgId).files(List.of(seedFile)).build());
+        assertThat(reasons(seedResult)).as("seed cascade tree").isEmpty();
+
+        MultipartFile updateFile = new MockMultipartFile("file", "update.csv", "text/csv", CASCADE_CURRENCY_UPDATE_CSV.getBytes());
+        FundingBulkImportResult updateResult = bulkImportService.importFiles(
+                BulkImportRequest.builder().organisationId(orgId).files(List.of(updateFile)).build());
+
+        assertThat(reasons(updateResult)).isEmpty();
+
+        ProjectEntity root = projectRepository
+                .findByOrganisationIdAndProjectTitleAndParentProjectIsNull(orgId, "Project Cascade").orElseThrow();
+        ProjectEntity subProject = projectRepository.findByOrganisationIdAndProjectTitle(orgId, "Sub One")
+                .stream().findFirst().orElseThrow();
+
+        assertThat(root.getCurrency()).isEqualTo("EUR");
+        assertThat(subProject.getCurrency()).as("sub-project currency must follow the root's").isEqualTo("EUR");
+        assertThat(milestoneRepository.findByProjectIdAndMilestoneTitle(subProject.getId(), "Sub Milestone").orElseThrow().getCurrency())
+                .as("sub-project's milestone currency must follow its (now-updated) project's")
+                .isEqualTo("EUR");
     }
 
     @Test

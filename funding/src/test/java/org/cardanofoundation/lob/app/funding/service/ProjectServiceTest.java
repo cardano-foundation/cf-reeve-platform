@@ -475,6 +475,57 @@ class ProjectServiceTest {
     }
 
     @Test
+    void update_cascadesCurrencyToSubProjectsAndTheirMilestones() {
+        ProjectEntity root = projectEntity(); // "p1", currency USD
+        ProjectEntity sub = ProjectEntity.builder().id("sub1").organisationId("org1")
+                .projectTitle("Sub").totalAmount(new BigDecimal("50000.00")).currency("USD")
+                .parentProject(root).build();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
+        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
+        when(allocationRepository.existsByMilestoneProjectIdIn(any())).thenReturn(false);
+        when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of(sub));
+        when(projectRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        ProjectView result = projectService.updateProject("p1", ProjectUpdateRequest.builder().currency("EUR").build());
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(root.getCurrency()).isEqualTo("EUR");
+        assertThat(sub.getCurrency()).isEqualTo("EUR");
+        verify(milestoneService).updateCurrencyForProject("p1", "EUR");
+        verify(milestoneService).updateCurrencyForProject("sub1", "EUR");
+    }
+
+    @Test
+    void update_rejected_whenCurrencyChangedButAllocationsExistAnywhereInSubtree() {
+        // Even a draft (non-published) allocation blocks a currency change — not just a published one,
+        // which is already covered by update_conflict_whenLinkedToPublishedEvent.
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
+        when(allocationRepository.existsByMilestoneProjectIdIn(any())).thenReturn(true);
+
+        ProjectView result = projectService.updateProject("p1", ProjectUpdateRequest.builder().currency("EUR").build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.CURRENCY_CHANGE_HAS_ALLOCATIONS);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_allowed_whenAllocationsExistButCurrencyUnchanged() {
+        // Resending the same currency (or changing another field) must not trip the allocations guard.
+        ProjectEntity project = projectEntity(); // currency USD
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
+        when(projectRepository.saveAndFlush(project)).thenReturn(project);
+
+        ProjectView result = projectService.updateProject("p1",
+                ProjectUpdateRequest.builder().currency("USD").totalAmount(new BigDecimal("250000.00")).build());
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(project.getTotalAmount()).isEqualByComparingTo("250000.00");
+        verify(allocationRepository, never()).existsByMilestoneProjectIdIn(any());
+    }
+
+    @Test
     void update_success_whenProjectTitleResentUnchanged() {
         // Sending the same (unchanged) title back is not a "change" — it's a no-op, not rejected.
         ProjectEntity project = projectEntity(); // title "Project AB"
