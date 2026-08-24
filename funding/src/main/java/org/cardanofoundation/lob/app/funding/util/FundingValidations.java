@@ -110,6 +110,26 @@ public final class FundingValidations {
     }
 
     /**
+     * An event is booked in a single recording currency ({@code currencyRcy}), and a milestone's
+     * currency always matches its owning project's (root projects require it explicitly; sub-projects
+     * and milestones inherit it — see {@link org.cardanofoundation.lob.app.funding.service.ProjectStructureService}
+     * and {@code FundingBulkImportService#upsertMilestoneRow}). So an event allocating to a milestone
+     * whose currency differs from the event's would silently record amounts in the wrong currency
+     * (e.g. a USD spend booked against a EUR milestone) — this rejects that up front, for both the
+     * REST API and CSV import (they share this validation pipeline).
+     */
+    public static Optional<ProblemDetail> eventCurrencyMatchesMilestone(String eventCurrencyRcy, MilestoneEntity milestone) {
+        if (eventCurrencyRcy != null && milestone.getCurrency() != null
+                && !eventCurrencyRcy.equals(milestone.getCurrency())) {
+            return Optional.of(Problems.badRequest(
+                    "currencyRcy %s does not match milestone '%s' currency %s".formatted(
+                            eventCurrencyRcy, milestone.getMilestoneTitle(), milestone.getCurrency()),
+                    ErrorTitleConstants.EVENT_CURRENCY_MISMATCH));
+        }
+        return Optional.empty();
+    }
+
+    /**
      * An event's total is the sum of its milestone allocations, so it must end up strictly positive —
      * guarding against an event whose allocations are absent or sum to zero (e.g. when no milestones
      * were supplied).
@@ -341,6 +361,45 @@ public final class FundingValidations {
             return Optional.of(Problems.badRequest(
                     "eventDate %s must not be in the future".formatted(eventDate),
                     ErrorTitleConstants.EVENT_DATE_IN_FUTURE));
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Every event must carry a date — applies to all event types (FUNDING, SPENDING, REFUND). A
+     * dateless event cannot be placed in a reporting period, so it must be rejected rather than
+     * silently persisted without one (this is what the CSV import path did before this check existed,
+     * since a blank {@code Event Date} cell parses to {@code null} rather than a parse error).
+     */
+    public static Optional<ProblemDetail> eventDateRequired(LocalDate eventDate) {
+        if (eventDate == null) {
+            return Optional.of(Problems.badRequest(
+                    "eventDate is required",
+                    ErrorTitleConstants.EVENT_DATE_REQUIRED));
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * A SPENDING event's {@code amountFcy} and {@code fxRate} describe a real foreign-currency
+     * purchase converted at a real rate, so both must be strictly positive when present. (Their
+     * presence itself is enforced separately by {@link #spendDetail}; this only guards against a
+     * supplied zero/negative value — e.g. a CSV cell containing {@code 0} rather than being left
+     * blank.) Not applicable to FUNDING/REFUND events, which carry neither field.
+     */
+    public static Optional<ProblemDetail> spendAmountsPositive(EventType eventType, BigDecimal amountFcy, BigDecimal fxRate) {
+        if (eventType != EventType.SPENDING) {
+            return Optional.empty();
+        }
+        if (amountFcy != null && amountFcy.signum() <= 0) {
+            return Optional.of(Problems.badRequest(
+                    "amountFcy must be greater than zero for a SPENDING event",
+                    ErrorTitleConstants.AMOUNT_FCY_INVALID));
+        }
+        if (fxRate != null && fxRate.signum() <= 0) {
+            return Optional.of(Problems.badRequest(
+                    "fxRate must be greater than zero for a SPENDING event",
+                    ErrorTitleConstants.FX_RATE_INVALID));
         }
         return Optional.empty();
     }

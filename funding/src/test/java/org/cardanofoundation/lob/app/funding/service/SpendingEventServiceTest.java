@@ -149,6 +149,51 @@ class SpendingEventServiceTest {
     }
 
     @Test
+    void create_returnsLeft_whenAmountFcyIsZero() {
+        // Rejected before allocations are resolved — no project/milestone stubbing required.
+        SpendingEventCreateRequest request = spendingRequest(fundingMilestone("MS-1", ALLOCATED));
+        request.setAmountFcy(BigDecimal.ZERO);
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.AMOUNT_FCY_INVALID);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenAmountFcyIsNegative() {
+        SpendingEventCreateRequest request = spendingRequest(fundingMilestone("MS-1", ALLOCATED));
+        request.setAmountFcy(new BigDecimal("-100"));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.AMOUNT_FCY_INVALID);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenFxRateIsZero() {
+        SpendingEventCreateRequest request = spendingRequest(fundingMilestone("MS-1", ALLOCATED));
+        request.setFxRate(BigDecimal.ZERO);
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.FX_RATE_INVALID);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenFxRateIsNegative() {
+        SpendingEventCreateRequest request = spendingRequest(fundingMilestone("MS-1", ALLOCATED));
+        request.setFxRate(new BigDecimal("-1"));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.FX_RATE_INVALID);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void create_successWithNewProjectAndNewMilestone() {
         when(projectRepository.existsById(any())).thenReturn(false);
         when(projectRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
@@ -245,6 +290,19 @@ class SpendingEventServiceTest {
         assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.ALLOCATION_TOTAL_EXCEEDS_PROJECT);
     }
 
+    @Test
+    void create_returnsLeft_whenEventCurrencyDoesNotMatchMilestoneCurrency() {
+        stubExistingProjectAndMilestone("MS-1"); // project/milestone currency is USD
+
+        SpendingEventCreateRequest request = fundingRequest(fundingMilestone("MS-1", ALLOCATED));
+        request.setCurrencyRcy("EUR");
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_CURRENCY_MISMATCH);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
     // --- create: spend-detail validations ---
 
     @Test
@@ -263,6 +321,7 @@ class SpendingEventServiceTest {
         // SPENDING event with allocations but no amountFcy/amountRcy/fxRate on the event.
         SpendingEventCreateRequest request = SpendingEventCreateRequest.builder()
                 .organisationId("org1").eventType(EventType.SPENDING).fundingId("GRANT-2025-001").currencyRcy("USD")
+                .eventDate(LocalDate.of(2025, 4, 3))
                 .allocations(List.of(EventProjectAllocationRequest.builder()
                         .externalProjectId("PROJ-AB").projectTitle("Project AB")
                         .milestones(List.of(fundingMilestone("MS-1", ALLOCATED))).build()))
@@ -299,16 +358,16 @@ class SpendingEventServiceTest {
     }
 
     @Test
-    void create_succeeds_whenEventDateIsNull() {
-        stubExistingProjectAndMilestone("MS-1");
-        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
-
+    void create_returnsLeft_whenEventDateIsNull() {
+        // eventDate is mandatory for every event type — a dateless event cannot be placed in a
+        // reporting period. Rejected before allocations are resolved — no stubbing required.
         SpendingEventCreateRequest request = fundingRequest(fundingMilestone("MS-1", ALLOCATED));
         request.setEventDate(null);
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
 
-        assertThat(result.isRight()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_DATE_REQUIRED);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -985,6 +1044,7 @@ class SpendingEventServiceTest {
         SpendingEventView result = spendingEventService.createEvent(SpendingEventCreateRequest.builder()
                 .organisationId("org1").eventType(EventType.FUNDING).fundingId("GRANT-2025-001")
                 .fundingEntity("Cardano Foundation").currencyRcy("USD").amountRcy(ALLOCATED)
+                .eventDate(LocalDate.of(2025, 4, 3))
                 .allocations(List.of(EventProjectAllocationRequest.builder()
                         .milestones(List.of(fundingMilestone("MS-1", ALLOCATED))).build()))
                 .build());
@@ -1122,6 +1182,7 @@ class SpendingEventServiceTest {
         return SpendingEventCreateRequest.builder()
                 .organisationId("org1").eventType(EventType.FUNDING).fundingId("GRANT-2025-001")
                 .fundingEntity("Cardano Foundation").currencyRcy("USD").amountRcy(ALLOCATED)
+                .eventDate(LocalDate.of(2025, 4, 3))
                 .allocations(List.of(allocation)).build();
     }
 

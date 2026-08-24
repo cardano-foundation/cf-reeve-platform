@@ -38,6 +38,7 @@ public final class ErrorTitleConstants {
     public static final String SPEND_FIELDS_NOT_ALLOWED = "SPEND_FIELDS_NOT_ALLOWED";
     public static final String SPEND_FIELDS_REQUIRED = "SPEND_FIELDS_REQUIRED";
     public static final String FX_RATE_MISMATCH = "FX_RATE_MISMATCH";
+    public static final String EVENT_CURRENCY_MISMATCH = "EVENT_CURRENCY_MISMATCH";
     public static final String EVENT_AMOUNT_INVALID = "EVENT_AMOUNT_INVALID";
     public static final String EVENT_AMOUNT_EXCEEDS_MILESTONES = "EVENT_AMOUNT_EXCEEDS_MILESTONES";
     public static final String EVENT_AMOUNT_EXCEEDS_PROJECT = "EVENT_AMOUNT_EXCEEDS_PROJECT";
@@ -48,6 +49,9 @@ public final class ErrorTitleConstants {
     public static final String EVENT_TYPE_IMMUTABLE = "EVENT_TYPE_IMMUTABLE";
     public static final String FUNDING_ENTITY_REQUIRED = "FUNDING_ENTITY_REQUIRED";
     public static final String EVENT_DATE_IN_FUTURE = "EVENT_DATE_IN_FUTURE";
+    public static final String EVENT_DATE_REQUIRED = "EVENT_DATE_REQUIRED";
+    public static final String AMOUNT_FCY_INVALID = "AMOUNT_FCY_INVALID";
+    public static final String FX_RATE_INVALID = "FX_RATE_INVALID";
     public static final String ORGANISATION_NOT_FOUND = "ORGANISATION_NOT_FOUND";
     public static final String ORGANISATION_MISMATCH = "ORGANISATION_MISMATCH";
     public static final String UNAUTHORIZED = "UNAUTHORIZED";
