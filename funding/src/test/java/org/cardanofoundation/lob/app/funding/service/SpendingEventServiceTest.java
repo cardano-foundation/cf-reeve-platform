@@ -34,6 +34,7 @@ import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.repository.*;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Currency;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
@@ -63,12 +64,17 @@ class SpendingEventServiceTest {
      */
     @BeforeEach
     void wireService() {
-        MilestoneService milestoneService = new MilestoneService(
-                milestoneRepository, projectRepository, milestoneAllocationRepository, keycloakSecurityHelper, cascadeDeleteService);
+        MilestoneService milestoneService = new MilestoneService(milestoneRepository, projectRepository,
+                milestoneAllocationRepository, keycloakSecurityHelper, cascadeDeleteService, organisationPublicApi);
         ProjectStructureService projectStructureService = new ProjectStructureService(projectRepository, milestoneService);
         spendingEventService = new SpendingEventService(fundingEventRepository, projectRepository,
                 milestoneAllocationRepository, milestoneService, projectStructureService,
                 keycloakSecurityHelper, organisationPublicApi);
+        // Currency codes referenced by these tests (USD, EUR, ...) are registered/active in the org's
+        // currency table by default; tests exercising the rejection path override this per code.
+        Currency activeCurrency = new Currency(new Currency.Id("org1", "x"), "ISO_4217:x", true);
+        lenient().when(organisationPublicApi.findCurrencyByCustomerCurrencyCode(any(), any()))
+                .thenReturn(Optional.of(activeCurrency));
     }
 
     private static final Pageable PAGEABLE = PageRequest.of(0, 10);

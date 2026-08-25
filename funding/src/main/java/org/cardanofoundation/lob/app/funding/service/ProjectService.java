@@ -133,7 +133,8 @@ public class ProjectService {
             return Either.left(Problems.badRequest(
                     "Currency is required to create a root project: " + request.getProjectTitle(), ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
-        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(request.getCurrency());
+        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(request.getCurrency(),
+                milestoneService.isCurrencyRegisteredAndActive(request.getOrganisationId(), request.getCurrency()));
         if (currencyProblem.isPresent()) {
             return Either.left(currencyProblem.get());
         }
@@ -239,7 +240,8 @@ public class ProjectService {
         if (amountProblem.isPresent()) {
             return ProjectView.error(amountProblem.get());
         }
-        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(request.getCurrency());
+        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(request.getCurrency(),
+                milestoneService.isCurrencyRegisteredAndActive(project.getOrganisationId(), request.getCurrency()));
         if (currencyProblem.isPresent()) {
             return ProjectView.error(currencyProblem.get());
         }

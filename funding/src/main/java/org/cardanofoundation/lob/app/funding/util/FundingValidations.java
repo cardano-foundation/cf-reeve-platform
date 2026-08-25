@@ -405,22 +405,23 @@ public final class FundingValidations {
     }
 
     /**
-     * A currency (project, sub-project or milestone) must be a real ISO 4217 code — e.g. CSV import
-     * previously accepted a typo'd or made-up code (such as {@code ABC}) and silently stored it. A
-     * code already in the qualified {@code ISO_xxx:...} form (see
-     * {@code SpendingEventService#toCurrency}) is left unchecked — that form isn't produced by any
-     * current input path, but existing data in it must not be rejected on re-validation. Null/blank
-     * is left unchecked; callers that require a currency enforce that separately.
+     * A currency (project, sub-project or milestone) must be one the organisation has registered and
+     * activated in its currency table — e.g. CSV import previously accepted a typo'd or made-up code
+     * (such as {@code ABC}) and silently stored it. The org's currency table covers both ISO 4217
+     * fiat codes and non-fiat codes (e.g. {@code ADA}, registered under ISO 24165), so validation
+     * defers to the caller-resolved {@code registeredAndActive} flag rather than the JDK's ISO 4217
+     * list, which doesn't know about them. A code already in the qualified {@code ISO_xxx:...} form
+     * (see {@code SpendingEventService#toCurrency}) is left unchecked — that form isn't produced by
+     * any current input path, but existing data in it must not be rejected on re-validation.
+     * Null/blank is left unchecked; callers that require a currency enforce that separately.
      */
-    public static Optional<ProblemDetail> currencyCode(String currency) {
+    public static Optional<ProblemDetail> currencyCode(String currency, boolean registeredAndActive) {
         if (currency == null || currency.isBlank() || currency.startsWith("ISO_")) {
             return Optional.empty();
         }
-        try {
-            java.util.Currency.getInstance(currency);
-        } catch (IllegalArgumentException e) {
+        if (!registeredAndActive) {
             return Optional.of(Problems.badRequest(
-                    "Currency %s is not a valid ISO 4217 currency code".formatted(currency),
+                    "Currency %s is not a registered, active currency for this organisation".formatted(currency),
                     ErrorTitleConstants.CURRENCY_INVALID));
         }
         return Optional.empty();

@@ -80,6 +80,7 @@ class ProjectServiceTest {
                 allocationRepository, keycloakSecurityHelper, organisationPublicApi, cascadeDeleteService);
         lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
         lenient().when(milestoneService.findByProjectId(any())).thenReturn(List.of());
+        lenient().when(milestoneService.isCurrencyRegisteredAndActive(any(), any())).thenReturn(true);
         lenient().when(projectRepository.findByParentProjectId(any(String.class))).thenReturn(List.of());
         lenient().when(spendingEventService.findByProjectIdAndFilter(any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of()));
@@ -224,6 +225,8 @@ class ProjectServiceTest {
 
     @Test
     void create_rejected_whenCurrencyIsNotAValidIsoCode() {
+        when(milestoneService.isCurrencyRegisteredAndActive(any(), eq("ABC"))).thenReturn(false);
+
         ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
                 .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Project AB")
                 .fundingId("GRANT-2025-001").totalAmount(new BigDecimal("200000.00")).currency("ABC")

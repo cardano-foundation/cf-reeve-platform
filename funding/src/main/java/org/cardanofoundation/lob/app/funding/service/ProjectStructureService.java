@@ -50,7 +50,8 @@ public class ProjectStructureService {
 
         String effectiveCurrency = (currency != null && !currency.isBlank()) ? currency : parent.getCurrency();
 
-        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(currency);
+        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(
+                currency, milestoneService.isCurrencyRegisteredAndActive(parent.getOrganisationId(), currency));
         if (currencyProblem.isPresent()) {
             return Either.left(currencyProblem.get());
         }

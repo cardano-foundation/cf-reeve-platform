@@ -561,38 +561,35 @@ class FundingValidationsTest {
         assertThat(FundingValidations.spendAmountsPositive(EventType.REFUND, new BigDecimal("-1"), new BigDecimal("-1"))).isEmpty();
     }
 
-    // --- currencyCode(currency) ---
+    // --- currencyCode(currency, registeredAndActive) ---
 
     @Test
-    void currencyCode_validIsoCode_isAllowed() {
-        assertThat(FundingValidations.currencyCode("USD")).isEmpty();
-        assertThat(FundingValidations.currencyCode("EUR")).isEmpty();
+    void currencyCode_registeredAndActive_isAllowed() {
+        // The org's currency table is the source of truth — it also covers non-ISO-4217 codes such
+        // as ADA (registered under ISO 24165), not just fiat ISO 4217 codes.
+        assertThat(FundingValidations.currencyCode("USD", true)).isEmpty();
+        assertThat(FundingValidations.currencyCode("ADA", true)).isEmpty();
     }
 
     @Test
-    void currencyCode_nonExistentCode_isRejected() {
-        assertThat(title(FundingValidations.currencyCode("ABC")))
-                .isEqualTo(ErrorTitleConstants.CURRENCY_INVALID);
-    }
-
-    @Test
-    void currencyCode_lowercaseValidCode_isRejected() {
-        // java.util.Currency requires the exact uppercase ISO 4217 code.
-        assertThat(title(FundingValidations.currencyCode("usd")))
+    void currencyCode_notRegisteredOrInactive_isRejected() {
+        assertThat(title(FundingValidations.currencyCode("ABC", false)))
                 .isEqualTo(ErrorTitleConstants.CURRENCY_INVALID);
     }
 
     @Test
     void currencyCode_nullOrBlank_isAllowed() {
-        // Presence is enforced separately by callers that require a currency.
-        assertThat(FundingValidations.currencyCode(null)).isEmpty();
-        assertThat(FundingValidations.currencyCode("")).isEmpty();
-        assertThat(FundingValidations.currencyCode("  ")).isEmpty();
+        // Presence is enforced separately by callers that require a currency; the flag is irrelevant
+        // when there's no currency to check.
+        assertThat(FundingValidations.currencyCode(null, false)).isEmpty();
+        assertThat(FundingValidations.currencyCode("", false)).isEmpty();
+        assertThat(FundingValidations.currencyCode("  ", false)).isEmpty();
     }
 
     @Test
     void currencyCode_qualifiedIsoForm_isAllowed() {
-        // Already-qualified ISO_xxx:... codes (see SpendingEventService#toCurrency) are left unchecked.
-        assertThat(FundingValidations.currencyCode("ISO_24165:ADA")).isEmpty();
+        // Already-qualified ISO_xxx:... codes (see SpendingEventService#toCurrency) are left unchecked
+        // regardless of the flag.
+        assertThat(FundingValidations.currencyCode("ISO_24165:ADA", false)).isEmpty();
     }
 }

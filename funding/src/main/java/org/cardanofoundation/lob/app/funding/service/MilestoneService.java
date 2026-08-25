@@ -29,6 +29,8 @@ import org.cardanofoundation.lob.app.funding.repository.MilestoneRepository;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 import org.cardanofoundation.lob.app.funding.util.FundingValidations;
 import org.cardanofoundation.lob.app.funding.util.Problems;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Currency;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @Slf4j
@@ -42,6 +44,7 @@ public class MilestoneService {
     private final EventMilestoneAllocationRepository allocationRepository;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
     private final FundingCascadeDeleteService cascadeDeleteService;
+    private final OrganisationPublicApiIF organisationPublicApi;
 
     // -------------------------------------------------------------------------
     // View-returning API (used by the controller — carries the ProblemDetail).
@@ -216,7 +219,8 @@ public class MilestoneService {
                     "Milestone title already exists in this project: " + entity.getMilestoneTitle(),
                     ErrorTitleConstants.MILESTONE_TITLE_ALREADY_EXISTS));
         }
-        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(request.getCurrency());
+        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(
+                request.getCurrency(), isCurrencyRegisteredAndActive(project.getOrganisationId(), request.getCurrency()));
         if (currencyProblem.isPresent()) {
             return Either.left(currencyProblem.get());
         }
@@ -228,6 +232,18 @@ public class MilestoneService {
             return Either.left(validation.get());
         }
         return Either.right(milestoneRepository.saveAndFlush(entity));
+    }
+
+    /**
+     * Whether {@code currency} is registered and active in the organisation's currency table. Shared
+     * by every funding service that validates a currency code (see {@link FundingValidations#currencyCode}),
+     * since the org's table — not {@code java.util.Currency} — is the source of truth: it also covers
+     * non-ISO-4217 codes such as crypto assets (e.g. {@code ADA}, registered under ISO 24165).
+     */
+    boolean isCurrencyRegisteredAndActive(String organisationId, String currency) {
+        return organisationPublicApi.findCurrencyByCustomerCurrencyCode(organisationId, currency)
+                .map(Currency::isActive)
+                .orElse(false);
     }
 
     private static boolean missingCreationFields(MilestoneCreateRequest request) {
@@ -278,7 +294,8 @@ public class MilestoneService {
         if (validation.isPresent()) {
             return Either.left(validation.get());
         }
-        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(request.getCurrency());
+        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(
+                request.getCurrency(), isCurrencyRegisteredAndActive(project.getOrganisationId(), request.getCurrency()));
         if (currencyProblem.isPresent()) {
             return Either.left(currencyProblem.get());
         }
