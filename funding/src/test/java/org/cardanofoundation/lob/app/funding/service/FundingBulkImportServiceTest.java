@@ -1542,6 +1542,59 @@ class FundingBulkImportServiceTest {
         verify(spendingEventService, never()).createEvent(any());
     }
 
+    @Test
+    void eventsFile_twoMilestoneRowsOnSameProjectBothExceedLimit_reportsBothRowErrors() {
+        // Regression test: buildMilestoneAllocations/FundingValidations.allocation used to stop at the
+        // first over-limit row in a project, silently dropping every other bad row from the same event
+        // group's report.
+        MultipartFile file = file("events.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.EVENTS));
+        EventCsvLine row1 = eventLine("FUNDING", "GRANT-1", "USD", "Project A", "Milestone One", "25000");
+        EventCsvLine row2 = eventLine("FUNDING", "GRANT-1", "USD", "Project A", "Milestone Two", "50000");
+        when(eventCsvParser.parseCsv(file, EventCsvLine.class)).thenReturn(Either.right(List.of(row1, row2)));
+        when(projectRepository.findByOrganisationIdAndProjectTitle(ORG_ID, "Project A"))
+                .thenReturn(List.of(projectEntity("p1", "Project A", "USD")));
+        when(milestoneService.findByProjectIdAndMilestoneTitle("p1", "Milestone One")).thenReturn(Optional.of(
+                MilestoneEntity.builder().id("m1").milestoneTitle("Milestone One")
+                        .milestoneAmount(new java.math.BigDecimal("20000")).build()));
+        when(milestoneService.findByProjectIdAndMilestoneTitle("p1", "Milestone Two")).thenReturn(Optional.of(
+                MilestoneEntity.builder().id("m2").milestoneTitle("Milestone Two")
+                        .milestoneAmount(new java.math.BigDecimal("20000")).build()));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(2);
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getRowNumber()).isEqualTo(1);
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getReason()).contains("exceeds the milestone amount");
+        assertThat(result.getFiles().get(0).getRowErrors().get(1).getRowNumber()).isEqualTo(2);
+        assertThat(result.getFiles().get(0).getRowErrors().get(1).getReason()).contains("exceeds the milestone amount");
+        verify(spendingEventService, never()).createEvent(any());
+    }
+
+    @Test
+    void eventsFile_twoUnknownProjectsInSameEventGroup_reportsBothRowErrors() {
+        // Regression test: resolveAllocations used to stop at the first unresolved project in a group,
+        // silently dropping every other unresolved project from the same event group's report.
+        MultipartFile file = file("events.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.EVENTS));
+        EventCsvLine row1 = eventLine("FUNDING", "GRANT-1", "USD", "Unknown One", "Milestone One", "1000");
+        EventCsvLine row2 = eventLine("FUNDING", "GRANT-1", "USD", "Unknown Two", "Milestone One", "1000");
+        when(eventCsvParser.parseCsv(file, EventCsvLine.class)).thenReturn(Either.right(List.of(row1, row2)));
+        when(projectRepository.findByOrganisationIdAndProjectTitle(ORG_ID, "Unknown One")).thenReturn(List.of());
+        when(projectRepository.findByOrganisationIdAndProjectTitle(ORG_ID, "Unknown Two")).thenReturn(List.of());
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(2);
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getRowNumber()).isEqualTo(1);
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getReason()).contains("Unknown One");
+        assertThat(result.getFiles().get(0).getRowErrors().get(1).getRowNumber()).isEqualTo(2);
+        assertThat(result.getFiles().get(0).getRowErrors().get(1).getReason()).contains("Unknown Two");
+        verify(spendingEventService, never()).createEvent(any());
+    }
+
     private static EventCsvLine eventLine(String eventType, String fundingId, String currencyRcy,
             String projectTitle, String milestoneTitle, String allocatedAmount) {
         return eventLine(eventType, fundingId, currencyRcy, projectTitle, null, milestoneTitle, allocatedAmount);

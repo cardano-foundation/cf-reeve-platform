@@ -49,6 +49,7 @@ import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.funding.util.FundingValidations;
 import org.cardanofoundation.lob.app.funding.util.Problems;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
@@ -583,10 +584,10 @@ public class FundingBulkImportService {
         int allocationsUpdated = 0;
 
         for (List<Integer> idxs : groups.values()) {
-            List<EventCsvLine> group = idxs.stream().map(lines::get).toList();
-            EventGroupOutcome outcome = processEventGroup(organisationId, idxs.get(0) + 1, group, resolvedProjectIds);
-            if (outcome.error() != null) {
-                errors.add(outcome.error());
+            List<IndexedLine> group = idxs.stream().map(idx -> new IndexedLine(idx + 1, lines.get(idx))).toList();
+            EventGroupOutcome outcome = processEventGroup(organisationId, group, resolvedProjectIds);
+            if (!outcome.errors().isEmpty()) {
+                errors.addAll(outcome.errors());
                 continue;
             }
             succeeded++;
@@ -605,14 +606,38 @@ public class FundingBulkImportService {
                 eventsCreated, eventsUpdated, allocationsCreated, allocationsUpdated);
     }
 
-    private EventGroupOutcome processEventGroup(String organisationId, int firstRowNumber, List<EventCsvLine> group,
+    /**
+     * Builds and (if every row in the group is individually valid) persists one event. Unlike the
+     * single-request JSON API — where {@link FundingValidations} and {@code SpendingEventService}
+     * deliberately return only the <em>first</em> violation, since there's exactly one thing to report
+     * back to the caller — a CSV event group represents several independent rows, and a user fixing
+     * their file from one reported error at a time is a bad experience. So this method first validates
+     * every row exhaustively (never stopping at the first bad row — see {@link
+     * #groupAllocationRowsByProject} and {@link #buildMilestoneAllocations}), collecting one error per
+     * bad row, and only calls {@code createEvent}/{@code updateEvent} when that pass finds nothing
+     * wrong. Cross-row/event-level rules that aren't tied to a single CSV row (e.g. the event's total
+     * not being fully allocated) are still left to that single call and reported as one error, since
+     * they aren't "per row" in the first place.
+     */
+    private EventGroupOutcome processEventGroup(String organisationId, List<IndexedLine> group,
             Map<String, String> resolvedProjectIds) {
+        int firstRowNumber = group.get(0).rowNumber();
 
-        Either<ProblemDetail, SpendingEventCreateRequest> built = buildEventRequest(organisationId, group, resolvedProjectIds);
-        if (built.isLeft()) {
-            return new EventGroupOutcome(rowError(firstRowNumber, built.getLeft()), 0, 0, false);
+        Either<ProblemDetail, EventHeader> headerE = parseEventHeader(group.get(0).line());
+        if (headerE.isLeft()) {
+            return new EventGroupOutcome(List.of(rowError(firstRowNumber, headerE.getLeft())), 0, 0, false);
         }
-        SpendingEventCreateRequest request = built.get();
+        EventHeader header = headerE.get();
+
+        List<FundingRowError> errors = new ArrayList<>();
+        Map<String, List<IndexedLine>> byProject = groupAllocationRowsByProject(group, errors);
+        List<EventProjectAllocationRequest> allocations =
+                resolveAllocations(organisationId, byProject, resolvedProjectIds, header.eventType(), errors);
+        if (!errors.isEmpty()) {
+            return new EventGroupOutcome(errors, 0, 0, false);
+        }
+
+        SpendingEventCreateRequest request = buildSpendingEventRequest(organisationId, header, allocations);
 
         // Upsert: an event's id is fully deterministic from its header fields, so re-uploading the
         // same Events file resolves to the same event — update its allocations (replacing them)
@@ -627,41 +652,19 @@ public class FundingBulkImportService {
                 : spendingEventService.createEvent(request);
         Optional<ProblemDetail> error = view.getError();
         if (error.isPresent()) {
-            return new EventGroupOutcome(rowError(firstRowNumber, error.get()), 0, 0, false);
+            return new EventGroupOutcome(List.of(rowError(firstRowNumber, error.get())), 0, 0, false);
         }
         // An update replaces the event's allocations wholesale, so every allocation row in the group
         // counts as updated rather than created when the event already existed.
         return alreadyExists
-                ? new EventGroupOutcome(null, 0, group.size(), false)
-                : new EventGroupOutcome(null, group.size(), 0, true);
+                ? new EventGroupOutcome(List.of(), 0, group.size(), false)
+                : new EventGroupOutcome(List.of(), group.size(), 0, true);
     }
 
     private static String eventKey(EventCsvLine line) {
         return String.join("||",
                 nullToEmpty(line.getFundingId()), nullToEmpty(line.getEventType()),
                 nullToEmpty(line.getFundingHash()), nullToEmpty(line.getCurrencyRcy()));
-    }
-
-    private Either<ProblemDetail, SpendingEventCreateRequest> buildEventRequest(String organisationId, List<EventCsvLine> group,
-            Map<String, String> resolvedProjectIds) {
-
-        Either<ProblemDetail, EventHeader> headerE = parseEventHeader(group.get(0));
-        if (headerE.isLeft()) {
-            return Either.left(headerE.getLeft());
-        }
-
-        Either<ProblemDetail, Map<String, List<EventCsvLine>>> byProjectE = groupAllocationRowsByProject(group);
-        if (byProjectE.isLeft()) {
-            return Either.left(byProjectE.getLeft());
-        }
-
-        Either<ProblemDetail, List<EventProjectAllocationRequest>> allocationsE =
-                resolveAllocations(organisationId, byProjectE.get(), resolvedProjectIds);
-        if (allocationsE.isLeft()) {
-            return Either.left(allocationsE.getLeft());
-        }
-
-        return Either.right(buildSpendingEventRequest(organisationId, headerE.get(), allocationsE.get()));
     }
 
     /** Parses and validates the event-level (non-allocation) columns, shared by every row in the group. */
@@ -695,18 +698,23 @@ public class FundingBulkImportService {
                 blankToNull(first.getHash()), blankToNull(first.getNotes())));
     }
 
-    /** Groups allocation rows by target project, preserving first-seen order, so a project that receives
-     * several milestone allocations in this event appears once with all its milestones. */
-    private Either<ProblemDetail, Map<String, List<EventCsvLine>>> groupAllocationRowsByProject(List<EventCsvLine> group) {
-        LinkedHashMap<String, List<EventCsvLine>> byProject = new LinkedHashMap<>();
-        for (EventCsvLine line : group) {
-            if (isBlank(line.getProjectTitle())) {
-                return Either.left(Problems.badRequest("Project Title is required for every allocation row",
-                        ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
+    /**
+     * Groups allocation rows by target project, preserving first-seen order, so a project that receives
+     * several milestone allocations in this event appears once with all its milestones. A row with a
+     * blank {@code Project Title} is reported and skipped — never bails out of the whole group, so
+     * every other row still gets grouped and validated (see {@link #processEventGroup}).
+     */
+    private LinkedHashMap<String, List<IndexedLine>> groupAllocationRowsByProject(List<IndexedLine> group, List<FundingRowError> errors) {
+        LinkedHashMap<String, List<IndexedLine>> byProject = new LinkedHashMap<>();
+        for (IndexedLine il : group) {
+            if (isBlank(il.line().getProjectTitle())) {
+                errors.add(rowError(il.rowNumber(), Problems.badRequest("Project Title is required for every allocation row",
+                        ErrorTitleConstants.PROJECT_FIELDS_REQUIRED)));
+                continue;
             }
-            byProject.computeIfAbsent(allocationTargetKey(line), k -> new ArrayList<>()).add(line);
+            byProject.computeIfAbsent(allocationTargetKey(il.line()), k -> new ArrayList<>()).add(il);
         }
-        return Either.right(byProject);
+        return byProject;
     }
 
     /**
@@ -724,63 +732,92 @@ public class FundingBulkImportService {
      * references under their root — the underlying event-creation logic only resolves a flat
      * {@code projectTitle} as a ROOT project, so a sub-project must be attached via its root's
      * {@code subProjects} instead of appearing as its own top-level allocation.
+     *
+     * <p>Every target project is resolved and every one of its rows validated regardless of an earlier
+     * project or row failing — each failure is appended to {@code errors} instead of aborting the rest
+     * of the group, so one CSV import surfaces every row's problem instead of only the first. The
+     * returned allocation list is only meaningful (and only used by the caller) when {@code errors}
+     * ends up empty.
      */
-    private Either<ProblemDetail, List<EventProjectAllocationRequest>> resolveAllocations(String organisationId,
-            Map<String, List<EventCsvLine>> byProject, Map<String, String> resolvedProjectIds) {
+    private List<EventProjectAllocationRequest> resolveAllocations(String organisationId,
+            Map<String, List<IndexedLine>> byProject, Map<String, String> resolvedProjectIds,
+            EventType eventType, List<FundingRowError> errors) {
 
         LinkedHashMap<String, ProjectEntity> rootsByTitle = new LinkedHashMap<>();
         LinkedHashMap<String, List<EventMilestoneAllocationRequest>> rootDirectMilestones = new LinkedHashMap<>();
         LinkedHashMap<String, List<EventSubProjectAllocationRequest>> subAllocationsByRoot = new LinkedHashMap<>();
 
-        for (List<EventCsvLine> projectLines : byProject.values()) {
-            EventCsvLine first = projectLines.get(0);
+        for (List<IndexedLine> projectLines : byProject.values()) {
+            IndexedLine first = projectLines.get(0);
             // Validation only — the project must already exist, this file never creates one.
-            Either<ProblemDetail, ProjectEntity> projectE =
-                    resolveExistingProjectEntity(organisationId, first.getProjectTitle(), first.getSubProjectTitle(), resolvedProjectIds);
+            Either<ProblemDetail, ProjectEntity> projectE = resolveExistingProjectEntity(
+                    organisationId, first.line().getProjectTitle(), first.line().getSubProjectTitle(), resolvedProjectIds);
             if (projectE.isLeft()) {
-                return Either.left(projectE.getLeft());
+                errors.add(rowError(first.rowNumber(), projectE.getLeft()));
+                continue;
             }
             ProjectEntity project = projectE.get();
 
-            Either<ProblemDetail, List<EventMilestoneAllocationRequest>> milestonesE = buildMilestoneAllocations(project, projectLines);
-            if (milestonesE.isLeft()) {
-                return Either.left(milestonesE.getLeft());
-            }
+            List<EventMilestoneAllocationRequest> milestones = buildMilestoneAllocations(project, projectLines, eventType, errors);
 
-            attachAllocation(project, milestonesE.get(), rootsByTitle, rootDirectMilestones, subAllocationsByRoot);
+            attachAllocation(project, milestones, rootsByTitle, rootDirectMilestones, subAllocationsByRoot);
         }
 
-        return Either.right(buildAllocationRequests(rootsByTitle, rootDirectMilestones, subAllocationsByRoot));
+        return buildAllocationRequests(rootsByTitle, rootDirectMilestones, subAllocationsByRoot);
     }
 
-    /** Validates and builds the milestone allocations for one project's rows within an event group. */
-    private Either<ProblemDetail, List<EventMilestoneAllocationRequest>> buildMilestoneAllocations(ProjectEntity project,
-            List<EventCsvLine> projectLines) {
+    /**
+     * Validates and builds the milestone allocations for one project's rows within an event group. Each
+     * row is validated independently — a bad row (blank title, unknown milestone, unparsable/missing
+     * amount, or an amount that fails {@link FundingValidations#allocation}) is appended to
+     * {@code errors} and skipped, so a sibling row for the same project is still checked instead of
+     * being left unreported (this is what let a second offending milestone row on the same project
+     * silently pass import review before). {@link FundingValidations#allocation} is the same rule
+     * {@code SpendingEventService} applies when it actually persists the event — reusing it here (rather
+     * than re-deriving the check) keeps this preview and the real save in agreement, it's just now
+     * invoked once per row instead of stopping at the first violation.
+     */
+    private List<EventMilestoneAllocationRequest> buildMilestoneAllocations(ProjectEntity project,
+            List<IndexedLine> projectLines, EventType eventType, List<FundingRowError> errors) {
 
         List<EventMilestoneAllocationRequest> milestones = new ArrayList<>();
-        for (EventCsvLine line : projectLines) {
+        for (IndexedLine il : projectLines) {
+            EventCsvLine line = il.line();
             if (isBlank(line.getMilestoneTitle())) {
-                return Either.left(Problems.badRequest("Milestone Title is required for every allocation row",
-                        ErrorTitleConstants.MILESTONE_FIELDS_REQUIRED));
+                errors.add(rowError(il.rowNumber(), Problems.badRequest("Milestone Title is required for every allocation row",
+                        ErrorTitleConstants.MILESTONE_FIELDS_REQUIRED)));
+                continue;
             }
             // Validation only — the milestone must already exist, this file never creates one.
-            if (milestoneService.findByProjectIdAndMilestoneTitle(project.getId(), line.getMilestoneTitle()).isEmpty()) {
-                return Either.left(Problems.milestoneNotFound(line.getMilestoneTitle()));
+            Optional<MilestoneEntity> milestone = milestoneService.findByProjectIdAndMilestoneTitle(project.getId(), line.getMilestoneTitle());
+            if (milestone.isEmpty()) {
+                errors.add(rowError(il.rowNumber(), Problems.milestoneNotFound(line.getMilestoneTitle())));
+                continue;
             }
-            Either<ProblemDetail, BigDecimal> allocatedAmount = parseDecimal(line.getAllocatedAmount(), "Allocated Amount");
-            if (allocatedAmount.isLeft()) return Either.left(allocatedAmount.getLeft());
-            if (allocatedAmount.get() == null) {
-                return Either.left(Problems.badRequest("Allocated Amount is required", ErrorTitleConstants.ALLOCATION_AMOUNT_REQUIRED));
+            Either<ProblemDetail, BigDecimal> allocatedAmountE = parseDecimal(line.getAllocatedAmount(), "Allocated Amount");
+            if (allocatedAmountE.isLeft()) {
+                errors.add(rowError(il.rowNumber(), allocatedAmountE.getLeft()));
+                continue;
+            }
+            BigDecimal allocatedAmount = allocatedAmountE.get();
+            if (allocatedAmount == null) {
+                errors.add(rowError(il.rowNumber(), Problems.badRequest("Allocated Amount is required", ErrorTitleConstants.ALLOCATION_AMOUNT_REQUIRED)));
+                continue;
+            }
+            Optional<ProblemDetail> allocationProblem = FundingValidations.allocation(allocatedAmount, milestone.get(), eventType);
+            if (allocationProblem.isPresent()) {
+                errors.add(rowError(il.rowNumber(), allocationProblem.get()));
+                continue;
             }
 
             milestones.add(EventMilestoneAllocationRequest.builder()
                     .milestone(MilestoneCreateRequest.builder()
                             .milestoneTitle(line.getMilestoneTitle())
                             .build())
-                    .allocatedAmount(allocatedAmount.get())
+                    .allocatedAmount(allocatedAmount)
                     .build());
         }
-        return Either.right(milestones);
+        return milestones;
     }
 
     /** Records {@code project}'s allocation as a root-level entry, or nests it under its root's sub-projects. */
@@ -1008,8 +1045,13 @@ public class FundingBulkImportService {
             int allocationsCreated, int allocationsUpdated) {
     }
 
-    /** {@code created} is meaningless when {@code error} is set. */
-    private record EventGroupOutcome(FundingRowError error, int allocationsCreated, int allocationsUpdated, boolean created) {
+    /** {@code created} is meaningless when {@code errors} is non-empty. */
+    private record EventGroupOutcome(List<FundingRowError> errors, int allocationsCreated, int allocationsUpdated, boolean created) {
+    }
+
+    /** An Events-file CSV row paired with its 1-based row number, threaded through group processing so
+     * a validation failure on any row (not just the group's first) can be reported against its own row. */
+    private record IndexedLine(int rowNumber, EventCsvLine line) {
     }
 
     /** The event-level (non-allocation) columns shared by every row in a grouped Events-file event. */
