@@ -782,42 +782,49 @@ public class FundingBulkImportService {
 
         List<EventMilestoneAllocationRequest> milestones = new ArrayList<>();
         for (IndexedLine il : projectLines) {
-            EventCsvLine line = il.line();
-            if (isBlank(line.getMilestoneTitle())) {
-                errors.add(rowError(il.rowNumber(), Problems.badRequest("Milestone Title is required for every allocation row",
-                        ErrorTitleConstants.MILESTONE_FIELDS_REQUIRED)));
-                continue;
-            }
-            // Validation only — the milestone must already exist, this file never creates one.
-            Optional<MilestoneEntity> milestone = milestoneService.findByProjectIdAndMilestoneTitle(project.getId(), line.getMilestoneTitle());
-            if (milestone.isEmpty()) {
-                errors.add(rowError(il.rowNumber(), Problems.milestoneNotFound(line.getMilestoneTitle())));
-                continue;
-            }
-            Either<ProblemDetail, BigDecimal> allocatedAmountE = parseDecimal(line.getAllocatedAmount(), "Allocated Amount");
-            if (allocatedAmountE.isLeft()) {
-                errors.add(rowError(il.rowNumber(), allocatedAmountE.getLeft()));
-                continue;
-            }
-            BigDecimal allocatedAmount = allocatedAmountE.get();
-            if (allocatedAmount == null) {
-                errors.add(rowError(il.rowNumber(), Problems.badRequest("Allocated Amount is required", ErrorTitleConstants.ALLOCATION_AMOUNT_REQUIRED)));
-                continue;
-            }
-            Optional<ProblemDetail> allocationProblem = FundingValidations.allocation(allocatedAmount, milestone.get(), eventType);
-            if (allocationProblem.isPresent()) {
-                errors.add(rowError(il.rowNumber(), allocationProblem.get()));
-                continue;
-            }
-
-            milestones.add(EventMilestoneAllocationRequest.builder()
-                    .milestone(MilestoneCreateRequest.builder()
-                            .milestoneTitle(line.getMilestoneTitle())
-                            .build())
-                    .allocatedAmount(allocatedAmount)
-                    .build());
+            buildMilestoneAllocation(project, il, eventType, errors).ifPresent(milestones::add);
         }
         return milestones;
+    }
+
+    /** Validates a single allocation row, appending to {@code errors} and returning empty if it fails. */
+    private Optional<EventMilestoneAllocationRequest> buildMilestoneAllocation(ProjectEntity project,
+            IndexedLine il, EventType eventType, List<FundingRowError> errors) {
+
+        EventCsvLine line = il.line();
+        if (isBlank(line.getMilestoneTitle())) {
+            errors.add(rowError(il.rowNumber(), Problems.badRequest("Milestone Title is required for every allocation row",
+                    ErrorTitleConstants.MILESTONE_FIELDS_REQUIRED)));
+            return Optional.empty();
+        }
+        // Validation only — the milestone must already exist, this file never creates one.
+        Optional<MilestoneEntity> milestone = milestoneService.findByProjectIdAndMilestoneTitle(project.getId(), line.getMilestoneTitle());
+        if (milestone.isEmpty()) {
+            errors.add(rowError(il.rowNumber(), Problems.milestoneNotFound(line.getMilestoneTitle())));
+            return Optional.empty();
+        }
+        Either<ProblemDetail, BigDecimal> allocatedAmountE = parseDecimal(line.getAllocatedAmount(), "Allocated Amount");
+        if (allocatedAmountE.isLeft()) {
+            errors.add(rowError(il.rowNumber(), allocatedAmountE.getLeft()));
+            return Optional.empty();
+        }
+        BigDecimal allocatedAmount = allocatedAmountE.get();
+        if (allocatedAmount == null) {
+            errors.add(rowError(il.rowNumber(), Problems.badRequest("Allocated Amount is required", ErrorTitleConstants.ALLOCATION_AMOUNT_REQUIRED)));
+            return Optional.empty();
+        }
+        Optional<ProblemDetail> allocationProblem = FundingValidations.allocation(allocatedAmount, milestone.get(), eventType);
+        if (allocationProblem.isPresent()) {
+            errors.add(rowError(il.rowNumber(), allocationProblem.get()));
+            return Optional.empty();
+        }
+
+        return Optional.of(EventMilestoneAllocationRequest.builder()
+                .milestone(MilestoneCreateRequest.builder()
+                        .milestoneTitle(line.getMilestoneTitle())
+                        .build())
+                .allocatedAmount(allocatedAmount)
+                .build());
     }
 
     /** Records {@code project}'s allocation as a root-level entry, or nests it under its root's sub-projects. */
