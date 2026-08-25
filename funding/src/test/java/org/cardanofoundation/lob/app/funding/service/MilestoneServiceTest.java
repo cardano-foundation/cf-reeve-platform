@@ -411,7 +411,7 @@ class MilestoneServiceTest {
     @Test
     void toView_setsCalculatedSpentAmount() {
         MilestoneEntity milestone = milestoneEntity("m1");
-        when(allocationRepository.spentAmountByMilestoneId("m1", EventType.SPENDING, EventType.REFUND))
+        when(allocationRepository.spentAmountByMilestoneId("m1", EventType.SPENDING))
                 .thenReturn(new BigDecimal("12000.00"));
 
         MilestoneView view = milestoneService.toView(milestone);

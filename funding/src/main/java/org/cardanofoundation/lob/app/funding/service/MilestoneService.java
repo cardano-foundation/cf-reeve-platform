@@ -335,7 +335,7 @@ public class MilestoneService {
                 .currency(milestone.getCurrency())
                 .milestoneDate(milestone.getMilestoneDate())
                 .spentAmount(allocationRepository.spentAmountByMilestoneId(
-                        milestone.getId(), EventType.SPENDING, EventType.REFUND))
+                        milestone.getId(), EventType.SPENDING))
                 .build();
     }
 
