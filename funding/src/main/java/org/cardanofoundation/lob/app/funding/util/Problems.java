@@ -67,4 +67,10 @@ public final class Problems {
                         .formatted(projectTitle),
                 ErrorTitleConstants.AMBIGUOUS_PROJECT_REFERENCE);
     }
+
+    public static ProblemDetail fundingEventIdAlreadyUsed(String fundingId) {
+        return conflict(
+                "fundingId %s is already used by another FUNDING event".formatted(fundingId),
+                ErrorTitleConstants.FUNDING_EVENT_FUNDING_ID_ALREADY_USED);
+    }
 }

@@ -307,6 +307,7 @@ public class FundingBulkImportService {
                 .rowNumber(error.getRowNumber())
                 .reason(error.getReason() + ". All changes for project \"" + rootProjectTitle
                         + "\" in this request were rolled back because of this error.")
+                .title(error.getTitle())
                 .build();
     }
 
@@ -1015,12 +1016,12 @@ public class FundingBulkImportService {
                 .fileName(file.getOriginalFilename())
                 .fileType(type)
                 .rowsSucceeded(0)
-                .rowErrors(List.of(FundingRowError.builder().rowNumber(0).reason(problem.getDetail()).build()))
+                .rowErrors(List.of(FundingRowError.builder().rowNumber(0).reason(problem.getDetail()).title(problem.getTitle()).build()))
                 .build();
     }
 
     private static FundingRowError rowError(int rowNumber, ProblemDetail problem) {
-        return FundingRowError.builder().rowNumber(rowNumber).reason(problem.getDetail()).build();
+        return FundingRowError.builder().rowNumber(rowNumber).reason(problem.getDetail()).title(problem.getTitle()).build();
     }
 
     private static FundingRowWarning rowWarning(int rowNumber, String reason) {

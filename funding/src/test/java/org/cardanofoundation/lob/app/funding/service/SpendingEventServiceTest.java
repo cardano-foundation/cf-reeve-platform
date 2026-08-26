@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.funding.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -10,6 +11,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -303,6 +305,151 @@ class SpendingEventServiceTest {
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
 
         assertThat(result.isRight()).isTrue();
+    }
+
+    // --- create/update: Funding ID uniqueness (FUNDING events only) ---
+
+    @Test
+    void create_returnsLeft_whenFundingIdAlreadyUsedByAnotherFundingEvent() {
+        // Checked before allocations are resolved, so no project/milestone stubbing is needed.
+        when(fundingEventRepository.existsByOrganisationIdAndEventTypeAndFundingIdAndIdNot(
+                eq("org1"), eq(EventType.FUNDING), eq("GRANT-2025-001"), anyString())).thenReturn(true);
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(
+                fundingRequest(fundingMilestone("MS-1", ALLOCATED)));
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.FUNDING_EVENT_FUNDING_ID_ALREADY_USED);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_succeeds_whenFundingIdAlreadyUsedButEventIsNotFunding() {
+        // SPENDING/REFUND events are expected to reuse a FUNDING event's Funding ID (they spend
+        // against/refund that grant) — the uniqueness check only ever applies to FUNDING events, so it
+        // is skipped entirely here regardless of what the repository would say.
+        stubExistingProjectAndMilestone("MS-1");
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(
+                spendingRequest(fundingMilestone("MS-1", ALLOCATED)));
+
+        assertThat(result.isRight()).isTrue();
+        verify(fundingEventRepository, never()).existsByOrganisationIdAndEventTypeAndFundingIdAndIdNot(
+                any(), any(), any(), any());
+    }
+
+    @Test
+    void update_excludesTheEventsOwnRecord_fromTheFundingIdUniquenessCheck() {
+        // Re-saving a FUNDING event with its own, unchanged Funding ID must not flag itself.
+        FundingEventEntity existing = eventEntity(EventType.FUNDING, EventStatus.DRAFT);
+        existing.setFundingEntity("Cardano Foundation");
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(existing));
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+        stubExistingProjectAndMilestone("MS-1");
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.update(
+                "e1", fundingRequest(fundingMilestone("MS-1", ALLOCATED)));
+
+        assertThat(result.isRight()).isTrue();
+        verify(fundingEventRepository).existsByOrganisationIdAndEventTypeAndFundingIdAndIdNot(
+                "org1", EventType.FUNDING, "GRANT-2025-001", "e1");
+    }
+
+    @Test
+    void create_returnsLeft_whenSaveViolatesTheFundingIdUniqueConstraint() {
+        // Last-resort safety net: a race that slips past the pre-check above still surfaces as a clean
+        // 409 instead of an unhandled 500 — driven by the raw DB exception, not the pre-check.
+        stubExistingProjectAndMilestone("MS-1");
+        when(fundingEventRepository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException(
+                "duplicate key value violates unique constraint \"uq_funding_event_org_funding_id_funding_type\""));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(
+                fundingRequest(fundingMilestone("MS-1", ALLOCATED)));
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.FUNDING_EVENT_FUNDING_ID_ALREADY_USED);
+    }
+
+    @Test
+    void create_rethrows_whenSaveViolatesAnUnrelatedConstraint() {
+        // A constraint violation unrelated to Funding ID uniqueness is a genuine bug, not a handleable
+        // client error — it must not be silently reinterpreted as a duplicate-Funding-ID conflict.
+        stubExistingProjectAndMilestone("MS-1");
+        DataIntegrityViolationException unrelated = new DataIntegrityViolationException("some other constraint violated");
+        when(fundingEventRepository.saveAndFlush(any())).thenThrow(unrelated);
+
+        assertThatThrownBy(() -> spendingEventService.create(fundingRequest(fundingMilestone("MS-1", ALLOCATED))))
+                .isSameAs(unrelated);
+    }
+
+    @Test
+    void isFundingEventIdAvailable_delegatesToRepository() {
+        when(fundingEventRepository.existsByOrganisationIdAndEventTypeAndFundingIdAndIdNot(
+                "org1", EventType.FUNDING, "GRANT-X", "")).thenReturn(false);
+
+        assertThat(spendingEventService.isFundingEventIdAvailable("org1", "GRANT-X", null)).isTrue();
+    }
+
+    @Test
+    void isFundingEventIdAvailable_false_whenAlreadyUsed() {
+        when(fundingEventRepository.existsByOrganisationIdAndEventTypeAndFundingIdAndIdNot(
+                "org1", EventType.FUNDING, "GRANT-X", "e1")).thenReturn(true);
+
+        assertThat(spendingEventService.isFundingEventIdAvailable("org1", "GRANT-X", "e1")).isFalse();
+    }
+
+    @Test
+    void checkFundingEventIdAvailable_returns401_whenUserCannotAccessOrg() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        var result = spendingEventService.checkFundingEventIdAvailable("org1", "GRANT-X", Optional.empty());
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+    }
+
+    @Test
+    void checkFundingEventIdAvailable_returnsError_whenOrganisationNotFound() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.empty());
+
+        var result = spendingEventService.checkFundingEventIdAvailable("org1", "GRANT-X", Optional.empty());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.ORGANISATION_NOT_FOUND);
+    }
+
+    @Test
+    void checkFundingEventIdAvailable_returnsError_whenFundingIdBlank() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
+
+        var result = spendingEventService.checkFundingEventIdAvailable("org1", "  ", Optional.empty());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.FUNDING_ID_REQUIRED);
+    }
+
+    @Test
+    void checkFundingEventIdAvailable_returnsTrue_whenFree() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
+        when(fundingEventRepository.existsByOrganisationIdAndEventTypeAndFundingIdAndIdNot(
+                "org1", EventType.FUNDING, "GRANT-X", "")).thenReturn(false);
+
+        var result = spendingEventService.checkFundingEventIdAvailable("org1", "GRANT-X", Optional.empty());
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.isAvailable()).isTrue();
+    }
+
+    @Test
+    void checkFundingEventIdAvailable_returnsFalse_andExcludesTheGivenEventId() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
+        when(fundingEventRepository.existsByOrganisationIdAndEventTypeAndFundingIdAndIdNot(
+                "org1", EventType.FUNDING, "GRANT-X", "e1")).thenReturn(true);
+
+        var result = spendingEventService.checkFundingEventIdAvailable("org1", "GRANT-X", Optional.of("e1"));
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.isAvailable()).isFalse();
     }
 
     @Test
