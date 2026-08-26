@@ -192,7 +192,12 @@ public class SpendingEventService {
     public Either<ProblemDetail, FundingEventEntity> create(SpendingEventCreateRequest request) {
         FundingEventEntity event = toEntity(request);
         if (fundingEventRepository.existsById(event.getId())) {
-            return Either.left(Problems.conflict("Event already exists: %s".formatted(event.getId()),
+            // Named by the natural key that actually determines the id (see FundingEventEntity#id) —
+            // the id itself is an opaque hash, meaningless to a user reading the error.
+            String fundingHash = event.getFundingHash() == null ? "(none)" : event.getFundingHash();
+            return Either.left(Problems.conflict(
+                    "An event with Funding ID %s, Type %s, Hash %s and Currency %s already exists".formatted(
+                            event.getFundingId(), event.getEventType(), fundingHash, event.getCurrencyRcy()),
                     ErrorTitleConstants.SPENDING_EVENT_ALREADY_EXISTS));
         }
         return validateAndPersist(event, request);
