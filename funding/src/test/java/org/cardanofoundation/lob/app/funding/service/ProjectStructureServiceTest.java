@@ -37,6 +37,7 @@ class ProjectStructureServiceTest {
     void setUp() {
         projectStructureService = new ProjectStructureService(projectRepository, milestoneService);
         lenient().when(milestoneService.hasMilestones(anyString())).thenReturn(false);
+        lenient().when(milestoneService.isCurrencyRegisteredAndActive(any(), any())).thenReturn(true);
         lenient().when(projectRepository.findByParentProjectId(anyString())).thenReturn(List.of());
         lenient().when(projectRepository.saveAndFlush(any(ProjectEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));

@@ -20,6 +20,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -35,6 +36,8 @@ import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocation
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 import org.cardanofoundation.lob.app.funding.repository.MilestoneRepository;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Currency;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
@@ -50,12 +53,23 @@ class MilestoneServiceTest {
     private KeycloakSecurityHelper keycloakSecurityHelper;
     @Mock
     private FundingCascadeDeleteService cascadeDeleteService;
+    @Mock
+    private OrganisationPublicApiIF organisationPublicApi;
 
     @InjectMocks
     private MilestoneService milestoneService;
 
     private static final Pageable PAGEABLE = PageRequest.of(0, 10);
     private static final LocalDate FUTURE_DATE = LocalDate.now().plusYears(1);
+
+    @BeforeEach
+    void allowAnyCurrencyByDefault() {
+        // Currency codes referenced by these tests (USD, EUR, ...) are registered/active in the org's
+        // currency table by default; tests exercising the rejection path override this per code.
+        Currency activeCurrency = new Currency(new Currency.Id("org1", "x"), "ISO_4217:x", true);
+        lenient().when(organisationPublicApi.findCurrencyByCustomerCurrencyCode(any(), any()))
+                .thenReturn(Optional.of(activeCurrency));
+    }
 
     @Test
     void findById_returnsEmpty_whenNotFound() {
@@ -166,6 +180,8 @@ class MilestoneServiceTest {
     void create_rejected_whenCurrencyIsNotAValidIsoCode() {
         ProjectEntity project = projectEntity("p1");
         when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(organisationPublicApi.findCurrencyByCustomerCurrencyCode(any(), eq("ABC")))
+                .thenReturn(Optional.empty());
 
         MilestoneCreateRequest request = MilestoneCreateRequest.builder()
                 .milestoneTitle("Milestone AB").milestoneAmount(new BigDecimal("50000.00"))
@@ -395,7 +411,7 @@ class MilestoneServiceTest {
     @Test
     void toView_setsCalculatedSpentAmount() {
         MilestoneEntity milestone = milestoneEntity("m1");
-        when(allocationRepository.spentAmountByMilestoneId("m1", EventType.SPENDING, EventType.REFUND))
+        when(allocationRepository.spentAmountByMilestoneId("m1", EventType.SPENDING))
                 .thenReturn(new BigDecimal("12000.00"));
 
         MilestoneView view = milestoneService.toView(milestone);

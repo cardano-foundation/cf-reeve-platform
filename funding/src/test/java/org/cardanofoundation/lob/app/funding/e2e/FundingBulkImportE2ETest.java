@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.funding.e2e;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -43,6 +44,7 @@ import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository
 import org.cardanofoundation.lob.app.funding.repository.MilestoneRepository;
 import org.cardanofoundation.lob.app.funding.service.FundingBulkImportService;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Currency;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
@@ -173,6 +175,11 @@ class FundingBulkImportE2ETest {
     @BeforeEach
     void allowOrganisationAccess() {
         when(keycloakSecurityHelper.canUserAccessOrg(anyString())).thenReturn(true);
+        // Currency codes referenced by these CSVs (USD, EUR, ...) are registered/active in the org's
+        // currency table by default; currencyCode() checks this rather than java.util.Currency.
+        Currency activeCurrency = new Currency(new Currency.Id("org1", "x"), "ISO_4217:x", true);
+        lenient().when(organisationPublicApi.findCurrencyByCustomerCurrencyCode(anyString(), anyString()))
+                .thenReturn(Optional.of(activeCurrency));
     }
 
     @Test
