@@ -44,6 +44,8 @@ import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateReque
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.EventMilestoneAllocationView;
+import org.cardanofoundation.lob.app.funding.domain.view.EventProjectAllocationView;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingBulkImportResult;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingFileImportResult;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
@@ -1543,10 +1545,10 @@ class FundingBulkImportServiceTest {
     }
 
     @Test
-    void eventsFile_twoMilestoneRowsOnSameProjectBothExceedLimit_reportsBothRowErrors() {
-        // Regression test: buildMilestoneAllocations/FundingValidations.allocation used to stop at the
-        // first over-limit row in a project, silently dropping every other bad row from the same event
-        // group's report.
+    void eventsFile_twoMilestoneRowsOnSameProjectBothExceedLimit_reportsBothAsOverspendWarningsAndSucceeds() {
+        // The hard cap against a milestone's budget was removed — a row exceeding it now imports
+        // successfully and is flagged as an overspend warning (traced back to its own CSV row), instead
+        // of failing the row (this replaces a now-obsolete regression test for the old error path).
         MultipartFile file = file("events.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.EVENTS));
         EventCsvLine row1 = eventLine("FUNDING", "GRANT-1", "USD", "Project A", "Milestone One", "25000");
@@ -1561,15 +1563,40 @@ class FundingBulkImportServiceTest {
                 MilestoneEntity.builder().id("m2").milestoneTitle("Milestone Two")
                         .milestoneAmount(new java.math.BigDecimal("20000")).build()));
 
+        SpendingEventView overspendView = SpendingEventView.builder()
+                .eventId("e1")
+                .overspend(true)
+                .projectAllocations(List.of(EventProjectAllocationView.builder()
+                        .projectId("p1")
+                        .overspend(false)
+                        .milestoneAllocations(List.of(
+                                EventMilestoneAllocationView.builder()
+                                        .milestoneId("m1").milestoneTitle("Milestone One")
+                                        .milestoneAmount(new java.math.BigDecimal("20000"))
+                                        .spentAmount(new java.math.BigDecimal("25000"))
+                                        .overspend(true)
+                                        .build(),
+                                EventMilestoneAllocationView.builder()
+                                        .milestoneId("m2").milestoneTitle("Milestone Two")
+                                        .milestoneAmount(new java.math.BigDecimal("20000"))
+                                        .spentAmount(new java.math.BigDecimal("50000"))
+                                        .overspend(true)
+                                        .build()))
+                        .build()))
+                .build();
+        when(spendingEventService.createEvent(any())).thenReturn(overspendView);
+
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
-        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(2);
-        assertThat(result.getFiles().get(0).getRowErrors().get(0).getRowNumber()).isEqualTo(1);
-        assertThat(result.getFiles().get(0).getRowErrors().get(0).getReason()).contains("exceeds the milestone amount");
-        assertThat(result.getFiles().get(0).getRowErrors().get(1).getRowNumber()).isEqualTo(2);
-        assertThat(result.getFiles().get(0).getRowErrors().get(1).getReason()).contains("exceeds the milestone amount");
-        verify(spendingEventService, never()).createEvent(any());
+        assertThat(result.getFiles().get(0).getRowErrors()).isEmpty();
+        assertThat(result.getFiles().get(0).getRowsSucceeded()).isEqualTo(1);
+        assertThat(result.getFiles().get(0).getRowWarnings()).hasSize(2);
+        assertThat(result.getFiles().get(0).getRowWarnings().get(0).getRowNumber()).isEqualTo(1);
+        assertThat(result.getFiles().get(0).getRowWarnings().get(0).getReason()).contains("Milestone One");
+        assertThat(result.getFiles().get(0).getRowWarnings().get(1).getRowNumber()).isEqualTo(2);
+        assertThat(result.getFiles().get(0).getRowWarnings().get(1).getReason()).contains("Milestone Two");
+        verify(spendingEventService, times(1)).createEvent(any());
     }
 
     @Test

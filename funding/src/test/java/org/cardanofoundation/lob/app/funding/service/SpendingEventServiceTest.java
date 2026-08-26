@@ -266,17 +266,24 @@ class SpendingEventServiceTest {
     }
 
     @Test
-    void create_returnsLeft_whenAllocatedAmountExceedsMilestone() {
+    void create_succeeds_whenAllocatedAmountExceedsMilestone() {
+        // The hard cap against the milestone's budget was removed — this now succeeds; overspend is
+        // surfaced in the view layer (see SpendingEventServiceOverspendTest-style toView assertions),
+        // not rejected here.
         stubExistingProjectAndMilestone("MS-1"); // milestone amount 50000
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
-        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(
-                fundingRequest(fundingMilestone("MS-1", new BigDecimal("60000.00"))));
+        SpendingEventCreateRequest request = fundingRequest(fundingMilestone("MS-1", new BigDecimal("60000.00")));
+        request.setAmountRcy(new BigDecimal("60000.00")); // must stay fully allocated (spendFullyAllocated)
 
-        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.ALLOCATION_EXCEEDS_MILESTONE);
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.isRight()).isTrue();
     }
 
     @Test
-    void create_returnsLeft_whenAllocationTotalExceedsProject() {
+    void create_succeeds_whenAllocationTotalExceedsProject() {
+        // The hard cap against the project's total budget was removed — this now succeeds.
         ProjectEntity project = projectEntity(); // total 200000
         MilestoneEntity m1 = milestoneEntityWithAmount("m1", "Milestone One", new BigDecimal("150000.00"));
         MilestoneEntity m2 = milestoneEntityWithAmount("m2", "Milestone Two", new BigDecimal("150000.00"));
@@ -284,16 +291,18 @@ class SpendingEventServiceTest {
         when(projectRepository.findById(any())).thenReturn(Optional.of(project));
         when(milestoneRepository.findById(MilestoneEntity.id(project.getId(), "Milestone One"))).thenReturn(Optional.of(m1));
         when(milestoneRepository.findById(MilestoneEntity.id(project.getId(), "Milestone Two"))).thenReturn(Optional.of(m2));
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         SpendingEventCreateRequest request = fundingRequest(EventProjectAllocationRequest.builder()
                 .externalProjectId("PROJ-AB").projectTitle("Project AB")
                 .milestones(List.of(fundingMilestone("Milestone One", new BigDecimal("150000.00")),
                                     fundingMilestone("Milestone Two", new BigDecimal("150000.00"))))
                 .build());
+        request.setAmountRcy(new BigDecimal("300000.00")); // must stay fully allocated (spendFullyAllocated)
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
 
-        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.ALLOCATION_TOTAL_EXCEEDS_PROJECT);
+        assertThat(result.isRight()).isTrue();
     }
 
     @Test
@@ -420,36 +429,38 @@ class SpendingEventServiceTest {
     }
 
     @Test
-    void create_returnsLeft_whenAmountRcyExceedsMilestoneBudget() {
+    void create_succeeds_whenAmountRcyExceedsMilestoneBudget() {
+        // The hard cap against the milestone's budget was removed — a fully-allocated SPENDING event
+        // that exceeds the milestone's budget (50000) now succeeds instead of being rejected.
         stubExistingProjectAndMilestone("MS-1"); // milestone budget 50000, project 200000
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
-        // amountRcy (60000) exceeds the summed milestone budget (50000); fx stays consistent (60000 * 2 = 120000)
-        SpendingEventCreateRequest request = spendingRequest(fundingMilestone("MS-1", ALLOCATED));
+        SpendingEventCreateRequest request = spendingRequest(fundingMilestone("MS-1", new BigDecimal("60000.00")));
         request.setAmountRcy(new BigDecimal("60000.00"));
         request.setAmountFcy(new BigDecimal("120000.00"));
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
 
-        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_EXCEEDS_MILESTONES);
+        assertThat(result.isRight()).isTrue();
     }
 
     @Test
-    void create_returnsLeft_whenAmountRcyExceedsProjectBudget() {
-        // Milestone with no budget -> milestone cap is lifted, project total (200000) still bounds the spend.
-        ProjectEntity project = projectEntity();
+    void create_succeeds_whenAmountRcyExceedsProjectBudget() {
+        // The hard cap against the project's total budget was removed — this now succeeds.
+        ProjectEntity project = projectEntity(); // total 200000
         MilestoneEntity milestone = milestoneEntityWithAmount("m1", "MS-1", null);
         when(projectRepository.existsById(any())).thenReturn(true);
         when(projectRepository.findById(any())).thenReturn(Optional.of(project));
         when(milestoneRepository.findById(MilestoneEntity.id(project.getId(), "MS-1"))).thenReturn(Optional.of(milestone));
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
-        // amountRcy (250000) exceeds the project total (200000); fx stays consistent (250000 * 2 = 500000)
-        SpendingEventCreateRequest request = spendingRequest(fundingMilestone("MS-1", ALLOCATED));
+        SpendingEventCreateRequest request = spendingRequest(fundingMilestone("MS-1", new BigDecimal("250000.00")));
         request.setAmountRcy(new BigDecimal("250000.00"));
         request.setAmountFcy(new BigDecimal("500000.00"));
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
 
-        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_EXCEEDS_PROJECT);
+        assertThat(result.isRight()).isTrue();
     }
 
     @Test
@@ -888,6 +899,69 @@ class SpendingEventServiceTest {
         assertThat(view.getProjectAllocations()).hasSize(1);
         var mv = view.getProjectAllocations().get(0).getMilestoneAllocations().get(0);
         assertThat(mv.getAllocatedAmount()).isEqualByComparingTo(ALLOCATED);
+    }
+
+    // --- toView: overspend detection (the hard budget cap was removed; overspend is surfaced instead) ---
+
+    @Test
+    void toView_flagsMilestoneAndTopLevelOverspend_whenCumulativeSpendExceedsMilestoneBudget() {
+        FundingEventEntity event = spendingEventEntity();
+        MilestoneEntity milestone = milestoneEntity("m1"); // milestone budget 50000, project total 200000
+        EventMilestoneAllocationEntity alloc = spendingAllocation("e1", "m1");
+        when(milestoneAllocationRepository.findById_EventId("e1")).thenReturn(List.of(alloc));
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        // Cumulative SPENDING against the milestone (incl. this event's own allocation) exceeds its budget.
+        when(milestoneAllocationRepository.spentAmountByMilestoneId("m1", EventType.SPENDING))
+                .thenReturn(new BigDecimal("60000.00"));
+        when(milestoneAllocationRepository.spentAmountByProjectId("p1", EventType.SPENDING))
+                .thenReturn(new BigDecimal("60000.00")); // within the project's 200000 total
+
+        SpendingEventView view = spendingEventService.toView(event);
+
+        var mv = view.getProjectAllocations().get(0).getMilestoneAllocations().get(0);
+        assertThat(mv.getSpentAmount()).isEqualByComparingTo(new BigDecimal("60000.00"));
+        assertThat(mv.isOverspend()).isTrue();
+        var pv = view.getProjectAllocations().get(0);
+        assertThat(pv.isOverspend()).isFalse();
+        assertThat(view.isOverspend()).isTrue();
+    }
+
+    @Test
+    void toView_noOverspend_whenCumulativeSpendWithinBudget() {
+        FundingEventEntity event = spendingEventEntity();
+        MilestoneEntity milestone = milestoneEntity("m1"); // milestone budget 50000, project total 200000
+        EventMilestoneAllocationEntity alloc = spendingAllocation("e1", "m1");
+        when(milestoneAllocationRepository.findById_EventId("e1")).thenReturn(List.of(alloc));
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(milestoneAllocationRepository.spentAmountByMilestoneId("m1", EventType.SPENDING))
+                .thenReturn(ALLOCATED);
+        when(milestoneAllocationRepository.spentAmountByProjectId("p1", EventType.SPENDING))
+                .thenReturn(ALLOCATED);
+
+        SpendingEventView view = spendingEventService.toView(event);
+
+        assertThat(view.getProjectAllocations().get(0).getMilestoneAllocations().get(0).isOverspend()).isFalse();
+        assertThat(view.getProjectAllocations().get(0).isOverspend()).isFalse();
+        assertThat(view.isOverspend()).isFalse();
+    }
+
+    @Test
+    void toView_flagsProjectOverspend_whenCumulativeSpendExceedsProjectBudget() {
+        FundingEventEntity event = spendingEventEntity();
+        MilestoneEntity milestone = milestoneEntity("m1"); // milestone budget 50000, project total 200000
+        EventMilestoneAllocationEntity alloc = spendingAllocation("e1", "m1");
+        when(milestoneAllocationRepository.findById_EventId("e1")).thenReturn(List.of(alloc));
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(milestoneAllocationRepository.spentAmountByMilestoneId("m1", EventType.SPENDING))
+                .thenReturn(ALLOCATED); // within the milestone's own 50000 budget
+        when(milestoneAllocationRepository.spentAmountByProjectId("p1", EventType.SPENDING))
+                .thenReturn(new BigDecimal("210000.00")); // exceeds the project's 200000 total
+
+        SpendingEventView view = spendingEventService.toView(event);
+
+        assertThat(view.getProjectAllocations().get(0).getMilestoneAllocations().get(0).isOverspend()).isFalse();
+        assertThat(view.getProjectAllocations().get(0).isOverspend()).isTrue();
+        assertThat(view.isOverspend()).isTrue();
     }
 
     @Test

@@ -68,4 +68,17 @@ public interface EventMilestoneAllocationRepository extends JpaRepository<EventM
     BigDecimal spentAmountByMilestoneId(@Param("milestoneId") String milestoneId,
                                         @Param("spending") EventType spending);
 
+    /**
+     * Spent amount directly against a project's own milestones (sub-projects are not rolled up here —
+     * a project holds either milestones or sub-projects, never both, so this is exact for a leaf
+     * project): sum of SPENDING allocations only.
+     */
+    @Query("""
+            SELECT COALESCE(SUM(a.allocatedAmount), 0)
+            FROM funding.EventMilestoneAllocationEntity a
+            WHERE a.milestone.project.id = :projectId AND a.event.eventType = :spending
+            """)
+    BigDecimal spentAmountByProjectId(@Param("projectId") String projectId,
+                                       @Param("spending") EventType spending);
+
 }

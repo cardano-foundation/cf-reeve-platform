@@ -88,7 +88,10 @@ public final class FundingValidations {
 
     /**
      * Per-allocation validation: an amount is always required (the event total is the sum of the
-     * allocations), must be positive, and may not exceed its milestone's amount.
+     * allocations) and must be positive. It is deliberately <em>not</em> capped against the
+     * milestone's budget — a SPENDING allocation may push cumulative spend past the milestone's
+     * allocated amount; that overspend is surfaced to the caller (see {@link #isOverspend}) rather
+     * than rejected, so the event still records and publishes normally.
      */
     public static Optional<ProblemDetail> allocation(BigDecimal allocatedAmount, MilestoneEntity milestone, EventType eventType) {
         if (allocatedAmount == null) {
@@ -100,11 +103,6 @@ public final class FundingValidations {
             return Optional.of(Problems.badRequest(
                     "allocatedAmount must be greater than zero",
                     ErrorTitleConstants.ALLOCATION_AMOUNT_INVALID));
-        }
-        if (milestone.getMilestoneAmount() != null && allocatedAmount.compareTo(milestone.getMilestoneAmount()) > 0) {
-            return Optional.of(Problems.badRequest(
-                    "allocatedAmount %s exceeds the milestone amount %s".formatted(allocatedAmount, milestone.getMilestoneAmount()),
-                    ErrorTitleConstants.ALLOCATION_EXCEEDS_MILESTONE));
         }
         return Optional.empty();
     }
@@ -214,36 +212,14 @@ public final class FundingValidations {
     }
 
     /**
-     * A SPENDING event's spend ({@code amountRcy}) may not exceed the combined budget of the milestones
-     * it is booked against, nor the combined budget of the projects it is assigned to. A null budget
-     * (passed as {@code null}) lifts that bound — it cannot be meaningfully enforced.
+     * Whether cumulative spend against a budget — existing SPENDING allocations plus the one being
+     * evaluated — exceeds that budget. Used at both milestone and project level to flag (not reject)
+     * overspend on SPENDING events: the hard cap that used to block submission here was removed, in
+     * favour of surfacing this as a detectable condition in the API response and CSV import result
+     * (UI warning alert, dashboard). A {@code null} budget is unbounded and never flagged.
      */
-    public static Optional<ProblemDetail> eventAmountWithinBudget(EventType eventType, BigDecimal amountRcy,
-            BigDecimal summedMilestoneBudget, BigDecimal summedProjectBudget) {
-        if (eventType != EventType.SPENDING || amountRcy == null) {
-            return Optional.empty();
-        }
-        if (summedMilestoneBudget != null && amountRcy.compareTo(summedMilestoneBudget) > 0) {
-            return Optional.of(Problems.badRequest(
-                    "Event amount %s exceeds the total milestone budget %s".formatted(amountRcy, summedMilestoneBudget),
-                    ErrorTitleConstants.EVENT_AMOUNT_EXCEEDS_MILESTONES));
-        }
-        if (summedProjectBudget != null && amountRcy.compareTo(summedProjectBudget) > 0) {
-            return Optional.of(Problems.badRequest(
-                    "Event amount %s exceeds the total project budget %s".formatted(amountRcy, summedProjectBudget),
-                    ErrorTitleConstants.EVENT_AMOUNT_EXCEEDS_PROJECT));
-        }
-        return Optional.empty();
-    }
-
-    /** The sum of an event's allocations to a single project may not exceed that project's total. */
-    public static Optional<ProblemDetail> allocationTotal(BigDecimal projectAllocatedTotal, ProjectEntity project) {
-        if (project.getTotalAmount() != null && projectAllocatedTotal.compareTo(project.getTotalAmount()) > 0) {
-            return Optional.of(Problems.badRequest(
-                    "Allocated total %s exceeds the project total %s".formatted(projectAllocatedTotal, project.getTotalAmount()),
-                    ErrorTitleConstants.ALLOCATION_TOTAL_EXCEEDS_PROJECT));
-        }
-        return Optional.empty();
+    public static boolean isOverspend(BigDecimal cumulativeSpend, BigDecimal budget) {
+        return budget != null && cumulativeSpend != null && cumulativeSpend.compareTo(budget) > 0;
     }
 
     /**
