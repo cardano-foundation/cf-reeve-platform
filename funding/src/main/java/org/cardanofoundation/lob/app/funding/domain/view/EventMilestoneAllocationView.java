@@ -43,4 +43,12 @@ public class EventMilestoneAllocationView {
     @Schema(example = "2025-06-30")
     private LocalDate milestoneDate;
 
+    @Schema(example = "55000.00",
+            description = "Cumulative SPENDING allocated to this milestone across all events, including this one.")
+    private BigDecimal spentAmount;
+
+    @Schema(example = "true",
+            description = "True when spentAmount exceeds milestoneAmount — a warning condition, not a rejection.")
+    private boolean overspend;
+
 }

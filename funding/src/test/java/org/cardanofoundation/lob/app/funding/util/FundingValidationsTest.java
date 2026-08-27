@@ -129,9 +129,10 @@ class FundingValidationsTest {
     }
 
     @Test
-    void allocation_exceedingMilestone_isRejected() {
-        assertThat(title(FundingValidations.allocation(new BigDecimal("60000"), milestone(new BigDecimal("50000")), EventType.FUNDING)))
-                .isEqualTo(ErrorTitleConstants.ALLOCATION_EXCEEDS_MILESTONE);
+    void allocation_exceedingMilestone_isAllowed() {
+        // The hard cap against the milestone's budget was removed — an allocation may now push
+        // cumulative spend past it; that overspend is surfaced (see isOverspend), not rejected.
+        assertThat(FundingValidations.allocation(new BigDecimal("60000"), milestone(new BigDecimal("50000")), EventType.FUNDING)).isEmpty();
     }
 
     @Test
@@ -328,51 +329,26 @@ class FundingValidationsTest {
                 EventType.REFUND, new BigDecimal("50000"), new BigDecimal("50000.00"))).isEmpty();
     }
 
-    // --- eventAmountWithinBudget(eventType, amountRcy, summedMilestoneBudget, summedProjectBudget) ---
+    // --- isOverspend(cumulativeSpend, budget) ---
 
     @Test
-    void eventAmountWithinBudget_rejected_whenAmountExceedsMilestoneBudget() {
-        assertThat(title(FundingValidations.eventAmountWithinBudget(
-                EventType.SPENDING, new BigDecimal("60000"), new BigDecimal("50000"), new BigDecimal("200000"))))
-                .isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_EXCEEDS_MILESTONES);
+    void isOverspend_true_whenCumulativeExceedsBudget() {
+        assertThat(FundingValidations.isOverspend(new BigDecimal("60000"), new BigDecimal("50000"))).isTrue();
     }
 
     @Test
-    void eventAmountWithinBudget_rejected_whenAmountExceedsProjectBudget() {
-        // milestone budget unknown (null) -> only the project bound applies
-        assertThat(title(FundingValidations.eventAmountWithinBudget(
-                EventType.SPENDING, new BigDecimal("250000"), null, new BigDecimal("200000"))))
-                .isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_EXCEEDS_PROJECT);
+    void isOverspend_false_whenCumulativeEqualsBudget() {
+        assertThat(FundingValidations.isOverspend(new BigDecimal("50000"), new BigDecimal("50000"))).isFalse();
     }
 
     @Test
-    void eventAmountWithinBudget_allowed_whenWithinBothBudgets() {
-        assertThat(FundingValidations.eventAmountWithinBudget(
-                EventType.SPENDING, new BigDecimal("50000"), new BigDecimal("50000"), new BigDecimal("200000"))).isEmpty();
+    void isOverspend_false_whenCumulativeWithinBudget() {
+        assertThat(FundingValidations.isOverspend(new BigDecimal("40000"), new BigDecimal("50000"))).isFalse();
     }
 
     @Test
-    void eventAmountWithinBudget_ignoredForNonSpending() {
-        assertThat(FundingValidations.eventAmountWithinBudget(
-                EventType.FUNDING, new BigDecimal("999999"), new BigDecimal("1"), new BigDecimal("1"))).isEmpty();
-    }
-
-    // --- allocationTotal(sum, project) ---
-
-    @Test
-    void allocationTotal_exceedingProject_isRejected() {
-        assertThat(title(FundingValidations.allocationTotal(new BigDecimal("250000"), project(new BigDecimal("200000")))))
-                .isEqualTo(ErrorTitleConstants.ALLOCATION_TOTAL_EXCEEDS_PROJECT);
-    }
-
-    @Test
-    void allocationTotal_withinProject_isAllowed() {
-        assertThat(FundingValidations.allocationTotal(new BigDecimal("150000"), project(new BigDecimal("200000")))).isEmpty();
-    }
-
-    @Test
-    void allocationTotal_skipped_whenProjectHasNoBudget() {
-        assertThat(FundingValidations.allocationTotal(new BigDecimal("999999"), project(null))).isEmpty();
+    void isOverspend_false_whenBudgetUnknown() {
+        assertThat(FundingValidations.isOverspend(new BigDecimal("999999"), null)).isFalse();
     }
 
     // --- milestones XOR sub-projects ---

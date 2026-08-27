@@ -25,4 +25,8 @@ public class FundingFileImportResult {
     @Builder.Default
     private List<FundingRowError> rowErrors = new ArrayList<>();
 
+    /** Non-blocking conditions on rows that were still persisted — currently only SPENDING budget overspend. */
+    @Builder.Default
+    private List<FundingRowWarning> rowWarnings = new ArrayList<>();
+
 }

@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.funding.e2e;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
@@ -18,6 +19,7 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.ComponentScan.Filter;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.FilterType;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -35,14 +37,19 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import org.cardanofoundation.lob.app.funding.domain.entity.FundingEventEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
+import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
+import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.BulkImportRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingBulkImportResult;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingRowError;
 import org.cardanofoundation.lob.app.funding.job.EventPublishJob;
+import org.cardanofoundation.lob.app.funding.repository.FundingEventRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 import org.cardanofoundation.lob.app.funding.repository.MilestoneRepository;
 import org.cardanofoundation.lob.app.funding.service.FundingBulkImportService;
+import org.cardanofoundation.lob.app.funding.service.SpendingEventService;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Currency;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
@@ -167,6 +174,10 @@ class FundingBulkImportE2ETest {
     private FundingProjectRepository projectRepository;
     @Autowired
     private MilestoneRepository milestoneRepository;
+    @Autowired
+    private FundingEventRepository fundingEventRepository;
+    @Autowired
+    private SpendingEventService spendingEventService;
     @MockitoBean
     private OrganisationPublicApiIF organisationPublicApi;
     @MockitoBean
@@ -347,6 +358,70 @@ class FundingBulkImportE2ETest {
 
         assertThat(reasons(result)).isEmpty();
         assertThat(result.getEventsCreated()).isEqualTo(1);
+    }
+
+    // --- Funding ID uniqueness (FUNDING events only) ---
+
+    @Test
+    void secondFundingEventReusingTheSameFundingId_isRejectedAsARowError_earlierGroupsStillImport() {
+        // A Funding ID must identify a single FUNDING event per organisation — two FUNDING groups in
+        // the same file sharing one (distinguished only by Funding Hash, so they're genuinely different
+        // event groups, not the same event re-sent) must not both succeed. A SPENDING event reusing that
+        // same Funding ID, however, is the normal, expected pattern (it spends against that grant) and
+        // must import cleanly regardless.
+        String orgId = "org-dup-funding-id";
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+        seedProjectAndMilestone(orgId, "Dup Project", "Dup Milestone");
+
+        String csv = """
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
+                FUNDING,GRANT-DUP,hash-1,Cardano Foundation,USD,2026-07-01,,,,,,5000.00,,,Dup Project,,Dup Milestone,5000.00
+                FUNDING,GRANT-DUP,hash-2,Cardano Foundation,USD,2026-07-01,,,,,,3000.00,,,Dup Project,,Dup Milestone,3000.00
+                SPENDING,GRANT-DUP,hash-1,,USD,2026-07-20,Personnel,Vendor AB,4500.00,EUR,0.9,5000.00,,Invoice #1,Dup Project,,Dup Milestone,5000.00
+                """;
+        MultipartFile file = new MockMultipartFile("file", "dup-funding-id.csv", "text/csv", csv.getBytes());
+
+        FundingBulkImportResult result = bulkImportService.importFiles(
+                BulkImportRequest.builder().organisationId(orgId).files(List.of(file)).build());
+
+        List<FundingRowError> rowErrors = result.getFiles().get(0).getRowErrors();
+        assertThat(rowErrors).hasSize(1);
+        assertThat(rowErrors.get(0).getTitle()).isEqualTo("FUNDING_EVENT_FUNDING_ID_ALREADY_USED");
+        assertThat(rowErrors.get(0).getReason()).contains("GRANT-DUP").contains("already used");
+        // The first FUNDING group and the SPENDING group both succeeded — only the second FUNDING group failed.
+        assertThat(result.getEventsCreated()).isEqualTo(2);
+    }
+
+    @Test
+    void uniqueFundingIdConstraint_rejectsADuplicateInsertAtTheDbLevel_bypassingAppLevelChecks() {
+        // The final safety net: even skipping SpendingEventService entirely (as a race between two
+        // concurrent app-level-validated requests would), the raw partial unique index
+        // (uq_funding_event_org_funding_id_funding_type) still rejects a second FUNDING event sharing
+        // an organisation + Funding ID — proving the DB constraint from
+        // V1.7_100_2__unique_funding_id_per_funding_event.sql is actually in effect.
+        String orgId = "org-dup-funding-id-db";
+        FundingEventEntity first = FundingEventEntity.builder()
+                .id(FundingEventEntity.id(orgId, EventType.FUNDING, "GRANT-DB-DUP", "hash-a", "USD"))
+                .eventType(EventType.FUNDING).status(EventStatus.DRAFT).organisationId(orgId)
+                .fundingId("GRANT-DB-DUP").fundingEntity("Cardano Foundation").currencyRcy("USD").build();
+        fundingEventRepository.saveAndFlush(first);
+
+        FundingEventEntity second = FundingEventEntity.builder()
+                .id(FundingEventEntity.id(orgId, EventType.FUNDING, "GRANT-DB-DUP", "hash-b", "USD"))
+                .eventType(EventType.FUNDING).status(EventStatus.DRAFT).organisationId(orgId)
+                .fundingId("GRANT-DB-DUP").fundingEntity("Cardano Foundation").currencyRcy("USD").build();
+
+        assertThatThrownBy(() -> fundingEventRepository.saveAndFlush(second))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("uq_funding_event_org_funding_id_funding_type");
+
+        // SPENDING events reusing the same Funding ID are unaffected by the constraint (it's scoped to
+        // event_type = 'FUNDING' only) — proving the partial index, not a blanket one, is what's in effect.
+        FundingEventEntity spending = FundingEventEntity.builder()
+                .id(FundingEventEntity.id(orgId, EventType.SPENDING, "GRANT-DB-DUP", "hash-a", "USD"))
+                .eventType(EventType.SPENDING).status(EventStatus.DRAFT).organisationId(orgId)
+                .fundingId("GRANT-DB-DUP").currencyRcy("USD").build();
+        assertThat(fundingEventRepository.saveAndFlush(spending)).isNotNull();
     }
 
     @Test

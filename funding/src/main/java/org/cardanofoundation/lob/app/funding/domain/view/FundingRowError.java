@@ -15,4 +15,13 @@ public class FundingRowError {
 
     private String reason;
 
+    /**
+     * The underlying {@code ProblemDetail}'s machine-readable error code (see
+     * {@code ErrorTitleConstants}), when the row failed a validation that carries one — absent for
+     * file-level/parse errors that don't. Lets the frontend map a row error to its approved inline
+     * validation message without pattern-matching {@code reason}, the same way it already does for
+     * single-entry API responses via {@code ProblemDetail.title}.
+     */
+    private String title;
+
 }
