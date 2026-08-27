@@ -425,33 +425,6 @@ class FundingBulkImportE2ETest {
     }
 
     @Test
-    void fundingIdAvailabilityCheck_realTimeApi_reflectsActualDbState() {
-        String orgId = "org-funding-id-check";
-        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(true);
-        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
-        seedProjectAndMilestone(orgId, "Check Project", "Check Milestone");
-
-        assertThat(spendingEventService.checkFundingEventIdAvailable(orgId, "GRANT-CHECK", Optional.empty()).isAvailable())
-                .as("free before any FUNDING event uses it").isTrue();
-
-        String csv = """
-                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
-                FUNDING,GRANT-CHECK,,Cardano Foundation,USD,2026-07-01,,,,,,1000.00,,,Check Project,,Check Milestone,1000.00
-                """;
-        MultipartFile file = new MockMultipartFile("file", "check.csv", "text/csv", csv.getBytes());
-        FundingBulkImportResult result = bulkImportService.importFiles(
-                BulkImportRequest.builder().organisationId(orgId).files(List.of(file)).build());
-        assertThat(reasons(result)).isEmpty();
-
-        String eventId = FundingEventEntity.id(orgId, EventType.FUNDING, "GRANT-CHECK", null, "USD");
-
-        assertThat(spendingEventService.checkFundingEventIdAvailable(orgId, "GRANT-CHECK", Optional.empty()).isAvailable())
-                .as("now used by the FUNDING event just created").isFalse();
-        assertThat(spendingEventService.checkFundingEventIdAvailable(orgId, "GRANT-CHECK", Optional.of(eventId)).isAvailable())
-                .as("excluding the event's own id lets it re-save its own Funding ID unchanged").isTrue();
-    }
-
-    @Test
     void spendingEventSingleRow_missingCategoryVendorAmountColumns_reportsCleanValidationError() {
         when(organisationPublicApi.findByOrganisationId("org-events-single-spending")).thenReturn(Optional.of(new Organisation()));
         seedProjectAndMilestone("org-events-single-spending", "Seed Project Y", "Seed Milestone Y");

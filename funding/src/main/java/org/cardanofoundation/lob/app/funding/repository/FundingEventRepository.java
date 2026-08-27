@@ -18,12 +18,11 @@ public interface FundingEventRepository extends JpaRepository<FundingEventEntity
 
     /**
      * Whether another event (any id but {@code excludeEventId}) already uses this Funding ID for
-     * this organisation and event type — backs the Funding ID uniqueness check (see
-     * {@code SpendingEventService#fundingEventIdAvailable}), which only ever calls this with
+     * this organisation and event type — backs the create/update Funding ID uniqueness pre-check
+     * (see {@code SpendingEventService#fundingEventIdAvailable}), which only ever calls this with
      * {@code eventType = FUNDING}: a SPENDING/REFUND event is expected to reuse a FUNDING event's
-     * Funding ID. {@code excludeEventId} lets an update (or a re-run of the same create) exclude the
-     * event's own row; pass an id that can't match (e.g. an empty string) to check with nothing
-     * excluded.
+     * Funding ID. {@code excludeEventId} lets an update exclude the event's own row; on create it is
+     * the event's not-yet-persisted id, so it can never match and nothing is excluded.
      */
     boolean existsByOrganisationIdAndEventTypeAndFundingIdAndIdNot(
             String organisationId, EventType eventType, String fundingId, String excludeEventId);

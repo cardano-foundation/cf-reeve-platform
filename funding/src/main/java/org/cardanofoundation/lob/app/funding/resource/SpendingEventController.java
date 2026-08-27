@@ -30,7 +30,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
-import org.cardanofoundation.lob.app.funding.domain.view.FundingIdAvailabilityView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.service.SpendingEventService;
@@ -93,28 +92,6 @@ public class SpendingEventController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<List<String>> eventStatuses() {
         return ResponseEntity.ok(Arrays.stream(EventStatus.values()).map(Enum::name).toList());
-    }
-
-    @Operation(
-            summary = "Check whether a Funding ID is available for a FUNDING event",
-            description = "Real-time check for the UI to call as a Funding ID is entered. Covers Funding IDs across " +
-                    "both DRAFT and PUBLISHED FUNDING events (SPENDING/REFUND events are expected to reuse a FUNDING " +
-                    "event's Funding ID, so they never count against this check). Pass `excludeEventId` when editing " +
-                    "an existing event so its own (unchanged) Funding ID does not flag itself.",
-            responses = {
-                    @ApiResponse(responseCode = "200", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
-                            schema = @Schema(implementation = FundingIdAvailabilityView.class))}),
-                    @ApiResponse(responseCode = "400", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
-                            schema = @Schema(implementation = ProblemDetail.class))})
-            }
-    )
-    @GetMapping(value = "/events/funding-id-available", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<FundingIdAvailabilityView> fundingIdAvailable(
-            @RequestParam String organisationId,
-            @RequestParam String fundingId,
-            @RequestParam(required = false) Optional<String> excludeEventId) {
-        return Responses.respond(spendingEventService.checkFundingEventIdAvailable(organisationId, fundingId, excludeEventId), HttpStatus.OK);
     }
 
     @Operation(summary = "Get a single event by ID", responses = {

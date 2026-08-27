@@ -25,7 +25,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
-import org.cardanofoundation.lob.app.funding.domain.view.FundingIdAvailabilityView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.service.SpendingEventService;
@@ -99,29 +98,6 @@ class SpendingEventControllerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).contains("DRAFT", "PUBLISHED");
-    }
-
-    @Test
-    void fundingIdAvailable_returns200_withView() {
-        when(spendingEventService.checkFundingEventIdAvailable("org1", "GRANT-1", Optional.empty()))
-                .thenReturn(FundingIdAvailabilityView.builder().available(true).build());
-
-        ResponseEntity<FundingIdAvailabilityView> response =
-                spendingEventController.fundingIdAvailable("org1", "GRANT-1", Optional.empty());
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody().isAvailable()).isTrue();
-    }
-
-    @Test
-    void fundingIdAvailable_propagatesErrorStatus() {
-        when(spendingEventService.checkFundingEventIdAvailable("org1", "GRANT-1", Optional.empty()))
-                .thenReturn(FundingIdAvailabilityView.error(problem(HttpStatus.BAD_REQUEST, ErrorTitleConstants.FUNDING_ID_REQUIRED)));
-
-        ResponseEntity<FundingIdAvailabilityView> response =
-                spendingEventController.fundingIdAvailable("org1", "GRANT-1", Optional.empty());
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     @Test

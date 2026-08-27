@@ -43,7 +43,6 @@ public final class ErrorTitleConstants {
     public static final String SPENDING_EVENT_NOT_FOUND = "SPENDING_EVENT_NOT_FOUND";
     public static final String SPENDING_EVENT_ALREADY_EXISTS = "SPENDING_EVENT_ALREADY_EXISTS";
     public static final String FUNDING_EVENT_FUNDING_ID_ALREADY_USED = "FUNDING_EVENT_FUNDING_ID_ALREADY_USED";
-    public static final String FUNDING_ID_REQUIRED = "FUNDING_ID_REQUIRED";
     public static final String SPENDING_EVENT_ALREADY_PUBLISHED = "SPENDING_EVENT_ALREADY_PUBLISHED";
     public static final String CURRENCY_CHANGE_HAS_ALLOCATIONS = "CURRENCY_CHANGE_HAS_ALLOCATIONS";
     public static final String EVENT_TYPE_IMMUTABLE = "EVENT_TYPE_IMMUTABLE";

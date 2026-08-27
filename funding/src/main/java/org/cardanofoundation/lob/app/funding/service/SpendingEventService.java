@@ -9,8 +9,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import jakarta.annotation.Nullable;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -76,23 +74,6 @@ public class SpendingEventService {
             return PagedResponse.error(Problems.unauthorized());
         }
         return PagedResponse.of(findByProjectIdAndFilter(projectId, status, eventType, pageable), this::toView);
-    }
-
-    /** Real-time check for the UI to call when a Funding ID is entered on a FUNDING event. */
-    public FundingIdAvailabilityView checkFundingEventIdAvailable(String organisationId, String fundingId,
-            Optional<String> excludeEventId) {
-        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
-            return FundingIdAvailabilityView.error(Problems.unauthorized());
-        }
-        if (organisationPublicApi.findByOrganisationId(organisationId).isEmpty()) {
-            return FundingIdAvailabilityView.error(Problems.organisationNotFound(organisationId));
-        }
-        if (fundingId == null || fundingId.isBlank()) {
-            return FundingIdAvailabilityView.error(Problems.badRequest(
-                    "fundingId is required", ErrorTitleConstants.FUNDING_ID_REQUIRED));
-        }
-        boolean available = isFundingEventIdAvailable(organisationId, fundingId, excludeEventId.orElse(null));
-        return FundingIdAvailabilityView.builder().available(available).build();
     }
 
     public SpendingEventView getEvent(String eventId) {
@@ -307,16 +288,6 @@ public class SpendingEventService {
             return Optional.of(Problems.fundingEventIdAlreadyUsed(event.getFundingId()));
         }
         return Optional.empty();
-    }
-
-    /**
-     * Real-time check for the UI: whether {@code fundingId} is free to use for a FUNDING event in
-     * this organisation. {@code excludeEventId} lets an existing event's own Funding ID pass when
-     * re-saving it unchanged — pass {@code null} when checking a brand-new event.
-     */
-    public boolean isFundingEventIdAvailable(String organisationId, String fundingId, @Nullable String excludeEventId) {
-        return !fundingEventRepository.existsByOrganisationIdAndEventTypeAndFundingIdAndIdNot(
-                organisationId, EventType.FUNDING, fundingId, excludeEventId == null ? "" : excludeEventId);
     }
 
     /** Published events are immutable — returns a conflict built from {@code messageTemplate} otherwise empty. */
