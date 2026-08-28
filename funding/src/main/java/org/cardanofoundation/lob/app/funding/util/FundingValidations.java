@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.funding.util;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -220,6 +221,37 @@ public final class FundingValidations {
      */
     public static boolean isOverspend(BigDecimal cumulativeSpend, BigDecimal budget) {
         return budget != null && cumulativeSpend != null && cumulativeSpend.compareTo(budget) > 0;
+    }
+
+    /**
+     * Whether allocating to a milestone as FUNDING would push cumulative FUNDING (existing FUNDING
+     * allocations plus this one) past the milestone's budgeted amount. Unlike {@link #isOverspend}
+     * (SPENDING, allowed and only flagged), over-funding is rejected outright: a milestone may never
+     * be committed more funding than it was budgeted for. Only applies to FUNDING events — SPENDING
+     * is handled by {@link #isOverspend} and REFUND is left unrestricted. A null budget is unbounded
+     * and never rejected.
+     */
+    public static Optional<ProblemDetail> overfunding(EventType eventType, BigDecimal cumulativeFunded, MilestoneEntity milestone) {
+        if (eventType != EventType.FUNDING || milestone.getMilestoneAmount() == null || cumulativeFunded == null) {
+            return Optional.empty();
+        }
+        if (cumulativeFunded.compareTo(milestone.getMilestoneAmount()) > 0) {
+            return Optional.of(Problems.badRequest(
+                    "Milestone '%s' cumulative funding %s exceeds its budget %s".formatted(
+                            milestone.getMilestoneTitle(), formatAmount(cumulativeFunded), formatAmount(milestone.getMilestoneAmount())),
+                    ErrorTitleConstants.MILESTONE_OVERFUNDED));
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Rounds an amount to 2 decimal places for display in a validation message — the underlying
+     * high-precision BigDecimal columns otherwise print with a long trail of zeros (e.g.
+     * {@code 11.0000000000}), which reaches the caller verbatim since this text is never reformatted
+     * downstream (see {@code FundingBulkImportService}'s identical helper for the CSV warning path).
+     */
+    private static String formatAmount(BigDecimal amount) {
+        return amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 
     /**

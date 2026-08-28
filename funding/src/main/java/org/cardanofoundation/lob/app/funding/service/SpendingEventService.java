@@ -459,6 +459,24 @@ public class SpendingEventService {
     }
 
     /**
+     * See {@link FundingValidations#overfunding} — only queries the DB when the event is FUNDING. On
+     * an update, the event's own prior allocations are cleared and flushed before {@code populateNode}
+     * runs (see {@link #update}), so the queried amount always reflects <em>other</em> events only —
+     * never double-counts the event being saved. This is deliberately not duplicated as a per-row
+     * precheck in {@code FundingBulkImportService} — see the comment in its {@code
+     * buildMilestoneAllocation} — since only this post-clear query can exclude the event's own prior
+     * allocations correctly.
+     */
+    private Optional<ProblemDetail> overfundingProblem(EventType eventType, MilestoneEntity milestone, BigDecimal allocatedAmount) {
+        if (eventType != EventType.FUNDING) {
+            return Optional.empty();
+        }
+        BigDecimal cumulativeFunded = milestoneAllocationRepository.spentAmountByMilestoneId(milestone.getId(), EventType.FUNDING)
+                .add(allocatedAmount != null ? allocatedAmount : BigDecimal.ZERO);
+        return FundingValidations.overfunding(eventType, cumulativeFunded, milestone);
+    }
+
+    /**
      * Recursively attaches an allocation node to the event, mirroring the create-project endpoint's tree:
      * a node resolves/creates <em>either</em> its milestones (each carrying an allocated amount)
      * <em>or</em> its sub-projects (never both).
@@ -493,6 +511,9 @@ public class SpendingEventService {
                 Optional<ProblemDetail> allocationProblem = FundingValidations.allocation(
                         milestoneReq.getAllocatedAmount(), milestone, event.getEventType());
                 if (allocationProblem.isPresent()) return allocationProblem;
+
+                Optional<ProblemDetail> overfundingProblem = overfundingProblem(event.getEventType(), milestone, milestoneReq.getAllocatedAmount());
+                if (overfundingProblem.isPresent()) return overfundingProblem;
 
                 event.getMilestoneAllocations().add(EventMilestoneAllocationEntity.builder()
                         .id(new EventMilestoneAllocationEntity.Id(event.getId(), milestone.getId()))

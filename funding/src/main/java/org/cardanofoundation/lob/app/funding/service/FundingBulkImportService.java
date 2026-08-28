@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.funding.service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -696,17 +697,25 @@ public class FundingBulkImportService {
             if (pv.isOverspend()) {
                 int rowNumber = projectRowNumbers.getOrDefault(pv.getProjectId(), fallbackRowNumber);
                 warnings.add(rowWarning(rowNumber, "Project '%s' cumulative spend %s exceeds its budget %s"
-                        .formatted(pv.getProjectTitle(), pv.getSpentAmount(), pv.getTotalAmount())));
+                        .formatted(pv.getProjectTitle(), formatAmount(pv.getSpentAmount()), formatAmount(pv.getTotalAmount()))));
             }
             for (EventMilestoneAllocationView mv : pv.getMilestoneAllocations()) {
                 if (mv.isOverspend()) {
                     int rowNumber = milestoneRowNumbers.getOrDefault(mv.getMilestoneId(), fallbackRowNumber);
                     warnings.add(rowWarning(rowNumber, "Milestone '%s' cumulative spend %s exceeds its budget %s"
-                            .formatted(mv.getMilestoneTitle(), mv.getSpentAmount(), mv.getMilestoneAmount())));
+                            .formatted(mv.getMilestoneTitle(), formatAmount(mv.getSpentAmount()), formatAmount(mv.getMilestoneAmount()))));
                 }
             }
         }
         return warnings;
+    }
+
+    /**
+     * Rounds an amount to 2 decimal places for display in warning messages, avoiding the
+     * long trailing zeros that the underlying high-precision BigDecimal columns carry.
+     */
+    private static String formatAmount(BigDecimal amount) {
+        return amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 
     private static String eventKey(EventCsvLine line) {
@@ -873,6 +882,13 @@ public class FundingBulkImportService {
             errors.add(rowError(il.rowNumber(), allocationProblem.get()));
             return Optional.empty();
         }
+        // Over-funding (FUNDING pushing cumulative funding past a milestone's budget) is deliberately
+        // not checked here — it's cumulative across every FUNDING event on the milestone, including
+        // this one's own prior allocations on an update, which only SpendingEventService can account
+        // for correctly (it excludes them by clearing and flushing before re-validating; see its
+        // populateNode). It's a cross-row, event-level rule like spendFullyAllocated/eventTotal below:
+        // left to that single create/update call and reported as one row error via its returned
+        // ProblemDetail, not duplicated here per row.
 
         return Optional.of(EventMilestoneAllocationRequest.builder()
                 .milestone(MilestoneCreateRequest.builder()
