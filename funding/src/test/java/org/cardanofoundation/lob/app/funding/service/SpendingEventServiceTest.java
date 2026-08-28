@@ -275,8 +275,8 @@ class SpendingEventServiceTest {
 
     @Test
     void create_succeeds_whenSpendingAllocatedAmountExceedsMilestone() {
-        // The hard cap against the milestone's budget was removed for SPENDING — this now succeeds;
-        // overspend is surfaced in the view layer, not rejected here. FUNDING is different — see
+        // The hard cap against the milestone's budget was removed for SPENDING, so this now succeeds.
+        // Overspend is surfaced in the view layer, not rejected here. FUNDING is different — see
         // create_rejectsFundingAllocation_whenItExceedsTheMilestoneBudget below.
         stubExistingProjectAndMilestone("MS-1"); // milestone amount 50000
         when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
