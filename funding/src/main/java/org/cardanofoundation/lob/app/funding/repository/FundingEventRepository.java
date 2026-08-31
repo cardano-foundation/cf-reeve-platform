@@ -2,10 +2,15 @@ package org.cardanofoundation.lob.app.funding.repository;
 
 import java.util.Set;
 
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.FundingEventEntity;
@@ -54,6 +59,10 @@ public interface FundingEventRepository extends JpaRepository<FundingEventEntity
             @Param("eventType") EventType eventType,
             Pageable pageable);
 
+    // Atomic claim read: FOR UPDATE SKIP LOCKED (lock timeout -2) so concurrent job instances never pick up
+    // the same events; must run inside the transaction that also flips ledgerDispatchStatus to DISPATCHED.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "-2"))
     @Query("""
             SELECT e FROM funding.FundingEventEntity e
             WHERE e.ledgerDispatchApproved IS TRUE
