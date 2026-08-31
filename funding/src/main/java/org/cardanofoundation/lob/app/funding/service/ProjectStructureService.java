@@ -80,7 +80,7 @@ public class ProjectStructureService {
 
         BigDecimal otherSubProjectsTotal = FundingValidations.sumProjectTotals(
                 projectRepository.findByParentProjectId(parent.getId()), null);
-        Optional<ProblemDetail> subAmount = FundingValidations.subProjectAmount(totalAmount, parent, otherSubProjectsTotal);
+        Optional<ProblemDetail> subAmount = FundingValidations.subProjectAmount(totalAmount, projectTitle, parent, otherSubProjectsTotal);
         if (subAmount.isPresent()) {
             return Either.left(subAmount.get());
         }

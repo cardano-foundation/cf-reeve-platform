@@ -18,11 +18,13 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 class FundingValidationsTest {
 
     private ProjectEntity project(BigDecimal total) {
-        return ProjectEntity.builder().id("p1").organisationId("org1").totalAmount(total).currency("USD").build();
+        return ProjectEntity.builder().id("p1").organisationId("org1").projectTitle("Parent Project").totalAmount(total).currency("USD").build();
     }
 
     private MilestoneEntity milestone(BigDecimal amount) {
-        return MilestoneEntity.builder().id("m1").milestoneAmount(amount).currency("USD").build();
+        return MilestoneEntity.builder().id("m1").milestoneAmount(amount).currency("USD")
+                .project(ProjectEntity.builder().id("p2").projectTitle("Test Project").currency("USD").build())
+                .build();
     }
 
     private String title(Optional<ProblemDetail> p) {
@@ -184,9 +186,10 @@ class FundingValidationsTest {
     void eventCurrencyMatchesMilestone_mismatched_isRejected() {
         Optional<ProblemDetail> problem = FundingValidations.eventCurrencyMatchesMilestone("EUR", milestone(new BigDecimal("50000")));
         assertThat(title(problem)).isEqualTo(ErrorTitleConstants.EVENT_CURRENCY_MISMATCH);
-        // The message must point at the project currency, not just the milestone — a milestone's
-        // currency is always inherited from its project, so that's the field the user actually set.
-        assertThat(detail(problem)).contains("project currency");
+        // The message must name which project's currency it is, not just the milestone — a milestone's
+        // currency is always inherited from its project, and titles aren't globally unique, so the
+        // project name is what actually lets the user act on it.
+        assertThat(detail(problem)).contains("Test Project").contains("EUR").contains("USD");
     }
 
     @Test
@@ -396,18 +399,22 @@ class FundingValidationsTest {
         assertThat(FundingValidations.projectAmount(null)).isEmpty();
     }
 
-    // --- subProjectAmount(childTotal, parent, otherSubProjectsTotal) ---
+    // --- subProjectAmount(childTotal, childTitle, parent, otherSubProjectsTotal) ---
 
     @Test
     void subProjectAmount_valid_returnsEmpty() {
-        assertThat(FundingValidations.subProjectAmount(new BigDecimal("200000"), project(new BigDecimal("500000")), BigDecimal.ZERO))
+        assertThat(FundingValidations.subProjectAmount(new BigDecimal("200000"), "Child Project", project(new BigDecimal("500000")), BigDecimal.ZERO))
                 .isEmpty();
     }
 
     @Test
     void subProjectAmount_childExceedsParent_isRejected() {
-        assertThat(title(FundingValidations.subProjectAmount(new BigDecimal("600000"), project(new BigDecimal("500000")), BigDecimal.ZERO)))
-                .isEqualTo(ErrorTitleConstants.SUBPROJECT_AMOUNT_EXCEEDS_PARENT);
+        Optional<ProblemDetail> problem = FundingValidations.subProjectAmount(
+                new BigDecimal("600000"), "Child Project", project(new BigDecimal("500000")), BigDecimal.ZERO);
+        assertThat(title(problem)).isEqualTo(ErrorTitleConstants.SUBPROJECT_AMOUNT_EXCEEDS_PARENT);
+        // The message must name both projects involved, not just the amounts — that's what lets the
+        // user act on it without guessing which sub-project/parent pair is at fault.
+        assertThat(detail(problem)).contains("Child Project").contains("Parent Project");
     }
 
     @Test
@@ -415,25 +422,29 @@ class FundingValidationsTest {
         // A budget round-tripped through a high-precision DB column carries a long trail of zeros
         // (e.g. 50000000.0000000000) that must not leak into a user-facing message verbatim.
         Optional<ProblemDetail> problem = FundingValidations.subProjectAmount(
-                new BigDecimal("600000.0000000000"), project(new BigDecimal("500000.0000000000")), BigDecimal.ZERO);
+                new BigDecimal("600000.0000000000"), "Child Project", project(new BigDecimal("500000.0000000000")), BigDecimal.ZERO);
         assertThat(detail(problem)).contains("600000.00").contains("500000.00").doesNotContain("0000000000");
     }
 
     @Test
     void subProjectAmount_cumulativeExceedsParent_isRejected() {
         // child (300000) fits, but together with existing sub-projects (300000) it exceeds the parent (500000)
-        assertThat(title(FundingValidations.subProjectAmount(new BigDecimal("300000"), project(new BigDecimal("500000")), new BigDecimal("300000"))))
-                .isEqualTo(ErrorTitleConstants.SUBPROJECT_TOTAL_EXCEEDS_PARENT);
+        Optional<ProblemDetail> problem = FundingValidations.subProjectAmount(
+                new BigDecimal("300000"), "Child Project", project(new BigDecimal("500000")), new BigDecimal("300000"));
+        assertThat(title(problem)).isEqualTo(ErrorTitleConstants.SUBPROJECT_TOTAL_EXCEEDS_PARENT);
+        assertThat(detail(problem)).contains("Child Project").contains("Parent Project");
     }
 
     @Test
     void subProjectAmount_skipped_whenParentHasNoBudget() {
-        assertThat(FundingValidations.subProjectAmount(new BigDecimal("999999"), project(null), new BigDecimal("999999"))).isEmpty();
+        assertThat(FundingValidations.subProjectAmount(new BigDecimal("999999"), "Child Project", project(null), new BigDecimal("999999")))
+                .isEmpty();
     }
 
     @Test
     void subProjectAmount_skipped_whenChildHasNoBudget() {
-        assertThat(FundingValidations.subProjectAmount(null, project(new BigDecimal("500000")), BigDecimal.ZERO)).isEmpty();
+        assertThat(FundingValidations.subProjectAmount(null, "Child Project", project(new BigDecimal("500000")), BigDecimal.ZERO))
+                .isEmpty();
     }
 
     // --- projectTotalCoversChildren(newTotal, milestonesTotal, subProjectsTotal) ---

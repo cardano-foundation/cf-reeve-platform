@@ -124,8 +124,8 @@ public final class FundingValidations {
         if (eventCurrencyRcy != null && milestone.getCurrency() != null
                 && !eventCurrencyRcy.equals(milestone.getCurrency())) {
             return Optional.of(Problems.badRequest(
-                    "Currency RCY %s does not match the project currency %s for milestone '%s'".formatted(
-                            eventCurrencyRcy, milestone.getCurrency(), milestone.getMilestoneTitle()),
+                    "Currency RCY %s does not match the currency %s of %s, milestone '%s'".formatted(
+                            eventCurrencyRcy, milestone.getCurrency(), quotedProjectPath(milestone.getProject()), milestone.getMilestoneTitle()),
                     ErrorTitleConstants.EVENT_CURRENCY_MISMATCH));
         }
         return Optional.empty();
@@ -259,27 +259,54 @@ public final class FundingValidations {
     }
 
     /**
+     * Human-readable label identifying a project unambiguously: {@code "project 'X'"} for a root
+     * project, or {@code "sub-project 'X' of project 'Y'"} for a sub-project. A sub-project's title
+     * (like a milestone's) is only unique within its parent's scope — two different root projects can
+     * each have a sub-project called "Phase 1" — so naming just the leaf title in an error message
+     * isn't enough for the user to tell which one is meant; this always includes the full path.
+     */
+    public static String projectPath(ProjectEntity project) {
+        return project.getParentProject() != null
+                ? "sub-project '%s' of project '%s'".formatted(project.getProjectTitle(), project.getParentProject().getProjectTitle())
+                : "project '%s'".formatted(project.getProjectTitle());
+    }
+
+    /**
+     * Same idea as {@link #projectPath}, but without the "project"/"sub-project" labels — just the
+     * quoted title(s) — for messages that already establish what kind of thing is being named (e.g.
+     * a currency mismatch, where "project"/"sub-project" would read as noise next to "milestone").
+     */
+    private static String quotedProjectPath(ProjectEntity project) {
+        return project.getParentProject() != null
+                ? "'%s' of '%s'".formatted(project.getProjectTitle(), project.getParentProject().getProjectTitle())
+                : "'%s'".formatted(project.getProjectTitle());
+    }
+
+    /**
      * Validates a project's budget when it is attached under a parent as a sub-project: the
      * sub-project's total may not exceed the parent's total, and the parent's sub-projects' totals
      * may not sum to more than the parent's total. {@code otherSubProjectsTotal} is the summed total
      * of the parent's <em>other</em> sub-projects (excluding the one being attached). Checks are
      * skipped when either budget is absent (a parent or sub-project without a {@code totalAmount}).
+     * {@code childTitle} names the sub-project being attached, so the message pinpoints exactly which
+     * project and which sub-project are involved instead of leaving the caller to infer it.
      */
-    public static Optional<ProblemDetail> subProjectAmount(BigDecimal childTotal, ProjectEntity parent, BigDecimal otherSubProjectsTotal) {
+    public static Optional<ProblemDetail> subProjectAmount(BigDecimal childTotal, String childTitle,
+            ProjectEntity parent, BigDecimal otherSubProjectsTotal) {
         if (parent.getTotalAmount() == null || childTotal == null) {
             return Optional.empty();
         }
         if (childTotal.compareTo(parent.getTotalAmount()) > 0) {
             return Optional.of(Problems.badRequest(
-                    "Sub-project total %s exceeds the parent project total %s".formatted(
-                            formatAmount(childTotal), formatAmount(parent.getTotalAmount())),
+                    "Sub-project '%s' total %s exceeds project '%s' total %s".formatted(
+                            childTitle, formatAmount(childTotal), parent.getProjectTitle(), formatAmount(parent.getTotalAmount())),
                     ErrorTitleConstants.SUBPROJECT_AMOUNT_EXCEEDS_PARENT));
         }
         BigDecimal cumulative = otherSubProjectsTotal.add(childTotal);
         if (cumulative.compareTo(parent.getTotalAmount()) > 0) {
             return Optional.of(Problems.badRequest(
-                    "Sub-projects total %s exceeds the parent project total %s".formatted(
-                            formatAmount(cumulative), formatAmount(parent.getTotalAmount())),
+                    "Sub-projects total %s (including sub-project '%s') exceeds project '%s' total %s".formatted(
+                            formatAmount(cumulative), childTitle, parent.getProjectTitle(), formatAmount(parent.getTotalAmount())),
                     ErrorTitleConstants.SUBPROJECT_TOTAL_EXCEEDS_PARENT));
         }
         return Optional.empty();

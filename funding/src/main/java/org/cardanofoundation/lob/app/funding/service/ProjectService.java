@@ -276,7 +276,8 @@ public class ProjectService {
                 ProjectEntity parent = project.getParentProject();
                 BigDecimal otherSubProjectsTotal = FundingValidations.sumProjectTotals(
                         projectRepository.findByParentProjectId(parent.getId()), project.getId());
-                Optional<ProblemDetail> fit = FundingValidations.subProjectAmount(effectiveTotal, parent, otherSubProjectsTotal);
+                Optional<ProblemDetail> fit = FundingValidations.subProjectAmount(
+                        effectiveTotal, project.getProjectTitle(), parent, otherSubProjectsTotal);
                 if (fit.isPresent()) {
                     return ProjectView.error(fit.get());
                 }
@@ -359,7 +360,7 @@ public class ProjectService {
         BigDecimal otherSubProjectsTotal = FundingValidations.sumProjectTotals(
                 projectRepository.findByParentProjectId(parent.getId()), project.getId());
         Optional<ProblemDetail> amountProblem = FundingValidations.subProjectAmount(
-                effectiveTotal, parent, otherSubProjectsTotal);
+                effectiveTotal, project.getProjectTitle(), parent, otherSubProjectsTotal);
         if (amountProblem.isPresent()) {
             return amountProblem;
         }

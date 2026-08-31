@@ -869,12 +869,14 @@ public class FundingBulkImportService {
             // distinctly (rather than the generic not-found) is what actually points the user at the fix.
             if (isBlank(line.getSubProjectTitle()) && projectRepository.existsByParentProjectId(project.getId())) {
                 errors.add(rowError(il.rowNumber(), Problems.badRequest(
-                        "Project '%s' organises milestones under sub-projects; set Sub Project Title to name the one that owns milestone '%s'"
-                                .formatted(project.getProjectTitle(), line.getMilestoneTitle()),
+                        "%s organises milestones under sub-projects; set Sub Project Title to name the sub-project that owns milestone '%s'"
+                                .formatted(capitalize(FundingValidations.projectPath(project)), line.getMilestoneTitle()),
                         ErrorTitleConstants.SUBPROJECT_TITLE_REQUIRED)));
                 return Optional.empty();
             }
-            errors.add(rowError(il.rowNumber(), Problems.milestoneNotFound(line.getMilestoneTitle())));
+            errors.add(rowError(il.rowNumber(), Problems.notFound(
+                    "Milestone '%s' not found under %s".formatted(line.getMilestoneTitle(), FundingValidations.projectPath(project)),
+                    ErrorTitleConstants.MILESTONE_NOT_FOUND)));
             return Optional.empty();
         }
         milestoneRowNumbers.put(milestone.get().getId(), il.rowNumber());
@@ -1057,6 +1059,11 @@ public class FundingBulkImportService {
 
     private static boolean isBlank(String s) {
         return s == null || s.isBlank();
+    }
+
+    /** Upper-cases the first character only, for {@link FundingValidations#projectPath} at the start of a sentence. */
+    private static String capitalize(String s) {
+        return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
 
     private static String blankToNull(String s) {
