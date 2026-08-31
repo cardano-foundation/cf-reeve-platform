@@ -51,19 +51,19 @@ public final class Problems {
     }
 
     public static ProblemDetail projectReferenceNotFound(String projectTitle) {
-        return notFound("Project not found for projectTitle: %s".formatted(projectTitle),
+        return notFound("Project '%s' not found".formatted(projectTitle),
                 ErrorTitleConstants.PROJECT_REFERENCE_NOT_FOUND);
     }
 
     public static ProblemDetail subProjectReferenceNotFound(String projectTitle, String subProjectTitle) {
-        return notFound("Sub-project not found for Sub Project Title: %s under Project Title (root): %s"
+        return notFound("Sub-project '%s' not found under project '%s'"
                         .formatted(subProjectTitle, projectTitle),
                 ErrorTitleConstants.SUBPROJECT_REFERENCE_NOT_FOUND);
     }
 
     public static ProblemDetail ambiguousProjectReference(String projectTitle) {
         return badRequest(
-                "projectTitle %s matches more than one project in this organisation; set Sub Project Title to name a specific one"
+                "Project '%s' matches more than one project in this organisation; set Sub Project Title to name a specific one"
                         .formatted(projectTitle),
                 ErrorTitleConstants.AMBIGUOUS_PROJECT_REFERENCE);
     }

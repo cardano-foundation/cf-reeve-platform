@@ -191,7 +191,7 @@ public class SpendingEventService {
 
         FundingEventEntity event = eventOrError.get();
 
-        Optional<ProblemDetail> draftProblem = requireDraft(event, "Cannot update a published event: %s");
+        Optional<ProblemDetail> draftProblem = requireDraft(event, "Cannot update event with Funding ID %s: it is already published");
         if (draftProblem.isPresent()) return Either.left(draftProblem.get());
 
         // The event's identity — organisation and type — is fixed at creation; the update payload
@@ -293,7 +293,9 @@ public class SpendingEventService {
     /** Published events are immutable — returns a conflict built from {@code messageTemplate} otherwise empty. */
     private static Optional<ProblemDetail> requireDraft(FundingEventEntity event, String messageTemplate) {
         if (event.getStatus() == EventStatus.PUBLISHED) {
-            String message = messageTemplate.formatted(event.getId());
+            // Funding ID is the identifier the user actually recognises — event.getId() is an opaque
+            // internal hash that means nothing to someone reading the error (e.g. from a CSV re-upload).
+            String message = messageTemplate.formatted(event.getFundingId());
             log.warn(message);
             return Optional.of(Problems.conflict(message, ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED));
         }
@@ -330,7 +332,7 @@ public class SpendingEventService {
         if (eventOrError.isLeft()) return eventOrError;
 
         FundingEventEntity event = eventOrError.get();
-        Optional<ProblemDetail> draftProblem = requireDraft(event, "Event is already published: %s");
+        Optional<ProblemDetail> draftProblem = requireDraft(event, "Event with Funding ID %s is already published");
         if (draftProblem.isPresent()) return Either.left(draftProblem.get());
 
         event.setStatus(EventStatus.PUBLISHED);
@@ -344,7 +346,7 @@ public class SpendingEventService {
         if (eventOrError.isLeft()) return Either.left(eventOrError.getLeft());
 
         FundingEventEntity event = eventOrError.get();
-        Optional<ProblemDetail> draftProblem = requireDraft(event, "Cannot delete a published event: %s");
+        Optional<ProblemDetail> draftProblem = requireDraft(event, "Cannot delete event with Funding ID %s: it is already published");
         if (draftProblem.isPresent()) return Either.left(draftProblem.get());
 
         fundingEventRepository.delete(event);
