@@ -1546,13 +1546,14 @@ class FundingBulkImportServiceTest {
 
     @Test
     void eventsFile_twoMilestoneRowsOnSameProjectBothExceedLimit_reportsBothAsOverspendWarningsAndSucceeds() {
-        // The hard cap against a milestone's budget was removed — a row exceeding it now imports
-        // successfully and is flagged as an overspend warning (traced back to its own CSV row), instead
-        // of failing the row (this replaces a now-obsolete regression test for the old error path).
+        // The hard cap against a milestone's budget was removed for SPENDING — a row exceeding it now
+        // imports successfully and is flagged as an overspend warning (traced back to its own CSV row),
+        // instead of failing the row (this replaces a now-obsolete regression test for the old error
+        // path). FUNDING is different — see eventsFile_fundingRowExceedingMilestoneBudget_isDroppedAsRowError.
         MultipartFile file = file("events.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.EVENTS));
-        EventCsvLine row1 = eventLine("FUNDING", "GRANT-1", "USD", "Project A", "Milestone One", "25000");
-        EventCsvLine row2 = eventLine("FUNDING", "GRANT-1", "USD", "Project A", "Milestone Two", "50000");
+        EventCsvLine row1 = eventLine("SPENDING", "GRANT-1", "USD", "Project A", "Milestone One", "25000");
+        EventCsvLine row2 = eventLine("SPENDING", "GRANT-1", "USD", "Project A", "Milestone Two", "50000");
         when(eventCsvParser.parseCsv(file, EventCsvLine.class)).thenReturn(Either.right(List.of(row1, row2)));
         when(projectRepository.findByOrganisationIdAndProjectTitle(ORG_ID, "Project A"))
                 .thenReturn(List.of(projectEntity("p1", "Project A", "USD")));
@@ -1597,6 +1598,34 @@ class FundingBulkImportServiceTest {
         assertThat(result.getFiles().get(0).getRowWarnings().get(1).getRowNumber()).isEqualTo(2);
         assertThat(result.getFiles().get(0).getRowWarnings().get(1).getReason()).contains("Milestone Two");
         verify(spendingEventService, times(1)).createEvent(any());
+    }
+
+    @Test
+    void eventsFile_fundingEventRejectedAsOverfunded_isDroppedAsRowError() {
+        // Unlike SPENDING (overspend allowed, only flagged), a FUNDING event that would push
+        // cumulative funding past a milestone's budget is rejected outright by SpendingEventService
+        // (see SpendingEventServiceTest); the whole CSV group is dropped like any other event-level
+        // failure — not persisted, not a warning — via the same generic error path exercised by
+        // eventsFile_businessValidationError_isReportedAsRowError above.
+        MultipartFile file = file("events.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.EVENTS));
+        EventCsvLine row = eventLine("FUNDING", "GRANT-1", "USD", "Project A", "Milestone One", "25000");
+        when(eventCsvParser.parseCsv(file, EventCsvLine.class)).thenReturn(Either.right(List.of(row)));
+        when(projectRepository.findByOrganisationIdAndProjectTitle(ORG_ID, "Project A"))
+                .thenReturn(List.of(projectEntity("p1", "Project A", "USD")));
+        when(milestoneService.findByProjectIdAndMilestoneTitle("p1", "Milestone One")).thenReturn(Optional.of(
+                MilestoneEntity.builder().id("m1").milestoneTitle("Milestone One")
+                        .milestoneAmount(new java.math.BigDecimal("20000")).build()));
+        when(spendingEventService.createEvent(any()))
+                .thenReturn(SpendingEventView.error(problem(HttpStatus.BAD_REQUEST, ErrorTitleConstants.MILESTONE_OVERFUNDED)));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getEventsCreated()).isZero();
+        assertThat(result.getFiles().get(0).getRowsSucceeded()).isZero();
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_OVERFUNDED);
     }
 
     @Test

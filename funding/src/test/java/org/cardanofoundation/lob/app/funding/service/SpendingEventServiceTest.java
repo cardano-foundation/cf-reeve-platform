@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.funding.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 import java.math.BigDecimal;
@@ -77,6 +78,11 @@ class SpendingEventServiceTest {
         Currency activeCurrency = new Currency(new Currency.Id("org1", "x"), "ISO_4217:x", true);
         lenient().when(organisationPublicApi.findCurrencyByCustomerCurrencyCode(any(), any()))
                 .thenReturn(Optional.of(activeCurrency));
+        // Default: no prior FUNDING recorded against any milestone (matches the DB's COALESCE(...,0)) —
+        // the over-funding check (populateNode) queries this for every FUNDING allocation, so tests
+        // that don't care about it would otherwise NPE; tests exercising over-funding override this.
+        lenient().when(milestoneAllocationRepository.spentAmountByMilestoneId(any(), eq(EventType.FUNDING)))
+                .thenReturn(BigDecimal.ZERO);
     }
 
     private static final Pageable PAGEABLE = PageRequest.of(0, 10);
@@ -268,19 +274,52 @@ class SpendingEventServiceTest {
     }
 
     @Test
-    void create_succeeds_whenAllocatedAmountExceedsMilestone() {
-        // The hard cap against the milestone's budget was removed — this now succeeds; overspend is
-        // surfaced in the view layer (see SpendingEventServiceOverspendTest-style toView assertions),
-        // not rejected here.
+    void create_succeeds_whenSpendingAllocatedAmountExceedsMilestone() {
+        // The hard cap against the milestone's budget was removed for SPENDING, so this now succeeds.
+        // Overspend is surfaced in the view layer, not rejected here. FUNDING is different — see
+        // create_rejectsFundingAllocation_whenItExceedsTheMilestoneBudget below.
         stubExistingProjectAndMilestone("MS-1"); // milestone amount 50000
         when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        SpendingEventCreateRequest request = spendingRequest(fundingMilestone("MS-1", new BigDecimal("60000.00")));
+        request.setAmountRcy(new BigDecimal("60000.00")); // must stay fully allocated (spendFullyAllocated)
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.isRight()).isTrue();
+    }
+
+    @Test
+    void create_rejectsFundingAllocation_whenItExceedsTheMilestoneBudget() {
+        // Unlike SPENDING, a project may not be over-funded: a FUNDING allocation that would push
+        // cumulative funding past the milestone's budget is rejected outright, not just flagged.
+        stubExistingProjectAndMilestone("MS-1"); // milestone amount 50000
 
         SpendingEventCreateRequest request = fundingRequest(fundingMilestone("MS-1", new BigDecimal("60000.00")));
         request.setAmountRcy(new BigDecimal("60000.00")); // must stay fully allocated (spendFullyAllocated)
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
 
-        assertThat(result.isRight()).isTrue();
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_OVERFUNDED);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_rejectsFundingAllocation_whenCumulativeFundingExceedsTheMilestoneBudget() {
+        // A single allocation within budget can still push the milestone over once combined with
+        // FUNDING already recorded against it by other events.
+        stubExistingProjectAndMilestone("MS-1"); // milestone amount 50000
+        when(milestoneAllocationRepository.spentAmountByMilestoneId("m1", EventType.FUNDING))
+                .thenReturn(new BigDecimal("40000.00"));
+
+        SpendingEventCreateRequest request = fundingRequest(fundingMilestone("MS-1", new BigDecimal("20000.00")));
+        request.setAmountRcy(new BigDecimal("20000.00"));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_OVERFUNDED);
     }
 
     @Test
