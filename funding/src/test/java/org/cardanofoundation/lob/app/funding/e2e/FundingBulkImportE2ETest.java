@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.funding.e2e;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
@@ -18,6 +19,7 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.ComponentScan.Filter;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.FilterType;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -35,14 +37,20 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import org.cardanofoundation.lob.app.funding.domain.entity.FundingEventEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
+import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
+import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.BulkImportRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingBulkImportResult;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingRowError;
 import org.cardanofoundation.lob.app.funding.job.EventPublishJob;
+import org.cardanofoundation.lob.app.funding.repository.FundingEventRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 import org.cardanofoundation.lob.app.funding.repository.MilestoneRepository;
 import org.cardanofoundation.lob.app.funding.service.FundingBulkImportService;
+import org.cardanofoundation.lob.app.funding.service.SpendingEventService;
+import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Currency;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
@@ -167,6 +175,10 @@ class FundingBulkImportE2ETest {
     private FundingProjectRepository projectRepository;
     @Autowired
     private MilestoneRepository milestoneRepository;
+    @Autowired
+    private FundingEventRepository fundingEventRepository;
+    @Autowired
+    private SpendingEventService spendingEventService;
     @MockitoBean
     private OrganisationPublicApiIF organisationPublicApi;
     @MockitoBean
@@ -286,7 +298,7 @@ class FundingBulkImportE2ETest {
                 .organisationId(orgId).files(List.of(shrinkFile)).build());
 
         assertThat(reasons(shrinkResult)).containsExactly(
-                "Milestone amount 5000.00 is below the total already allocated to it 10000.0000000000. "
+                "Milestone amount 5000.00 is below the total already allocated to it 10000.00. "
                         + "All changes for project \"Change Project\" in this request were rolled back because of this error.");
         assertThat(shrinkResult.getMilestonesUpdated()).isZero();
     }
@@ -347,6 +359,70 @@ class FundingBulkImportE2ETest {
 
         assertThat(reasons(result)).isEmpty();
         assertThat(result.getEventsCreated()).isEqualTo(1);
+    }
+
+    // --- Funding ID uniqueness (FUNDING events only) ---
+
+    @Test
+    void secondFundingEventReusingTheSameFundingId_isRejectedAsARowError_earlierGroupsStillImport() {
+        // A Funding ID must identify a single FUNDING event per organisation — two FUNDING groups in
+        // the same file sharing one (distinguished only by Funding Hash, so they're genuinely different
+        // event groups, not the same event re-sent) must not both succeed. A SPENDING event reusing that
+        // same Funding ID, however, is the normal, expected pattern (it spends against that grant) and
+        // must import cleanly regardless.
+        String orgId = "org-dup-funding-id";
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+        seedProjectAndMilestone(orgId, "Dup Project", "Dup Milestone");
+
+        String csv = """
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
+                FUNDING,GRANT-DUP,hash-1,Cardano Foundation,USD,2026-07-01,,,,,,5000.00,,,Dup Project,,Dup Milestone,5000.00
+                FUNDING,GRANT-DUP,hash-2,Cardano Foundation,USD,2026-07-01,,,,,,3000.00,,,Dup Project,,Dup Milestone,3000.00
+                SPENDING,GRANT-DUP,hash-1,,USD,2026-07-20,Personnel,Vendor AB,4500.00,EUR,0.9,5000.00,,Invoice #1,Dup Project,,Dup Milestone,5000.00
+                """;
+        MultipartFile file = new MockMultipartFile("file", "dup-funding-id.csv", "text/csv", csv.getBytes());
+
+        FundingBulkImportResult result = bulkImportService.importFiles(
+                BulkImportRequest.builder().organisationId(orgId).files(List.of(file)).build());
+
+        List<FundingRowError> rowErrors = result.getFiles().get(0).getRowErrors();
+        assertThat(rowErrors).hasSize(1);
+        assertThat(rowErrors.get(0).getTitle()).isEqualTo("FUNDING_EVENT_FUNDING_ID_ALREADY_USED");
+        assertThat(rowErrors.get(0).getReason()).contains("GRANT-DUP").contains("already used");
+        // The first FUNDING group and the SPENDING group both succeeded — only the second FUNDING group failed.
+        assertThat(result.getEventsCreated()).isEqualTo(2);
+    }
+
+    @Test
+    void uniqueFundingIdConstraint_rejectsADuplicateInsertAtTheDbLevel_bypassingAppLevelChecks() {
+        // The final safety net: even skipping SpendingEventService entirely (as a race between two
+        // concurrent app-level-validated requests would), the raw partial unique index
+        // (uq_funding_event_org_funding_id_funding_type) still rejects a second FUNDING event sharing
+        // an organisation + Funding ID — proving the DB constraint from
+        // V1.7_100_2__unique_funding_id_per_funding_event.sql is actually in effect.
+        String orgId = "org-dup-funding-id-db";
+        FundingEventEntity first = FundingEventEntity.builder()
+                .id(FundingEventEntity.id(orgId, EventType.FUNDING, "GRANT-DB-DUP", "hash-a", "USD"))
+                .eventType(EventType.FUNDING).status(EventStatus.DRAFT).organisationId(orgId)
+                .fundingId("GRANT-DB-DUP").fundingEntity("Cardano Foundation").currencyRcy("USD").build();
+        fundingEventRepository.saveAndFlush(first);
+
+        FundingEventEntity second = FundingEventEntity.builder()
+                .id(FundingEventEntity.id(orgId, EventType.FUNDING, "GRANT-DB-DUP", "hash-b", "USD"))
+                .eventType(EventType.FUNDING).status(EventStatus.DRAFT).organisationId(orgId)
+                .fundingId("GRANT-DB-DUP").fundingEntity("Cardano Foundation").currencyRcy("USD").build();
+
+        assertThatThrownBy(() -> fundingEventRepository.saveAndFlush(second))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("uq_funding_event_org_funding_id_funding_type");
+
+        // SPENDING events reusing the same Funding ID are unaffected by the constraint (it's scoped to
+        // event_type = 'FUNDING' only) — proving the partial index, not a blanket one, is what's in effect.
+        FundingEventEntity spending = FundingEventEntity.builder()
+                .id(FundingEventEntity.id(orgId, EventType.SPENDING, "GRANT-DB-DUP", "hash-a", "USD"))
+                .eventType(EventType.SPENDING).status(EventStatus.DRAFT).organisationId(orgId)
+                .fundingId("GRANT-DB-DUP").currencyRcy("USD").build();
+        assertThat(fundingEventRepository.saveAndFlush(spending)).isNotNull();
     }
 
     @Test
@@ -423,7 +499,7 @@ class FundingBulkImportE2ETest {
 
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
-        assertThat(reasons(result)).containsExactly("Project not found for projectTitle: Never Seeded Project");
+        assertThat(reasons(result)).containsExactly("Project 'Never Seeded Project' not found");
         assertThat(result.getEventsCreated()).isZero();
     }
 
@@ -563,7 +639,8 @@ class FundingBulkImportE2ETest {
         // The message must make the rollback itself visible, not just the validation failure — otherwise
         // there's no hint that row 2's already-succeeded sub-project and milestone were undone too.
         assertThat(reason)
-                .contains("exceeds the parent project total")
+                .contains("exceeds project")
+                .contains("Sub 2")
                 .contains("rolled back")
                 .contains("Project Cascade");
         // Nothing from the group survives — not the root, not the first (successful-on-its-own)
@@ -619,7 +696,7 @@ class FundingBulkImportE2ETest {
         List<String> reasons = reasons(result);
         assertThat(reasons)
                 .hasSize(2)
-                .anySatisfy(reason -> assertThat(reason).contains("exceeds the parent project total"))
+                .anySatisfy(reason -> assertThat(reason).contains("exceeds project").contains("Sub One"))
                 .anySatisfy(reason -> assertThat(reason).contains("exceeds the project total"))
                 .allSatisfy(reason -> assertThat(reason).contains("rolled back").contains("Project Test"));
         // Nothing from the group survives — not the root, not Sub One (regardless of which amount it
@@ -689,6 +766,86 @@ class FundingBulkImportE2ETest {
                 arguments("blank-sub-project-title", BLANK_SUB_PROJECT_TITLE_CSV, "org-blank-sub-project-title", "Project E", false, false, true),
                 arguments("missing-sub-total-amount", MISSING_SUB_TOTAL_AMOUNT_CSV, "org-missing-sub-total-amount", "Project C", false, false, true)
         );
+    }
+
+    // -------------------------------------------------------------------------
+    // LOB-2333 / LOB-2334 — Events CSV error-message regression coverage. Each row below forces
+    // exactly one of the five failure modes named in the ticket, isolated under its own Funding ID
+    // so the groups don't interfere with each other, and asserts both the error title and that the
+    // message text actually names the real cause (not a generic/misleading one).
+    // -------------------------------------------------------------------------
+
+    private static final String TICKET_STRUCTURE_CSV = """
+            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
+            Ticket Project,100000.00,EUR,Ticket Sub,50000.00,Ticket Milestone,20000.00,2026-06-30
+            """;
+
+    private static final String TICKET_PUBLISHED_SEED_CSV = """
+            Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
+            FUNDING,TICKET-PUBLISHED,,Cardano Foundation,EUR,2026-06-01,,,,,,5000.00,,,Ticket Project,Ticket Sub,Ticket Milestone,5000.00
+            """;
+
+    private static final String TICKET_FIVE_ERRORS_CSV = """
+            Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
+            FUNDING,TICKET-ERR-1,,Cardano Foundation,EUR,2026-06-01,,,,,,,,,Ticket Project,Ticket Sub,Ticket Milestone,1000.00
+            FUNDING,TICKET-ERR-2,,Cardano Foundation,USD,2026-06-01,,,,,,1000.00,,,Ticket Project,Ticket Sub,Ticket Milestone,1000.00
+            FUNDING,TICKET-ERR-3,,Cardano Foundation,EUR,2026-06-01,,,,,,1000.00,,,Ticket Project,,Ticket Milestone,1000.00
+            FUNDING,TICKET-ERR-4,,Cardano Foundation,EUR,2026-06-01,,,,,,1000.00,,,Nonexistent Project,,Ticket Milestone,1000.00
+            FUNDING,TICKET-PUBLISHED,,Cardano Foundation,EUR,2026-06-01,,,,,,5000.00,,,Ticket Project,Ticket Sub,Ticket Milestone,5000.00
+            """;
+
+    @Test
+    void eventsFile_fiveTicketScenarios_eachReportsItsOwnDistinctCause() {
+        String orgId = "org-ticket-2333-2334";
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+
+        // Seed the structure every scenario but #4 (unknown project) needs: a root with a sub-project
+        // (so #3 can prove "milestone belongs under a sub-project"), whose milestone's currency is EUR
+        // (so #2 can prove a real mismatch, not just an arbitrary rejection).
+        MultipartFile structureFile = new MockMultipartFile("file", "ticket-structure.csv", "text/csv", TICKET_STRUCTURE_CSV.getBytes());
+        FundingBulkImportResult structureResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(structureFile)).build());
+        assertThat(reasons(structureResult)).as("seed structure").isEmpty();
+
+        // Seed and publish the event that #5's row will collide with.
+        MultipartFile publishedSeedFile = new MockMultipartFile("file", "ticket-published-seed.csv", "text/csv", TICKET_PUBLISHED_SEED_CSV.getBytes());
+        FundingBulkImportResult publishedSeedResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(publishedSeedFile)).build());
+        assertThat(reasons(publishedSeedResult)).as("seed published event").isEmpty();
+        String publishedEventId = FundingEventEntity.id(orgId, EventType.FUNDING, "TICKET-PUBLISHED", null, "EUR");
+        assertThat(spendingEventService.publish(publishedEventId).isRight()).as("publish seed event").isTrue();
+
+        MultipartFile file = new MockMultipartFile("file", "ticket-five-errors.csv", "text/csv", TICKET_FIVE_ERRORS_CSV.getBytes());
+        FundingBulkImportResult result = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(file)).build());
+
+        List<FundingRowError> errors = result.getFiles().get(0).getRowErrors();
+        assertThat(errors).hasSize(5);
+
+        // #1 — missing mandatory field (Amount RCY)
+        assertThat(errors.get(0).getTitle()).isEqualTo(ErrorTitleConstants.SPEND_FIELDS_REQUIRED);
+        assertThat(errors.get(0).getReason()).contains("amountRcy");
+
+        // #2 — mismatch in the project currency; must name the specific project/sub-project involved,
+        // not just the milestone, since sub-project/milestone titles aren't unique across projects.
+        assertThat(errors.get(1).getTitle()).isEqualTo(ErrorTitleConstants.EVENT_CURRENCY_MISMATCH);
+        assertThat(errors.get(1).getReason())
+                .contains("USD").contains("EUR")
+                .contains("Ticket Sub").contains("Ticket Project");
+
+        // #3 — missing sub-project (incomplete project structure)
+        assertThat(errors.get(2).getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_TITLE_REQUIRED);
+        assertThat(errors.get(2).getReason()).contains("Ticket Project").contains("Sub Project Title");
+
+        // #4 — project doesn't exist
+        assertThat(errors.get(3).getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_REFERENCE_NOT_FOUND);
+        assertThat(errors.get(3).getReason()).contains("Nonexistent Project");
+
+        // #5 — Funding ID belongs to a published report
+        assertThat(errors.get(4).getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+        assertThat(errors.get(4).getReason()).contains("TICKET-PUBLISHED").contains("published");
+
+        assertThat(result.getEventsCreated()).isZero();
     }
 
     @Configuration

@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.funding.util;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -59,13 +60,15 @@ public final class FundingValidations {
         if (project.getTotalAmount() != null && amount != null) {
             if (amount.compareTo(project.getTotalAmount()) > 0) {
                 return Optional.of(Problems.badRequest(
-                        "Milestone amount %s exceeds the project total %s".formatted(amount, project.getTotalAmount()),
+                        "Milestone amount %s exceeds the project total %s".formatted(
+                                formatAmount(amount), formatAmount(project.getTotalAmount())),
                         ErrorTitleConstants.MILESTONE_AMOUNT_EXCEEDS_PROJECT));
             }
             BigDecimal cumulative = otherMilestonesTotal.add(amount);
             if (cumulative.compareTo(project.getTotalAmount()) > 0) {
                 return Optional.of(Problems.badRequest(
-                        "Milestones total %s exceeds the project total %s".formatted(cumulative, project.getTotalAmount()),
+                        "Milestones total %s exceeds the project total %s".formatted(
+                                formatAmount(cumulative), formatAmount(project.getTotalAmount())),
                         ErrorTitleConstants.MILESTONE_TOTAL_EXCEEDS_PROJECT));
             }
         }
@@ -80,7 +83,8 @@ public final class FundingValidations {
     public static Optional<ProblemDetail> milestoneCoversAllocations(BigDecimal newAmount, BigDecimal totalAllocated) {
         if (newAmount != null && totalAllocated != null && newAmount.compareTo(totalAllocated) < 0) {
             return Optional.of(Problems.badRequest(
-                    "Milestone amount %s is below the total already allocated to it %s".formatted(newAmount, totalAllocated),
+                    "Milestone amount %s is below the total already allocated to it %s".formatted(
+                            formatAmount(newAmount), formatAmount(totalAllocated)),
                     ErrorTitleConstants.MILESTONE_AMOUNT_BELOW_ALLOCATED));
         }
         return Optional.empty();
@@ -88,7 +92,10 @@ public final class FundingValidations {
 
     /**
      * Per-allocation validation: an amount is always required (the event total is the sum of the
-     * allocations), must be positive, and may not exceed its milestone's amount.
+     * allocations) and must be positive. It is deliberately <em>not</em> capped against the
+     * milestone's budget — a SPENDING allocation may push cumulative spend past the milestone's
+     * allocated amount; that overspend is surfaced to the caller (see {@link #isOverspend}) rather
+     * than rejected, so the event still records and publishes normally.
      */
     public static Optional<ProblemDetail> allocation(BigDecimal allocatedAmount, MilestoneEntity milestone, EventType eventType) {
         if (allocatedAmount == null) {
@@ -100,11 +107,6 @@ public final class FundingValidations {
             return Optional.of(Problems.badRequest(
                     "allocatedAmount must be greater than zero",
                     ErrorTitleConstants.ALLOCATION_AMOUNT_INVALID));
-        }
-        if (milestone.getMilestoneAmount() != null && allocatedAmount.compareTo(milestone.getMilestoneAmount()) > 0) {
-            return Optional.of(Problems.badRequest(
-                    "allocatedAmount %s exceeds the milestone amount %s".formatted(allocatedAmount, milestone.getMilestoneAmount()),
-                    ErrorTitleConstants.ALLOCATION_EXCEEDS_MILESTONE));
         }
         return Optional.empty();
     }
@@ -122,8 +124,8 @@ public final class FundingValidations {
         if (eventCurrencyRcy != null && milestone.getCurrency() != null
                 && !eventCurrencyRcy.equals(milestone.getCurrency())) {
             return Optional.of(Problems.badRequest(
-                    "currencyRcy %s does not match milestone '%s' currency %s".formatted(
-                            eventCurrencyRcy, milestone.getMilestoneTitle(), milestone.getCurrency()),
+                    "Currency RCY %s does not match the currency %s of %s, milestone '%s'".formatted(
+                            eventCurrencyRcy, milestone.getCurrency(), quotedProjectPath(milestone.getProject()), milestone.getMilestoneTitle()),
                     ErrorTitleConstants.EVENT_CURRENCY_MISMATCH));
         }
         return Optional.empty();
@@ -201,49 +203,83 @@ public final class FundingValidations {
         }
         if (totalAllocated.compareTo(amountRcy) > 0) {
             return Optional.of(Problems.badRequest(
-                    "Allocated total %s exceeds the %s event's amount (amountRcy) %s".formatted(totalAllocated, eventType, amountRcy),
+                    "Allocated total %s exceeds the %s event's amount (amountRcy) %s".formatted(
+                            formatAmount(totalAllocated), eventType, formatAmount(amountRcy)),
                     ErrorTitleConstants.ALLOCATION_EXCEEDS_SPEND));
         }
         if (totalAllocated.compareTo(amountRcy) < 0) {
             return Optional.of(Problems.badRequest(
                     "Allocated total %s does not fully allocate the %s event's amount (amountRcy) %s"
-                            .formatted(totalAllocated, eventType, amountRcy),
+                            .formatted(formatAmount(totalAllocated), eventType, formatAmount(amountRcy)),
                     ErrorTitleConstants.SPEND_NOT_FULLY_ALLOCATED));
         }
         return Optional.empty();
     }
 
     /**
-     * A SPENDING event's spend ({@code amountRcy}) may not exceed the combined budget of the milestones
-     * it is booked against, nor the combined budget of the projects it is assigned to. A null budget
-     * (passed as {@code null}) lifts that bound — it cannot be meaningfully enforced.
+     * Whether cumulative spend against a budget — existing SPENDING allocations plus the one being
+     * evaluated — exceeds that budget. Used at both milestone and project level to flag (not reject)
+     * overspend on SPENDING events: the hard cap that used to block submission here was removed, in
+     * favour of surfacing this as a detectable condition in the API response and CSV import result
+     * (UI warning alert, dashboard). A {@code null} budget is unbounded and never flagged.
      */
-    public static Optional<ProblemDetail> eventAmountWithinBudget(EventType eventType, BigDecimal amountRcy,
-            BigDecimal summedMilestoneBudget, BigDecimal summedProjectBudget) {
-        if (eventType != EventType.SPENDING || amountRcy == null) {
+    public static boolean isOverspend(BigDecimal cumulativeSpend, BigDecimal budget) {
+        return budget != null && cumulativeSpend != null && cumulativeSpend.compareTo(budget) > 0;
+    }
+
+    /**
+     * Whether allocating to a milestone as FUNDING would push cumulative FUNDING (existing FUNDING
+     * allocations plus this one) past the milestone's budgeted amount. Unlike {@link #isOverspend}
+     * (SPENDING, allowed and only flagged), over-funding is rejected outright: a milestone may never
+     * be committed more funding than it was budgeted for. Only applies to FUNDING events — SPENDING
+     * is handled by {@link #isOverspend} and REFUND is left unrestricted. A null budget is unbounded
+     * and never rejected.
+     */
+    public static Optional<ProblemDetail> overfunding(EventType eventType, BigDecimal cumulativeFunded, MilestoneEntity milestone) {
+        if (eventType != EventType.FUNDING || milestone.getMilestoneAmount() == null || cumulativeFunded == null) {
             return Optional.empty();
         }
-        if (summedMilestoneBudget != null && amountRcy.compareTo(summedMilestoneBudget) > 0) {
+        if (cumulativeFunded.compareTo(milestone.getMilestoneAmount()) > 0) {
             return Optional.of(Problems.badRequest(
-                    "Event amount %s exceeds the total milestone budget %s".formatted(amountRcy, summedMilestoneBudget),
-                    ErrorTitleConstants.EVENT_AMOUNT_EXCEEDS_MILESTONES));
-        }
-        if (summedProjectBudget != null && amountRcy.compareTo(summedProjectBudget) > 0) {
-            return Optional.of(Problems.badRequest(
-                    "Event amount %s exceeds the total project budget %s".formatted(amountRcy, summedProjectBudget),
-                    ErrorTitleConstants.EVENT_AMOUNT_EXCEEDS_PROJECT));
+                    "Milestone '%s' cumulative funding %s exceeds its budget %s".formatted(
+                            milestone.getMilestoneTitle(), formatAmount(cumulativeFunded), formatAmount(milestone.getMilestoneAmount())),
+                    ErrorTitleConstants.MILESTONE_OVERFUNDED));
         }
         return Optional.empty();
     }
 
-    /** The sum of an event's allocations to a single project may not exceed that project's total. */
-    public static Optional<ProblemDetail> allocationTotal(BigDecimal projectAllocatedTotal, ProjectEntity project) {
-        if (project.getTotalAmount() != null && projectAllocatedTotal.compareTo(project.getTotalAmount()) > 0) {
-            return Optional.of(Problems.badRequest(
-                    "Allocated total %s exceeds the project total %s".formatted(projectAllocatedTotal, project.getTotalAmount()),
-                    ErrorTitleConstants.ALLOCATION_TOTAL_EXCEEDS_PROJECT));
-        }
-        return Optional.empty();
+    /**
+     * Rounds an amount to 2 decimal places for display in a validation message — the underlying
+     * high-precision BigDecimal columns otherwise print with a long trail of zeros (e.g.
+     * {@code 11.0000000000}), which reaches the caller verbatim since this text is never reformatted
+     * downstream (see {@code FundingBulkImportService}'s identical helper for the CSV warning path).
+     */
+    private static String formatAmount(BigDecimal amount) {
+        return amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
+    }
+
+    /**
+     * Human-readable label identifying a project unambiguously: {@code "project 'X'"} for a root
+     * project, or {@code "sub-project 'X' of project 'Y'"} for a sub-project. A sub-project's title
+     * (like a milestone's) is only unique within its parent's scope — two different root projects can
+     * each have a sub-project called "Phase 1" — so naming just the leaf title in an error message
+     * isn't enough for the user to tell which one is meant; this always includes the full path.
+     */
+    public static String projectPath(ProjectEntity project) {
+        return project.getParentProject() != null
+                ? "sub-project '%s' of project '%s'".formatted(project.getProjectTitle(), project.getParentProject().getProjectTitle())
+                : "project '%s'".formatted(project.getProjectTitle());
+    }
+
+    /**
+     * Same idea as {@link #projectPath}, but without the "project"/"sub-project" labels — just the
+     * quoted title(s) — for messages that already establish what kind of thing is being named (e.g.
+     * a currency mismatch, where "project"/"sub-project" would read as noise next to "milestone").
+     */
+    private static String quotedProjectPath(ProjectEntity project) {
+        return project.getParentProject() != null
+                ? "'%s' of '%s'".formatted(project.getProjectTitle(), project.getParentProject().getProjectTitle())
+                : "'%s'".formatted(project.getProjectTitle());
     }
 
     /**
@@ -252,20 +288,25 @@ public final class FundingValidations {
      * may not sum to more than the parent's total. {@code otherSubProjectsTotal} is the summed total
      * of the parent's <em>other</em> sub-projects (excluding the one being attached). Checks are
      * skipped when either budget is absent (a parent or sub-project without a {@code totalAmount}).
+     * {@code childTitle} names the sub-project being attached, so the message pinpoints exactly which
+     * project and which sub-project are involved instead of leaving the caller to infer it.
      */
-    public static Optional<ProblemDetail> subProjectAmount(BigDecimal childTotal, ProjectEntity parent, BigDecimal otherSubProjectsTotal) {
+    public static Optional<ProblemDetail> subProjectAmount(BigDecimal childTotal, String childTitle,
+            ProjectEntity parent, BigDecimal otherSubProjectsTotal) {
         if (parent.getTotalAmount() == null || childTotal == null) {
             return Optional.empty();
         }
         if (childTotal.compareTo(parent.getTotalAmount()) > 0) {
             return Optional.of(Problems.badRequest(
-                    "Sub-project total %s exceeds the parent project total %s".formatted(childTotal, parent.getTotalAmount()),
+                    "Sub-project '%s' total %s exceeds project '%s' total %s".formatted(
+                            childTitle, formatAmount(childTotal), parent.getProjectTitle(), formatAmount(parent.getTotalAmount())),
                     ErrorTitleConstants.SUBPROJECT_AMOUNT_EXCEEDS_PARENT));
         }
         BigDecimal cumulative = otherSubProjectsTotal.add(childTotal);
         if (cumulative.compareTo(parent.getTotalAmount()) > 0) {
             return Optional.of(Problems.badRequest(
-                    "Sub-projects total %s exceeds the parent project total %s".formatted(cumulative, parent.getTotalAmount()),
+                    "Sub-projects total %s (including sub-project '%s') exceeds project '%s' total %s".formatted(
+                            formatAmount(cumulative), childTitle, parent.getProjectTitle(), formatAmount(parent.getTotalAmount())),
                     ErrorTitleConstants.SUBPROJECT_TOTAL_EXCEEDS_PARENT));
         }
         return Optional.empty();
@@ -331,12 +372,14 @@ public final class FundingValidations {
         }
         if (milestonesTotal != null && newTotal.compareTo(milestonesTotal) < 0) {
             return Optional.of(Problems.badRequest(
-                    "Project total %s is below the summed milestone amounts %s".formatted(newTotal, milestonesTotal),
+                    "Project total %s is below the summed milestone amounts %s".formatted(
+                            formatAmount(newTotal), formatAmount(milestonesTotal)),
                     ErrorTitleConstants.PROJECT_AMOUNT_BELOW_MILESTONES));
         }
         if (subProjectsTotal != null && newTotal.compareTo(subProjectsTotal) < 0) {
             return Optional.of(Problems.badRequest(
-                    "Project total %s is below the summed sub-project totals %s".formatted(newTotal, subProjectsTotal),
+                    "Project total %s is below the summed sub-project totals %s".formatted(
+                            formatAmount(newTotal), formatAmount(subProjectsTotal)),
                     ErrorTitleConstants.PROJECT_AMOUNT_BELOW_SUBPROJECTS));
         }
         return Optional.empty();

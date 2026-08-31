@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.funding.service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -41,9 +42,12 @@ import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateReque
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.EventMilestoneAllocationView;
+import org.cardanofoundation.lob.app.funding.domain.view.EventProjectAllocationView;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingBulkImportResult;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingFileImportResult;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingRowError;
+import org.cardanofoundation.lob.app.funding.domain.view.FundingRowWarning;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
@@ -304,6 +308,7 @@ public class FundingBulkImportService {
                 .rowNumber(error.getRowNumber())
                 .reason(error.getReason() + ". All changes for project \"" + rootProjectTitle
                         + "\" in this request were rolled back because of this error.")
+                .title(error.getTitle())
                 .build();
     }
 
@@ -577,6 +582,7 @@ public class FundingBulkImportService {
         LinkedHashMap<String, List<Integer>> groups = groupByKey(lines, FundingBulkImportService::eventKey);
 
         List<FundingRowError> errors = new ArrayList<>();
+        List<FundingRowWarning> warnings = new ArrayList<>();
         int succeeded = 0;
         int eventsCreated = 0;
         int eventsUpdated = 0;
@@ -591,6 +597,7 @@ public class FundingBulkImportService {
                 continue;
             }
             succeeded++;
+            warnings.addAll(outcome.warnings());
             if (outcome.created()) eventsCreated++; else eventsUpdated++;
             allocationsCreated += outcome.allocationsCreated();
             allocationsUpdated += outcome.allocationsUpdated();
@@ -602,6 +609,7 @@ public class FundingBulkImportService {
                         .fileType(FundingCsvFileType.EVENTS)
                         .rowsSucceeded(succeeded)
                         .rowErrors(errors)
+                        .rowWarnings(warnings)
                         .build(),
                 eventsCreated, eventsUpdated, allocationsCreated, allocationsUpdated);
     }
@@ -618,6 +626,13 @@ public class FundingBulkImportService {
      * wrong. Cross-row/event-level rules that aren't tied to a single CSV row (e.g. the event's total
      * not being fully allocated) are still left to that single call and reported as one error, since
      * they aren't "per row" in the first place.
+     *
+     * <p>A row that exceeds its milestone's or project's budget is no longer a validation failure — the
+     * budget cap was removed (overspend is allowed and recorded like any other spend). Once the event is
+     * persisted, its view carries an {@code overspend} flag per project/milestone allocation (see
+     * {@code SpendingEventService#toView}); this method maps any flagged allocation back to the CSV row(s)
+     * that fed it (via {@code milestoneRowNumbers}/{@code projectRowNumbers}) and reports it as a
+     * non-blocking {@link FundingRowWarning} instead — it never fails the row, the group, or the import.
      */
     private EventGroupOutcome processEventGroup(String organisationId, List<IndexedLine> group,
             Map<String, String> resolvedProjectIds) {
@@ -625,16 +640,18 @@ public class FundingBulkImportService {
 
         Either<ProblemDetail, EventHeader> headerE = parseEventHeader(group.get(0).line());
         if (headerE.isLeft()) {
-            return new EventGroupOutcome(List.of(rowError(firstRowNumber, headerE.getLeft())), 0, 0, false);
+            return new EventGroupOutcome(List.of(rowError(firstRowNumber, headerE.getLeft())), List.of(), 0, 0, false);
         }
         EventHeader header = headerE.get();
 
         List<FundingRowError> errors = new ArrayList<>();
         Map<String, List<IndexedLine>> byProject = groupAllocationRowsByProject(group, errors);
-        List<EventProjectAllocationRequest> allocations =
-                resolveAllocations(organisationId, byProject, resolvedProjectIds, header.eventType(), errors);
+        Map<String, Integer> milestoneRowNumbers = new HashMap<>();
+        Map<String, Integer> projectRowNumbers = new HashMap<>();
+        List<EventProjectAllocationRequest> allocations = resolveAllocations(organisationId, byProject,
+                resolvedProjectIds, header.eventType(), errors, milestoneRowNumbers, projectRowNumbers);
         if (!errors.isEmpty()) {
-            return new EventGroupOutcome(errors, 0, 0, false);
+            return new EventGroupOutcome(errors, List.of(), 0, 0, false);
         }
 
         SpendingEventCreateRequest request = buildSpendingEventRequest(organisationId, header, allocations);
@@ -652,13 +669,53 @@ public class FundingBulkImportService {
                 : spendingEventService.createEvent(request);
         Optional<ProblemDetail> error = view.getError();
         if (error.isPresent()) {
-            return new EventGroupOutcome(List.of(rowError(firstRowNumber, error.get())), 0, 0, false);
+            return new EventGroupOutcome(List.of(rowError(firstRowNumber, error.get())), List.of(), 0, 0, false);
         }
+        List<FundingRowWarning> warnings = collectOverspendWarnings(view, milestoneRowNumbers, projectRowNumbers, firstRowNumber);
+
         // An update replaces the event's allocations wholesale, so every allocation row in the group
         // counts as updated rather than created when the event already existed.
         return alreadyExists
-                ? new EventGroupOutcome(List.of(), 0, group.size(), false)
-                : new EventGroupOutcome(List.of(), group.size(), 0, true);
+                ? new EventGroupOutcome(List.of(), warnings, 0, group.size(), false)
+                : new EventGroupOutcome(List.of(), warnings, group.size(), 0, true);
+    }
+
+    /**
+     * Maps overspend flags on the persisted event's view back to the CSV row(s) that fed each
+     * allocation, one warning per flagged project or milestone. Falls back to the group's first row
+     * number if a flagged allocation can't be traced to a specific row (defensive only — every
+     * allocation in the view was built from a row in this group).
+     */
+    private List<FundingRowWarning> collectOverspendWarnings(SpendingEventView view,
+            Map<String, Integer> milestoneRowNumbers, Map<String, Integer> projectRowNumbers, int fallbackRowNumber) {
+        List<FundingRowWarning> warnings = new ArrayList<>();
+        List<EventProjectAllocationView> projectAllocations = view.getProjectAllocations();
+        if (projectAllocations == null) {
+            return warnings;
+        }
+        for (EventProjectAllocationView pv : projectAllocations) {
+            if (pv.isOverspend()) {
+                int rowNumber = projectRowNumbers.getOrDefault(pv.getProjectId(), fallbackRowNumber);
+                warnings.add(rowWarning(rowNumber, "Project '%s' cumulative spend %s exceeds its budget %s"
+                        .formatted(pv.getProjectTitle(), formatAmount(pv.getSpentAmount()), formatAmount(pv.getTotalAmount()))));
+            }
+            for (EventMilestoneAllocationView mv : pv.getMilestoneAllocations()) {
+                if (mv.isOverspend()) {
+                    int rowNumber = milestoneRowNumbers.getOrDefault(mv.getMilestoneId(), fallbackRowNumber);
+                    warnings.add(rowWarning(rowNumber, "Milestone '%s' cumulative spend %s exceeds its budget %s"
+                            .formatted(mv.getMilestoneTitle(), formatAmount(mv.getSpentAmount()), formatAmount(mv.getMilestoneAmount()))));
+                }
+            }
+        }
+        return warnings;
+    }
+
+    /**
+     * Rounds an amount to 2 decimal places for display in warning messages, avoiding the
+     * long trailing zeros that the underlying high-precision BigDecimal columns carry.
+     */
+    private static String formatAmount(BigDecimal amount) {
+        return amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 
     private static String eventKey(EventCsvLine line) {
@@ -737,11 +794,14 @@ public class FundingBulkImportService {
      * project or row failing — each failure is appended to {@code errors} instead of aborting the rest
      * of the group, so one CSV import surfaces every row's problem instead of only the first. The
      * returned allocation list is only meaningful (and only used by the caller) when {@code errors}
-     * ends up empty.
+     * ends up empty. {@code milestoneRowNumbers}/{@code projectRowNumbers} are populated as a side
+     * effect (keyed by resolved milestone/project id) so a later overspend flag on the persisted event's
+     * view can be traced back to the row that produced it — see {@link #collectOverspendWarnings}.
      */
     private List<EventProjectAllocationRequest> resolveAllocations(String organisationId,
             Map<String, List<IndexedLine>> byProject, Map<String, String> resolvedProjectIds,
-            EventType eventType, List<FundingRowError> errors) {
+            EventType eventType, List<FundingRowError> errors,
+            Map<String, Integer> milestoneRowNumbers, Map<String, Integer> projectRowNumbers) {
 
         LinkedHashMap<String, ProjectEntity> rootsByTitle = new LinkedHashMap<>();
         LinkedHashMap<String, List<EventMilestoneAllocationRequest>> rootDirectMilestones = new LinkedHashMap<>();
@@ -757,8 +817,10 @@ public class FundingBulkImportService {
                 continue;
             }
             ProjectEntity project = projectE.get();
+            projectRowNumbers.put(project.getId(), first.rowNumber());
 
-            List<EventMilestoneAllocationRequest> milestones = buildMilestoneAllocations(project, projectLines, eventType, errors);
+            List<EventMilestoneAllocationRequest> milestones =
+                    buildMilestoneAllocations(project, projectLines, eventType, errors, milestoneRowNumbers);
 
             attachAllocation(project, milestones, rootsByTitle, rootDirectMilestones, subAllocationsByRoot);
         }
@@ -768,28 +830,29 @@ public class FundingBulkImportService {
 
     /**
      * Validates and builds the milestone allocations for one project's rows within an event group. Each
-     * row is validated independently — a bad row (blank title, unknown milestone, unparsable/missing
-     * amount, or an amount that fails {@link FundingValidations#allocation}) is appended to
-     * {@code errors} and skipped, so a sibling row for the same project is still checked instead of
-     * being left unreported (this is what let a second offending milestone row on the same project
-     * silently pass import review before). {@link FundingValidations#allocation} is the same rule
-     * {@code SpendingEventService} applies when it actually persists the event — reusing it here (rather
-     * than re-deriving the check) keeps this preview and the real save in agreement, it's just now
-     * invoked once per row instead of stopping at the first violation.
+     * row is validated independently — a bad row (blank title, unknown milestone, or an
+     * unparsable/missing amount) is appended to {@code errors} and skipped, so a sibling row for the
+     * same project is still checked instead of being left unreported (this is what let a second
+     * offending milestone row on the same project silently pass import review before). A row's amount
+     * is no longer capped against the milestone's budget here — {@link FundingValidations#allocation}
+     * (the same rule {@code SpendingEventService} applies when it actually persists the event) only
+     * checks that the amount is present and positive; overspend is a warning surfaced later from the
+     * persisted event's view, not a row error.
      */
     private List<EventMilestoneAllocationRequest> buildMilestoneAllocations(ProjectEntity project,
-            List<IndexedLine> projectLines, EventType eventType, List<FundingRowError> errors) {
+            List<IndexedLine> projectLines, EventType eventType, List<FundingRowError> errors,
+            Map<String, Integer> milestoneRowNumbers) {
 
         List<EventMilestoneAllocationRequest> milestones = new ArrayList<>();
         for (IndexedLine il : projectLines) {
-            buildMilestoneAllocation(project, il, eventType, errors).ifPresent(milestones::add);
+            buildMilestoneAllocation(project, il, eventType, errors, milestoneRowNumbers).ifPresent(milestones::add);
         }
         return milestones;
     }
 
     /** Validates a single allocation row, appending to {@code errors} and returning empty if it fails. */
     private Optional<EventMilestoneAllocationRequest> buildMilestoneAllocation(ProjectEntity project,
-            IndexedLine il, EventType eventType, List<FundingRowError> errors) {
+            IndexedLine il, EventType eventType, List<FundingRowError> errors, Map<String, Integer> milestoneRowNumbers) {
 
         EventCsvLine line = il.line();
         if (isBlank(line.getMilestoneTitle())) {
@@ -800,9 +863,23 @@ public class FundingBulkImportService {
         // Validation only — the milestone must already exist, this file never creates one.
         Optional<MilestoneEntity> milestone = milestoneService.findByProjectIdAndMilestoneTitle(project.getId(), line.getMilestoneTitle());
         if (milestone.isEmpty()) {
-            errors.add(rowError(il.rowNumber(), Problems.milestoneNotFound(line.getMilestoneTitle())));
+            // A project holds either milestones or sub-projects, never both — so if this "milestone not
+            // found" project actually has sub-projects, the real problem isn't a typo'd milestone title,
+            // it's a row that forgot to name which sub-project the milestone belongs to. Reporting that
+            // distinctly (rather than the generic not-found) is what actually points the user at the fix.
+            if (isBlank(line.getSubProjectTitle()) && projectRepository.existsByParentProjectId(project.getId())) {
+                errors.add(rowError(il.rowNumber(), Problems.badRequest(
+                        "%s organises milestones under sub-projects; set Sub Project Title to name the sub-project that owns milestone '%s'"
+                                .formatted(capitalize(FundingValidations.projectPath(project)), line.getMilestoneTitle()),
+                        ErrorTitleConstants.SUBPROJECT_TITLE_REQUIRED)));
+                return Optional.empty();
+            }
+            errors.add(rowError(il.rowNumber(), Problems.notFound(
+                    "Milestone '%s' not found under %s".formatted(line.getMilestoneTitle(), FundingValidations.projectPath(project)),
+                    ErrorTitleConstants.MILESTONE_NOT_FOUND)));
             return Optional.empty();
         }
+        milestoneRowNumbers.put(milestone.get().getId(), il.rowNumber());
         Either<ProblemDetail, BigDecimal> allocatedAmountE = parseDecimal(line.getAllocatedAmount(), "Allocated Amount");
         if (allocatedAmountE.isLeft()) {
             errors.add(rowError(il.rowNumber(), allocatedAmountE.getLeft()));
@@ -818,6 +895,13 @@ public class FundingBulkImportService {
             errors.add(rowError(il.rowNumber(), allocationProblem.get()));
             return Optional.empty();
         }
+        // Over-funding (FUNDING pushing cumulative funding past a milestone's budget) is deliberately
+        // not checked here — it's cumulative across every FUNDING event on the milestone, including
+        // this one's own prior allocations on an update, which only SpendingEventService can account
+        // for correctly (it excludes them by clearing and flushing before re-validating; see its
+        // populateNode). It's a cross-row, event-level rule like spendFullyAllocated/eventTotal below:
+        // left to that single create/update call and reported as one row error via its returned
+        // ProblemDetail, not duplicated here per row.
 
         return Optional.of(EventMilestoneAllocationRequest.builder()
                 .milestone(MilestoneCreateRequest.builder()
@@ -961,16 +1045,25 @@ public class FundingBulkImportService {
                 .fileName(file.getOriginalFilename())
                 .fileType(type)
                 .rowsSucceeded(0)
-                .rowErrors(List.of(FundingRowError.builder().rowNumber(0).reason(problem.getDetail()).build()))
+                .rowErrors(List.of(FundingRowError.builder().rowNumber(0).reason(problem.getDetail()).title(problem.getTitle()).build()))
                 .build();
     }
 
     private static FundingRowError rowError(int rowNumber, ProblemDetail problem) {
-        return FundingRowError.builder().rowNumber(rowNumber).reason(problem.getDetail()).build();
+        return FundingRowError.builder().rowNumber(rowNumber).reason(problem.getDetail()).title(problem.getTitle()).build();
+    }
+
+    private static FundingRowWarning rowWarning(int rowNumber, String reason) {
+        return FundingRowWarning.builder().rowNumber(rowNumber).reason(reason).build();
     }
 
     private static boolean isBlank(String s) {
         return s == null || s.isBlank();
+    }
+
+    /** Upper-cases the first character only, for {@link FundingValidations#projectPath} at the start of a sentence. */
+    private static String capitalize(String s) {
+        return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
 
     private static String blankToNull(String s) {
@@ -1053,7 +1146,8 @@ public class FundingBulkImportService {
     }
 
     /** {@code created} is meaningless when {@code errors} is non-empty. */
-    private record EventGroupOutcome(List<FundingRowError> errors, int allocationsCreated, int allocationsUpdated, boolean created) {
+    private record EventGroupOutcome(List<FundingRowError> errors, List<FundingRowWarning> warnings,
+            int allocationsCreated, int allocationsUpdated, boolean created) {
     }
 
     /** An Events-file CSV row paired with its 1-based row number, threaded through group processing so

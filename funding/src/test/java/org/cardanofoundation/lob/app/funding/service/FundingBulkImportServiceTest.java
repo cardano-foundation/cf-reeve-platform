@@ -44,8 +44,11 @@ import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateReque
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.EventMilestoneAllocationView;
+import org.cardanofoundation.lob.app.funding.domain.view.EventProjectAllocationView;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingBulkImportResult;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingFileImportResult;
+import org.cardanofoundation.lob.app.funding.domain.view.FundingRowError;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
@@ -1543,14 +1546,15 @@ class FundingBulkImportServiceTest {
     }
 
     @Test
-    void eventsFile_twoMilestoneRowsOnSameProjectBothExceedLimit_reportsBothRowErrors() {
-        // Regression test: buildMilestoneAllocations/FundingValidations.allocation used to stop at the
-        // first over-limit row in a project, silently dropping every other bad row from the same event
-        // group's report.
+    void eventsFile_twoMilestoneRowsOnSameProjectBothExceedLimit_reportsBothAsOverspendWarningsAndSucceeds() {
+        // The hard cap against a milestone's budget was removed for SPENDING — a row exceeding it now
+        // imports successfully and is flagged as an overspend warning (traced back to its own CSV row),
+        // instead of failing the row (this replaces a now-obsolete regression test for the old error
+        // path). FUNDING is different — see eventsFile_fundingRowExceedingMilestoneBudget_isDroppedAsRowError.
         MultipartFile file = file("events.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.EVENTS));
-        EventCsvLine row1 = eventLine("FUNDING", "GRANT-1", "USD", "Project A", "Milestone One", "25000");
-        EventCsvLine row2 = eventLine("FUNDING", "GRANT-1", "USD", "Project A", "Milestone Two", "50000");
+        EventCsvLine row1 = eventLine("SPENDING", "GRANT-1", "USD", "Project A", "Milestone One", "25000");
+        EventCsvLine row2 = eventLine("SPENDING", "GRANT-1", "USD", "Project A", "Milestone Two", "50000");
         when(eventCsvParser.parseCsv(file, EventCsvLine.class)).thenReturn(Either.right(List.of(row1, row2)));
         when(projectRepository.findByOrganisationIdAndProjectTitle(ORG_ID, "Project A"))
                 .thenReturn(List.of(projectEntity("p1", "Project A", "USD")));
@@ -1561,15 +1565,68 @@ class FundingBulkImportServiceTest {
                 MilestoneEntity.builder().id("m2").milestoneTitle("Milestone Two")
                         .milestoneAmount(new java.math.BigDecimal("20000")).build()));
 
+        SpendingEventView overspendView = SpendingEventView.builder()
+                .eventId("e1")
+                .overspend(true)
+                .projectAllocations(List.of(EventProjectAllocationView.builder()
+                        .projectId("p1")
+                        .overspend(false)
+                        .milestoneAllocations(List.of(
+                                EventMilestoneAllocationView.builder()
+                                        .milestoneId("m1").milestoneTitle("Milestone One")
+                                        .milestoneAmount(new java.math.BigDecimal("20000"))
+                                        .spentAmount(new java.math.BigDecimal("25000"))
+                                        .overspend(true)
+                                        .build(),
+                                EventMilestoneAllocationView.builder()
+                                        .milestoneId("m2").milestoneTitle("Milestone Two")
+                                        .milestoneAmount(new java.math.BigDecimal("20000"))
+                                        .spentAmount(new java.math.BigDecimal("50000"))
+                                        .overspend(true)
+                                        .build()))
+                        .build()))
+                .build();
+        when(spendingEventService.createEvent(any())).thenReturn(overspendView);
+
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
-        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(2);
-        assertThat(result.getFiles().get(0).getRowErrors().get(0).getRowNumber()).isEqualTo(1);
-        assertThat(result.getFiles().get(0).getRowErrors().get(0).getReason()).contains("exceeds the milestone amount");
-        assertThat(result.getFiles().get(0).getRowErrors().get(1).getRowNumber()).isEqualTo(2);
-        assertThat(result.getFiles().get(0).getRowErrors().get(1).getReason()).contains("exceeds the milestone amount");
-        verify(spendingEventService, never()).createEvent(any());
+        assertThat(result.getFiles().get(0).getRowErrors()).isEmpty();
+        assertThat(result.getFiles().get(0).getRowsSucceeded()).isEqualTo(1);
+        assertThat(result.getFiles().get(0).getRowWarnings()).hasSize(2);
+        assertThat(result.getFiles().get(0).getRowWarnings().get(0).getRowNumber()).isEqualTo(1);
+        assertThat(result.getFiles().get(0).getRowWarnings().get(0).getReason()).contains("Milestone One");
+        assertThat(result.getFiles().get(0).getRowWarnings().get(1).getRowNumber()).isEqualTo(2);
+        assertThat(result.getFiles().get(0).getRowWarnings().get(1).getReason()).contains("Milestone Two");
+        verify(spendingEventService, times(1)).createEvent(any());
+    }
+
+    @Test
+    void eventsFile_fundingEventRejectedAsOverfunded_isDroppedAsRowError() {
+        // Unlike SPENDING (overspend allowed, only flagged), a FUNDING event that would push
+        // cumulative funding past a milestone's budget is rejected outright by SpendingEventService
+        // (see SpendingEventServiceTest); the whole CSV group is dropped like any other event-level
+        // failure — not persisted, not a warning — via the same generic error path exercised by
+        // eventsFile_businessValidationError_isReportedAsRowError above.
+        MultipartFile file = file("events.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.EVENTS));
+        EventCsvLine row = eventLine("FUNDING", "GRANT-1", "USD", "Project A", "Milestone One", "25000");
+        when(eventCsvParser.parseCsv(file, EventCsvLine.class)).thenReturn(Either.right(List.of(row)));
+        when(projectRepository.findByOrganisationIdAndProjectTitle(ORG_ID, "Project A"))
+                .thenReturn(List.of(projectEntity("p1", "Project A", "USD")));
+        when(milestoneService.findByProjectIdAndMilestoneTitle("p1", "Milestone One")).thenReturn(Optional.of(
+                MilestoneEntity.builder().id("m1").milestoneTitle("Milestone One")
+                        .milestoneAmount(new java.math.BigDecimal("20000")).build()));
+        when(spendingEventService.createEvent(any()))
+                .thenReturn(SpendingEventView.error(problem(HttpStatus.BAD_REQUEST, ErrorTitleConstants.MILESTONE_OVERFUNDED)));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getEventsCreated()).isZero();
+        assertThat(result.getFiles().get(0).getRowsSucceeded()).isZero();
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_OVERFUNDED);
     }
 
     @Test
@@ -1592,6 +1649,30 @@ class FundingBulkImportServiceTest {
         assertThat(result.getFiles().get(0).getRowErrors().get(0).getReason()).contains("Unknown One");
         assertThat(result.getFiles().get(0).getRowErrors().get(1).getRowNumber()).isEqualTo(2);
         assertThat(result.getFiles().get(0).getRowErrors().get(1).getReason()).contains("Unknown Two");
+        verify(spendingEventService, never()).createEvent(any());
+    }
+
+    @Test
+    void eventsFile_milestoneAllocatedToRootThatHasSubProjects_reportsSubProjectTitleRequired() {
+        // "Milestone not found" is technically true here, but misleading: the milestone lives under one
+        // of the root's sub-projects, not the root itself, so the row is missing Sub Project Title, not
+        // referencing a bad milestone name.
+        MultipartFile file = file("events.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.EVENTS));
+        EventCsvLine row = eventLine("FUNDING", "GRANT-1", "USD", "Vaccines", "Milestone 1", "15000");
+        when(eventCsvParser.parseCsv(file, EventCsvLine.class)).thenReturn(Either.right(List.of(row)));
+        ProjectEntity root = projectEntity("p1", "Vaccines", "USD");
+        when(projectRepository.findByOrganisationIdAndProjectTitle(ORG_ID, "Vaccines")).thenReturn(List.of(root));
+        when(milestoneService.findByProjectIdAndMilestoneTitle("p1", "Milestone 1")).thenReturn(Optional.empty());
+        when(projectRepository.existsByParentProjectId("p1")).thenReturn(true);
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        FundingRowError error = result.getFiles().get(0).getRowErrors().get(0);
+        assertThat(error.getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_TITLE_REQUIRED);
+        assertThat(error.getReason()).contains("Vaccines").contains("Sub Project Title");
         verify(spendingEventService, never()).createEvent(any());
     }
 
