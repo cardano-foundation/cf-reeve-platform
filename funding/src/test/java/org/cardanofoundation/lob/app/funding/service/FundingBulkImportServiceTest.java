@@ -48,6 +48,7 @@ import org.cardanofoundation.lob.app.funding.domain.view.EventMilestoneAllocatio
 import org.cardanofoundation.lob.app.funding.domain.view.EventProjectAllocationView;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingBulkImportResult;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingFileImportResult;
+import org.cardanofoundation.lob.app.funding.domain.view.FundingRowError;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
@@ -1648,6 +1649,30 @@ class FundingBulkImportServiceTest {
         assertThat(result.getFiles().get(0).getRowErrors().get(0).getReason()).contains("Unknown One");
         assertThat(result.getFiles().get(0).getRowErrors().get(1).getRowNumber()).isEqualTo(2);
         assertThat(result.getFiles().get(0).getRowErrors().get(1).getReason()).contains("Unknown Two");
+        verify(spendingEventService, never()).createEvent(any());
+    }
+
+    @Test
+    void eventsFile_milestoneAllocatedToRootThatHasSubProjects_reportsSubProjectTitleRequired() {
+        // "Milestone not found" is technically true here, but misleading: the milestone lives under one
+        // of the root's sub-projects, not the root itself, so the row is missing Sub Project Title, not
+        // referencing a bad milestone name.
+        MultipartFile file = file("events.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.EVENTS));
+        EventCsvLine row = eventLine("FUNDING", "GRANT-1", "USD", "Vaccines", "Milestone 1", "15000");
+        when(eventCsvParser.parseCsv(file, EventCsvLine.class)).thenReturn(Either.right(List.of(row)));
+        ProjectEntity root = projectEntity("p1", "Vaccines", "USD");
+        when(projectRepository.findByOrganisationIdAndProjectTitle(ORG_ID, "Vaccines")).thenReturn(List.of(root));
+        when(milestoneService.findByProjectIdAndMilestoneTitle("p1", "Milestone 1")).thenReturn(Optional.empty());
+        when(projectRepository.existsByParentProjectId("p1")).thenReturn(true);
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        FundingRowError error = result.getFiles().get(0).getRowErrors().get(0);
+        assertThat(error.getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_TITLE_REQUIRED);
+        assertThat(error.getReason()).contains("Vaccines").contains("Sub Project Title");
         verify(spendingEventService, never()).createEvent(any());
     }
 

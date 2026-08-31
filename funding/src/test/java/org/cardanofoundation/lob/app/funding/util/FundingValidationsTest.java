@@ -182,8 +182,11 @@ class FundingValidationsTest {
 
     @Test
     void eventCurrencyMatchesMilestone_mismatched_isRejected() {
-        assertThat(title(FundingValidations.eventCurrencyMatchesMilestone("EUR", milestone(new BigDecimal("50000")))))
-                .isEqualTo(ErrorTitleConstants.EVENT_CURRENCY_MISMATCH);
+        Optional<ProblemDetail> problem = FundingValidations.eventCurrencyMatchesMilestone("EUR", milestone(new BigDecimal("50000")));
+        assertThat(title(problem)).isEqualTo(ErrorTitleConstants.EVENT_CURRENCY_MISMATCH);
+        // The message must point at the project currency, not just the milestone — a milestone's
+        // currency is always inherited from its project, so that's the field the user actually set.
+        assertThat(detail(problem)).contains("project currency");
     }
 
     @Test
@@ -408,6 +411,15 @@ class FundingValidationsTest {
     }
 
     @Test
+    void subProjectAmount_highPrecisionTotals_areFormattedForDisplay() {
+        // A budget round-tripped through a high-precision DB column carries a long trail of zeros
+        // (e.g. 50000000.0000000000) that must not leak into a user-facing message verbatim.
+        Optional<ProblemDetail> problem = FundingValidations.subProjectAmount(
+                new BigDecimal("600000.0000000000"), project(new BigDecimal("500000.0000000000")), BigDecimal.ZERO);
+        assertThat(detail(problem)).contains("600000.00").contains("500000.00").doesNotContain("0000000000");
+    }
+
+    @Test
     void subProjectAmount_cumulativeExceedsParent_isRejected() {
         // child (300000) fits, but together with existing sub-projects (300000) it exceeds the parent (500000)
         assertThat(title(FundingValidations.subProjectAmount(new BigDecimal("300000"), project(new BigDecimal("500000")), new BigDecimal("300000"))))
@@ -422,6 +434,35 @@ class FundingValidationsTest {
     @Test
     void subProjectAmount_skipped_whenChildHasNoBudget() {
         assertThat(FundingValidations.subProjectAmount(null, project(new BigDecimal("500000")), BigDecimal.ZERO)).isEmpty();
+    }
+
+    // --- projectTotalCoversChildren(newTotal, milestonesTotal, subProjectsTotal) ---
+
+    @Test
+    void projectTotalCoversChildren_valid_returnsEmpty() {
+        assertThat(FundingValidations.projectTotalCoversChildren(new BigDecimal("500000"), new BigDecimal("200000"), null))
+                .isEmpty();
+    }
+
+    @Test
+    void projectTotalCoversChildren_belowMilestones_isRejected() {
+        assertThat(title(FundingValidations.projectTotalCoversChildren(new BigDecimal("100000"), new BigDecimal("200000"), null)))
+                .isEqualTo(ErrorTitleConstants.PROJECT_AMOUNT_BELOW_MILESTONES);
+    }
+
+    @Test
+    void projectTotalCoversChildren_belowSubProjects_isRejected() {
+        assertThat(title(FundingValidations.projectTotalCoversChildren(new BigDecimal("100000"), null, new BigDecimal("200000"))))
+                .isEqualTo(ErrorTitleConstants.PROJECT_AMOUNT_BELOW_SUBPROJECTS);
+    }
+
+    @Test
+    void projectTotalCoversChildren_highPrecisionSubProjectsTotal_isFormattedForDisplay() {
+        // Reproduces the reported bug: a sub-projects total accumulated from a high-precision DB column
+        // (e.g. 50000000.0000000000) must be rounded for display, not shown with its full scale intact.
+        Optional<ProblemDetail> problem = FundingValidations.projectTotalCoversChildren(
+                new BigDecimal("25000"), null, new BigDecimal("50000000.0000000000"));
+        assertThat(detail(problem)).contains("50000000.00").doesNotContain("0000000000");
     }
 
     @Test

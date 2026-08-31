@@ -297,7 +297,7 @@ class FundingBulkImportE2ETest {
                 .organisationId(orgId).files(List.of(shrinkFile)).build());
 
         assertThat(reasons(shrinkResult)).containsExactly(
-                "Milestone amount 5000.00 is below the total already allocated to it 10000.0000000000. "
+                "Milestone amount 5000.00 is below the total already allocated to it 10000.00. "
                         + "All changes for project \"Change Project\" in this request were rolled back because of this error.");
         assertThat(shrinkResult.getMilestonesUpdated()).isZero();
     }

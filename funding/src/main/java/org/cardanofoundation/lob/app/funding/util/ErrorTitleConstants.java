@@ -65,5 +65,6 @@ public final class ErrorTitleConstants {
     public static final String NO_FILES_UPLOADED = "NO_FILES_UPLOADED";
     public static final String PROJECT_NOT_CREATED_NO_SUBPROJECT = "PROJECT_NOT_CREATED_NO_SUBPROJECT";
     public static final String DUPLICATE_MILESTONE_ALLOCATION = "DUPLICATE_MILESTONE_ALLOCATION";
+    public static final String SUBPROJECT_TITLE_REQUIRED = "SUBPROJECT_TITLE_REQUIRED";
 
 }

@@ -60,13 +60,15 @@ public final class FundingValidations {
         if (project.getTotalAmount() != null && amount != null) {
             if (amount.compareTo(project.getTotalAmount()) > 0) {
                 return Optional.of(Problems.badRequest(
-                        "Milestone amount %s exceeds the project total %s".formatted(amount, project.getTotalAmount()),
+                        "Milestone amount %s exceeds the project total %s".formatted(
+                                formatAmount(amount), formatAmount(project.getTotalAmount())),
                         ErrorTitleConstants.MILESTONE_AMOUNT_EXCEEDS_PROJECT));
             }
             BigDecimal cumulative = otherMilestonesTotal.add(amount);
             if (cumulative.compareTo(project.getTotalAmount()) > 0) {
                 return Optional.of(Problems.badRequest(
-                        "Milestones total %s exceeds the project total %s".formatted(cumulative, project.getTotalAmount()),
+                        "Milestones total %s exceeds the project total %s".formatted(
+                                formatAmount(cumulative), formatAmount(project.getTotalAmount())),
                         ErrorTitleConstants.MILESTONE_TOTAL_EXCEEDS_PROJECT));
             }
         }
@@ -81,7 +83,8 @@ public final class FundingValidations {
     public static Optional<ProblemDetail> milestoneCoversAllocations(BigDecimal newAmount, BigDecimal totalAllocated) {
         if (newAmount != null && totalAllocated != null && newAmount.compareTo(totalAllocated) < 0) {
             return Optional.of(Problems.badRequest(
-                    "Milestone amount %s is below the total already allocated to it %s".formatted(newAmount, totalAllocated),
+                    "Milestone amount %s is below the total already allocated to it %s".formatted(
+                            formatAmount(newAmount), formatAmount(totalAllocated)),
                     ErrorTitleConstants.MILESTONE_AMOUNT_BELOW_ALLOCATED));
         }
         return Optional.empty();
@@ -121,8 +124,8 @@ public final class FundingValidations {
         if (eventCurrencyRcy != null && milestone.getCurrency() != null
                 && !eventCurrencyRcy.equals(milestone.getCurrency())) {
             return Optional.of(Problems.badRequest(
-                    "currencyRcy %s does not match milestone '%s' currency %s".formatted(
-                            eventCurrencyRcy, milestone.getMilestoneTitle(), milestone.getCurrency()),
+                    "Currency RCY %s does not match the project currency %s for milestone '%s'".formatted(
+                            eventCurrencyRcy, milestone.getCurrency(), milestone.getMilestoneTitle()),
                     ErrorTitleConstants.EVENT_CURRENCY_MISMATCH));
         }
         return Optional.empty();
@@ -200,13 +203,14 @@ public final class FundingValidations {
         }
         if (totalAllocated.compareTo(amountRcy) > 0) {
             return Optional.of(Problems.badRequest(
-                    "Allocated total %s exceeds the %s event's amount (amountRcy) %s".formatted(totalAllocated, eventType, amountRcy),
+                    "Allocated total %s exceeds the %s event's amount (amountRcy) %s".formatted(
+                            formatAmount(totalAllocated), eventType, formatAmount(amountRcy)),
                     ErrorTitleConstants.ALLOCATION_EXCEEDS_SPEND));
         }
         if (totalAllocated.compareTo(amountRcy) < 0) {
             return Optional.of(Problems.badRequest(
                     "Allocated total %s does not fully allocate the %s event's amount (amountRcy) %s"
-                            .formatted(totalAllocated, eventType, amountRcy),
+                            .formatted(formatAmount(totalAllocated), eventType, formatAmount(amountRcy)),
                     ErrorTitleConstants.SPEND_NOT_FULLY_ALLOCATED));
         }
         return Optional.empty();
@@ -267,13 +271,15 @@ public final class FundingValidations {
         }
         if (childTotal.compareTo(parent.getTotalAmount()) > 0) {
             return Optional.of(Problems.badRequest(
-                    "Sub-project total %s exceeds the parent project total %s".formatted(childTotal, parent.getTotalAmount()),
+                    "Sub-project total %s exceeds the parent project total %s".formatted(
+                            formatAmount(childTotal), formatAmount(parent.getTotalAmount())),
                     ErrorTitleConstants.SUBPROJECT_AMOUNT_EXCEEDS_PARENT));
         }
         BigDecimal cumulative = otherSubProjectsTotal.add(childTotal);
         if (cumulative.compareTo(parent.getTotalAmount()) > 0) {
             return Optional.of(Problems.badRequest(
-                    "Sub-projects total %s exceeds the parent project total %s".formatted(cumulative, parent.getTotalAmount()),
+                    "Sub-projects total %s exceeds the parent project total %s".formatted(
+                            formatAmount(cumulative), formatAmount(parent.getTotalAmount())),
                     ErrorTitleConstants.SUBPROJECT_TOTAL_EXCEEDS_PARENT));
         }
         return Optional.empty();
@@ -339,12 +345,14 @@ public final class FundingValidations {
         }
         if (milestonesTotal != null && newTotal.compareTo(milestonesTotal) < 0) {
             return Optional.of(Problems.badRequest(
-                    "Project total %s is below the summed milestone amounts %s".formatted(newTotal, milestonesTotal),
+                    "Project total %s is below the summed milestone amounts %s".formatted(
+                            formatAmount(newTotal), formatAmount(milestonesTotal)),
                     ErrorTitleConstants.PROJECT_AMOUNT_BELOW_MILESTONES));
         }
         if (subProjectsTotal != null && newTotal.compareTo(subProjectsTotal) < 0) {
             return Optional.of(Problems.badRequest(
-                    "Project total %s is below the summed sub-project totals %s".formatted(newTotal, subProjectsTotal),
+                    "Project total %s is below the summed sub-project totals %s".formatted(
+                            formatAmount(newTotal), formatAmount(subProjectsTotal)),
                     ErrorTitleConstants.PROJECT_AMOUNT_BELOW_SUBPROJECTS));
         }
         return Optional.empty();

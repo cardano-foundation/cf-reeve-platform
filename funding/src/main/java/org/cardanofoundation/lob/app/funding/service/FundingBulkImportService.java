@@ -863,6 +863,17 @@ public class FundingBulkImportService {
         // Validation only — the milestone must already exist, this file never creates one.
         Optional<MilestoneEntity> milestone = milestoneService.findByProjectIdAndMilestoneTitle(project.getId(), line.getMilestoneTitle());
         if (milestone.isEmpty()) {
+            // A project holds either milestones or sub-projects, never both — so if this "milestone not
+            // found" project actually has sub-projects, the real problem isn't a typo'd milestone title,
+            // it's a row that forgot to name which sub-project the milestone belongs to. Reporting that
+            // distinctly (rather than the generic not-found) is what actually points the user at the fix.
+            if (isBlank(line.getSubProjectTitle()) && projectRepository.existsByParentProjectId(project.getId())) {
+                errors.add(rowError(il.rowNumber(), Problems.badRequest(
+                        "Project '%s' organises milestones under sub-projects; set Sub Project Title to name the one that owns milestone '%s'"
+                                .formatted(project.getProjectTitle(), line.getMilestoneTitle()),
+                        ErrorTitleConstants.SUBPROJECT_TITLE_REQUIRED)));
+                return Optional.empty();
+            }
             errors.add(rowError(il.rowNumber(), Problems.milestoneNotFound(line.getMilestoneTitle())));
             return Optional.empty();
         }
