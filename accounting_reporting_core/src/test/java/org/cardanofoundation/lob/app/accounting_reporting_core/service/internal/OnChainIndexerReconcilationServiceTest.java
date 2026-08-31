@@ -997,7 +997,8 @@ class OnChainIndexerReconcilationServiceTest {
     }
 
     @Test
-    void shouldReturnOK_whenTxHasAccountCodeCreditIsEmptyViolation() {
+    void shouldProcessNormally_whenTxHasAccountCodeCreditIsEmptyViolation() {
+        // ACCOUNT_CODE_CREDIT_IS_EMPTY is NOT an exclusion code (LOB-2252 fix) → normal comparison applies
         String organisationId = "test-org";
         LocalDate dateFrom = LocalDate.of(2024, 1, 1);
         LocalDate dateTo = LocalDate.of(2024, 1, 31);
@@ -1005,16 +1006,78 @@ class OnChainIndexerReconcilationServiceTest {
         TransactionEntity dbTx = buildDbTx("tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1");
         dbTx.setViolations(new LinkedHashSet<>(Set.of(exclusionViolation(TransactionViolationCode.ACCOUNT_CODE_CREDIT_IS_EMPTY))));
 
+        TransformedTransaction transformedTx = buildTransformedTx(
+                "tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1", organisationId, List.of());
+        when(indexerTransactionTransformer.transformForIndexerComparison(any())).thenReturn(transformedTx);
+
+        // Indexer has a different type → NOK (if exclusion were still applied this would be OK)
+        OnChainTransactionDto indexerTx = buildIndexerTx(
+                "tx-1", "VENDPYMT-001", "Journal", "2024-01-15", organisationId, List.of());
         when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo))
-                .thenReturn(Either.right(List.of(
-                        buildIndexerTx("tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", organisationId, List.of()))));
+                .thenReturn(Either.right(List.of(indexerTx)));
 
         Either<ProblemDetail, Map<String, IndexerReconcilationResult>> result =
                 service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
 
         assertThat(result.isRight()).isTrue();
+        assertThat(result.get().get("tx-1").status()).isEqualTo(ReconcilationCode.NOK);
+        verify(indexerTransactionTransformer, times(1)).transformForIndexerComparison(any());
+    }
+
+    @Test
+    void shouldProcessNormally_whenTxHasAccountCodeDebitIsEmptyViolation() {
+        // ACCOUNT_CODE_DEBIT_IS_EMPTY is NOT an exclusion code (LOB-2252 fix) → normal comparison applies
+        String organisationId = "test-org";
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2024, 1, 31);
+
+        TransactionEntity dbTx = buildDbTx("tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1");
+        dbTx.setViolations(new LinkedHashSet<>(Set.of(exclusionViolation(TransactionViolationCode.ACCOUNT_CODE_DEBIT_IS_EMPTY))));
+
+        TransformedTransaction transformedTx = buildTransformedTx(
+                "tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1", organisationId, List.of());
+        when(indexerTransactionTransformer.transformForIndexerComparison(any())).thenReturn(transformedTx);
+
+        OnChainTransactionDto indexerTx = buildIndexerTx(
+                "tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", organisationId, List.of());
+        when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo))
+                .thenReturn(Either.right(List.of(indexerTx)));
+
+        Either<ProblemDetail, Map<String, IndexerReconcilationResult>> result =
+                service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
+
+        assertThat(result.isRight()).isTrue();
+        // Data matches → still OK, but reached via real comparison rather than exclusion bypass
         assertThat(result.get().get("tx-1").status()).isEqualTo(ReconcilationCode.OK);
-        verify(indexerTransactionTransformer, never()).transformForIndexerComparison(any());
+        verify(indexerTransactionTransformer, times(1)).transformForIndexerComparison(any());
+    }
+
+    @Test
+    void shouldProcessNormally_whenTxHasDocumentMustBePresentViolation() {
+        // DOCUMENT_MUST_BE_PRESENT is NOT an exclusion code (LOB-2252 fix) → normal comparison applies
+        String organisationId = "test-org";
+        LocalDate dateFrom = LocalDate.of(2024, 1, 1);
+        LocalDate dateTo = LocalDate.of(2024, 1, 31);
+
+        TransactionEntity dbTx = buildDbTx("tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1");
+        dbTx.setViolations(new LinkedHashSet<>(Set.of(exclusionViolation(TransactionViolationCode.DOCUMENT_MUST_BE_PRESENT))));
+
+        TransformedTransaction transformedTx = buildTransformedTx(
+                "tx-1", "VENDPYMT-001", "VendorPayment", "2024-01-15", "batch-1", organisationId, List.of());
+        when(indexerTransactionTransformer.transformForIndexerComparison(any())).thenReturn(transformedTx);
+
+        // Indexer has mismatching data → NOK (if exclusion were still applied this would be OK)
+        OnChainTransactionDto indexerTx = buildIndexerTx(
+                "tx-1", "VENDPYMT-999", "Journal", "2024-01-20", organisationId, List.of());
+        when(indexerService.retrieveTransactionsByDateRange(organisationId, dateFrom, dateTo))
+                .thenReturn(Either.right(List.of(indexerTx)));
+
+        Either<ProblemDetail, Map<String, IndexerReconcilationResult>> result =
+                service.reconcileWithIndexer(organisationId, dateFrom, dateTo, Set.of(dbTx));
+
+        assertThat(result.isRight()).isTrue();
+        assertThat(result.get().get("tx-1").status()).isEqualTo(ReconcilationCode.NOK);
+        verify(indexerTransactionTransformer, times(1)).transformForIndexerComparison(any());
     }
 
     @Test

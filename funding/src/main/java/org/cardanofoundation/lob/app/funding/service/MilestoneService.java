@@ -29,6 +29,8 @@ import org.cardanofoundation.lob.app.funding.repository.MilestoneRepository;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 import org.cardanofoundation.lob.app.funding.util.FundingValidations;
 import org.cardanofoundation.lob.app.funding.util.Problems;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Currency;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @Slf4j
@@ -42,6 +44,7 @@ public class MilestoneService {
     private final EventMilestoneAllocationRepository allocationRepository;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
     private final FundingCascadeDeleteService cascadeDeleteService;
+    private final OrganisationPublicApiIF organisationPublicApi;
 
     // -------------------------------------------------------------------------
     // View-returning API (used by the controller — carries the ProblemDetail).
@@ -123,6 +126,16 @@ public class MilestoneService {
         return milestoneRepository.findByIdAndProjectId(milestoneId, projectId);
     }
 
+    /** Looks up a milestone by its user-defined external id within a project — used by the bulk CSV importer's upsert logic. */
+    public Optional<MilestoneEntity> findByProjectIdAndExternalMilestoneId(String projectId, String externalMilestoneId) {
+        return milestoneRepository.findByProjectIdAndExternalMilestoneId(projectId, externalMilestoneId);
+    }
+
+    /** Looks up a milestone by its title within a project — used by the bulk CSV importer's upsert logic. */
+    public Optional<MilestoneEntity> findByProjectIdAndMilestoneTitle(String projectId, String milestoneTitle) {
+        return milestoneRepository.findByProjectIdAndMilestoneTitle(projectId, milestoneTitle);
+    }
+
     public List<MilestoneEntity> findByProjectId(String projectId) {
         return milestoneRepository.findByProjectId(projectId);
     }
@@ -134,6 +147,18 @@ public class MilestoneService {
 
     public Page<MilestoneEntity> findByProjectId(String projectId, Pageable pageable) {
         return milestoneRepository.findByProjectId(projectId, pageable);
+    }
+
+    /**
+     * Sets every milestone of {@code projectId} to {@code currency} — a milestone's currency always
+     * mirrors its owning project's, so this keeps them in sync when the project's currency changes
+     * (see {@link ProjectService#cascadeCurrency}).
+     */
+    @Transactional
+    void updateCurrencyForProject(String projectId, String currency) {
+        List<MilestoneEntity> milestones = milestoneRepository.findByProjectId(projectId);
+        milestones.forEach(m -> m.setCurrency(currency));
+        milestoneRepository.saveAll(milestones);
     }
 
     @Transactional
@@ -150,14 +175,7 @@ public class MilestoneService {
         }
         ProjectEntity project = projectM.orElseThrow();
 
-        MilestoneEntity entity = toEntity(request, project);
-        if (milestoneRepository.findById(entity.getId()).isPresent()) {
-            log.warn("Milestone already exists for id: {}", entity.getId());
-            return Either.left(Problems.conflict(
-                    "Milestone already exists for id: %s".formatted(entity.getId()),
-                    ErrorTitleConstants.MILESTONE_ALREADY_EXISTS));
-        }
-        return validateAndSave(project, entity, request);
+        return validateAndSave(project, toEntity(request, project), request);
     }
 
     /**
@@ -168,29 +186,24 @@ public class MilestoneService {
      */
     @Transactional
     public Either<ProblemDetail, MilestoneEntity> resolveOrCreate(ProjectEntity project, MilestoneCreateRequest request) {
-        if (request.getExternalMilestoneId() != null) {
-            Optional<MilestoneEntity> existing = milestoneRepository
-                    .findByProjectIdAndExternalMilestoneId(project.getId(), request.getExternalMilestoneId());
-            if (existing.isPresent()) {
-                return Either.right(existing.get());
-            }
-            if (missingCreationFields(request)) {
-                // Id supplied but no milestone exists and creation fields are incomplete → referencing a
-                // milestone that does not exist.
-                log.warn("Milestone not found: {} in project: {}", request.getExternalMilestoneId(), project.getId());
-                return Either.left(Problems.milestoneNotFound(request.getExternalMilestoneId()));
-            }
-        } else if (missingCreationFields(request)) {
+        if (request.getMilestoneTitle() == null) {
             return Either.left(milestoneFieldsRequired());
         }
 
-        MilestoneEntity entity = toEntity(request, project);
-        // An anonymous milestone resolves by its content id — an identical one already present is reused.
-        Optional<MilestoneEntity> existing = milestoneRepository.findById(entity.getId());
+        Optional<MilestoneEntity> existing = milestoneRepository.findById(
+                MilestoneEntity.id(project.getId(), request.getMilestoneTitle()));
         if (existing.isPresent()) {
             return Either.right(existing.get());
         }
-        return validateAndSave(project, entity, request);
+
+        if (missingCreationFields(request)) {
+            // Title supplied but no milestone exists and creation fields are incomplete → referencing a
+            // milestone that does not exist.
+            log.warn("Milestone not found: {} in project: {}", request.getMilestoneTitle(), project.getId());
+            return Either.left(Problems.milestoneNotFound(request.getMilestoneTitle()));
+        }
+
+        return validateAndSave(project, toEntity(request, project), request);
     }
 
     /** Shared creation core: structure rule, budget validations, persist. */
@@ -206,6 +219,11 @@ public class MilestoneService {
                     "Milestone title already exists in this project: " + entity.getMilestoneTitle(),
                     ErrorTitleConstants.MILESTONE_TITLE_ALREADY_EXISTS));
         }
+        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(
+                request.getCurrency(), isCurrencyRegisteredAndActive(project.getOrganisationId(), request.getCurrency()));
+        if (currencyProblem.isPresent()) {
+            return Either.left(currencyProblem.get());
+        }
         BigDecimal otherMilestonesTotal = FundingValidations.sumMilestoneAmounts(
                 milestoneRepository.findByProjectId(project.getId()), null);
         Optional<ProblemDetail> validation = FundingValidations.milestone(
@@ -214,6 +232,18 @@ public class MilestoneService {
             return Either.left(validation.get());
         }
         return Either.right(milestoneRepository.saveAndFlush(entity));
+    }
+
+    /**
+     * Whether {@code currency} is registered and active in the organisation's currency table. Shared
+     * by every funding service that validates a currency code (see {@link FundingValidations#currencyCode}),
+     * since the org's table — not {@code java.util.Currency} — is the source of truth: it also covers
+     * non-ISO-4217 codes such as crypto assets (e.g. {@code ADA}, registered under ISO 24165).
+     */
+    boolean isCurrencyRegisteredAndActive(String organisationId, String currency) {
+        return organisationPublicApi.findCurrencyByCustomerCurrencyCode(organisationId, currency)
+                .map(Currency::isActive)
+                .orElse(false);
     }
 
     private static boolean missingCreationFields(MilestoneCreateRequest request) {
@@ -249,12 +279,13 @@ public class MilestoneService {
         // excludes this milestone's current amount so an unchanged amount can't trip the check.
         ProjectEntity project = milestone.getProject();
 
-        if (request.getMilestoneTitle() != null && milestoneRepository
-                .existsByProjectIdAndMilestoneTitleAndIdNot(project.getId(), request.getMilestoneTitle(), milestoneId)) {
-            log.warn("Milestone title already exists in project {}: {}", project.getId(), request.getMilestoneTitle());
-            return Either.left(Problems.conflict(
-                    "Milestone title already exists in this project: " + request.getMilestoneTitle(),
-                    ErrorTitleConstants.MILESTONE_TITLE_ALREADY_EXISTS));
+        // milestoneTitle is immutable — the milestone's id is derived from it, so changing it would
+        // leave the id stale relative to its new title.
+        if (request.getMilestoneTitle() != null && !request.getMilestoneTitle().equals(milestone.getMilestoneTitle())) {
+            log.warn("Attempted to change immutable milestoneTitle for milestone: {}", milestoneId);
+            return Either.left(Problems.badRequest(
+                    "milestoneTitle cannot be changed on update (id is derived from it)",
+                    ErrorTitleConstants.MILESTONE_TITLE_IMMUTABLE));
         }
         BigDecimal otherMilestonesTotal = FundingValidations.sumMilestoneAmounts(
                 milestoneRepository.findByProjectId(project.getId()), milestoneId);
@@ -262,6 +293,11 @@ public class MilestoneService {
                 request.getMilestoneAmount(), project, otherMilestonesTotal);
         if (validation.isPresent()) {
             return Either.left(validation.get());
+        }
+        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(
+                request.getCurrency(), isCurrencyRegisteredAndActive(project.getOrganisationId(), request.getCurrency()));
+        if (currencyProblem.isPresent()) {
+            return Either.left(currencyProblem.get());
         }
 
         if (request.getMilestoneAmount() != null) {
@@ -272,9 +308,6 @@ public class MilestoneService {
             }
         }
 
-        if (request.getMilestoneTitle() != null) {
-            milestone.setMilestoneTitle(request.getMilestoneTitle());
-        }
         if (request.getMilestoneAmount() != null) {
             milestone.setMilestoneAmount(request.getMilestoneAmount());
         }
@@ -302,18 +335,13 @@ public class MilestoneService {
                 .currency(milestone.getCurrency())
                 .milestoneDate(milestone.getMilestoneDate())
                 .spentAmount(allocationRepository.spentAmountByMilestoneId(
-                        milestone.getId(), EventType.SPENDING, EventType.REFUND))
+                        milestone.getId(), EventType.SPENDING))
                 .build();
     }
 
     private MilestoneEntity toEntity(MilestoneCreateRequest request, ProjectEntity project) {
-        String id = request.getExternalMilestoneId() != null
-                ? MilestoneEntity.id(project.getId(), request.getExternalMilestoneId())
-                : MilestoneEntity.contentId(project.getId(), request.getMilestoneTitle(),
-                        request.getMilestoneAmount(), request.getCurrency(), request.getMilestoneDate());
         return MilestoneEntity.builder()
-                .id(id)
-                .externalMilestoneId(request.getExternalMilestoneId())
+                .id(MilestoneEntity.id(project.getId(), request.getMilestoneTitle()))
                 .milestoneTitle(request.getMilestoneTitle())
                 .milestoneAmount(request.getMilestoneAmount())
                 .currency(request.getCurrency())

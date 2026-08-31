@@ -45,7 +45,7 @@ public class ProjectView implements ErrorAware {
 
     /** Calculated (not stored): total spent across this project's milestones and sub-projects. */
     @Nullable
-    @Schema(example = "12000.00", description = "Spent = allocated SPENDING amounts minus REFUND amounts.")
+    @Schema(example = "12000.00", description = "Spent = sum of allocated SPENDING amounts. FUNDING and REFUND do not affect this total.")
     private BigDecimal spentAmount;
 
     /** Null for root projects; set for sub-projects (SHA256 id of the parent). */

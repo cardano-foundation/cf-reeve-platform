@@ -38,9 +38,7 @@ public enum TransactionViolationCode {
         exclusion.add(TransactionViolationCode.NET_OFF_TX.name());
         exclusion.add(TransactionViolationCode.TRANSACTION_NOT_IN_ERP.name());
         exclusion.add(TransactionViolationCode.ALL_TX_ITEMS_ERASED.name());
-        exclusion.add(TransactionViolationCode.DOCUMENT_MUST_BE_PRESENT.name());
-        exclusion.add(TransactionViolationCode.ACCOUNT_CODE_CREDIT_IS_EMPTY.name());
-        exclusion.add(TransactionViolationCode.ACCOUNT_CODE_DEBIT_IS_EMPTY.name());
+
         return exclusion;
     }
     }

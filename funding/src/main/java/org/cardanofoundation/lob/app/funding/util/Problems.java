@@ -49,4 +49,28 @@ public final class Problems {
         return badRequest("Organisation with id: %s not found".formatted(organisationId),
                 ErrorTitleConstants.ORGANISATION_NOT_FOUND);
     }
+
+    public static ProblemDetail projectReferenceNotFound(String projectTitle) {
+        return notFound("Project '%s' not found".formatted(projectTitle),
+                ErrorTitleConstants.PROJECT_REFERENCE_NOT_FOUND);
+    }
+
+    public static ProblemDetail subProjectReferenceNotFound(String projectTitle, String subProjectTitle) {
+        return notFound("Sub-project '%s' not found under project '%s'"
+                        .formatted(subProjectTitle, projectTitle),
+                ErrorTitleConstants.SUBPROJECT_REFERENCE_NOT_FOUND);
+    }
+
+    public static ProblemDetail ambiguousProjectReference(String projectTitle) {
+        return badRequest(
+                "Project '%s' matches more than one project in this organisation; set Sub Project Title to name a specific one"
+                        .formatted(projectTitle),
+                ErrorTitleConstants.AMBIGUOUS_PROJECT_REFERENCE);
+    }
+
+    public static ProblemDetail fundingEventIdAlreadyUsed(String fundingId) {
+        return conflict(
+                "fundingId %s is already used by another FUNDING event".formatted(fundingId),
+                ErrorTitleConstants.FUNDING_EVENT_FUNDING_ID_ALREADY_USED);
+    }
 }

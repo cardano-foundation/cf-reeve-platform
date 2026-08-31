@@ -59,7 +59,9 @@ public class CsvParser<T> {
     }
 
     private Either<ProblemDetail, Void> checkHeaders(byte[] file, Class<T> type) throws CsvValidationException, IOException {
+        com.opencsv.CSVParser csvParser = new com.opencsv.CSVParserBuilder().withSeparator(delimiter.charAt(0)).build();
         CSVReader headerReader = new CSVReaderBuilder(new InputStreamReader(new ByteArrayInputStream(file)))
+                .withCSVParser(csvParser)
                 .withSkipLines(0)
                 .build();
 

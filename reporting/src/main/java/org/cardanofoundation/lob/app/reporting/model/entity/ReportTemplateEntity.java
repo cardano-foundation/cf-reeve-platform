@@ -25,6 +25,8 @@ import lombok.Setter;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import org.hibernate.annotations.SQLRestriction;
+import org.hibernate.envers.Audited;
+import org.hibernate.envers.NotAudited;
 
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
@@ -36,6 +38,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
+@Audited
 @Getter
 @Setter
 @EntityListeners(AuditingEntityListener.class)
@@ -68,6 +71,7 @@ public class ReportTemplateEntity extends CommonEntity {
     @Builder.Default
     private List<ReportTemplateFieldEntity> fields = new ArrayList<>();
 
+    @NotAudited
     @OneToMany(mappedBy = "reportTemplate", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<ReportTemplateValidationRuleEntity> validationRules = new ArrayList<>();

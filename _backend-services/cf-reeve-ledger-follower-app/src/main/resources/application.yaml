@@ -7,6 +7,9 @@ store:
   plugins:
     enabled: true
     exit-on-error: true
+    files:
+      # we don't use plugin jars but we have to point to /tmp because of restricted access in new hardened image
+      root-path: ${STORE_PLUGINS_FILES_ROOT_PATH:/tmp/plugins/files}
     filters:
       utxo.unspent.save:
         # Java implementation: see JavaPluginFactory + AddressUtxoFilterPlugin. Bound through the yaci-store

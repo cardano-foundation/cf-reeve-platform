@@ -41,7 +41,7 @@ class SpendingEventsPublishCommandSerdeTest {
 
         // Sub-project allocation: the milestones travel nested inside the sub-project object.
         SpendingEventPublishView.ProjectAllocation allocation = SpendingEventPublishView.ProjectAllocation.builder()
-                .externalProjectId("PROJ-AB")
+                .projectId("PROJ-AB")
                 .projectTitle("Project One")
                 .subProject(SpendingEventPublishView.SubProject.builder()
                         .subProjectId("SUB-1")
@@ -111,7 +111,7 @@ class SpendingEventsPublishCommandSerdeTest {
                 .build();
 
         SpendingEventPublishView.ProjectAllocation allocation = SpendingEventPublishView.ProjectAllocation.builder()
-                .externalProjectId("PROJ-AB")
+                .projectId("PROJ-AB")
                 .projectTitle("Project One")
                 .milestones(List.of(milestone))
                 .build();

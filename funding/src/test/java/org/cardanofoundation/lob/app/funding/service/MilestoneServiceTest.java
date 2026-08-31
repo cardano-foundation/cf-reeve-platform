@@ -20,6 +20,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -35,6 +36,8 @@ import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocation
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 import org.cardanofoundation.lob.app.funding.repository.MilestoneRepository;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Currency;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
@@ -50,12 +53,23 @@ class MilestoneServiceTest {
     private KeycloakSecurityHelper keycloakSecurityHelper;
     @Mock
     private FundingCascadeDeleteService cascadeDeleteService;
+    @Mock
+    private OrganisationPublicApiIF organisationPublicApi;
 
     @InjectMocks
     private MilestoneService milestoneService;
 
     private static final Pageable PAGEABLE = PageRequest.of(0, 10);
     private static final LocalDate FUTURE_DATE = LocalDate.now().plusYears(1);
+
+    @BeforeEach
+    void allowAnyCurrencyByDefault() {
+        // Currency codes referenced by these tests (USD, EUR, ...) are registered/active in the org's
+        // currency table by default; tests exercising the rejection path override this per code.
+        Currency activeCurrency = new Currency(new Currency.Id("org1", "x"), "ISO_4217:x", true);
+        lenient().when(organisationPublicApi.findCurrencyByCustomerCurrencyCode(any(), any()))
+                .thenReturn(Optional.of(activeCurrency));
+    }
 
     @Test
     void findById_returnsEmpty_whenNotFound() {
@@ -79,6 +93,29 @@ class MilestoneServiceTest {
         when(milestoneRepository.findByProjectId("p1")).thenReturn(List.of(m1, m2));
 
         assertThat(milestoneService.findByProjectId("p1")).containsExactly(m1, m2);
+    }
+
+    @Test
+    void findByProjectIdAndExternalMilestoneId_returnsEntity_whenFound() {
+        MilestoneEntity milestone = milestoneEntity("m1");
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId("p1", "MS-1")).thenReturn(Optional.of(milestone));
+
+        assertThat(milestoneService.findByProjectIdAndExternalMilestoneId("p1", "MS-1")).contains(milestone);
+    }
+
+    @Test
+    void findByProjectIdAndExternalMilestoneId_returnsEmpty_whenNotFound() {
+        when(milestoneRepository.findByProjectIdAndExternalMilestoneId("p1", "MS-UNKNOWN")).thenReturn(Optional.empty());
+
+        assertThat(milestoneService.findByProjectIdAndExternalMilestoneId("p1", "MS-UNKNOWN")).isEmpty();
+    }
+
+    @Test
+    void findByProjectIdAndMilestoneTitle_delegatesToRepository() {
+        MilestoneEntity milestone = milestoneEntity("m1");
+        when(milestoneRepository.findByProjectIdAndMilestoneTitle("p1", "Milestone AB")).thenReturn(Optional.of(milestone));
+
+        assertThat(milestoneService.findByProjectIdAndMilestoneTitle("p1", "Milestone AB")).contains(milestone);
     }
 
     @Test
@@ -140,6 +177,105 @@ class MilestoneServiceTest {
     }
 
     @Test
+    void create_rejected_whenCurrencyIsNotAValidIsoCode() {
+        ProjectEntity project = projectEntity("p1");
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(organisationPublicApi.findCurrencyByCustomerCurrencyCode(any(), eq("ABC")))
+                .thenReturn(Optional.empty());
+
+        MilestoneCreateRequest request = MilestoneCreateRequest.builder()
+                .milestoneTitle("Milestone AB").milestoneAmount(new BigDecimal("50000.00"))
+                .currency("ABC").milestoneDate(FUTURE_DATE)
+                .build();
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.CURRENCY_INVALID);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_derivesIdFromProjectAndTitle_notFromAnyExternalId() {
+        ProjectEntity project = projectEntity("p1");
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProjectId("p1")).thenReturn(List.of());
+        when(milestoneRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        MilestoneCreateRequest request = MilestoneCreateRequest.builder()
+                .externalMilestoneId("some-external-id-that-must-be-ignored")
+                .milestoneTitle("Milestone AB").milestoneAmount(new BigDecimal("50000.00"))
+                .currency("USD").milestoneDate(FUTURE_DATE).build();
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", request);
+
+        assertThat(result.isRight()).isTrue();
+        assertThat(result.get().getId()).isEqualTo(MilestoneEntity.id("p1", "Milestone AB"));
+    }
+
+    // -------------------------------------------------------------------------
+    // resolveOrCreate — the event-allocation flow's shared "reference or create inline" path
+    // -------------------------------------------------------------------------
+
+    @Test
+    void resolveOrCreate_returnsExisting_whenMilestoneTitleAlreadyExistsInProject() {
+        ProjectEntity project = projectEntity("p1");
+        MilestoneEntity existing = milestoneEntity("m1");
+        when(milestoneRepository.findById(MilestoneEntity.id("p1", "Milestone AB"))).thenReturn(Optional.of(existing));
+
+        // Reference-only: no creation fields supplied, just the title.
+        MilestoneCreateRequest request = MilestoneCreateRequest.builder().milestoneTitle("Milestone AB").build();
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.resolveOrCreate(project, request);
+
+        assertThat(result.isRight()).isTrue();
+        assertThat(result.get()).isEqualTo(existing);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void resolveOrCreate_createsNew_whenTitleDoesNotExistAndFullDataProvided() {
+        ProjectEntity project = projectEntity("p1");
+        when(milestoneRepository.findById(MilestoneEntity.id("p1", "New Milestone"))).thenReturn(Optional.empty());
+        when(milestoneRepository.findByProjectId("p1")).thenReturn(List.of());
+        when(milestoneRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        MilestoneCreateRequest request = MilestoneCreateRequest.builder()
+                .milestoneTitle("New Milestone").milestoneAmount(new BigDecimal("20000.00"))
+                .currency("USD").milestoneDate(FUTURE_DATE).build();
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.resolveOrCreate(project, request);
+
+        assertThat(result.isRight()).isTrue();
+        assertThat(result.get().getId()).isEqualTo(MilestoneEntity.id("p1", "New Milestone"));
+        verify(milestoneRepository).saveAndFlush(any());
+    }
+
+    @Test
+    void resolveOrCreate_returnsNotFound_whenTitleDoesNotExistAndCreationFieldsIncomplete() {
+        ProjectEntity project = projectEntity("p1");
+        when(milestoneRepository.findById(MilestoneEntity.id("p1", "Missing Milestone"))).thenReturn(Optional.empty());
+
+        // Title supplied but no amount/currency/date — not enough to create, and nothing to resolve to.
+        MilestoneCreateRequest request = MilestoneCreateRequest.builder().milestoneTitle("Missing Milestone").build();
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.resolveOrCreate(project, request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_FOUND);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void resolveOrCreate_returnsError_whenTitleMissingEntirely() {
+        ProjectEntity project = projectEntity("p1");
+
+        MilestoneCreateRequest request = MilestoneCreateRequest.builder()
+                .milestoneAmount(new BigDecimal("20000.00")).currency("USD").milestoneDate(FUTURE_DATE).build();
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.resolveOrCreate(project, request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_FIELDS_REQUIRED);
+        verify(milestoneRepository, never()).findById(any());
+    }
+
+    @Test
     void update_returnsEmpty_whenMilestoneNotFound() {
         when(milestoneRepository.findById("m1")).thenReturn(Optional.empty());
 
@@ -147,7 +283,8 @@ class MilestoneServiceTest {
     }
 
     @Test
-    void update_updatesAllFields_whenAllProvided() {
+    void update_updatesAmountCurrencyDate_whenProvided() {
+        // milestoneTitle is immutable (the id is derived from it) — this covers every other field.
         MilestoneEntity milestone = milestoneEntity("m1");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
         when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
@@ -155,7 +292,6 @@ class MilestoneServiceTest {
         when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
 
         MilestoneUpdateRequest request = MilestoneUpdateRequest.builder()
-                .milestoneTitle("Updated Label")
                 .milestoneAmount(new BigDecimal("99000.00"))
                 .currency("EUR")
                 .milestoneDate(FUTURE_DATE)
@@ -164,10 +300,40 @@ class MilestoneServiceTest {
         Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1", request);
 
         assertThat(result.isRight()).isTrue();
-        assertThat(milestone.getMilestoneTitle()).isEqualTo("Updated Label");
+        assertThat(milestone.getMilestoneTitle()).isEqualTo("Milestone AB");
         assertThat(milestone.getMilestoneAmount()).isEqualByComparingTo("99000.00");
         assertThat(milestone.getCurrency()).isEqualTo("EUR");
         assertThat(milestone.getMilestoneDate()).isEqualTo(FUTURE_DATE);
+    }
+
+    @Test
+    void update_success_whenMilestoneTitleResentUnchanged() {
+        // Sending the same (unchanged) title back is not a "change" — it's a no-op, not rejected.
+        MilestoneEntity milestone = milestoneEntity("m1"); // title "Milestone AB"
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
+        when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1",
+                MilestoneUpdateRequest.builder().milestoneTitle("Milestone AB").build());
+
+        assertThat(result.isRight()).isTrue();
+    }
+
+    @Test
+    void update_returnsError_whenMilestoneTitleChanged() {
+        // milestoneTitle is immutable — the milestone's id is derived from it. Attempting to change it
+        // is rejected outright, regardless of whether the new title would itself conflict.
+        MilestoneEntity milestone = milestoneEntity("m1"); // title "Milestone AB"
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1",
+                MilestoneUpdateRequest.builder().milestoneTitle("Renamed").build());
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_TITLE_IMMUTABLE);
+        verify(milestoneRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -189,21 +355,6 @@ class MilestoneServiceTest {
         when(milestoneRepository.existsByProjectIdAndMilestoneTitle("p1", "Milestone AB")).thenReturn(true);
 
         Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", createRequest());
-
-        assertThat(result.isLeft()).isTrue();
-        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_TITLE_ALREADY_EXISTS);
-        verify(milestoneRepository, never()).saveAndFlush(any());
-    }
-
-    @Test
-    void update_returnsConflict_whenTitleExistsInProject() {
-        MilestoneEntity milestone = milestoneEntity("m1");
-        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
-        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
-        when(milestoneRepository.existsByProjectIdAndMilestoneTitleAndIdNot("p1", "Existing", "m1")).thenReturn(true);
-
-        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1",
-                MilestoneUpdateRequest.builder().milestoneTitle("Existing").build());
 
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_TITLE_ALREADY_EXISTS);
@@ -260,7 +411,7 @@ class MilestoneServiceTest {
     @Test
     void toView_setsCalculatedSpentAmount() {
         MilestoneEntity milestone = milestoneEntity("m1");
-        when(allocationRepository.spentAmountByMilestoneId("m1", EventType.SPENDING, EventType.REFUND))
+        when(allocationRepository.spentAmountByMilestoneId("m1", EventType.SPENDING))
                 .thenReturn(new BigDecimal("12000.00"));
 
         MilestoneView view = milestoneService.toView(milestone);
@@ -355,7 +506,6 @@ class MilestoneServiceTest {
     void createMilestone_returnsView_whenAuthorisedAndCreated() {
         when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
-        when(milestoneRepository.findById(any())).thenReturn(Optional.empty());
         when(milestoneRepository.saveAndFlush(any())).thenReturn(milestoneEntity("m-new"));
 
         MilestoneView result = milestoneService.createMilestone("p1", createRequest());

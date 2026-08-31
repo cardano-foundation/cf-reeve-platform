@@ -23,6 +23,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import org.hibernate.envers.Audited;
+
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
 @Entity
@@ -30,6 +32,7 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
+@Audited
 @Getter
 @Setter
 public class ReportFieldEntity extends CommonEntity {

@@ -19,11 +19,6 @@ spring:
   kafka:
     enabled: false
 
-keycloak:
-  enabled: false
-  token-url: ""
-  authorization-url: ""
-
 lob:
   cardano:
     network: "DEV"

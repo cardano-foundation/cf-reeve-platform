@@ -1,15 +1,18 @@
 package org.cardanofoundation.lob.app.funding.service;
 
 import java.math.BigDecimal;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ProblemDetail;
@@ -170,7 +173,12 @@ public class SpendingEventService {
     public Either<ProblemDetail, FundingEventEntity> create(SpendingEventCreateRequest request) {
         FundingEventEntity event = toEntity(request);
         if (fundingEventRepository.existsById(event.getId())) {
-            return Either.left(Problems.conflict("Event already exists: %s".formatted(event.getId()),
+            // Named by the natural key that actually determines the id (see FundingEventEntity#id) —
+            // the id itself is an opaque hash, meaningless to a user reading the error.
+            String fundingHash = event.getFundingHash() == null ? "(none)" : event.getFundingHash();
+            return Either.left(Problems.conflict(
+                    "An event with Funding ID %s, Type %s, Hash %s and Currency %s already exists".formatted(
+                            event.getFundingId(), event.getEventType(), fundingHash, event.getCurrencyRcy()),
                     ErrorTitleConstants.SPENDING_EVENT_ALREADY_EXISTS));
         }
         return validateAndPersist(event, request);
@@ -183,7 +191,7 @@ public class SpendingEventService {
 
         FundingEventEntity event = eventOrError.get();
 
-        Optional<ProblemDetail> draftProblem = requireDraft(event, "Cannot update a published event: %s");
+        Optional<ProblemDetail> draftProblem = requireDraft(event, "Cannot update event with Funding ID %s: it is already published");
         if (draftProblem.isPresent()) return Either.left(draftProblem.get());
 
         // The event's identity — organisation and type — is fixed at creation; the update payload
@@ -217,11 +225,21 @@ public class SpendingEventService {
         Optional<ProblemDetail> entityProblem = FundingValidations.fundingEntity(event.getEventType(), event.getFundingEntity());
         if (entityProblem.isPresent()) return Either.left(entityProblem.get());
 
+        Optional<ProblemDetail> fundingIdProblem = fundingEventIdAvailable(event);
+        if (fundingIdProblem.isPresent()) return Either.left(fundingIdProblem.get());
+
+        Optional<ProblemDetail> eventDateRequiredProblem = FundingValidations.eventDateRequired(event.getEventDate());
+        if (eventDateRequiredProblem.isPresent()) return Either.left(eventDateRequiredProblem.get());
+
         Optional<ProblemDetail> eventDateProblem = FundingValidations.eventDateNotInFuture(event.getEventDate());
         if (eventDateProblem.isPresent()) return Either.left(eventDateProblem.get());
 
         Optional<ProblemDetail> spendProblem = validateEventSpendDetail(event);
         if (spendProblem.isPresent()) return Either.left(spendProblem.get());
+
+        Optional<ProblemDetail> spendAmountsProblem = FundingValidations.spendAmountsPositive(
+                event.getEventType(), event.getAmountFcy(), event.getFxRate());
+        if (spendAmountsProblem.isPresent()) return Either.left(spendAmountsProblem.get());
 
         Either<ProblemDetail, Void> allocResult = populateMilestoneAllocations(event, request.getAllocations(), request.getOrganisationId());
         if (allocResult.isLeft()) return Either.left(allocResult.getLeft());
@@ -229,13 +247,55 @@ public class SpendingEventService {
         recalculateTotalAmount(event);
         Optional<ProblemDetail> totalProblem = validateEventTotals(event);
         if (totalProblem.isPresent()) return Either.left(totalProblem.get());
-        return Either.right(fundingEventRepository.saveAndFlush(event));
+
+        try {
+            return Either.right(fundingEventRepository.saveAndFlush(event));
+        } catch (DataIntegrityViolationException e) {
+            // Last-resort safety net behind fundingEventIdAvailable's app-level check above (see the
+            // uq_funding_event_org_funding_id_funding_type partial unique index) — catches a duplicate
+            // Funding ID that slips past it via a race between two concurrent submissions. Any other
+            // constraint violation is a genuine bug, not a handleable client error, so it is rethrown.
+            if (event.getEventType() == EventType.FUNDING && isUniqueFundingIdViolation(e)) {
+                return Either.left(Problems.fundingEventIdAlreadyUsed(event.getFundingId()));
+            }
+            throw e;
+        }
+    }
+
+    private static boolean isUniqueFundingIdViolation(DataIntegrityViolationException e) {
+        String message = String.valueOf(e.getMostSpecificCause().getMessage());
+        return message.contains("uq_funding_event_org_funding_id_funding_type");
+    }
+
+    /**
+     * A Funding ID must identify a single FUNDING (allocation) event per organisation — enforced at
+     * the DB level by the {@code uq_funding_event_org_funding_id_funding_type} partial unique index
+     * (scoped to {@code event_type = 'FUNDING'} only: a SPENDING/REFUND event is expected to reuse
+     * the Funding ID of the FUNDING event it spends against or refunds, which is not a duplicate).
+     * Validated here too so callers get a clean 409 instead of a data-integrity 500 in the common
+     * case; {@link #isUniqueFundingIdViolation} is the fallback for a race that slips past this.
+     * {@code event.getId()} is used to exclude the event's own row, so re-saving an existing FUNDING
+     * event with its own (unchanged) Funding ID never flags itself — this is a no-op exclusion on
+     * create, since that id does not exist yet.
+     */
+    private Optional<ProblemDetail> fundingEventIdAvailable(FundingEventEntity event) {
+        if (event.getEventType() != EventType.FUNDING) {
+            return Optional.empty();
+        }
+        boolean exists = fundingEventRepository.existsByOrganisationIdAndEventTypeAndFundingIdAndIdNot(
+                event.getOrganisationId(), EventType.FUNDING, event.getFundingId(), event.getId());
+        if (exists) {
+            return Optional.of(Problems.fundingEventIdAlreadyUsed(event.getFundingId()));
+        }
+        return Optional.empty();
     }
 
     /** Published events are immutable — returns a conflict built from {@code messageTemplate} otherwise empty. */
     private static Optional<ProblemDetail> requireDraft(FundingEventEntity event, String messageTemplate) {
         if (event.getStatus() == EventStatus.PUBLISHED) {
-            String message = messageTemplate.formatted(event.getId());
+            // Funding ID is the identifier the user actually recognises — event.getId() is an opaque
+            // internal hash that means nothing to someone reading the error (e.g. from a CSV re-upload).
+            String message = messageTemplate.formatted(event.getFundingId());
             log.warn(message);
             return Optional.of(Problems.conflict(message, ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED));
         }
@@ -272,7 +332,7 @@ public class SpendingEventService {
         if (eventOrError.isLeft()) return eventOrError;
 
         FundingEventEntity event = eventOrError.get();
-        Optional<ProblemDetail> draftProblem = requireDraft(event, "Event is already published: %s");
+        Optional<ProblemDetail> draftProblem = requireDraft(event, "Event with Funding ID %s is already published");
         if (draftProblem.isPresent()) return Either.left(draftProblem.get());
 
         event.setStatus(EventStatus.PUBLISHED);
@@ -286,7 +346,7 @@ public class SpendingEventService {
         if (eventOrError.isLeft()) return Either.left(eventOrError.getLeft());
 
         FundingEventEntity event = eventOrError.get();
-        Optional<ProblemDetail> draftProblem = requireDraft(event, "Cannot delete a published event: %s");
+        Optional<ProblemDetail> draftProblem = requireDraft(event, "Cannot delete event with Funding ID %s: it is already published");
         if (draftProblem.isPresent()) return Either.left(draftProblem.get());
 
         fundingEventRepository.delete(event);
@@ -299,9 +359,12 @@ public class SpendingEventService {
 
     public SpendingEventView toView(FundingEventEntity event) {
         List<EventProjectAllocationView> projViews = buildProjectAllocationViews(event.getId());
+        boolean overspend = projViews.stream().anyMatch(p -> p.isOverspend()
+                || p.getMilestoneAllocations().stream().anyMatch(EventMilestoneAllocationView::isOverspend));
 
         return SpendingEventView.builder()
                 .eventId(event.getId())
+                .overspend(overspend)
                 .organisationId(event.getOrganisationId())
                 .eventType(event.getEventType())
                 .status(event.getStatus())
@@ -366,44 +429,63 @@ public class SpendingEventService {
     /**
      * For each allocation request (project + milestones), resolves/creates the project and its
      * milestones, then adds a flat {@link EventMilestoneAllocationEntity} per milestone directly
-     * to the event. The project association is implicit via the milestone's project FK.
+     * to the event. The project association is implicit via the milestone's project FK. There is
+     * deliberately no hard cap here on the event's amount against milestone/project budgets — a
+     * SPENDING event that pushes cumulative spend past its budget is still recorded; the overspend
+     * is surfaced later, once persisted, when building the response view (see {@link
+     * #toMilestoneAllocationView} / {@link #buildProjectAllocationViews}).
      */
     private Either<ProblemDetail, Void> populateMilestoneAllocations(
             FundingEventEntity event,
             List<EventProjectAllocationRequest> allocationRequests,
             String organisationId) {
 
-        // Combined budgets the event books against — a SPENDING event's spend (amountRcy) may not exceed
-        // the summed milestone budgets nor the summed project budgets. A null budget anywhere lifts that
-        // bound (it cannot be meaningfully enforced).
-        BudgetAccumulator budget = new BudgetAccumulator();
+        // Tracks every milestone already allocated in this event (across all nodes) — a milestone can
+        // only belong to one project, so a repeat here always means the same milestone was requested
+        // twice. Without this check, two allocation rows for the same milestone add two
+        // EventMilestoneAllocationEntity rows with the same (eventId, milestoneId) id, which Hibernate
+        // rejects at flush time as a raw, uncaught DuplicateKeyException (surfaces as a 500) instead of
+        // a clean validation error.
+        Set<String> seenMilestoneIds = new HashSet<>();
 
         for (EventProjectAllocationRequest req : allocationRequests) {
             Either<ProblemDetail, ProjectEntity> rootResult = resolveOrCreateRootProject(req, organisationId);
             if (rootResult.isLeft()) return Either.left(rootResult.getLeft());
 
             Optional<ProblemDetail> nodeProblem = populateNode(
-                    event, rootResult.get(), req.getMilestones(), req.getSubProjects(), budget);
+                    event, rootResult.get(), req.getMilestones(), req.getSubProjects(), seenMilestoneIds);
             if (nodeProblem.isPresent()) return Either.left(nodeProblem.get());
         }
-
-        Optional<ProblemDetail> capProblem = FundingValidations.eventAmountWithinBudget(
-                event.getEventType(), event.getAmountRcy(),
-                budget.milestoneKnown ? budget.milestoneBudget : null,
-                budget.projectKnown ? budget.projectBudget : null);
-        if (capProblem.isPresent()) return Either.left(capProblem.get());
 
         return Either.right(null);
     }
 
     /**
+     * See {@link FundingValidations#overfunding} — only queries the DB when the event is FUNDING. On
+     * an update, the event's own prior allocations are cleared and flushed before {@code populateNode}
+     * runs (see {@link #update}), so the queried amount always reflects <em>other</em> events only —
+     * never double-counts the event being saved. This is deliberately not duplicated as a per-row
+     * precheck in {@code FundingBulkImportService} — see the comment in its {@code
+     * buildMilestoneAllocation} — since only this post-clear query can exclude the event's own prior
+     * allocations correctly.
+     */
+    private Optional<ProblemDetail> overfundingProblem(EventType eventType, MilestoneEntity milestone, BigDecimal allocatedAmount) {
+        if (eventType != EventType.FUNDING) {
+            return Optional.empty();
+        }
+        BigDecimal cumulativeFunded = milestoneAllocationRepository.spentAmountByMilestoneId(milestone.getId(), EventType.FUNDING)
+                .add(allocatedAmount != null ? allocatedAmount : BigDecimal.ZERO);
+        return FundingValidations.overfunding(eventType, cumulativeFunded, milestone);
+    }
+
+    /**
      * Recursively attaches an allocation node to the event, mirroring the create-project endpoint's tree:
      * a node resolves/creates <em>either</em> its milestones (each carrying an allocated amount)
-     * <em>or</em> its sub-projects (never both). Budgets are accumulated for the event-amount cap.
+     * <em>or</em> its sub-projects (never both).
      */
     private Optional<ProblemDetail> populateNode(FundingEventEntity event, ProjectEntity project,
             List<EventMilestoneAllocationRequest> milestones, List<EventSubProjectAllocationRequest> subProjects,
-            BudgetAccumulator budget) {
+            Set<String> seenMilestoneIds) {
 
         Optional<ProblemDetail> xor = FundingValidations.milestonesXorSubProjects(
                 !milestones.isEmpty(), !subProjects.isEmpty());
@@ -412,41 +494,34 @@ public class SpendingEventService {
         }
 
         if (!milestones.isEmpty()) {
-            // A node carrying allocations is a target project — its budget bounds the event amount.
-            if (project.getTotalAmount() != null) {
-                budget.projectBudget = budget.projectBudget.add(project.getTotalAmount());
-            } else {
-                budget.projectKnown = false;
-            }
-
-            BigDecimal projectAllocatedTotal = BigDecimal.ZERO;
             for (EventMilestoneAllocationRequest milestoneReq : milestones) {
                 Either<ProblemDetail, MilestoneEntity> milestoneResult = milestoneService.resolveOrCreate(project, milestoneReq.getMilestone());
                 if (milestoneResult.isLeft()) return Optional.of(milestoneResult.getLeft());
 
                 MilestoneEntity milestone = milestoneResult.get();
 
+                if (!seenMilestoneIds.add(milestone.getId())) {
+                    return Optional.of(Problems.conflict(
+                            "Duplicate allocation to the same milestone in this event: " + milestone.getMilestoneTitle(),
+                            ErrorTitleConstants.DUPLICATE_MILESTONE_ALLOCATION));
+                }
+
+                Optional<ProblemDetail> currencyProblem = FundingValidations.eventCurrencyMatchesMilestone(
+                        event.getCurrencyRcy(), milestone);
+                if (currencyProblem.isPresent()) return currencyProblem;
+
                 Optional<ProblemDetail> allocationProblem = FundingValidations.allocation(
                         milestoneReq.getAllocatedAmount(), milestone, event.getEventType());
                 if (allocationProblem.isPresent()) return allocationProblem;
 
-                if (milestoneReq.getAllocatedAmount() != null) {
-                    projectAllocatedTotal = projectAllocatedTotal.add(milestoneReq.getAllocatedAmount());
-                }
-                if (milestone.getMilestoneAmount() != null) {
-                    budget.milestoneBudget = budget.milestoneBudget.add(milestone.getMilestoneAmount());
-                } else {
-                    budget.milestoneKnown = false;
-                }
+                Optional<ProblemDetail> overfundingProblem = overfundingProblem(event.getEventType(), milestone, milestoneReq.getAllocatedAmount());
+                if (overfundingProblem.isPresent()) return overfundingProblem;
 
                 event.getMilestoneAllocations().add(EventMilestoneAllocationEntity.builder()
                         .id(new EventMilestoneAllocationEntity.Id(event.getId(), milestone.getId()))
                         .allocatedAmount(milestoneReq.getAllocatedAmount())
                         .build());
             }
-
-            Optional<ProblemDetail> totalProblem = FundingValidations.allocationTotal(projectAllocatedTotal, project);
-            if (totalProblem.isPresent()) return totalProblem;
         }
 
         // Sub-project titles are unique within their parent — reject duplicate titles among the sibling
@@ -464,38 +539,21 @@ public class SpendingEventService {
             if (subResult.isLeft()) return Optional.of(subResult.getLeft());
 
             Optional<ProblemDetail> childProblem = populateNode(
-                    event, subResult.get(), subNode.getMilestones(), subNode.getSubProjects(), budget);
+                    event, subResult.get(), subNode.getMilestones(), subNode.getSubProjects(), seenMilestoneIds);
             if (childProblem.isPresent()) return childProblem;
         }
         return Optional.empty();
     }
 
-    /** Mutable holder for the event-amount cap budgets accumulated while walking the allocation tree. */
-    private static final class BudgetAccumulator {
-        private BigDecimal milestoneBudget = BigDecimal.ZERO;
-        private boolean milestoneKnown = true;
-        private BigDecimal projectBudget = BigDecimal.ZERO;
-        private boolean projectKnown = true;
-    }
-
     private Either<ProblemDetail, ProjectEntity> resolveOrCreateRootProject(EventProjectAllocationRequest req, String organisationId) {
-        if (req.getExternalProjectId() == null) {
-            return Either.left(Problems.badRequest("externalProjectId is required",
+        if (req.getProjectTitle() == null) {
+            return Either.left(Problems.badRequest("projectTitle is required",
                     ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
 
-        String projectId = ProjectEntity.id(organisationId, req.getExternalProjectId());
+        String projectId = ProjectEntity.id(organisationId, req.getProjectTitle());
         if (projectRepository.existsById(projectId)) {
             return Either.right(projectRepository.findById(projectId).orElseThrow());
-        }
-
-        // Id supplied but no project exists for it. With no creation fields, the caller is referencing
-        // an existing project — fail as not-found. Supplying projectTitle (and budget) creates it instead.
-        if (req.getProjectTitle() == null) {
-            return Either.left(Problems.notFound(
-                    "Project not found: %s. Supply projectTitle (and totalAmount/currency) to create it."
-                            .formatted(req.getExternalProjectId()),
-                    ErrorTitleConstants.PROJECT_NOT_FOUND));
         }
 
         // A root that directly carries milestones needs a budget; one that only holds sub-projects may omit it.
@@ -508,22 +566,20 @@ public class SpendingEventService {
         if (amountProblem.isPresent()) {
             return Either.left(amountProblem.get());
         }
+        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(
+                req.getCurrency(), milestoneService.isCurrencyRegisteredAndActive(organisationId, req.getCurrency()));
+        if (currencyProblem.isPresent()) {
+            return Either.left(currencyProblem.get());
+        }
         Optional<ProblemDetail> fundingIdProblem = projectStructureService.fundingIdAvailable(organisationId, req.getFundingId());
         if (fundingIdProblem.isPresent()) {
             return Either.left(fundingIdProblem.get());
-        }
-        // Root titles are unique per organisation — return a clean 409 rather than a DB-integrity 500.
-        if (projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNull(organisationId, req.getProjectTitle())) {
-            return Either.left(Problems.conflict(
-                    "Project title already exists in this organisation: " + req.getProjectTitle(),
-                    ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS));
         }
 
         ProjectEntity newProject = ProjectEntity.builder()
                 .id(projectId)
                 .organisationId(organisationId)
                 .fundingId(req.getFundingId())
-                .externalProjectId(req.getExternalProjectId())
                 .projectTitle(req.getProjectTitle())
                 .totalAmount(req.getTotalAmount())
                 .currency(req.getCurrency())
@@ -532,23 +588,19 @@ public class SpendingEventService {
     }
 
     private Either<ProblemDetail, ProjectEntity> resolveOrCreateSubProjectNode(EventSubProjectAllocationRequest subReq, ProjectEntity parent) {
-        String subProjectUid = ProjectEntity.subId(parent.getId(), subReq.getExternalProjectId());
+        if (subReq.getProjectTitle() == null) {
+            return Either.left(Problems.badRequest("projectTitle is required",
+                    ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
+        }
+
+        String subProjectUid = ProjectEntity.subId(parent.getId(), subReq.getProjectTitle());
         Optional<ProjectEntity> existing = projectRepository.findById(subProjectUid);
         if (existing.isPresent()) {
             return Either.right(existing.get());
         }
 
-        // Id supplied but no sub-project exists for it under this parent. With no creation fields, the
-        // caller is referencing an existing sub-project — fail as not-found. Supplying projectTitle creates it.
-        if (subReq.getProjectTitle() == null) {
-            return Either.left(Problems.notFound(
-                    "Sub-project not found: %s. Supply projectTitle to create it."
-                            .formatted(subReq.getExternalProjectId()),
-                    ErrorTitleConstants.PROJECT_NOT_FOUND));
-        }
-
         // Same shared creation path (structure + budget rules) as the create-project endpoint.
-        return projectStructureService.createSubProject(parent, subReq.getExternalProjectId(),
+        return projectStructureService.createSubProject(parent,
                 subReq.getProjectTitle(), subReq.getFundingId(), subReq.getTotalAmount(), subReq.getCurrency());
     }
 
@@ -582,13 +634,22 @@ public class SpendingEventService {
                 .map(entry -> {
                     ProjectEntity project = entry.getKey();
                     List<EventMilestoneAllocationView> mViews = entry.getValue().stream()
-                            .map(SpendingEventService::toMilestoneAllocationView)
+                            .map(this::toMilestoneAllocationView)
                             .toList();
+                    // Cumulative spend directly against this project's own milestones (the project holds
+                    // either milestones or sub-projects, never both — see FundingValidations.milestonesXorSubProjects
+                    // — so this is exact, no roll-up needed). Overspend is surfaced, not blocked; see
+                    // FundingValidations.isOverspend.
+                    BigDecimal projectSpent = milestoneAllocationRepository.spentAmountByProjectId(project.getId(), EventType.SPENDING);
+                    boolean projectOverspend = FundingValidations.isOverspend(projectSpent, project.getTotalAmount());
                     return EventProjectAllocationView.builder()
                             .projectId(project.getId())
                             .externalProjectId(project.getExternalProjectId())
                             .projectTitle(project.getProjectTitle())
                             .parentProjectId(project.getParentProject() != null ? project.getParentProject().getId() : null)
+                            .totalAmount(project.getTotalAmount())
+                            .spentAmount(projectSpent)
+                            .overspend(projectOverspend)
                             .milestoneAllocations(mViews)
                             .build();
                 })
@@ -605,14 +666,16 @@ public class SpendingEventService {
                     // Publish the root project's id/title as is. A direct allocation carries its
                     // milestones at the project level; an allocation to a sub-project nests the
                     // sub-project's own id/title/milestones so it is unambiguous where the money went.
+                    // Projects have no user-defined external id anymore (title-based identity), so the
+                    // internal deterministic id is what downstream consumers (blockchain_publisher) get.
                     boolean isSubProject = project.getParentProject() != null;
                     ProjectEntity root = rootOf(project);
                     return SpendingEventPublishView.ProjectAllocation.builder()
-                            .externalProjectId(root.getExternalProjectId())
+                            .projectId(root.getId())
                             .projectTitle(root.getProjectTitle())
                             .subProject(isSubProject
                                     ? SpendingEventPublishView.SubProject.builder()
-                                            .subProjectId(project.getExternalProjectId())
+                                            .subProjectId(project.getId())
                                             .subProjectTitle(project.getProjectTitle())
                                             .milestones(milestones)
                                             .build()
@@ -632,7 +695,10 @@ public class SpendingEventService {
         return cursor;
     }
 
-    private static EventMilestoneAllocationView toMilestoneAllocationView(AllocatedMilestone am) {
+    private EventMilestoneAllocationView toMilestoneAllocationView(AllocatedMilestone am) {
+        BigDecimal spentAmount = milestoneAllocationRepository.spentAmountByMilestoneId(
+                am.milestone().getId(), EventType.SPENDING);
+        boolean overspend = FundingValidations.isOverspend(spentAmount, am.milestone().getMilestoneAmount());
         return EventMilestoneAllocationView.builder()
                 .eventId(am.allocation().getId().getEventId())
                 .milestoneId(am.allocation().getId().getMilestoneId())
@@ -642,6 +708,8 @@ public class SpendingEventService {
                 .allocatedAmount(am.allocation().getAllocatedAmount())
                 .currency(am.milestone().getCurrency())
                 .milestoneDate(am.milestone().getMilestoneDate())
+                .spentAmount(spentAmount)
+                .overspend(overspend)
                 .build();
     }
 

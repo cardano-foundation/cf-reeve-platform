@@ -33,7 +33,7 @@ public class MilestoneEntity extends CommonEntity implements Persistable<String>
     @Column(name = "milestone_id", nullable = false)
     private String id;
 
-    /** User-defined milestone identifier (e.g. "MS-1"). */
+    /** User-defined milestone identifier (e.g. "MS-1"). No longer used for lookups or id generation; title-based now. */
     @Nullable
     @Column(name = "external_milestone_id")
     private String externalMilestoneId;
@@ -63,29 +63,9 @@ public class MilestoneEntity extends CommonEntity implements Persistable<String>
         return isNew;
     }
 
-    /**
-     * Deterministic id for a milestone identified by its user-defined id, unique within a project.
-     * This is the natural key used by {@code findByProject_IdAndExternalMilestoneId}.
-     */
-    public static String id(String projectId, String externalMilestoneId) {
-        return SHA3.digestAsHex("%s::%s".formatted(projectId, externalMilestoneId));
-    }
-
-    /**
-     * Deterministic id for a milestone created without a user-defined {@code externalMilestoneId};
-     * derived from its content so that re-creating the same milestone within a project is idempotent.
-     */
-    public static String contentId(String projectId,
-                                   String milestoneTitle,
-                                   BigDecimal milestoneAmount,
-                                   String currency,
-                                   LocalDate milestoneDate) {
-        return SHA3.digestAsHex("%s::%s::%s::%s::%s".formatted(
-                projectId,
-                milestoneTitle,
-                milestoneAmount == null ? "" : milestoneAmount.stripTrailingZeros().toPlainString(),
-                currency,
-                milestoneDate));
+    /** Deterministic id for a milestone — unique within its project by its title. */
+    public static String id(String projectId, String milestoneTitle) {
+        return SHA3.digestAsHex("%s::%s".formatted(projectId, milestoneTitle));
     }
 
 }

@@ -28,7 +28,7 @@ public class ProjectWithMilestonesCreateRequest extends BaseRequest {
     private String fundingId;
 
     @NotBlank
-    @Schema(example = "PROJ-AB")
+    @Schema(example = "PROJ-AB", description = "User-defined id. No longer used for lookups or id generation; kept for backward compatibility only.")
     private String externalProjectId;
 
     @NotBlank
@@ -39,8 +39,9 @@ public class ProjectWithMilestonesCreateRequest extends BaseRequest {
     @Schema(example = "200000.00")
     private BigDecimal totalAmount;
 
-    @NotBlank
-    @Schema(example = "USD")
+    @Nullable
+    @Schema(example = "USD", description = "Required when creating a root project (parentProjectId is null). "
+            + "When creating a sub-project (parentProjectId is set), defaults to the parent's currency if omitted.")
     private String currency;
 
     /** When set, the project is created as a sub-project of this (existing) parent. Null creates a root project. */

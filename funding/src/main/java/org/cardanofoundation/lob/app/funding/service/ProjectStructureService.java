@@ -36,12 +36,25 @@ public class ProjectStructureService {
 
     /**
      * Creates a sub-project of {@code parent} after applying the structural and budget rules.
-     * The new project's id is the deterministic {@code (parentId, externalProjectId)} sub-id and
-     * its organisation is inherited from the parent.
+     * The new project's id is the deterministic {@code (parentId, projectTitle)} sub-id and
+     * its organisation is inherited from the parent. When {@code currency} is null/blank, it
+     * defaults to the parent's currency — mirroring how a milestone's currency is always taken
+     * from its owning project rather than specified independently. The parent's own currency is
+     * always populated by this point (a root project requires it to be created, and every
+     * sub-project resolves and stores its own effective currency the same way), so this default
+     * is available at any depth.
      */
     @Transactional
-    public Either<ProblemDetail, ProjectEntity> createSubProject(ProjectEntity parent, String externalProjectId,
+    public Either<ProblemDetail, ProjectEntity> createSubProject(ProjectEntity parent,
             String projectTitle, @Nullable String fundingId, @Nullable BigDecimal totalAmount, @Nullable String currency) {
+
+        String effectiveCurrency = (currency != null && !currency.isBlank()) ? currency : parent.getCurrency();
+
+        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(
+                currency, milestoneService.isCurrencyRegisteredAndActive(parent.getOrganisationId(), currency));
+        if (currencyProblem.isPresent()) {
+            return Either.left(currencyProblem.get());
+        }
 
         Optional<ProblemDetail> structure = FundingValidations.subProjectAllowed(
                 milestoneService.hasMilestones(parent.getId()));
@@ -52,13 +65,6 @@ public class ProjectStructureService {
         Optional<ProblemDetail> amount = FundingValidations.projectAmount(totalAmount);
         if (amount.isPresent()) {
             return Either.left(amount.get());
-        }
-
-        String subProjectId = ProjectEntity.subId(parent.getId(), externalProjectId);
-        if (projectRepository.existsById(subProjectId)) {
-            return Either.left(Problems.conflict(
-                    "Sub-project already exists: " + externalProjectId,
-                    ErrorTitleConstants.PROJECT_ALREADY_EXISTS));
         }
 
         if (projectRepository.existsByParentProjectIdAndProjectTitle(parent.getId(), projectTitle)) {
@@ -74,19 +80,18 @@ public class ProjectStructureService {
 
         BigDecimal otherSubProjectsTotal = FundingValidations.sumProjectTotals(
                 projectRepository.findByParentProjectId(parent.getId()), null);
-        Optional<ProblemDetail> subAmount = FundingValidations.subProjectAmount(totalAmount, parent, otherSubProjectsTotal);
+        Optional<ProblemDetail> subAmount = FundingValidations.subProjectAmount(totalAmount, projectTitle, parent, otherSubProjectsTotal);
         if (subAmount.isPresent()) {
             return Either.left(subAmount.get());
         }
 
         return Either.right(projectRepository.saveAndFlush(ProjectEntity.builder()
-                .id(subProjectId)
+                .id(ProjectEntity.subId(parent.getId(), projectTitle))
                 .organisationId(parent.getOrganisationId())
                 .fundingId(fundingId)
-                .externalProjectId(externalProjectId)
                 .projectTitle(projectTitle)
                 .totalAmount(totalAmount)
-                .currency(currency)
+                .currency(effectiveCurrency)
                 .parentProject(parent)
                 .build()));
     }
