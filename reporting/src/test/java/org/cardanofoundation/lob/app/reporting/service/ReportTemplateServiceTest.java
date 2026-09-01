@@ -96,6 +96,7 @@ class ReportTemplateServiceTest {
         templateDto.setOrganisationId("org123");
         templateDto.setReportTemplateType("BALANCE_SHEET");
         templateDto.setDataMode("SYSTEM");
+        templateDto.setAccountingRegime("IFRS");
         templateDto.setFields(new ArrayList<>());
         templateDto.setValidationRules(new ArrayList<>());
 
@@ -105,6 +106,7 @@ class ReportTemplateServiceTest {
         templateEntity.setName("Test Template");
         templateEntity.setVer(1L);
         templateEntity.setReportTemplateType(ReportTemplateType.BALANCE_SHEET);
+        templateEntity.setAccountingRegime("IFRS");
         templateEntity.setFields(new ArrayList<>());
 
         templateResponseDto = new ReportTemplateResponseDto();

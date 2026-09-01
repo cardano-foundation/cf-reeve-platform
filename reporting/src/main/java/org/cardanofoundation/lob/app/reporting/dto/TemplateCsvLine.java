@@ -24,6 +24,9 @@ public class TemplateCsvLine {
     @CsvBindByName(column = "DataMode")
     @NotNull(message = "DataMode is required. Options are: SYSTEM or USER")
     private String dataMode;
+    @CsvBindByName(column = "Accounting Regime")
+    @NotNull(message = "Accounting Regime is required")
+    private String accountingRegime;
     @CsvBindByName(column = "Field Name")
     @NotNull(message = "Field Name is required")
     private String fieldName;

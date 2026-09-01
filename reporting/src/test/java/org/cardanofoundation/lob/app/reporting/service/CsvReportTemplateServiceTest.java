@@ -50,6 +50,8 @@ class CsvReportTemplateServiceTest {
     private ChartOfAccountRepository chartOfAccountRepository;
     @Mock
     private Validator validator;
+    @Mock
+    private ReportTemplateService reportTemplateServiceDependency;
     @InjectMocks
     private CsvReportTemplateService reportTemplateService;
 
