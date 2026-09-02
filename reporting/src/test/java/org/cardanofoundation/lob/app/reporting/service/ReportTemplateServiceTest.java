@@ -922,6 +922,80 @@ class ReportTemplateServiceTest {
         verify(reportTemplateRepository, never()).save(any());
     }
 
+    // -------------------------------------------------------------------------
+    // checkAccountingRegimeImmutable
+    // -------------------------------------------------------------------------
+
+    @Test
+    void checkAccountingRegimeImmutable_regimeUnchanged_returnsRight() {
+        ReportTemplateEntity existing = new ReportTemplateEntity();
+        existing.setId("abc");
+        existing.setAccountingRegime("IFRS");
+        templateDto.setAccountingRegime("IFRS");
+
+        Either<ProblemDetail, Void> result = reportTemplateService.checkAccountingRegimeImmutable(existing, templateDto);
+
+        assertTrue(result.isRight());
+        verify(reportingRepository, never()).existsByReportTemplateIdAndLedgerDispatchApprovedTrue(any());
+    }
+
+    @Test
+    void checkAccountingRegimeImmutable_regimeChangedNoPublishedReport_returnsRight() {
+        ReportTemplateEntity existing = new ReportTemplateEntity();
+        existing.setId("abc");
+        existing.setAccountingRegime("IFRS");
+        templateDto.setAccountingRegime("GAAP");
+        when(reportingRepository.existsByReportTemplateIdAndLedgerDispatchApprovedTrue("abc")).thenReturn(false);
+
+        Either<ProblemDetail, Void> result = reportTemplateService.checkAccountingRegimeImmutable(existing, templateDto);
+
+        assertTrue(result.isRight());
+    }
+
+    @Test
+    void checkAccountingRegimeImmutable_regimeChangedWithPublishedReport_returnsLeft() {
+        ReportTemplateEntity existing = new ReportTemplateEntity();
+        existing.setId("abc");
+        existing.setName("Test Template");
+        existing.setAccountingRegime("IFRS");
+        templateDto.setAccountingRegime("GAAP");
+        when(reportingRepository.existsByReportTemplateIdAndLedgerDispatchApprovedTrue("abc")).thenReturn(true);
+
+        Either<ProblemDetail, Void> result = reportTemplateService.checkAccountingRegimeImmutable(existing, templateDto);
+
+        assertTrue(result.isLeft());
+        assertEquals("ACCOUNTING_REGIME_IMMUTABLE_AFTER_PUBLISH", result.getLeft().getTitle());
+        assertEquals(409, result.getLeft().getStatus());
+    }
+
+    @Test
+    void update_BlockedWhenAccountingRegimeChangedAfterPublish() {
+        // Given
+        ReportTemplateEntity existing = new ReportTemplateEntity();
+        existing.setId("abc");
+        existing.setVer(1L);
+        existing.setName(templateDto.getName());
+        existing.setDataMode(DataMode.valueOf(templateDto.getDataMode()));
+        existing.setReportTemplateType(ReportTemplateType.valueOf(templateDto.getReportTemplateType()));
+        existing.setAccountingRegime("GAAP");
+        existing.setValidationRules(List.of());
+
+        when(reportTemplateRepository.findLatestByOrganisationIdAndId("org123", "abc"))
+                .thenReturn(Optional.of(existing));
+        when(reportingRepository.existsByReportTemplateIdAndLedgerDispatchApprovedTrue("abc")).thenReturn(true);
+        Errors errors = mock(Errors.class);
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any())).thenReturn(errors);
+
+        // When — templateDto.accountingRegime is "IFRS" (set in @BeforeEach), existing is "GAAP"
+        Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
+
+        // Then
+        assertTrue(result.isLeft());
+        assertEquals("ACCOUNTING_REGIME_IMMUTABLE_AFTER_PUBLISH", result.getLeft().getTitle());
+        verify(reportTemplateRepository, never()).save(any());
+    }
+
     @Test
     void delete_Success() {
         // Given

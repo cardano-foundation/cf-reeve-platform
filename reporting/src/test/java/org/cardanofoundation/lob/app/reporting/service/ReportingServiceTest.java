@@ -41,6 +41,7 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportGenerateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportIdRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportResponseDto;
+import org.cardanofoundation.lob.app.reporting.dto.events.PublishReportEvent;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportFieldEntity;
@@ -779,6 +780,71 @@ class ReportingServiceTest {
         verify(entity).setRejected(true);
         verify(entity).setRejectedBy("User123");
         verify(reportRepository).save(any());
+    }
+
+    // -------------------------------------------------------------------------
+    // publish
+    // -------------------------------------------------------------------------
+
+    @Test
+    void publish_reportNotFound() {
+        ReportIdRequest request = ReportIdRequest.builder().organisationId("org123").reportId("report123").build();
+        when(reportRepository.findByOrganisationIdAndId("org123", "report123")).thenReturn(Optional.empty());
+
+        Either<ProblemDetail, ReportResponseDto> result = reportingService.publish(request);
+
+        assertTrue(result.isLeft());
+        assertEquals("REPORT_NOT_FOUND", result.getLeft().getTitle());
+        verify(reportRepository, never()).save(any());
+    }
+
+    @Test
+    void publish_notReadyToPublish() {
+        ReportIdRequest request = ReportIdRequest.builder().organisationId("org123").reportId("report123").build();
+        ReportEntity entity = mock(ReportEntity.class);
+        when(reportRepository.findByOrganisationIdAndId("org123", "report123")).thenReturn(Optional.of(entity));
+        when(entity.isReadyToPublish()).thenReturn(false);
+
+        Either<ProblemDetail, ReportResponseDto> result = reportingService.publish(request);
+
+        assertTrue(result.isLeft());
+        assertEquals("REPORT_NOT_READY_TO_PUBLISH", result.getLeft().getTitle());
+        verify(reportRepository, never()).save(any());
+    }
+
+    @Test
+    void publish_alreadyApproved() {
+        ReportIdRequest request = ReportIdRequest.builder().organisationId("org123").reportId("report123").build();
+        ReportEntity entity = mock(ReportEntity.class);
+        when(reportRepository.findByOrganisationIdAndId("org123", "report123")).thenReturn(Optional.of(entity));
+        when(entity.isReadyToPublish()).thenReturn(true);
+        when(entity.isLedgerDispatchApproved()).thenReturn(true);
+
+        Either<ProblemDetail, ReportResponseDto> result = reportingService.publish(request);
+
+        assertTrue(result.isLeft());
+        assertEquals("REPORT_ALREADY_PUBLISHED", result.getLeft().getTitle());
+        verify(reportRepository, never()).save(any());
+    }
+
+    @Test
+    void publish_success_copiesAccountingRegimeFromTemplateAndPublishesEvent() {
+        ReportIdRequest request = ReportIdRequest.builder().organisationId("org123").reportId("abc").build();
+        templateEntity.setAccountingRegime("IFRS");
+        reportEntity.setReadyToPublish(true);
+
+        when(reportRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(reportEntity));
+        when(authenticationUserService.getCurrentUser()).thenReturn("user@example.com");
+        when(reportRepository.save(any(ReportEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(reportMapper.toResponseDto(any(ReportEntity.class))).thenReturn(reportResponseDto);
+
+        Either<ProblemDetail, ReportResponseDto> result = reportingService.publish(request);
+
+        assertTrue(result.isRight());
+        assertEquals("IFRS", reportEntity.getAccountingRegime());
+        assertTrue(reportEntity.isLedgerDispatchApproved());
+        assertEquals("user@example.com", reportEntity.getPublishedBy());
+        verify(applicationEventPublisher).publishEvent(any(PublishReportEvent.class));
     }
 
 }

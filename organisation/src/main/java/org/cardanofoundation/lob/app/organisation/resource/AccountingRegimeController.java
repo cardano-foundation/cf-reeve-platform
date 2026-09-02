@@ -86,7 +86,7 @@ public class AccountingRegimeController {
     })
     @PostMapping(value = "/{orgId}/accounting-regimes", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<?> insertAccountingRegimesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam(value = "file") MultipartFile file) {
+    public ResponseEntity<Object> insertAccountingRegimesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam(value = "file") MultipartFile file) {
         return accountingRegimeService.insertViaCsv(orgId, file).fold(
                 problem -> ResponseEntity.status(HttpStatus.BAD_REQUEST.value()).body(problem),
                 ResponseEntity::ok

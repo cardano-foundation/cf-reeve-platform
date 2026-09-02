@@ -3,7 +3,11 @@ package org.cardanofoundation.lob.app.reporting.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -17,6 +21,7 @@ import org.springframework.validation.Validator;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -30,9 +35,12 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 import org.cardanofoundation.lob.app.reporting.dto.CreateCsvTemplateRequest;
+import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.TemplateCsvLine;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
+import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -301,5 +309,84 @@ class CsvReportTemplateServiceTest {
         assertEquals(1, responseDtos.size());
         ReportTemplateResponseDto first = responseDtos.getFirst();
         assertTrue(first.getError().isEmpty());
+    }
+
+    @Test
+    void createCsvTemplates_success_accountingRegimePropagatedFromCsv() {
+        CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
+        Organisation organisation = new Organisation();
+        MultipartFile file = mock(MultipartFile.class);
+        TemplateCsvLine templateCsvLine = mock(TemplateCsvLine.class);
+        Errors errors = mock(Errors.class);
+        ChartOfAccount chartOfAccount = mock(ChartOfAccount.class);
+        ReportTemplateResponseDto responseDto = mock(ReportTemplateResponseDto.class);
+
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(organisation));
+        when(request.getOrganisationId()).thenReturn("org123");
+        when(csvParser.parseCsv(file, TemplateCsvLine.class)).thenReturn(Either.right(List.of(templateCsvLine)));
+        when(request.getFile()).thenReturn(file);
+        when(validator.validateObject(templateCsvLine)).thenReturn(errors);
+        when(templateCsvLine.getName()).thenReturn("Test Template");
+        when(templateCsvLine.getReportType()).thenReturn("BALANCE_SHEET");
+        when(templateCsvLine.getDataMode()).thenReturn("USER");
+        when(templateCsvLine.getAccounts()).thenReturn("1234");
+        when(templateCsvLine.getDateRange()).thenReturn("PERIOD");
+        when(templateCsvLine.getAccountingRegime()).thenReturn("IFRS");
+        when(chartOfAccountRepository.findById(new ChartOfAccount.Id("org123", "1234"))).thenReturn(Optional.of(chartOfAccount));
+        when(templateCsvLine.getParent()).thenReturn("");
+        when(chartOfAccount.getId()).thenReturn(new ChartOfAccount.Id("org123", "1234"));
+
+        ArgumentCaptor<ReportTemplateDto> dtoCaptor = ArgumentCaptor.forClass(ReportTemplateDto.class);
+        when(reportTemplateMapper.toEntity(dtoCaptor.capture(), isNull())).thenReturn(mock(ReportTemplateEntity.class));
+        when(reportTemplateMapper.toResponseDto(any())).thenReturn(responseDto);
+
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
+
+        assertTrue(result.isRight());
+        assertEquals("IFRS", dtoCaptor.getValue().getAccountingRegime());
+    }
+
+    @Test
+    void createCsvTemplates_accountingRegimeChangeBlockedAfterPublish() {
+        CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
+        Organisation organisation = new Organisation();
+        MultipartFile file = mock(MultipartFile.class);
+        TemplateCsvLine templateCsvLine = mock(TemplateCsvLine.class);
+        Errors errors = mock(Errors.class);
+        ChartOfAccount chartOfAccount = mock(ChartOfAccount.class);
+        ReportTemplateEntity existingTemplate = mock(ReportTemplateEntity.class);
+        ProblemDetail immutableProblem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The accounting regime of template 'Test Template' cannot be changed because it has at least one published report.");
+        immutableProblem.setTitle("ACCOUNTING_REGIME_IMMUTABLE_AFTER_PUBLISH");
+
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(organisation));
+        when(request.getOrganisationId()).thenReturn("org123");
+        when(csvParser.parseCsv(file, TemplateCsvLine.class)).thenReturn(Either.right(List.of(templateCsvLine)));
+        when(request.getFile()).thenReturn(file);
+        when(validator.validateObject(templateCsvLine)).thenReturn(errors);
+        when(templateCsvLine.getName()).thenReturn("Test Template");
+        when(templateCsvLine.getReportType()).thenReturn("BALANCE_SHEET");
+        when(templateCsvLine.getDataMode()).thenReturn("USER");
+        when(templateCsvLine.getAccounts()).thenReturn("1234");
+        when(templateCsvLine.getDateRange()).thenReturn("PERIOD");
+        when(templateCsvLine.getAccountingRegime()).thenReturn("GAAP");
+        when(chartOfAccountRepository.findById(new ChartOfAccount.Id("org123", "1234"))).thenReturn(Optional.of(chartOfAccount));
+        when(templateCsvLine.getParent()).thenReturn("");
+        when(chartOfAccount.getId()).thenReturn(new ChartOfAccount.Id("org123", "1234"));
+        when(reportTemplateRepository.findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion("org123", "Test Template", ReportTemplateType.BALANCE_SHEET))
+                .thenReturn(Optional.of(existingTemplate));
+        when(reportTemplateServiceDependency.checkAccountingRegimeImmutable(eq(existingTemplate), any(ReportTemplateDto.class)))
+                .thenReturn(Either.left(immutableProblem));
+
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
+
+        assertTrue(result.isRight());
+        List<ReportTemplateResponseDto> responseDtos = result.get();
+        assertEquals(1, responseDtos.size());
+        ReportTemplateResponseDto first = responseDtos.getFirst();
+        assertTrue(first.getError().isPresent());
+        assertEquals("ACCOUNTING_REGIME_IMMUTABLE_AFTER_PUBLISH", first.getError().get().getTitle());
+        verify(reportTemplateRepository, never()).saveAndFlush(any());
     }
 }
