@@ -18,6 +18,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.validation.Errors;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.Validator;
+import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
@@ -129,6 +130,43 @@ class CsvReportTemplateServiceTest {
 
         assertTrue(result.isLeft());
         assertEquals("CSV_PARSING_ERROR", result.getLeft().getTitle());
+    }
+
+    @Test
+    void createCsvTemplates_missingAccountingRegime_realValidatorRejects() {
+        LocalValidatorFactoryBean realValidator = new LocalValidatorFactoryBean();
+        realValidator.afterPropertiesSet();
+
+        CsvReportTemplateService serviceWithRealValidator = new CsvReportTemplateService(
+                organisationPublicApi,
+                csvParser,
+                reportTemplateRepository,
+                null,
+                reportTemplateMapper,
+                chartOfAccountRepository,
+                realValidator,
+                reportTemplateServiceDependency);
+
+        CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
+        Organisation organisation = new Organisation();
+        MultipartFile file = mock(MultipartFile.class);
+        TemplateCsvLine templateCsvLine = new TemplateCsvLine();
+        templateCsvLine.setName("Test Template");
+        templateCsvLine.setReportType("BALANCE_SHEET");
+        templateCsvLine.setDataMode("USER");
+        templateCsvLine.setFieldName("Revenue");
+        templateCsvLine.setAccountingRegime(null);
+
+        when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(organisation));
+        when(request.getOrganisationId()).thenReturn("org123");
+        when(csvParser.parseCsv(file, TemplateCsvLine.class)).thenReturn(Either.right(List.of(templateCsvLine)));
+        when(request.getFile()).thenReturn(file);
+
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = serviceWithRealValidator.createCsvTemplates(request);
+
+        assertTrue(result.isLeft());
+        assertEquals("CSV_PARSING_ERROR", result.getLeft().getTitle());
+        assertEquals("Accounting Regime is required", result.getLeft().getDetail());
     }
 
     @Test
