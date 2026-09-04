@@ -57,6 +57,7 @@ public class CsvReportTemplateService {
     private final ReportTemplateMapper reportTemplateMapper;
     private final ChartOfAccountRepository chartOfAccountRepository;
     private final Validator validator;
+    private final ReportTemplateService reportTemplateService;
 
     public Either<ProblemDetail, List<ReportTemplateResponseDto>> createCsvTemplates(@Valid CreateCsvTemplateRequest csvTemplateRequest) {
         Optional<Organisation> organisationO = organisationPublicApiIF.findByOrganisationId(csvTemplateRequest.getOrganisationId());
@@ -110,6 +111,7 @@ public class CsvReportTemplateService {
             reportTemplateDto.setName(firstLine.getName());
             reportTemplateDto.setReportTemplateType(reportTemplateType.name());
             reportTemplateDto.setDataMode(firstLine.getDataMode());
+            reportTemplateDto.setAccountingRegime(firstLine.getAccountingRegime());
             reportTemplateDto.setVer(1L);
             List<ReportTemplateFieldDto> fieldDtos = new ArrayList<>();
             for (TemplateCsvLine templateCsvLine : filteredLines) {
@@ -150,24 +152,34 @@ public class CsvReportTemplateService {
         }
         return Either.right(results.stream().map(e -> e.fold(
                 left -> ReportTemplateResponseDto.builder().error(Optional.of(left)).build(),
-                dto -> {
-                    Optional<ReportTemplateEntity> existingTemplateO = reportTemplateRepository
-                            .findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion(dto.getOrganisationId(), dto.getName(), ReportTemplateType.valueOf(dto.getReportTemplateType()));
-                    ReportTemplateEntity entity = existingTemplateO.map(existingTemplate -> {
-                                List<ReportEntity> byReportTemplateId = reportingRepository.findByReportTemplateId(existingTemplate.getId());
-                                ReportTemplateEntity newEntity;
-                                if(byReportTemplateId.isEmpty()) {
-                                    newEntity = reportTemplateMapper.toEntity(dto, existingTemplate);
-                                } else {
-                                    newEntity = reportTemplateMapper.toEntity(dto, ReportTemplateEntity.builder().ver(existingTemplate.getVer() + 1).build());
-                                }
-                                return newEntity;
-                            })
-                            .orElseGet(() -> reportTemplateMapper.toEntity(dto, null));
-                    entity = reportTemplateRepository.saveAndFlush(entity);
-                    return reportTemplateMapper.toResponseDto(entity);
-                }
+                this::saveOrUpdateFromCsv
         )).toList());
+    }
+
+    private ReportTemplateResponseDto saveOrUpdateFromCsv(ReportTemplateDto dto) {
+        Optional<ReportTemplateEntity> existingTemplateO = reportTemplateRepository
+                .findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion(dto.getOrganisationId(), dto.getName(), ReportTemplateType.valueOf(dto.getReportTemplateType()));
+
+        if (existingTemplateO.isPresent()) {
+            Either<ProblemDetail, Void> accountingRegimeImmutable = reportTemplateService.checkAccountingRegimeImmutable(existingTemplateO.get(), dto);
+            if (accountingRegimeImmutable.isLeft()) {
+                return ReportTemplateResponseDto.builder().error(Optional.of(accountingRegimeImmutable.getLeft())).build();
+            }
+        }
+
+        ReportTemplateEntity entity = existingTemplateO.map(existingTemplate -> {
+                    List<ReportEntity> byReportTemplateId = reportingRepository.findByReportTemplateId(existingTemplate.getId());
+                    ReportTemplateEntity newEntity;
+                    if(byReportTemplateId.isEmpty()) {
+                        newEntity = reportTemplateMapper.toEntity(dto, existingTemplate);
+                    } else {
+                        newEntity = reportTemplateMapper.toEntity(dto, ReportTemplateEntity.builder().ver(existingTemplate.getVer() + 1).build());
+                    }
+                    return newEntity;
+                })
+                .orElseGet(() -> reportTemplateMapper.toEntity(dto, null));
+        entity = reportTemplateRepository.saveAndFlush(entity);
+        return reportTemplateMapper.toResponseDto(entity);
     }
 
     private Either<ProblemDetail, ReportTemplateFieldDto> csvLineToTemplateField(String organisationId, TemplateCsvLine templateCsvLine) {

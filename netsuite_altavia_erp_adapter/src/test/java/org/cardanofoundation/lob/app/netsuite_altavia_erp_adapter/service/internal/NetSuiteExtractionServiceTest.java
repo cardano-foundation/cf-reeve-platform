@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.service.inter
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -52,6 +53,8 @@ class NetSuiteExtractionServiceTest {
     @Mock
     private NetSuiteClient netSuiteClient;
     @Mock
+    private NetSuiteClientRegistry netSuiteClientRegistry;
+    @Mock
     private TransactionConverter transactionConverter;
     @Mock
     private ApplicationEventPublisher applicationEventPublisher;
@@ -66,7 +69,26 @@ class NetSuiteExtractionServiceTest {
 
     @BeforeEach
     void setUp() {
-        netSuiteExtractionService = new NetSuiteExtractionService(ingestionRepository, netSuiteClient, transactionConverter, applicationEventPublisher, systemExtractionParametersFactory, extractionParametersFilteringService, netSuiteParser, 1, "",true );
+        // The service now resolves a per-organisation client; these tests exercise the
+        // configured-organisation path, so the registry always hands back the mock client.
+        lenient().when(netSuiteClientRegistry.forOrganisation(anyString()))
+                .thenReturn(Either.right(netSuiteClient));
+
+        netSuiteExtractionService = new NetSuiteExtractionService(ingestionRepository, netSuiteClientRegistry, transactionConverter, applicationEventPublisher, systemExtractionParametersFactory, extractionParametersFilteringService, netSuiteParser, 1, "",true );
+    }
+
+    @Test
+    void testStartNewERPExtraction_failsWhenTheOrganisationHasNoConfiguration() {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.PRECONDITION_REQUIRED,
+                "No NetSuite configuration exists for organisation orgId.");
+        problem.setTitle(NetSuiteClientRegistry.CONFIGURATION_NOT_FOUND);
+        when(netSuiteClientRegistry.forOrganisation("orgId")).thenReturn(Either.left(problem));
+
+        netSuiteExtractionService.startNewERPExtraction("orgId", "userId",
+                UserExtractionParameters.builder().from(LocalDate.now()).to(LocalDate.now()).build());
+
+        verify(applicationEventPublisher).publishEvent(any(TransactionBatchFailedEvent.class));
+        verifyNoMoreInteractions(applicationEventPublisher, netSuiteClient);
     }
 
     @Test
