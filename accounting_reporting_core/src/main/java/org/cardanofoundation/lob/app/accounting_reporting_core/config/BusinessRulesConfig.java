@@ -43,11 +43,14 @@ public class BusinessRulesConfig {
     @Value("${lob.accounting_reporting_core.rules.amounts_lcy_check:true}")
     private boolean amountsLcyCheck;
 
-    @Value("${lob.accounting_reporting_core.rules.amount_lcy_balance_zeros_out_check:true}")
+    @Value("${lob.accounting_reporting_core.rules.amount_lcy_balance_zeros_out_check:false}")
     private boolean amountLcyBalanceZerosOutCheck;
 
-    @Value("${lob.accounting_reporting_core.rules.amount_fcy_balance_zeros_out_check:true}")
+    @Value("${lob.accounting_reporting_core.rules.amount_fcy_balance_zeros_out_check:false}")
     private boolean amountFcyBalanceZerosOutCheck;
+
+    @Value("${lob.accounting_reporting_core.rules.line_item_debit_credit_accounts_check:true}")
+    private boolean lineItemDebitCreditAccountsCheck;
 
     @Value("${lob.accounting_reporting_core.rules.journal_account_credit_enrichment:true}")
     private boolean journalAccountCreditEnrichment;
@@ -106,10 +109,10 @@ public class BusinessRulesConfig {
         val pipelineTasks = new ArrayList<PipelineTask>();
         log.info("Business rules processor initialized - Active rules:\n" +
                 "sanityCheckFields={},\n transactionTypeUnknown={},\n discardZeroBalanceTxItems={},\n amountsFcyCheck={},\n amountsLcyCheck={},\n amountLcyBalanceZerosOutCheck={},\n" +
-                "amountFcyBalanceZerosOutCheck={},\n journalAccountCreditEnrichment={},\n organisationConversion={},\n documentConversion={},\n costCenterConversion={},\n projectConversion={},\n" +
+                "amountFcyBalanceZerosOutCheck={},\n lineItemDebitCreditAccountsCheck={},\n journalAccountCreditEnrichment={},\n organisationConversion={},\n documentConversion={},\n costCenterConversion={},\n projectConversion={},\n" +
                 "accountEventCodesConversion={},\n discardSameAccountCode={},\n txItemsAmountsSumming={},\n amountsLcyAfterSummingCheck={},\n accountCodeDebitCheck={},\n accountCodeCreditCheck={},\n documentMustBePresent={},\n checkIfAllTxItemsAreErased={},\n netOffCreditDebit={}",
                 sanityCheckFields, transactionTypeUnknown, discardZeroBalanceTxItems, amountsFcyCheck, amountsLcyCheck, amountLcyBalanceZerosOutCheck, amountFcyBalanceZerosOutCheck,
-                journalAccountCreditEnrichment, organisationConversion, documentConversion, costCenterConversion, projectConversion, accountEventCodesConversion, discardSameAccountCode, txItemsAmountsSumming, amountsLcyAfterSummingCheck, accountCodeDebitCheck,
+                lineItemDebitCreditAccountsCheck, journalAccountCreditEnrichment, organisationConversion, documentConversion, costCenterConversion, projectConversion, accountEventCodesConversion, discardSameAccountCode, txItemsAmountsSumming, amountsLcyAfterSummingCheck, accountCodeDebitCheck,
                 accountCodeCreditCheck, documentMustBePresent, checkIfAllTxItemsAreErased, netOffCreditDebit
         );
 
@@ -154,7 +157,8 @@ public class BusinessRulesConfig {
                 new AmountsLcyCheckTaskItem(amountsLcyCheck),
                 new AmountLcyBalanceZerosOutCheckTaskItem(amountLcyBalanceZerosOutCheck),
                 new AmountFcyBalanceZerosOutCheckTaskItem(amountFcyBalanceZerosOutCheck),
-                new JournalAccountCreditEnrichmentTaskItem(journalAccountCreditEnrichment, organisationPublicApi)
+                new JournalAccountCreditEnrichmentTaskItem(journalAccountCreditEnrichment, organisationPublicApi),
+                new LineItemDebitCreditAccountsPresentCheckTaskItem(lineItemDebitCreditAccountsCheck)
         ));
     }
 
