@@ -43,13 +43,13 @@ public class BusinessRulesConfig {
     @Value("${lob.accounting_reporting_core.rules.amounts_lcy_check:true}")
     private boolean amountsLcyCheck;
 
-    @Value("${lob.accounting_reporting_core.rules.amount_lcy_balance_zeros_out_check:false}")
+    @Value("${lob.accounting_reporting_core.rules.amount_lcy_balance_zeros_out_check:true}")
     private boolean amountLcyBalanceZerosOutCheck;
 
-    @Value("${lob.accounting_reporting_core.rules.amount_fcy_balance_zeros_out_check:false}")
+    @Value("${lob.accounting_reporting_core.rules.amount_fcy_balance_zeros_out_check:true}")
     private boolean amountFcyBalanceZerosOutCheck;
 
-    @Value("${lob.accounting_reporting_core.rules.line_item_debit_credit_accounts_check:true}")
+    @Value("${lob.accounting_reporting_core.rules.line_item_debit_credit_accounts_check:false}")
     private boolean lineItemDebitCreditAccountsCheck;
 
     @Value("${lob.accounting_reporting_core.rules.journal_account_credit_enrichment:true}")
