@@ -1,6 +1,8 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -45,11 +47,18 @@ class SpendingEventPublishableTest {
     }
 
     @Test
-    void findReadyToDispatch_delegatesToGateway() {
-        SpendingEventEntity entity = new SpendingEventEntity();
-        when(repositoryGateway.findEventsReadyToBeDispatched("org1", 10)).thenReturn(Set.of(entity));
+    void claimReadyToDispatch_delegatesToGateway() {
+        when(repositoryGateway.claimEventsReadyToBeDispatched(eq("org1"), eq(10), any())).thenReturn(Set.of("e1"));
 
-        assertThat(publishable.findReadyToDispatch("org1", 10)).containsExactly(entity);
+        assertThat(publishable.claimReadyToDispatch("org1", 10)).containsExactly("e1");
+    }
+
+    @Test
+    void loadByIds_delegatesToGateway() {
+        SpendingEventEntity entity = new SpendingEventEntity();
+        when(repositoryGateway.findAllByIdsPreservingOrder(Set.of("e1"))).thenReturn(Set.of(entity));
+
+        assertThat(publishable.loadByIds(Set.of("e1"))).containsExactly(entity);
     }
 
     @Test
@@ -97,20 +106,6 @@ class SpendingEventPublishableTest {
         publishable.storeAll(entities);
 
         verify(repositoryGateway).storeAll(entities);
-    }
-
-    @Test
-    void supportsLocking_returnsTrue() {
-        assertThat(publishable.supportsLocking()).isTrue();
-    }
-
-    @Test
-    void lock_delegatesToGateway() {
-        Set<SpendingEventEntity> entities = Set.of(new SpendingEventEntity());
-
-        publishable.lock(entities);
-
-        verify(repositoryGateway).lock(entities);
     }
 
     @Test

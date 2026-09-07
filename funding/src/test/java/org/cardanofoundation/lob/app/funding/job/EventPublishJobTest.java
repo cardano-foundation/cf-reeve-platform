@@ -12,6 +12,7 @@ import java.util.Set;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -44,6 +45,8 @@ class EventPublishJobTest {
     private ApplicationEventPublisher applicationEventPublisher;
     @Mock
     private OrganisationPublicApi organisationPublicApi;
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     @InjectMocks
     private EventPublishJob eventPublishJob;

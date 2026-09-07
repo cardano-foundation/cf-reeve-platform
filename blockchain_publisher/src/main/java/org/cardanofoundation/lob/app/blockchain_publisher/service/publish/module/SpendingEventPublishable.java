@@ -45,8 +45,13 @@ public class SpendingEventPublishable implements CardanoPublishable<SpendingEven
     }
 
     @Override
-    public Set<SpendingEventEntity> findReadyToDispatch(String organisationId, int batchSize) {
-        return repositoryGateway.findEventsReadyToBeDispatched(organisationId, batchSize);
+    public Set<String> claimReadyToDispatch(String organisationId, int batchSize) {
+        return repositoryGateway.claimEventsReadyToBeDispatched(organisationId, batchSize, dispatchingStrategy());
+    }
+
+    @Override
+    public Set<SpendingEventEntity> loadByIds(Set<String> ids) {
+        return repositoryGateway.findAllByIdsPreservingOrder(ids);
     }
 
     @Override
@@ -72,16 +77,6 @@ public class SpendingEventPublishable implements CardanoPublishable<SpendingEven
     @Override
     public void storeAll(Set<SpendingEventEntity> entities) {
         repositoryGateway.storeAll(entities);
-    }
-
-    @Override
-    public boolean supportsLocking() {
-        return true;
-    }
-
-    @Override
-    public void lock(Set<SpendingEventEntity> entities) {
-        repositoryGateway.lock(entities);
     }
 
     @Override

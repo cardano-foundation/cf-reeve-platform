@@ -3,7 +3,6 @@ package org.cardanofoundation.lob.app.blockchain_publisher.service.publish;
 import static org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus.SUBMITTED;
 import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
 
-import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 
@@ -30,7 +29,7 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 /**
  * Generic dispatcher that publishes any {@link CardanoPublishable} type to Cardano L1. Replaces the previously
  * duplicated {@code BlockchainTransactionsDispatcher} and {@code BlockchainReportsDispatcher}: the whole
- * fetch -> lock -> build -> submit -> update -> notify pipeline lives here once, and per-type behaviour is
+ * claim -> build -> submit -> update -> notify pipeline lives here once, and per-type behaviour is
  * supplied entirely by the injected module.
  */
 @Service
@@ -52,19 +51,18 @@ public class CardanoDispatcher {
         for (Organisation organisation : organisationPublicApi.listAll()) {
             String organisationId = organisation.getId();
 
-            Set<E> ready = module.findReadyToDispatch(organisationId, pullBatchSize);
-            Set<E> toDispatch = module.dispatchingStrategy().apply(organisationId, ready);
+            // The claim commits in its own transaction (FOR UPDATE SKIP LOCKED + lockedAt write) before
+            // returning, so from here on a concurrent dispatcher instance cannot pick up the same rows,
+            // even while this instance is still building / submitting. Rows stay claimed until unlock or
+            // until the lock timeout expires (crash recovery).
+            Set<String> claimedIds = module.claimReadyToDispatch(organisationId, pullBatchSize);
 
-            if (module.supportsLocking()) {
-                Set<E> toUnlock = new HashSet<>(ready);
-                toUnlock.removeAll(toDispatch);
-                module.unlock(toUnlock);
-            }
-
-            if (toDispatch.isEmpty()) {
+            if (claimedIds.isEmpty()) {
                 log.debug("No pending '{}' to dispatch for organisationId:{}", module.type(), organisationId);
                 continue;
             }
+
+            Set<E> toDispatch = module.loadByIds(claimedIds);
 
             log.info("Dispatching '{}' for organisationId:{}, count:{}", module.type(), organisationId, toDispatch.size());
             for (Set<E> unit : module.groupForDispatch(toDispatch)) {
@@ -78,10 +76,6 @@ public class CardanoDispatcher {
     private <E extends PublishableEntity> void dispatchUnit(CardanoPublishable<E> module,
                                                             String organisationId,
                                                             Set<E> unit) {
-        if (module.supportsLocking()) {
-            module.lock(unit);
-        }
-
         try {
             Either<ProblemDetail, Optional<L1Batch<E>>> builtE = module.buildL1Transaction(organisationId, unit);
 
@@ -102,9 +96,7 @@ public class CardanoDispatcher {
             ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(INTERNAL_SERVER_ERROR, e.getMessage());
             applyFailure(module, organisationId, unit, problemDetail.getDetail());
         } finally {
-            if (module.supportsLocking()) {
-                module.unlock(unit);
-            }
+            module.unlock(unit);
         }
     }
 

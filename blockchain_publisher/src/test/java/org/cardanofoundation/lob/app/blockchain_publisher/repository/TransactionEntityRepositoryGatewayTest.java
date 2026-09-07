@@ -31,6 +31,8 @@ import org.junit.jupiter.api.Test;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.dispatch.DispatchingStrategy;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.dispatch.ImmediateDispatchingStrategy;
 
 class TransactionEntityRepositoryGatewayTest {
 
@@ -60,7 +62,7 @@ class TransactionEntityRepositoryGatewayTest {
     }
 
     @Test
-    void testFindAndLockTransactionsReadyToBeDispatchedLockNotExpired() {
+    void testClaimTransactionsReadyToBeDispatched_setsLockedAtAndReturnsIds() {
         Set<BlockchainPublishStatus> dispatchStatuses = BlockchainPublishStatus.toDispatchStatuses();
         Set<TransactionEntity> transactions = new HashSet<>();
 
@@ -77,55 +79,67 @@ class TransactionEntityRepositoryGatewayTest {
         when(transactionEntityRepository.findFreeTransactionsByStatus(eq(ORG_ID), eq(dispatchStatuses),  any(LocalDateTime.class), any(Limit.class)))
                 .thenReturn(transactions);
 
-        Set<TransactionEntity> result = transactionEntityRepositoryGateway.findTransactionsReadyToBeDispatched(ORG_ID, BATCH_SIZE);
+        Set<String> claimedIds = transactionEntityRepositoryGateway.claimTransactionsReadyToBeDispatched(ORG_ID, BATCH_SIZE, new ImmediateDispatchingStrategy<>());
 
-        assertEquals(2, result.size());
-        //Assertions.assertTrue(result.stream().allMatch(tx -> tx.getLockedAt().isPresent()));
+        assertEquals(Set.of("tx1", "tx2"), claimedIds);
+        Assertions.assertTrue(transactions.stream().allMatch(tx -> tx.getLockedAt().isPresent()));
 
         verify(transactionEntityRepository).findFreeTransactionsByStatus(eq(ORG_ID), eq(dispatchStatuses), any(LocalDateTime.class),  eq(Limit.of(BATCH_SIZE)));
-        //verify(transactionEntityRepository).saveAll(result);
         verifyNoMoreInteractions(transactionEntityRepository);
     }
 
     @Test
-    void testFindAndLockTransactionsReadyToBeDispatchedLockExpired() {
+    void testClaimTransactionsReadyToBeDispatched_strategyFiltersOutEverything() {
         Set<BlockchainPublishStatus> dispatchStatuses = BlockchainPublishStatus.toDispatchStatuses();
-        Set<TransactionEntity> transactions = new HashSet<>();
 
         TransactionEntity unlockedTx = new TransactionEntity();
         unlockedTx.setId("tx1");
         unlockedTx.setLockedAt(null);
-        transactions.add(unlockedTx);
-
-        TransactionEntity expiredLockTx = new TransactionEntity();
-        expiredLockTx.setId("tx2");
-        expiredLockTx.setLockedAt(LocalDateTime.now().minus(LOCK_TIMEOUT_DURATION));
-        transactions.add(expiredLockTx);
 
         when(transactionEntityRepository.findFreeTransactionsByStatus(eq(ORG_ID), eq(dispatchStatuses), any(LocalDateTime.class), any(Limit.class)))
-                .thenReturn(transactions);
+                .thenReturn(Set.of(unlockedTx));
 
-        Set<TransactionEntity> result = transactionEntityRepositoryGateway.findTransactionsReadyToBeDispatched(ORG_ID, BATCH_SIZE);
+        // strategy decides to hold everything back: nothing may be marked as claimed
+        DispatchingStrategy<TransactionEntity> holdEverythingBack = new DispatchingStrategy<>() {
+            @Override
+            public Set<TransactionEntity> apply(String organisationId, Set<TransactionEntity> entries) {
+                return Set.of();
+            }
+        };
+        Set<String> claimedIds = transactionEntityRepositoryGateway.claimTransactionsReadyToBeDispatched(ORG_ID, BATCH_SIZE, holdEverythingBack);
 
-        assertEquals(2, result.size());
-        Assertions.assertTrue(result.stream().allMatch(tx -> tx.getLockedAt() != null));
-
-        verify(transactionEntityRepository).findFreeTransactionsByStatus(eq(ORG_ID), eq(dispatchStatuses), any(LocalDateTime.class),eq(Limit.of(BATCH_SIZE)));
-        //verify(transactionEntityRepository).saveAll(result);
+        assertEquals(0, claimedIds.size());
+        Assertions.assertTrue(unlockedTx.getLockedAt().isEmpty());
+        verify(transactionEntityRepository).findFreeTransactionsByStatus(eq(ORG_ID), eq(dispatchStatuses), any(LocalDateTime.class), eq(Limit.of(BATCH_SIZE)));
         verifyNoMoreInteractions(transactionEntityRepository);
     }
 
     @Test
-    void testFindTransactionsReadyToBeDispatchedEmptyList() {
+    void testClaimTransactionsReadyToBeDispatchedEmptyList() {
         Set<BlockchainPublishStatus> dispatchStatuses = BlockchainPublishStatus.toDispatchStatuses();
         when(transactionEntityRepository.findFreeTransactionsByStatus(eq(ORG_ID), eq(dispatchStatuses), any(LocalDateTime.class), any(Limit.class)))
                 .thenReturn(Set.of());
 
-        Set<TransactionEntity> result = transactionEntityRepositoryGateway.findTransactionsReadyToBeDispatched(ORG_ID, BATCH_SIZE);
+        Set<String> claimedIds = transactionEntityRepositoryGateway.claimTransactionsReadyToBeDispatched(ORG_ID, BATCH_SIZE, new ImmediateDispatchingStrategy<>());
 
-        assertEquals(0, result.size());
+        assertEquals(0, claimedIds.size());
         verify(transactionEntityRepository).findFreeTransactionsByStatus(eq(ORG_ID), eq(dispatchStatuses), any(LocalDateTime.class), eq(Limit.of(BATCH_SIZE)));
         verifyNoMoreInteractions(transactionEntityRepository);
+    }
+
+    @Test
+    void testFindAllByIdsPreservingOrder_preservesClaimOrderAndSkipsMissing() {
+        TransactionEntity tx1 = new TransactionEntity();
+        tx1.setId("tx1");
+        TransactionEntity tx2 = new TransactionEntity();
+        tx2.setId("tx2");
+
+        Set<String> ids = new java.util.LinkedHashSet<>(java.util.List.of("tx2", "tx1", "txMissing"));
+        when(transactionEntityRepository.findAllById(ids)).thenReturn(java.util.List.of(tx1, tx2));
+
+        Set<TransactionEntity> result = transactionEntityRepositoryGateway.findAllByIdsPreservingOrder(ids);
+
+        Assertions.assertIterableEquals(java.util.List.of(tx2, tx1), result);
     }
 
     @Test
