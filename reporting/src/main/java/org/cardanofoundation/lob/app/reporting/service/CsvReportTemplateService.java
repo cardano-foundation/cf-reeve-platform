@@ -89,19 +89,29 @@ public class CsvReportTemplateService {
                     .filter(line -> line.getName().equals(firstLine.getName()) && line.getReportType().equals(firstLine.getReportType()))
                     .toList();
             templateCsvLines.removeAll(filteredLines);
-            ReportTemplateType reportTemplateType;
-            try {
-                reportTemplateType = ReportTemplateType.valueOf(firstLine.getReportType());
-            } catch (IllegalArgumentException e) {
-                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid report template type: " + firstLine.getReportType() + ". Options are: " + String.join(", ", Arrays.stream(ReportTemplateType.values()).map(Enum::name).toList()));
+            Optional<ReportTemplateType> reportTemplateTypeO = ReportTemplateType.fromCsvLabel(firstLine.getReportType());
+            if (reportTemplateTypeO.isEmpty()) {
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid report type: " + firstLine.getReportType() + ". Options are: " + String.join(", ", Arrays.stream(ReportTemplateType.values()).map(ReportTemplateType::getCsvLabel).toList()));
                 problem.setTitle(Constants.CSV_PARSING_ERROR);
                 results.add(Either.left(problem));
                 continue;
             }
-            try {
-                DataMode.valueOf(firstLine.getDataMode());
-            } catch (IllegalArgumentException e) {
-                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid data mode: " + firstLine.getDataMode() + ". Options are: SYSTEM, USER");
+            ReportTemplateType reportTemplateType = reportTemplateTypeO.get();
+            Optional<DataMode> dataModeO = DataMode.fromCsvLabel(firstLine.getDataMode());
+            if (dataModeO.isEmpty()) {
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid generation method: " + firstLine.getDataMode() + ". Options are: " + String.join(", ", Arrays.stream(DataMode.values()).map(DataMode::getCsvLabel).toList()));
+                problem.setTitle(Constants.CSV_PARSING_ERROR);
+                results.add(Either.left(problem));
+                continue;
+            }
+            DataMode dataMode = dataModeO.get();
+            boolean active;
+            if ("true".equalsIgnoreCase(firstLine.getActive())) {
+                active = true;
+            } else if ("false".equalsIgnoreCase(firstLine.getActive())) {
+                active = false;
+            } else {
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid Active value: " + firstLine.getActive() + ". Options are: true, false");
                 problem.setTitle(Constants.CSV_PARSING_ERROR);
                 results.add(Either.left(problem));
                 continue;
@@ -110,8 +120,10 @@ public class CsvReportTemplateService {
             reportTemplateDto.setOrganisationId(csvTemplateRequest.getOrganisationId());
             reportTemplateDto.setName(firstLine.getName());
             reportTemplateDto.setReportTemplateType(reportTemplateType.name());
-            reportTemplateDto.setDataMode(firstLine.getDataMode());
+            reportTemplateDto.setDataMode(dataMode.name());
             reportTemplateDto.setAccountingRegime(firstLine.getAccountingRegime());
+            reportTemplateDto.setActive(active);
+            reportTemplateDto.setDescription(firstLine.getDescription());
             reportTemplateDto.setVer(1L);
             List<ReportTemplateFieldDto> fieldDtos = new ArrayList<>();
             for (TemplateCsvLine templateCsvLine : filteredLines) {
@@ -185,14 +197,13 @@ public class CsvReportTemplateService {
     private Either<ProblemDetail, ReportTemplateFieldDto> csvLineToTemplateField(String organisationId, TemplateCsvLine templateCsvLine) {
         ReportTemplateFieldDto fieldEntity = new ReportTemplateFieldDto();
         fieldEntity.setFieldName(templateCsvLine.getFieldName());
-        ReportFieldDateRange dateRange;
-        try {
-            dateRange = ReportFieldDateRange.valueOf(templateCsvLine.getDateRange());
-        } catch (IllegalArgumentException e) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid date range: " + templateCsvLine.getDateRange() + ". Options are: " + String.join(", ", Arrays.stream(ReportFieldDateRange.values()).map(Enum::name).toList()));
+        Optional<ReportFieldDateRange> dateRangeO = ReportFieldDateRange.fromCsvLabel(templateCsvLine.getDateRange());
+        if (dateRangeO.isEmpty()) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid date range: " + templateCsvLine.getDateRange() + ". Options are: " + String.join(", ", Arrays.stream(ReportFieldDateRange.values()).map(ReportFieldDateRange::getCsvLabel).toList()));
             problem.setTitle(Constants.CSV_PARSING_ERROR);
             return Either.left(problem);
         }
+        ReportFieldDateRange dateRange = dateRangeO.get();
         fieldEntity.setDateRange(dateRange);
         fieldEntity.setNegated(templateCsvLine.getNegated());
         String[] mappedAccounts = templateCsvLine.getAccounts().split(";");

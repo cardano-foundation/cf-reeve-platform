@@ -116,15 +116,21 @@ The following columns are needed:
 - `Active`: Active status of the VAT (e.g. `True`)
 
 ### Report Template data structure
-An example can be found here: [Report Template CSV Example](./examples/reporting/report_template_example.csv)
+Examples can be found here: [Report Template CSV Example](./examples/reporting/report_template_example.csv), [Income Statement Template CSV Example](./examples/reporting/incomeStatement_template_example.csv)
 The following columns are needed:
 - `Name`: Name of the report template (e.g. `Balance Sheet Template`)
-- `Type`: Type of the report template (one of `BALANCE_SHEET`, `INCOME_STATEMENT`, `CUSTOM`)
+- `ReportType`: Type of the report template. Possible values are: `Balance sheet`, `Income statement`, `Custom`
+- `Generation method`: How the report is generated. Possible values are: `Automatic`, `Manual`
+- `Accounting Regime`: Accounting regime disclosure (e.g. `IFRS`)
+- `Active`: Whether the template is available for use in reports. Possible values are: `true`, `false`
+- `Description`: Free text description of the template (optional)
 - `Field Name`: Name of the field (e.g. `TOTAL_ASSETS`)
 - `Parent`: Name of the Parent field (e.g. `ASSETS`)
-- `Mapped Types`: A list of type and subtype names. The type and subtypes are separated by `-` and multiple entries are separated by `,` (e.g. `ASSET-BANK,ASSET-CASH_AND_CASH_EQUIVALENTS`)
-- `Date Range`: Definition of the date range for the field. Possible values are: `PERIOD`, `ACCUMULATED_START_TO_PERIOD_END`, `ACCUMULATED_YEAR_TO_PERIOD_END`, `ACCUMULATED_PREVIOUS_YEAR_TO_PREVIOUS_YEAR_END`, `ACCUMULATED_PREVIOUS_YEAR_TO_PERIOD_END`
+- `Accounts`: A list of chart-of-account codes mapped to the field, separated by `;` (e.g. `1000;1010`)
+- `Date Range`: Definition of the date range for the field. Possible values are: `Period-Only balance`, `End-of-Period balance`, `Year-to-Date balance`, `Previous-Year balance`, `Previous-Year-to-Date balance`, `End-of-Previous-Year balance`
 - `Negated`: A boolean if the field is negated (e.g. `False`)
+
+Rows sharing the same `Name` and `ReportType` are grouped into a single template; `ReportType`, `Generation method`, `Accounting Regime`, `Active` and `Description` are read once from the first row of each group.
 
 ### Report data structure
 An example can be found here: [Report CSV Example](./examples/reporting/report_example.csv)
