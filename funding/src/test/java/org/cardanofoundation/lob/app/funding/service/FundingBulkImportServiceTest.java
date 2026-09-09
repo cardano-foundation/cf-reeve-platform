@@ -1149,6 +1149,40 @@ class FundingBulkImportServiceTest {
     }
 
     @Test
+    void eventsFile_rowsSharingFundingIdAndHash_butDifferentCategoryVendorOrDate_areSeparateEvents() {
+        // Two rows share Funding ID/Hash/Currency (what used to be the whole grouping key), but are
+        // otherwise different real-world transactions — different category, vendor and date, exactly
+        // like the "Create event" UI form fields that must match for two allocations to belong to the
+        // same event. They must import as two distinct events, not one event with two allocations.
+        MultipartFile file = file("events.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.EVENTS));
+
+        EventCsvLine row1 = eventLine("SPENDING", "GRANT-1", "USD", "Project A", "Milestone One", "10000.00");
+        row1.setCategory("Legal & Compliance");
+        row1.setVendor("BioEthic Counsel LLP");
+        row1.setEventDate("2026-02-15");
+
+        EventCsvLine row2 = eventLine("SPENDING", "GRANT-1", "USD", "Project A", "Milestone One", "5000.00");
+        row2.setCategory("Infrastructure");
+        row2.setVendor("AWS Cloud Health Services");
+        row2.setEventDate("2026-05-01");
+
+        when(eventCsvParser.parseCsv(file, EventCsvLine.class)).thenReturn(Either.right(List.of(row1, row2)));
+        when(projectRepository.findByOrganisationIdAndProjectTitle(ORG_ID, "Project A"))
+                .thenReturn(List.of(projectEntity("p1", "Project A", "USD")));
+        when(milestoneService.findByProjectIdAndMilestoneTitle("p1", "Milestone One"))
+                .thenReturn(Optional.of(MilestoneEntity.builder().id("m1").build()));
+        when(spendingEventService.createEvent(any())).thenReturn(SpendingEventView.builder().eventId("e1").build());
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getEventsCreated()).isEqualTo(2);
+        assertThat(result.getAllocationsCreated()).isEqualTo(2);
+        verify(spendingEventService, times(2)).createEvent(any());
+    }
+
+    @Test
     void eventsFile_nestsSubProjectAllocationUnderItsRoot() {
         // Regression test: a sub-project reference must be nested under its root via `subProjects` —
         // the underlying event-creation logic only resolves a flat projectTitle as a ROOT project, so

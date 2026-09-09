@@ -731,7 +731,10 @@ public class SpendingEventService {
                         request.getEventType(),
                         request.getFundingId(),
                         request.getFundingHash(),
-                        request.getCurrencyRcy()))
+                        request.getCurrencyRcy(),
+                        request.getCategory(),
+                        request.getVendor(),
+                        request.getEventDate()))
                 .eventType(request.getEventType())
                 .status(EventStatus.DRAFT)
                 .organisationId(request.getOrganisationId())
