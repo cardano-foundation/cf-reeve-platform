@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -402,13 +403,13 @@ class FundingBulkImportE2ETest {
         // V1.7_100_2__unique_funding_id_per_funding_event.sql is actually in effect.
         String orgId = "org-dup-funding-id-db";
         FundingEventEntity first = FundingEventEntity.builder()
-                .id(FundingEventEntity.id(orgId, EventType.FUNDING, "GRANT-DB-DUP", "hash-a", "USD"))
+                .id(FundingEventEntity.id(orgId, EventType.FUNDING, "GRANT-DB-DUP", "hash-a", "USD", null, null, null))
                 .eventType(EventType.FUNDING).status(EventStatus.DRAFT).organisationId(orgId)
                 .fundingId("GRANT-DB-DUP").fundingEntity("Cardano Foundation").currencyRcy("USD").build();
         fundingEventRepository.saveAndFlush(first);
 
         FundingEventEntity second = FundingEventEntity.builder()
-                .id(FundingEventEntity.id(orgId, EventType.FUNDING, "GRANT-DB-DUP", "hash-b", "USD"))
+                .id(FundingEventEntity.id(orgId, EventType.FUNDING, "GRANT-DB-DUP", "hash-b", "USD", null, null, null))
                 .eventType(EventType.FUNDING).status(EventStatus.DRAFT).organisationId(orgId)
                 .fundingId("GRANT-DB-DUP").fundingEntity("Cardano Foundation").currencyRcy("USD").build();
 
@@ -419,7 +420,7 @@ class FundingBulkImportE2ETest {
         // SPENDING events reusing the same Funding ID are unaffected by the constraint (it's scoped to
         // event_type = 'FUNDING' only) — proving the partial index, not a blanket one, is what's in effect.
         FundingEventEntity spending = FundingEventEntity.builder()
-                .id(FundingEventEntity.id(orgId, EventType.SPENDING, "GRANT-DB-DUP", "hash-a", "USD"))
+                .id(FundingEventEntity.id(orgId, EventType.SPENDING, "GRANT-DB-DUP", "hash-a", "USD", null, null, null))
                 .eventType(EventType.SPENDING).status(EventStatus.DRAFT).organisationId(orgId)
                 .fundingId("GRANT-DB-DUP").currencyRcy("USD").build();
         assertThat(fundingEventRepository.saveAndFlush(spending)).isNotNull();
@@ -812,7 +813,8 @@ class FundingBulkImportE2ETest {
         FundingBulkImportResult publishedSeedResult = bulkImportService.importFiles(BulkImportRequest.builder()
                 .organisationId(orgId).files(List.of(publishedSeedFile)).build());
         assertThat(reasons(publishedSeedResult)).as("seed published event").isEmpty();
-        String publishedEventId = FundingEventEntity.id(orgId, EventType.FUNDING, "TICKET-PUBLISHED", null, "EUR");
+        String publishedEventId = FundingEventEntity.id(orgId, EventType.FUNDING, "TICKET-PUBLISHED", null, "EUR",
+                null, null, LocalDate.of(2026, 6, 1));
         assertThat(spendingEventService.publish(publishedEventId).isRight()).as("publish seed event").isTrue();
 
         MultipartFile file = new MockMultipartFile("file", "ticket-five-errors.csv", "text/csv", TICKET_FIVE_ERRORS_CSV.getBytes());

@@ -153,9 +153,14 @@ public class FundingEventEntity extends CommonEntity implements Persistable<Stri
 
     /**
      * Deterministic, reproducible id for a funding event, derived from its immutable header
-     * fields. Two events created for the same organisation, type, funding reference and currency
-     * resolve to the same id (idempotent creation). {@code fundingHash} is part of the key so that
-     * distinct fundings sharing a funding id (but a different hash) do not collide.
+     * fields. Two events created for the same organisation, type, funding reference, currency,
+     * category, vendor and event date resolve to the same id (idempotent creation). {@code
+     * fundingHash} is part of the key so that distinct fundings sharing a funding id (but a
+     * different hash) do not collide; {@code category}/{@code vendor}/{@code eventDate} are part
+     * of it too so that distinct real-world transactions that happen to share a funding id and
+     * hash (e.g. several spends against the same grant) are treated as separate events rather than
+     * merged into one — matching the "Create event" UI, where those fields are entered once per
+     * event and apply to the whole thing. Two rows are only the same event if all of these match.
      *
      * <p>Computed in the service before child allocations/items are built — it intentionally does
      * <em>not</em> depend on children (a spending item's id is derived from the event id, so
@@ -165,13 +170,19 @@ public class FundingEventEntity extends CommonEntity implements Persistable<Stri
                             EventType eventType,
                             String fundingId,
                             String fundingHash,
-                            String currencyRcy) {
-        return SHA3.digestAsHex("%s::%s::%s::%s::%s".formatted(
+                            String currencyRcy,
+                            String category,
+                            String vendor,
+                            LocalDate eventDate) {
+        return SHA3.digestAsHex("%s::%s::%s::%s::%s::%s::%s::%s".formatted(
                 organisationId,
                 eventType,
                 fundingId,
                 fundingHash == null ? "" : fundingHash,
-                currencyRcy));
+                currencyRcy,
+                category == null ? "" : category,
+                vendor == null ? "" : vendor,
+                eventDate == null ? "" : eventDate));
     }
 
 }

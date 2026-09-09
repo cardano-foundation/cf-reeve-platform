@@ -661,7 +661,8 @@ public class FundingBulkImportService {
         // instead of failing as "already exists". updateEvent already refuses to touch a published
         // event on its own (Problems.conflict via its internal requireDraft guard).
         String eventId = FundingEventEntity.id(organisationId, request.getEventType(), request.getFundingId(),
-                request.getFundingHash(), request.getCurrencyRcy());
+                request.getFundingHash(), request.getCurrencyRcy(), request.getCategory(), request.getVendor(),
+                request.getEventDate());
         boolean alreadyExists = spendingEventService.findById(eventId).isPresent();
 
         SpendingEventView view = alreadyExists
@@ -718,10 +719,19 @@ public class FundingBulkImportService {
         return amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 
+    /**
+     * Rows belong to the same event only if every one of these fields matches — mirroring the
+     * "Create event" UI, where Funding ID, Funding Hash, Category, Vendor and (Spending) Date are
+     * entered once per event, not once per allocation row. Two rows that share a Funding ID/Hash
+     * but differ in category, vendor or date are distinct real-world transactions (see {@link
+     * FundingEventEntity#id}, which mirrors this same key for the entity's DB identity).
+     */
     private static String eventKey(EventCsvLine line) {
         return String.join("||",
                 nullToEmpty(line.getFundingId()), nullToEmpty(line.getEventType()),
-                nullToEmpty(line.getFundingHash()), nullToEmpty(line.getCurrencyRcy()));
+                nullToEmpty(line.getFundingHash()), nullToEmpty(line.getCurrencyRcy()),
+                nullToEmpty(line.getCategory()), nullToEmpty(line.getVendor()),
+                nullToEmpty(line.getEventDate()));
     }
 
     /** Parses and validates the event-level (non-allocation) columns, shared by every row in the group. */
