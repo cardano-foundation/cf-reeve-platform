@@ -661,8 +661,9 @@ public class FundingBulkImportService {
         // instead of failing as "already exists". updateEvent already refuses to touch a published
         // event on its own (Problems.conflict via its internal requireDraft guard).
         String eventId = FundingEventEntity.id(organisationId, request.getEventType(), request.getFundingId(),
-                request.getFundingHash(), request.getCurrencyRcy(), request.getCategory(), request.getVendor(),
-                request.getEventDate());
+                request.getFundingHash(), request.getFundingEntity(), request.getCurrencyRcy(),
+                request.getCategory(), request.getVendor(), request.getHash(), request.getAmountFcy(),
+                request.getCurrencyFcy(), request.getAmountRcy(), request.getEventDate());
         boolean alreadyExists = spendingEventService.findById(eventId).isPresent();
 
         SpendingEventView view = alreadyExists
@@ -721,16 +722,27 @@ public class FundingBulkImportService {
 
     /**
      * Rows belong to the same event only if every one of these fields matches — mirroring the
-     * "Create event" UI, where Funding ID, Funding Hash, Category, Vendor and (Spending) Date are
-     * entered once per event, not once per allocation row. Two rows that share a Funding ID/Hash
-     * but differ in category, vendor or date are distinct real-world transactions (see {@link
-     * FundingEventEntity#id}, which mirrors this same key for the entity's DB identity).
+     * "Create event" UI, where Funding ID, Funding Hash, Funding Entity, Category, Vendor and
+     * (Spending) Date are entered once per event, not once per allocation row. Two rows that share
+     * a Funding ID/Hash but differ in funding entity, category, vendor or date are distinct
+     * real-world transactions (see {@link FundingEventEntity#id}, which mirrors this same key for
+     * the entity's DB identity). For FUNDING/REFUND rows, which carry no spend detail, this reduces
+     * to Funding ID, Hash, Entity, Currency and Date — matching the five fields the "Create event"
+     * UI exposes for those event types. For SPENDING rows the key widens further to the row's full
+     * spend detail — (receipt) Hash, Amount FCY, Currency FCY and Amount RCY — since two spend rows
+     * describing different amounts are different transactions even if everything else matches;
+     * Amount RCY only participates for SPENDING — it's required on every row, but for FUNDING/
+     * REFUND it's the grant/refund total, not a disambiguating detail.
      */
     private static String eventKey(EventCsvLine line) {
+        boolean isSpending = "SPENDING".equalsIgnoreCase(nullToEmpty(line.getEventType()).trim());
         return String.join("||",
                 nullToEmpty(line.getFundingId()), nullToEmpty(line.getEventType()),
-                nullToEmpty(line.getFundingHash()), nullToEmpty(line.getCurrencyRcy()),
+                nullToEmpty(line.getFundingHash()), nullToEmpty(line.getFundingEntity()),
+                nullToEmpty(line.getCurrencyRcy()),
                 nullToEmpty(line.getCategory()), nullToEmpty(line.getVendor()),
+                nullToEmpty(line.getHash()), nullToEmpty(line.getAmountFcy()), nullToEmpty(line.getCurrencyFcy()),
+                isSpending ? nullToEmpty(line.getAmountRcy()) : "",
                 nullToEmpty(line.getEventDate()));
     }
 
