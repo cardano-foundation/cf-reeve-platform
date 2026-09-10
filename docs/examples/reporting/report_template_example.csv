@@ -1,2 +1,2 @@
-Name,ReportType,Generation method,Accounting Regime,Active,Description,Field Name,Parent,Accounts,Date Range,Negated
+Name,Report Type,Generation Method,Accounting Regime,Active,Description,Field Name,Parent,Accounts,Date Range,Negated
 Income Statement Example,Income statement,Manual,IFRS,true,Standard quarterly income statement,Revenue,,1,End-of-Period balance,false

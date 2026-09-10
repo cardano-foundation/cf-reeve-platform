@@ -1,4 +1,4 @@
-Name,ReportType,Generation method,Accounting Regime,Active,Description,Field Name,Parent,Accounts,Date Range,Negated
+Name,Report Type,Generation Method,Accounting Regime,Active,Description,Field Name,Parent,Accounts,Date Range,Negated
 Income Statement Example,Income statement,Manual,IFRS,true,,Revenues,,,Year-to-Date balance,true
 Income Statement Example,Income statement,Manual,IFRS,true,,Other Income,Revenues,,Year-to-Date balance,true
 Income Statement Example,Income statement,Manual,IFRS,true,,Building of long term provisions,Revenues,,Year-to-Date balance,true

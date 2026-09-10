@@ -119,8 +119,8 @@ The following columns are needed:
 Examples can be found here: [Report Template CSV Example](./examples/reporting/report_template_example.csv), [Income Statement Template CSV Example](./examples/reporting/incomeStatement_template_example.csv)
 The following columns are needed:
 - `Name`: Name of the report template (e.g. `Balance Sheet Template`)
-- `ReportType`: Type of the report template. Possible values are: `Balance sheet`, `Income statement`, `Custom`
-- `Generation method`: How the report is generated. Possible values are: `Automatic`, `Manual`
+- `Report Type`: Type of the report template. Possible values are: `Balance sheet`, `Income statement`, `Custom`
+- `Generation Method`: How the report is generated. Possible values are: `Automatic`, `Manual`
 - `Accounting Regime`: Accounting regime disclosure (e.g. `IFRS`)
 - `Active`: Whether the template is available for use in reports. Possible values are: `true`, `false`
 - `Description`: Free text description of the template (optional)
@@ -130,7 +130,7 @@ The following columns are needed:
 - `Date Range`: Definition of the date range for the field. Possible values are: `Period-Only balance`, `End-of-Period balance`, `Year-to-Date balance`, `Previous-Year balance`, `Previous-Year-to-Date balance`, `End-of-Previous-Year balance`
 - `Negated`: A boolean if the field is negated (e.g. `False`)
 
-Rows sharing the same `Name` and `ReportType` are grouped into a single template; `ReportType`, `Generation method`, `Accounting Regime`, `Active` and `Description` are read once from the first row of each group.
+Rows sharing the same `Name` and `Report Type` are grouped into a single template; `Report Type`, `Generation Method`, `Accounting Regime`, `Active` and `Description` are read once from the first row of each group.
 
 ### Report data structure
 An example can be found here: [Report CSV Example](./examples/reporting/report_example.csv)

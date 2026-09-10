@@ -18,11 +18,11 @@ public class TemplateCsvLine {
     @CsvBindByName(column = "Name")
     @NotNull(message = "Name is required")
     private String name;
-    @CsvBindByName(column = "ReportType")
-    @NotNull(message = "ReportType is required")
+    @CsvBindByName(column = "Report Type")
+    @NotNull(message = "Report Type is required")
     private String reportType;
-    @CsvBindByName(column = "Generation method")
-    @NotNull(message = "Generation method is required. Options are: Automatic or Manual")
+    @CsvBindByName(column = "Generation Method")
+    @NotNull(message = "Generation Method is required. Options are: Automatic or Manual")
     private String dataMode;
     @CsvBindByName(column = "Accounting Regime")
     @NotNull(message = "Accounting Regime is required")
