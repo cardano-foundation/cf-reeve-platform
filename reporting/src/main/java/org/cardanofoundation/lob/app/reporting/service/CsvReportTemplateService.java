@@ -50,6 +50,8 @@ import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 @Transactional
 public class CsvReportTemplateService {
 
+    private static final String OPTIONS_ARE = ". Options are: ";
+
     private final OrganisationPublicApiIF organisationPublicApiIF;
     private final CsvParser<TemplateCsvLine> csvParser;
     private final ReportTemplateRepository reportTemplateRepository;
@@ -91,7 +93,7 @@ public class CsvReportTemplateService {
             templateCsvLines.removeAll(filteredLines);
             Optional<ReportTemplateType> reportTemplateTypeO = ReportTemplateType.fromCsvLabel(firstLine.getReportType());
             if (reportTemplateTypeO.isEmpty()) {
-                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid report type: " + firstLine.getReportType() + ". Options are: " + String.join(", ", Arrays.stream(ReportTemplateType.values()).map(ReportTemplateType::getCsvLabel).toList()));
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid report type: " + firstLine.getReportType() + OPTIONS_ARE + String.join(", ", Arrays.stream(ReportTemplateType.values()).map(ReportTemplateType::getCsvLabel).toList()));
                 problem.setTitle(Constants.CSV_PARSING_ERROR);
                 results.add(Either.left(problem));
                 continue;
@@ -99,7 +101,7 @@ public class CsvReportTemplateService {
             ReportTemplateType reportTemplateType = reportTemplateTypeO.get();
             Optional<DataMode> dataModeO = DataMode.fromCsvLabel(firstLine.getDataMode());
             if (dataModeO.isEmpty()) {
-                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid generation method: " + firstLine.getDataMode() + ". Options are: " + String.join(", ", Arrays.stream(DataMode.values()).map(DataMode::getCsvLabel).toList()));
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid generation method: " + firstLine.getDataMode() + OPTIONS_ARE + String.join(", ", Arrays.stream(DataMode.values()).map(DataMode::getCsvLabel).toList()));
                 problem.setTitle(Constants.CSV_PARSING_ERROR);
                 results.add(Either.left(problem));
                 continue;
@@ -199,7 +201,7 @@ public class CsvReportTemplateService {
         fieldEntity.setFieldName(templateCsvLine.getFieldName());
         Optional<ReportFieldDateRange> dateRangeO = ReportFieldDateRange.fromCsvLabel(templateCsvLine.getDateRange());
         if (dateRangeO.isEmpty()) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid date range: " + templateCsvLine.getDateRange() + ". Options are: " + String.join(", ", Arrays.stream(ReportFieldDateRange.values()).map(ReportFieldDateRange::getCsvLabel).toList()));
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid date range: " + templateCsvLine.getDateRange() + OPTIONS_ARE + String.join(", ", Arrays.stream(ReportFieldDateRange.values()).map(ReportFieldDateRange::getCsvLabel).toList()));
             problem.setTitle(Constants.CSV_PARSING_ERROR);
             return Either.left(problem);
         }
