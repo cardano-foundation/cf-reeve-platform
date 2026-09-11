@@ -39,6 +39,10 @@ public class ReportTemplateDto extends BaseRequest {
     @NotNull(message = "Data mode must not be null")
     private String dataMode;
 
+    @Schema(description = "Accounting regime disclosure (free text, e.g. from the organisation's suggested list or custom)", example = "IFRS", required = true)
+    @NotNull(message = "Accounting regime must not be null")
+    private String accountingRegime;
+
     @Schema(description = "Template description", example = "Standard quarterly financial report with balance sheet", nullable = true)
     private String description;
 

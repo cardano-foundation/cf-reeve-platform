@@ -346,26 +346,42 @@ class SpendingEventServiceTest {
         assertThat(result.isRight()).isTrue();
     }
 
-    // --- create/update: Funding ID uniqueness (FUNDING events only) ---
+    // --- create/update: FUNDING event identity (Funding ID + Hash + Entity + Currency + Event Date) ---
 
     @Test
-    void create_returnsLeft_whenFundingIdAlreadyUsedByAnotherFundingEvent() {
-        // Checked before allocations are resolved, so no project/milestone stubbing is needed.
-        when(fundingEventRepository.existsByOrganisationIdAndEventTypeAndFundingIdAndIdNot(
-                eq("org1"), eq(EventType.FUNDING), eq("GRANT-2025-001"), anyString())).thenReturn(true);
+    void create_returnsLeft_whenAnotherEventAlreadyHasTheExactSameKey() {
+        // Same organisation, Funding ID, Funding Hash, Funding Entity, Currency and Event Date as an
+        // existing event resolves to the exact same id (see FundingEventEntity#id) — caught up front
+        // in create(), before allocations are resolved, so no project/milestone stubbing is needed.
+        when(fundingEventRepository.existsById(anyString())).thenReturn(true);
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(
                 fundingRequest(fundingMilestone("MS-1", ALLOCATED)));
 
-        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.FUNDING_EVENT_FUNDING_ID_ALREADY_USED);
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_EXISTS);
         verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_succeeds_whenFundingIdReusedButFundingEntityDiffers() {
+        // A Funding ID alone no longer determines a FUNDING event's identity: reusing it under a
+        // different Funding Entity (or Hash, Currency, Event Date) resolves to a different id, so it
+        // is a distinct, legitimate new event rather than a conflict with the existing one.
+        stubExistingProjectAndMilestone("MS-1");
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        SpendingEventCreateRequest request = fundingRequest(fundingMilestone("MS-1", ALLOCATED));
+        request.setFundingEntity("A Different Foundation");
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.isRight()).isTrue();
     }
 
     @Test
     void create_succeeds_whenFundingIdAlreadyUsedButEventIsNotFunding() {
         // SPENDING/REFUND events are expected to reuse a FUNDING event's Funding ID (they spend
-        // against/refund that grant) — the uniqueness check only ever applies to FUNDING events, so it
-        // is skipped entirely here regardless of what the repository would say.
+        // against/refund that grant) — this is never treated as a conflict for those event types.
         stubExistingProjectAndMilestone("MS-1");
         when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
@@ -373,34 +389,67 @@ class SpendingEventServiceTest {
                 spendingRequest(fundingMilestone("MS-1", ALLOCATED)));
 
         assertThat(result.isRight()).isTrue();
-        verify(fundingEventRepository, never()).existsByOrganisationIdAndEventTypeAndFundingIdAndIdNot(
-                any(), any(), any(), any());
     }
 
     @Test
-    void update_excludesTheEventsOwnRecord_fromTheFundingIdUniquenessCheck() {
-        // Re-saving a FUNDING event with its own, unchanged Funding ID must not flag itself.
-        FundingEventEntity existing = eventEntity(EventType.FUNDING, EventStatus.DRAFT);
-        existing.setFundingEntity("Cardano Foundation");
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(existing));
+    void update_excludesTheEventsOwnRecord_fromTheFundingEventKeyCheck() {
+        // Re-saving a FUNDING event with its own, unchanged key must not flag itself. Unlike the other
+        // fixtures here, the entity's id must be the real key hash (not a placeholder like "e1") for
+        // this to genuinely exercise the self-exclusion rather than pass by an unrelated mock default.
+        String existingId = FundingEventEntity.id("org1", EventType.FUNDING, "GRANT-2025-001", null,
+                "Cardano Foundation", "USD", null, null, null, null, null, null, LocalDate.of(2025, 4, 3));
+        FundingEventEntity existing = FundingEventEntity.builder()
+                .id(existingId).eventType(EventType.FUNDING).status(EventStatus.DRAFT).organisationId("org1")
+                .fundingId("GRANT-2025-001").fundingEntity("Cardano Foundation").currencyRcy("USD")
+                .eventDate(LocalDate.of(2025, 4, 3)).totalAmount(BigDecimal.ZERO).build();
+        when(fundingEventRepository.findById(existingId)).thenReturn(Optional.of(existing));
         when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
         stubExistingProjectAndMilestone("MS-1");
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.update(
-                "e1", fundingRequest(fundingMilestone("MS-1", ALLOCATED)));
+                existingId, fundingRequest(fundingMilestone("MS-1", ALLOCATED)));
 
         assertThat(result.isRight()).isTrue();
-        verify(fundingEventRepository).existsByOrganisationIdAndEventTypeAndFundingIdAndIdNot(
-                "org1", EventType.FUNDING, "GRANT-2025-001", "e1");
+        // The candidate key (unchanged) equals the event's own id, so the check short-circuits before
+        // ever calling existsById.
+        verify(fundingEventRepository, never()).existsById(any());
     }
 
     @Test
-    void create_returnsLeft_whenSaveViolatesTheFundingIdUniqueConstraint() {
+    void update_returnsLeft_whenChangedFieldsCollideWithAnotherExistingFundingEvent() {
+        // Changing Funding Entity (or Hash/Currency/Event Date) on an update, such that the new key
+        // matches a *different*, already-existing FUNDING event, is still a genuine conflict — the
+        // event's row keeps its original id across an update, so this can't be caught by a simple
+        // existsById(event.getId()) the way create() catches it; fundingEventIdAvailable recomputes
+        // the candidate key from the (changed) fields and checks it against other rows instead.
+        String existingId = FundingEventEntity.id("org1", EventType.FUNDING, "GRANT-2025-001", null,
+                "Original Foundation", "USD", null, null, null, null, null, null, LocalDate.of(2025, 4, 3));
+        FundingEventEntity existing = FundingEventEntity.builder()
+                .id(existingId).eventType(EventType.FUNDING).status(EventStatus.DRAFT).organisationId("org1")
+                .fundingId("GRANT-2025-001").fundingEntity("Original Foundation").currencyRcy("USD")
+                .eventDate(LocalDate.of(2025, 4, 3)).totalAmount(BigDecimal.ZERO).build();
+        when(fundingEventRepository.findById(existingId)).thenReturn(Optional.of(existing));
+
+        String collidingId = FundingEventEntity.id("org1", EventType.FUNDING, "GRANT-2025-001", null,
+                "Cardano Foundation", "USD", null, null, null, null, null, null, LocalDate.of(2025, 4, 3));
+        when(fundingEventRepository.existsById(collidingId)).thenReturn(true);
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.update(
+                existingId, fundingRequest(fundingMilestone("MS-1", ALLOCATED)));
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.FUNDING_EVENT_FUNDING_ID_ALREADY_USED);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_returnsLeft_whenSaveViolatesTheDatabasePrimaryKey() {
         // Last-resort safety net: a race that slips past the pre-check above still surfaces as a clean
-        // 409 instead of an unhandled 500 — driven by the raw DB exception, not the pre-check.
+        // 409 instead of an unhandled 500 — driven by the raw DB exception, not the pre-check. Two
+        // events resolving to the same key resolve to the same id (the table's primary key), so a
+        // race between two concurrent app-level-validated requests surfaces as a PK violation.
         stubExistingProjectAndMilestone("MS-1");
         when(fundingEventRepository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException(
-                "duplicate key value violates unique constraint \"uq_funding_event_org_funding_id_funding_type\""));
+                "duplicate key value violates unique constraint \"pk_funding_event\""));
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(
                 fundingRequest(fundingMilestone("MS-1", ALLOCATED)));

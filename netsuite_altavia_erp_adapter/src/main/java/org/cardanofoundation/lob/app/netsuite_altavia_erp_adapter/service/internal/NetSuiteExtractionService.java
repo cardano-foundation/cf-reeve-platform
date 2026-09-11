@@ -44,7 +44,7 @@ import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 public class NetSuiteExtractionService {
 
     private final IngestionRepository ingestionRepository;
-    private final NetSuiteClient netSuiteClient;
+    private final NetSuiteClientRegistry netSuiteClientRegistry;
     private final TransactionConverter transactionConverter;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final SystemExtractionParametersFactory systemExtractionParametersFactory;
@@ -66,10 +66,17 @@ public class NetSuiteExtractionService {
             errors.add(systemExtractionParametersE.getLeft());
         }
 
-        Either<ProblemDetail, Void> connection = netSuiteClient.testConnection();
-        if (connection.isLeft()) {
-            log.error("Error testing NetSuite connection: {}", connection.getLeft().getDetail());
-            errors.add(connection.getLeft());
+        Either<ProblemDetail, NetSuiteClient> clientE = netSuiteClientRegistry.forOrganisation(organisationId);
+        if (clientE.isLeft()) {
+            log.error("No usable NetSuite configuration for organisation {}: {}",
+                    organisationId, clientE.getLeft().getDetail());
+            errors.add(clientE.getLeft());
+        } else {
+            Either<ProblemDetail, Void> connection = clientE.get().testConnection();
+            if (connection.isLeft()) {
+                log.error("Error testing NetSuite connection: {}", connection.getLeft().getDetail());
+                errors.add(connection.getLeft());
+            }
         }
 
         ValidateIngestionResponseEvent build = ValidateIngestionResponseEvent.builder()
@@ -87,6 +94,29 @@ public class NetSuiteExtractionService {
 
         try {
             log.info("Running ingestion...");
+
+            Either<ProblemDetail, NetSuiteClient> clientE = netSuiteClientRegistry.forOrganisation(organisationId);
+            if (clientE.isLeft()) {
+                ProblemDetail problem = clientE.getLeft();
+                log.error("Cannot start extraction for organisation {}: {}", organisationId, problem.getDetail());
+
+                TransactionBatchFailedEvent batchFailedEvent = TransactionBatchFailedEvent.builder()
+                        .metadata(EventMetadata.create(TransactionBatchFailedEvent.VERSION, user))
+                        .batchId(batchId)
+                        .extractorType(ExtractorType.NETSUITE)
+                        .organisationId(organisationId)
+                        .userExtractionParameters(userExtractionParameters)
+                        // Use the problem's own title: an undecryptable configuration reports
+                        // CONFIGURATION_UNREADABLE, which needs a different remediation (restore the
+                        // encryption key) than a missing one (re-enter credentials).
+                        .error(new FatalError(ADAPTER_ERROR, problem.getTitle(),
+                                ErrorUtils.getBag(problem, problem.getTitle())))
+                        .build();
+
+                applicationEventPublisher.publishEvent(batchFailedEvent);
+                return;
+            }
+            NetSuiteClient netSuiteClient = clientE.get();
 
             LocalDate fromExtractionDate = userExtractionParameters.getFrom();
             LocalDate toExtractionDate = userExtractionParameters.getTo();

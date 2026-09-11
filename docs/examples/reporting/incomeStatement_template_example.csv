@@ -1,23 +1,23 @@
-Name,ReportType,DataMode,Field Name,Parent,Accounts,Date Range,Negated
-Income Statement Example,INCOME_STATEMENT,USER,Revenues,,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,USER,Other Income,Revenues,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,USER,Building of long term provisions,Revenues,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,USER,Cost of goods and services,,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,USER,External Services,Cost of goods and services,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,USER,Operating Expenses,,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,USER,Personnel Expenses,Operating Expenses,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,USER,General administrative expenses,Operating Expenses,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,USER,Depreciation and impairment losses on tangible Assets,Operating Expenses,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,USER,Amortization on intangible assets,Operating Expenses,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,USER,Rent Expenses,Operating Expenses,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,USER,Financial Income,,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,USER,Financial Revenues,Financial Income,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,USER,Financial Expenses,Financial Income,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,USER,Realised Gains on Sale of Cryptocurrencies,Financial Income,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,USER,Staking Rewards income,Financial Income,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,USER,Net Income options sale,Financial Income,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,USER,Extraordinary income,,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,USER,Extraordinary Expenses,Extraordinary income,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,USER,Tax Expense,,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,USER,Direct Taxes,Tax Expense,,ACCUMULATED_YEAR_TO_PERIOD_END,true
-Income Statement Example,INCOME_STATEMENT,USER,Profit for the year,,,ACCUMULATED_YEAR_TO_PERIOD_END,true
+Name,Report Type,Generation Method,Accounting Regime,Active,Description,Field Name,Parent,Accounts,Date Range,Negated
+Income Statement Example,Income statement,Manual,IFRS,true,,Revenues,,,Year-to-Date balance,true
+Income Statement Example,Income statement,Manual,IFRS,true,,Other Income,Revenues,,Year-to-Date balance,true
+Income Statement Example,Income statement,Manual,IFRS,true,,Building of long term provisions,Revenues,,Year-to-Date balance,true
+Income Statement Example,Income statement,Manual,IFRS,true,,Cost of goods and services,,,Year-to-Date balance,true
+Income Statement Example,Income statement,Manual,IFRS,true,,External Services,Cost of goods and services,,Year-to-Date balance,true
+Income Statement Example,Income statement,Manual,IFRS,true,,Operating Expenses,,,Year-to-Date balance,true
+Income Statement Example,Income statement,Manual,IFRS,true,,Personnel Expenses,Operating Expenses,,Year-to-Date balance,true
+Income Statement Example,Income statement,Manual,IFRS,true,,General administrative expenses,Operating Expenses,,Year-to-Date balance,true
+Income Statement Example,Income statement,Manual,IFRS,true,,Depreciation and impairment losses on tangible Assets,Operating Expenses,,Year-to-Date balance,true
+Income Statement Example,Income statement,Manual,IFRS,true,,Amortization on intangible assets,Operating Expenses,,Year-to-Date balance,true
+Income Statement Example,Income statement,Manual,IFRS,true,,Rent Expenses,Operating Expenses,,Year-to-Date balance,true
+Income Statement Example,Income statement,Manual,IFRS,true,,Financial Income,,,Year-to-Date balance,true
+Income Statement Example,Income statement,Manual,IFRS,true,,Financial Revenues,Financial Income,,Year-to-Date balance,true
+Income Statement Example,Income statement,Manual,IFRS,true,,Financial Expenses,Financial Income,,Year-to-Date balance,true
+Income Statement Example,Income statement,Manual,IFRS,true,,Realised Gains on Sale of Cryptocurrencies,Financial Income,,Year-to-Date balance,true
+Income Statement Example,Income statement,Manual,IFRS,true,,Staking Rewards income,Financial Income,,Year-to-Date balance,true
+Income Statement Example,Income statement,Manual,IFRS,true,,Net Income options sale,Financial Income,,Year-to-Date balance,true
+Income Statement Example,Income statement,Manual,IFRS,true,,Extraordinary income,,,Year-to-Date balance,true
+Income Statement Example,Income statement,Manual,IFRS,true,,Extraordinary Expenses,Extraordinary income,,Year-to-Date balance,true
+Income Statement Example,Income statement,Manual,IFRS,true,,Tax Expense,,,Year-to-Date balance,true
+Income Statement Example,Income statement,Manual,IFRS,true,,Direct Taxes,Tax Expense,,Year-to-Date balance,true
+Income Statement Example,Income statement,Manual,IFRS,true,,Profit for the year,,,Year-to-Date balance,true
