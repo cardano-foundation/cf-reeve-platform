@@ -1183,6 +1183,82 @@ class FundingBulkImportServiceTest {
     }
 
     @Test
+    void eventsFile_spendingRowsSharingFundingIdHashCategoryVendorAndDate_butDifferentAmountOrReceiptHash_areSeparateEvents() {
+        // Two SPENDING rows share Funding ID, Funding Hash, Category, Vendor and Event Date, but
+        // describe different amounts and a different receipt hash — still two distinct real-world
+        // transactions (e.g. an initial payment and a top-up against the same category/vendor on the
+        // same day), not two allocations of the same spend. They must import as two separate events.
+        MultipartFile file = file("events.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.EVENTS));
+
+        EventCsvLine row1 = eventLine("SPENDING", "GRANT-1", "USD", "Project A", "Milestone One", "10000.00");
+        row1.setCategory("Infrastructure");
+        row1.setVendor("AWS Cloud Health Services");
+        row1.setEventDate("2026-05-01");
+        row1.setHash("sha256:receipt-one");
+        row1.setAmountFcy("10000.00");
+        row1.setCurrencyFcy("USD");
+        row1.setAmountRcy("10000.00");
+
+        EventCsvLine row2 = eventLine("SPENDING", "GRANT-1", "USD", "Project A", "Milestone One", "2500.00");
+        row2.setCategory("Infrastructure");
+        row2.setVendor("AWS Cloud Health Services");
+        row2.setEventDate("2026-05-01");
+        row2.setHash("sha256:receipt-two");
+        row2.setAmountFcy("2500.00");
+        row2.setCurrencyFcy("USD");
+        row2.setAmountRcy("2500.00");
+
+        when(eventCsvParser.parseCsv(file, EventCsvLine.class)).thenReturn(Either.right(List.of(row1, row2)));
+        when(projectRepository.findByOrganisationIdAndProjectTitle(ORG_ID, "Project A"))
+                .thenReturn(List.of(projectEntity("p1", "Project A", "USD")));
+        when(milestoneService.findByProjectIdAndMilestoneTitle("p1", "Milestone One"))
+                .thenReturn(Optional.of(MilestoneEntity.builder().id("m1").build()));
+        when(spendingEventService.createEvent(any())).thenReturn(SpendingEventView.builder().eventId("e1").build());
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getEventsCreated()).isEqualTo(2);
+        assertThat(result.getAllocationsCreated()).isEqualTo(2);
+        verify(spendingEventService, times(2)).createEvent(any());
+    }
+
+    @Test
+    void eventsFile_fundingRowsSharingFundingIdHashEntityCurrencyAndDate_areOneEventEvenWithDifferentAmountRcy() {
+        // Unlike SPENDING, a FUNDING event has no spend detail: Amount RCY is the grant total, not a
+        // disambiguating field, so two FUNDING rows that agree on Funding ID, Funding Hash, Funding
+        // Entity, Currency and Event Date are the same event even if Amount RCY differs between the
+        // rows — they must merge into one event with both allocations, not split in two.
+        MultipartFile file = file("events.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.EVENTS));
+
+        EventCsvLine row1 = eventLine("FUNDING", "GRANT-1", "USD", "Project A", "Milestone One", "6000");
+        row1.setFundingEntity("Cardano Foundation");
+        row1.setEventDate("2026-05-01");
+        row1.setAmountRcy("6000");
+
+        EventCsvLine row2 = eventLine("FUNDING", "GRANT-1", "USD", "Project A", "Milestone One", "4000");
+        row2.setFundingEntity("Cardano Foundation");
+        row2.setEventDate("2026-05-01");
+        row2.setAmountRcy("10000");
+
+        when(eventCsvParser.parseCsv(file, EventCsvLine.class)).thenReturn(Either.right(List.of(row1, row2)));
+        when(projectRepository.findByOrganisationIdAndProjectTitle(ORG_ID, "Project A"))
+                .thenReturn(List.of(projectEntity("p1", "Project A", "USD")));
+        when(milestoneService.findByProjectIdAndMilestoneTitle("p1", "Milestone One"))
+                .thenReturn(Optional.of(MilestoneEntity.builder().id("m1").build()));
+        when(spendingEventService.createEvent(any())).thenReturn(SpendingEventView.builder().eventId("e1").build());
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getEventsCreated()).isEqualTo(1);
+        assertThat(result.getAllocationsCreated()).isEqualTo(2);
+        verify(spendingEventService, times(1)).createEvent(any());
+    }
+
+    @Test
     void eventsFile_nestsSubProjectAllocationUnderItsRoot() {
         // Regression test: a sub-project reference must be nested under its root via `subProjects` —
         // the underlying event-creation logic only resolves a flat projectTitle as a ROOT project, so
