@@ -153,35 +153,60 @@ public class FundingEventEntity extends CommonEntity implements Persistable<Stri
 
     /**
      * Deterministic, reproducible id for a funding event, derived from its immutable header
-     * fields. Two events created for the same organisation, type, funding reference, currency,
-     * category, vendor and event date resolve to the same id (idempotent creation). {@code
-     * fundingHash} is part of the key so that distinct fundings sharing a funding id (but a
-     * different hash) do not collide; {@code category}/{@code vendor}/{@code eventDate} are part
-     * of it too so that distinct real-world transactions that happen to share a funding id and
-     * hash (e.g. several spends against the same grant) are treated as separate events rather than
-     * merged into one — matching the "Create event" UI, where those fields are entered once per
-     * event and apply to the whole thing. Two rows are only the same event if all of these match.
+     * fields. Two events created for the same organisation, type, funding reference, funding
+     * entity, currency, category, vendor and event date resolve to the same id (idempotent
+     * creation). {@code fundingHash} is part of the key so that distinct fundings sharing a
+     * funding id (but a different hash) do not collide; {@code fundingEntity}/{@code category}/
+     * {@code vendor}/{@code eventDate} are part of it too so that distinct real-world transactions
+     * that happen to share a funding id and hash (e.g. several spends against the same grant, or
+     * two grants that reuse a Funding ID under a different funder) are treated as separate events
+     * rather than merged into one — matching the "Create event" UI, where those fields are entered
+     * once per event and apply to the whole thing. Two rows are only the same event if all of
+     * these match; for FUNDING/REFUND events specifically (which have no category/vendor/spend
+     * detail) this reduces to organisation, Funding ID, Funding Hash, Funding Entity, Currency and
+     * Event Date — if any one of those differs, it is a different event, not an update of the
+     * existing one.
+     *
+     * <p>For a SPENDING event the key widens further to its full spend detail — {@code hash}
+     * (the spend/receipt hash, distinct from {@code fundingHash}), {@code amountFcy},
+     * {@code currencyFcy} and {@code amountRcy} — since two spend rows that happen to share
+     * Funding ID/Hash/Category/Vendor/Date but describe different amounts are still different
+     * real-world transactions, not the same one. {@code amountRcy} only participates in the key
+     * for SPENDING: it is required for every event type, but for FUNDING/REFUND it is the grant/
+     * refund total, not a disambiguating detail, and must not split what is otherwise one event.
      *
      * <p>Computed in the service before child allocations/items are built — it intentionally does
      * <em>not</em> depend on children (a spending item's id is derived from the event id, so
-     * including item ids here would be circular) nor on {@code totalAmount} (derived later).
+     * including item ids here would be circular) nor on {@code totalAmount} (the allocations'
+     * derived sum, as opposed to {@code amountRcy} which is the declared recorded amount).
      */
     public static String id(String organisationId,
                             EventType eventType,
                             String fundingId,
                             String fundingHash,
+                            String fundingEntity,
                             String currencyRcy,
                             String category,
                             String vendor,
+                            String hash,
+                            BigDecimal amountFcy,
+                            String currencyFcy,
+                            BigDecimal amountRcy,
                             LocalDate eventDate) {
-        return SHA3.digestAsHex("%s::%s::%s::%s::%s::%s::%s::%s".formatted(
+        boolean isSpending = eventType == EventType.SPENDING;
+        return SHA3.digestAsHex("%s::%s::%s::%s::%s::%s::%s::%s::%s::%s::%s::%s::%s".formatted(
                 organisationId,
                 eventType,
                 fundingId,
                 fundingHash == null ? "" : fundingHash,
+                fundingEntity == null ? "" : fundingEntity,
                 currencyRcy,
                 category == null ? "" : category,
                 vendor == null ? "" : vendor,
+                hash == null ? "" : hash,
+                amountFcy == null ? "" : amountFcy.toPlainString(),
+                currencyFcy == null ? "" : currencyFcy,
+                isSpending && amountRcy != null ? amountRcy.toPlainString() : "",
                 eventDate == null ? "" : eventDate));
     }
 
