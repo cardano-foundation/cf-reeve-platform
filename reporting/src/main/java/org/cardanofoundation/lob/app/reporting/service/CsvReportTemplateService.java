@@ -157,9 +157,9 @@ public class CsvReportTemplateService {
                         break outerLoop;
                     }
                     parentField.getChildFields().add(fieldDto);
+                } else {
+                    fieldDtos.add(fieldDto);
                 }
-
-                fieldDtos.add(fieldDto);
             }
             reportTemplateDto.setFields(fieldDtos);
             results.add(Either.right(reportTemplateDto));
