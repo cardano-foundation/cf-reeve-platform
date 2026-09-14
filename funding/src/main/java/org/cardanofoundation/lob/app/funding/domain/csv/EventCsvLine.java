@@ -11,8 +11,13 @@ import com.opencsv.bean.CsvBindByName;
  * One row of the Events bulk-import CSV — one milestone allocation per row. Event-level columns
  * (everything except the allocation columns) are repeated on every row belonging to the same event;
  * consecutive rows sharing the same event natural key ({@code fundingId} + {@code eventType} +
- * {@code fundingHash} + {@code currencyRcy}) are grouped into one event with multiple allocations,
- * mirroring the Projects+Milestones file's project grouping.
+ * {@code fundingHash} + {@code fundingEntity} + {@code currencyRcy} + {@code category} +
+ * {@code vendor} + {@code hash} + {@code amountFcy} + {@code currencyFcy} + {@code amountRcy}
+ * (SPENDING only) + {@code eventDate}) are grouped into one event with multiple allocations,
+ * mirroring the Projects+Milestones file's project grouping. That key mirrors the "Create event"
+ * UI, where those fields are entered once per event — two rows differing in any of them are
+ * distinct real-world transactions, not two allocations of the same one. FUNDING/REFUND rows carry
+ * no spend detail, so for them this reduces to Funding ID, Hash, Entity, Currency and Date.
  *
  * <p>Both {@code projectTitle} and {@code milestoneTitle} must reference an <em>already-existing</em>
  * project and milestone — this file carries only allocation data (which milestone gets how much of
