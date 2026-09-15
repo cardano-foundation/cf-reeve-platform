@@ -24,9 +24,16 @@ import io.vavr.control.Either;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.slf4j.LoggerFactory;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
@@ -75,6 +82,20 @@ class NetSuiteExtractionServiceTest {
                 .thenReturn(Either.right(netSuiteClient));
 
         netSuiteExtractionService = new NetSuiteExtractionService(ingestionRepository, netSuiteClientRegistry, transactionConverter, applicationEventPublisher, systemExtractionParametersFactory, extractionParametersFilteringService, netSuiteParser, 1, "",true );
+    }
+
+    private ListAppender<ILoggingEvent> logAppender;
+
+    @BeforeEach
+    void attachLogAppender() {
+        logAppender = new ListAppender<>();
+        logAppender.start();
+        ((Logger) LoggerFactory.getLogger(NetSuiteExtractionService.class)).addAppender(logAppender);
+    }
+
+    @AfterEach
+    void detachLogAppender() {
+        ((Logger) LoggerFactory.getLogger(NetSuiteExtractionService.class)).detachAppender(logAppender);
     }
 
     @Test
@@ -148,6 +169,25 @@ class NetSuiteExtractionServiceTest {
         verify(applicationEventPublisher).publishEvent(any(TransactionBatchFailedEvent.class));
         verify(netSuiteClient).retrieveLatestNetsuiteTransactionLines(any(LocalDate.class), any(LocalDate.class));
         verifyNoMoreInteractions(applicationEventPublisher, netSuiteClient);
+    }
+
+    @Test
+    void testStartNewERPExtraction_exceptionHandling_logsTheFailureSoADeadBatchLeavesATrace() {
+        // A batch that dies here (e.g. a NetSuite timeout) previously vanished with no log line at
+        // all - only a TransactionBatchFailedEvent - which is why the incident that prompted this
+        // test couldn't be diagnosed after the fact. This locks in that a failure is now logged.
+        when(netSuiteClient.retrieveLatestNetsuiteTransactionLines(any(LocalDate.class), any(LocalDate.class)))
+                .thenThrow(new RuntimeException("TestException"));
+
+        netSuiteExtractionService.startNewERPExtraction("orgId", "userId",
+                UserExtractionParameters.builder().from(LocalDate.now()).to(LocalDate.now()).build());
+
+        assertThat(logAppender.list)
+                .anySatisfy(event -> {
+                    assertThat(event.getFormattedMessage()).contains("Fatal error while starting NetSuite ingestion");
+                    assertThat(event.getFormattedMessage()).contains("orgId");
+                    assertThat(event.getThrowableProxy().getMessage()).isEqualTo("TestException");
+                });
     }
 
     @Test
