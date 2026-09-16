@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.service.internal;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -20,20 +21,18 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 
-import io.vavr.control.Either;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import io.vavr.control.Either;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.slf4j.LoggerFactory;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Transaction;
