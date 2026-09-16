@@ -49,7 +49,7 @@ public class BusinessRulesConfig {
     @Value("${lob.accounting_reporting_core.rules.amount_fcy_balance_zeros_out_check:true}")
     private boolean amountFcyBalanceZerosOutCheck;
 
-    @Value("${lob.accounting_reporting_core.rules.line_item_debit_credit_accounts_check:false}")
+    @Value("${lob.accounting_reporting_core.rules.line_item_debit_credit_accounts_check:true}")
     private boolean lineItemDebitCreditAccountsCheck;
 
     @Value("${lob.accounting_reporting_core.rules.journal_account_credit_enrichment:true}")
@@ -79,10 +79,10 @@ public class BusinessRulesConfig {
     @Value("${lob.accounting_reporting_core.rules.amounts_lcy_after_summing_check:true}")
     private boolean amountsLcyAfterSummingCheck;
 
-    @Value("${lob.accounting_reporting_core.rules.account_code_debit_check:true}")
+    @Value("${lob.accounting_reporting_core.rules.account_code_debit_check:false}")
     private boolean accountCodeDebitCheck;
 
-    @Value("${lob.accounting_reporting_core.rules.account_code_credit_check:true}")
+    @Value("${lob.accounting_reporting_core.rules.account_code_credit_check:false}")
     private boolean accountCodeCreditCheck;
 
     @Value("${lob.accounting_reporting_core.rules.document_must_be_present:true}")
