@@ -37,6 +37,7 @@ import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepos
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 import org.cardanofoundation.lob.app.reporting.dto.CreateCsvTemplateRequest;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
+import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.TemplateCsvLine;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
@@ -434,5 +435,68 @@ class CsvReportTemplateServiceTest {
         assertTrue(first.getError().isPresent());
         assertEquals("ACCOUNTING_REGIME_IMMUTABLE_AFTER_PUBLISH", first.getError().get().getTitle());
         verify(reportTemplateRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void createCsvTemplates_childFieldsAreNotDuplicatedAtTopLevel() {
+        CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
+        Organisation organisation = new Organisation();
+        MultipartFile file = mock(MultipartFile.class);
+        ChartOfAccount chartOfAccount = mock(ChartOfAccount.class);
+        ReportTemplateResponseDto responseDto = mock(ReportTemplateResponseDto.class);
+
+        TemplateCsvLine revenueLine = mock(TemplateCsvLine.class);
+        TemplateCsvLine assetsLine = mock(TemplateCsvLine.class);
+        TemplateCsvLine testLine = mock(TemplateCsvLine.class);
+
+        for (TemplateCsvLine line : List.of(revenueLine, assetsLine, testLine)) {
+            when(line.getReportType()).thenReturn("Balance sheet");
+            when(line.getAccounts()).thenReturn("1234");
+            when(line.getDateRange()).thenReturn("Period-Only balance");
+        }
+        when(revenueLine.getDataMode()).thenReturn("Manual");
+        when(revenueLine.getActive()).thenReturn("true");
+        when(revenueLine.getAccountingRegime()).thenReturn("IFRS");
+        when(revenueLine.getFieldName()).thenReturn("Revenue");
+        when(revenueLine.getParent()).thenReturn("");
+        when(assetsLine.getFieldName()).thenReturn("Assets");
+        when(assetsLine.getParent()).thenReturn("Revenue");
+        when(testLine.getFieldName()).thenReturn("Test");
+        when(testLine.getParent()).thenReturn("Revenue");
+
+        Errors errors = mock(Errors.class);
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any(TemplateCsvLine.class))).thenReturn(errors);
+
+        when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(organisation));
+        when(request.getOrganisationId()).thenReturn("org123");
+        when(request.getFile()).thenReturn(file);
+        when(csvParser.parseCsv(file, TemplateCsvLine.class))
+                .thenReturn(Either.right(List.of(revenueLine, assetsLine, testLine)));
+        when(revenueLine.getName()).thenReturn("Test Template");
+        when(assetsLine.getName()).thenReturn("Test Template");
+        when(testLine.getName()).thenReturn("Test Template");
+        when(chartOfAccountRepository.findById(new ChartOfAccount.Id("org123", "1234"))).thenReturn(Optional.of(chartOfAccount));
+        when(chartOfAccount.getId()).thenReturn(new ChartOfAccount.Id("org123", "1234"));
+        when(reportTemplateMapper.toEntity(any(ReportTemplateDto.class), any())).thenReturn(mock(ReportTemplateEntity.class));
+        when(reportTemplateMapper.toResponseDto(any())).thenReturn(responseDto);
+
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
+
+        assertTrue(result.isRight());
+        List<ReportTemplateResponseDto> responseDtos = result.get();
+        assertEquals(1, responseDtos.size());
+        assertTrue(responseDtos.getFirst().getError().isEmpty());
+
+        ArgumentCaptor<ReportTemplateDto> dtoCaptor = ArgumentCaptor.forClass(ReportTemplateDto.class);
+        verify(reportTemplateMapper).toEntity(dtoCaptor.capture(), any());
+        List<ReportTemplateFieldDto> topLevelFields = dtoCaptor.getValue().getFields();
+
+        assertEquals(1, topLevelFields.size());
+        ReportTemplateFieldDto revenueField = topLevelFields.getFirst();
+        assertEquals("Revenue", revenueField.getFieldName());
+        assertEquals(2, revenueField.getChildFields().size());
+        assertEquals("Assets", revenueField.getChildFields().get(0).getFieldName());
+        assertEquals("Test", revenueField.getChildFields().get(1).getFieldName());
     }
 }
