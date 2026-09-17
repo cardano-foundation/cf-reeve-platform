@@ -41,7 +41,8 @@ public class TemplateCsvLine {
     private  String accounts = "";
     @CsvBindByName(column = "Date Range")
     private String dateRange = "";
-    @CsvBindByName(column = "Negated")
-    private Boolean negated = false;
+    @CsvBindByName(column = "Sign")
+    @NotNull(message = "Sign is required. Options are: Positive, Negative")
+    private String sign;
 
 }
