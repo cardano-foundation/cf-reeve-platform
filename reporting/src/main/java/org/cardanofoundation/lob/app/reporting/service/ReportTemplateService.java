@@ -154,7 +154,7 @@ public class ReportTemplateService {
         return Either.right(reportTemplateMapper.toResponseDto(saved));
     }
 
-    private Either<ProblemDetail, Void> validateDataMode(ReportTemplateDto dto) {
+    Either<ProblemDetail, Void> validateDataMode(ReportTemplateDto dto) {
         DataMode dataMode;
         try {
             dataMode = DataMode.valueOf(dto.getDataMode());
