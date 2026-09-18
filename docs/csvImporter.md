@@ -128,7 +128,7 @@ The following columns are needed:
 - `Parent`: Name of the Parent field (e.g. `ASSETS`)
 - `Accounts`: A list of chart-of-account codes mapped to the field, separated by `;` (e.g. `1000;1010`)
 - `Date Range`: Definition of the date range for the field. Possible values are: `Period-Only balance`, `End-of-Period balance`, `Year-to-Date balance`, `Previous-Year balance`, `Previous-Year-to-Date balance`, `End-of-Previous-Year balance`
-- `Negated`: A boolean if the field is negated (e.g. `False`)
+- `Sign`: Whether the field's amount should be shown as calculated or negated. Possible values are: `Positive`, `Negative`
 
 Rows sharing the same `Name` and `Report Type` are grouped into a single template; `Report Type`, `Generation Method`, `Accounting Regime`, `Active` and `Description` are read once from the first row of each group.
 
