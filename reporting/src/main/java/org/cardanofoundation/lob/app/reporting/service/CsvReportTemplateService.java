@@ -162,6 +162,11 @@ public class CsvReportTemplateService {
                 }
             }
             reportTemplateDto.setFields(fieldDtos);
+            Either<ProblemDetail, Void> dataModeValidation = reportTemplateService.validateDataMode(reportTemplateDto);
+            if (dataModeValidation.isLeft()) {
+                results.add(Either.left(dataModeValidation.getLeft()));
+                continue;
+            }
             results.add(Either.right(reportTemplateDto));
         }
         return Either.right(results.stream().map(e -> e.fold(
