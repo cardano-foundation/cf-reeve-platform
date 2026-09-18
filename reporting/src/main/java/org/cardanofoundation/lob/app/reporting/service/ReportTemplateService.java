@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -94,6 +95,16 @@ public class ReportTemplateService {
         return Either.right(null);
     }
 
+    Either<ProblemDetail, Void> checkAccountingRegimeImmutable(ReportTemplateEntity existing, ReportTemplateDto dto) {
+        boolean regimeChanged = !Objects.equals(existing.getAccountingRegime(), dto.getAccountingRegime());
+        if (regimeChanged && reportingRepository.existsByReportTemplateIdAndLedgerDispatchApprovedTrue(existing.getId())) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The accounting regime of template '" + existing.getName() + "' cannot be changed because it has at least one published report.");
+            problem.setTitle("ACCOUNTING_REGIME_IMMUTABLE_AFTER_PUBLISH");
+            return Either.left(problem);
+        }
+        return Either.right(null);
+    }
+
     private Either<ProblemDetail, Void> validateForbiddenCharacters(List<ReportTemplateFieldDto> fields) {
         for(ReportTemplateFieldDto field : fields) {
             if(!field.getChildFields().isEmpty()) {
@@ -143,7 +154,7 @@ public class ReportTemplateService {
         return Either.right(reportTemplateMapper.toResponseDto(saved));
     }
 
-    private Either<ProblemDetail, Void> validateDataMode(ReportTemplateDto dto) {
+    Either<ProblemDetail, Void> validateDataMode(ReportTemplateDto dto) {
         DataMode dataMode;
         try {
             dataMode = DataMode.valueOf(dto.getDataMode());
@@ -252,6 +263,10 @@ public class ReportTemplateService {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The report template type '" + dto.getReportTemplateType() + "' is not valid.");
             problem.setTitle("Invalid Report Template Type");
             return Either.left(problem);
+        }
+        Either<ProblemDetail, Void> accountingRegimeImmutable = checkAccountingRegimeImmutable(existing, dto);
+        if (accountingRegimeImmutable.isLeft()) {
+            return Either.left(accountingRegimeImmutable.getLeft());
         }
 
         // Check if there are any reports using this template

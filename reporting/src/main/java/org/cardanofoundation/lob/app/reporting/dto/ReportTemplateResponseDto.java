@@ -58,6 +58,9 @@ public class ReportTemplateResponseDto {
     @Schema(description = "Data mode for the report. Options are: SYSTEM, USER", example = "SYSTEM")
     private String dataMode;
 
+    @Schema(description = "Accounting regime disclosure (free text)", example = "IFRS")
+    private String accountingRegime;
+
     @Schema(description = "List of validation rules for report fields")
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     private List<ValidationRuleDto> validationRules;

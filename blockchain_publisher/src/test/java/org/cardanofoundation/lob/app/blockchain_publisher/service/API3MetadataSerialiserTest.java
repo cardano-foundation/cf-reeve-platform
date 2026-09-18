@@ -70,6 +70,54 @@ class API3MetadataSerialiserTest {
         assertThat(metadataMap.get("data")).isNotNull();
         MetadataMap data = (MetadataMap) metadataMap.get("data");
         assertThat(data.get("test123")).isEqualTo("5");
+        // No accounting regime set on the entity -> field must be omitted from the on-chain schema
+        assertThat(metadataMap.get("accounting_regime")).isNull();
+    }
+
+    @Test
+    void serializeReportEntity_withAccountingRegime_shouldIncludeItInSchema() {
+        org.cardanofoundation.lob.app.organisation.domain.entity.Organisation org = mock(org.cardanofoundation.lob.app.organisation.domain.entity.Organisation.class);
+        when(organisationPublicApi.findByOrganisationId("org123"))
+                .thenReturn(Optional.of(org));
+
+        ReportEntity reportEntity = new ReportEntity();
+        reportEntity.setId("report-v2-001");
+        reportEntity.setPeriod((short) 1);
+        reportEntity.setOrganisationId("org123");
+        reportEntity.setReportData(Map.of("Test123", 5));
+        reportEntity.setYear((short) 2024);
+        reportEntity.setIntervalType(IntervalType.YEAR);
+        reportEntity.setReportTemplateType(ReportTemplateType.BALANCE_SHEET);
+        reportEntity.setDataMode(DataMode.SYSTEM);
+        reportEntity.setReportVer(1L);
+        reportEntity.setAccountingRegime("IFRS");
+
+        MetadataMap metadataMap = serialiser.serialiseToMetadataMap(reportEntity, CREATION_SLOT);
+
+        assertThat(metadataMap.get("accounting_regime")).isEqualTo("IFRS");
+    }
+
+    @Test
+    void serializeReportEntity_withNullAccountingRegime_shouldOmitFromSchema() {
+        org.cardanofoundation.lob.app.organisation.domain.entity.Organisation org = mock(org.cardanofoundation.lob.app.organisation.domain.entity.Organisation.class);
+        when(organisationPublicApi.findByOrganisationId("org123"))
+                .thenReturn(Optional.of(org));
+
+        ReportEntity reportEntity = new ReportEntity();
+        reportEntity.setId("report-v2-001");
+        reportEntity.setPeriod((short) 1);
+        reportEntity.setOrganisationId("org123");
+        reportEntity.setReportData(Map.of("Test123", 5));
+        reportEntity.setYear((short) 2024);
+        reportEntity.setIntervalType(IntervalType.YEAR);
+        reportEntity.setReportTemplateType(ReportTemplateType.BALANCE_SHEET);
+        reportEntity.setDataMode(DataMode.SYSTEM);
+        reportEntity.setReportVer(1L);
+        reportEntity.setAccountingRegime(null); // legacy template predating this field
+
+        MetadataMap metadataMap = serialiser.serialiseToMetadataMap(reportEntity, CREATION_SLOT);
+
+        assertThat(metadataMap.get("accounting_regime")).isNull();
     }
 
     @Test

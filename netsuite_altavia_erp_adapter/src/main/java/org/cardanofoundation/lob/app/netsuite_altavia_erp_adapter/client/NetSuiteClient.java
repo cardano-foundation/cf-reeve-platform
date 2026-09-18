@@ -2,12 +2,8 @@ package org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.client;
 
 import static java.time.format.DateTimeFormatter.ISO_LOCAL_DATE;
 
-import java.io.File;
-import java.io.IOException;
 import java.net.URLEncoder;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.security.KeyFactory;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
@@ -24,8 +20,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import jakarta.annotation.PostConstruct;
-
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +29,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -60,7 +55,8 @@ public class NetSuiteClient {
     @Getter
     private final String baseUrl;
     private final String tokenUrl;
-    private final String privateKeyFilePath;
+    /** PKCS#8 PEM contents, already decrypted by the caller. */
+    private final String privateKeyPem;
     private final String certificateId;
     private final String clientId;
     private final Integer recordsPerCall;
@@ -70,28 +66,27 @@ public class NetSuiteClient {
 
     private static final String NETSUITE_API_ERROR = "NETSUITE_API_ERROR";
 
-    @PostConstruct
-    public void init() {
-        log.info("Initializing NetSuite client...");
-        log.info("token url: {}", tokenUrl);
+    /**
+     * Parses the PEM supplied at construction.
+     * <p>
+     * Strips all whitespace rather than only {@code System.lineSeparator()}: a PEM pasted into
+     * the admin form may carry CRLF regardless of the server's platform, and the old
+     * platform-specific strip silently produced an unparseable key in that case.
+     */
+    private PrivateKey loadPrivateKey() throws NoSuchAlgorithmException, InvalidKeySpecException {
+        String base64 = privateKeyPem
+                .replace("-----BEGIN PRIVATE KEY-----", "")
+                .replace("-----END PRIVATE KEY-----", "")
+                .replaceAll("\\s", "");
 
-        refreshToken();
-    }
-
-    private PrivateKey loadPrivateKeyFromFile(String fileName) throws IOException, NoSuchAlgorithmException, InvalidKeySpecException {
-        File f = new File(fileName);
-        String key = Files.readString(f.toPath(), Charset.defaultCharset());
-
-        String privateKeyPEM = key.replace("-----BEGIN PRIVATE KEY-----", "")
-                .replaceAll(System.lineSeparator(), "").replace("-----END PRIVATE KEY-----", "");
-        byte[] decoded = Base64.getDecoder().decode(privateKeyPEM);
+        byte[] decoded = Base64.getDecoder().decode(base64);
         PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(decoded);
         KeyFactory keyFactory = KeyFactory.getInstance("RSA");
         return keyFactory.generatePrivate(keySpec);
     }
 
-    private String getJwtTokenFromCertifikate() throws IOException, NoSuchAlgorithmException, InvalidKeySpecException {
-        PrivateKey privateKey = loadPrivateKeyFromFile(privateKeyFilePath);
+    private String getJwtTokenFromCertifikate() throws NoSuchAlgorithmException, InvalidKeySpecException {
+        PrivateKey privateKey = loadPrivateKey();
         return Jwts.builder()
                 .setIssuedAt(new Date())
                 .setAudience(tokenUrl)
@@ -108,7 +103,7 @@ public class NetSuiteClient {
         String jwtToken = null;
         try {
             jwtToken = getJwtTokenFromCertifikate();
-        } catch (IOException | NoSuchAlgorithmException | InvalidKeySpecException e) {
+        } catch (NoSuchAlgorithmException | InvalidKeySpecException | IllegalArgumentException e) {
             log.error("Error generating jwt Token: {}", e.getMessage());
             return;
         }
@@ -182,8 +177,11 @@ public class NetSuiteClient {
         ResponseEntity<String> response = null;
         try {
             response = callForTransactionLinesData(LocalDate.now(), LocalDate.now(), Optional.empty());
-        } catch (IOException e) {
-            log.error("Error calling NetSuite API: {}", e.getMessage());
+        } catch (RestClientException e) {
+            // Covers connect/read timeouts (ResourceAccessException) as well as other transport
+            // failures. RestClientException is unchecked, so nothing here relies on a checked
+            // IOException ever being thrown by the RestClient call above.
+            log.error("Error calling NetSuite API (connection/timeout): {}", e.getMessage());
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
             problem.setTitle(NETSUITE_API_ERROR);
             return Either.left(problem);
@@ -204,7 +202,11 @@ public class NetSuiteClient {
         ResponseEntity<String> response;
         try {
             response = callForTransactionLinesData(extractionFrom, extractionTo, start);
-        } catch (IOException e) {
+        } catch (RestClientException e) {
+            // Covers connect/read timeouts (ResourceAccessException) as well as other transport
+            // failures, so an extraction that times out mid-call is reported the same way as any
+            // other NetSuite API error instead of escaping to the caller's generic catch block.
+            log.error("Error calling NetSuite API (connection/timeout): {}", e.getMessage());
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
             problem.setTitle(NETSUITE_API_ERROR);
             return Either.left(problem);
@@ -251,7 +253,7 @@ public class NetSuiteClient {
         return Either.left(problem);
     }
 
-    private ResponseEntity<String> callForTransactionLinesData(LocalDate from, LocalDate to, Optional<Integer> start) throws IOException {
+    private ResponseEntity<String> callForTransactionLinesData(LocalDate from, LocalDate to, Optional<Integer> start) {
         log.info("Retrieving data from NetSuite...");
 
         if (LocalDateTime.now().isAfter(ChronoLocalDateTime.from(accessTokenExpiration.orElse(LocalDateTime.MIN)))) {
