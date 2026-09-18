@@ -2,7 +2,6 @@ package org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.client;
 
 import static java.time.format.DateTimeFormatter.ISO_LOCAL_DATE;
 
-import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
@@ -30,6 +29,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -177,8 +177,11 @@ public class NetSuiteClient {
         ResponseEntity<String> response = null;
         try {
             response = callForTransactionLinesData(LocalDate.now(), LocalDate.now(), Optional.empty());
-        } catch (IOException e) {
-            log.error("Error calling NetSuite API: {}", e.getMessage());
+        } catch (RestClientException e) {
+            // Covers connect/read timeouts (ResourceAccessException) as well as other transport
+            // failures. RestClientException is unchecked, so nothing here relies on a checked
+            // IOException ever being thrown by the RestClient call above.
+            log.error("Error calling NetSuite API (connection/timeout): {}", e.getMessage());
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
             problem.setTitle(NETSUITE_API_ERROR);
             return Either.left(problem);
@@ -199,7 +202,11 @@ public class NetSuiteClient {
         ResponseEntity<String> response;
         try {
             response = callForTransactionLinesData(extractionFrom, extractionTo, start);
-        } catch (IOException e) {
+        } catch (RestClientException e) {
+            // Covers connect/read timeouts (ResourceAccessException) as well as other transport
+            // failures, so an extraction that times out mid-call is reported the same way as any
+            // other NetSuite API error instead of escaping to the caller's generic catch block.
+            log.error("Error calling NetSuite API (connection/timeout): {}", e.getMessage());
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
             problem.setTitle(NETSUITE_API_ERROR);
             return Either.left(problem);
@@ -246,7 +253,7 @@ public class NetSuiteClient {
         return Either.left(problem);
     }
 
-    private ResponseEntity<String> callForTransactionLinesData(LocalDate from, LocalDate to, Optional<Integer> start) throws IOException {
+    private ResponseEntity<String> callForTransactionLinesData(LocalDate from, LocalDate to, Optional<Integer> start) {
         log.info("Retrieving data from NetSuite...");
 
         if (LocalDateTime.now().isAfter(ChronoLocalDateTime.from(accessTokenExpiration.orElse(LocalDateTime.MIN)))) {

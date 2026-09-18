@@ -193,6 +193,8 @@ public class NetSuiteExtractionService {
 
             log.info("NetSuite ingestion started.");
         } catch (Exception e) {
+            log.error("Fatal error while starting NetSuite ingestion, batchId: {}, organisationId: {}", batchId, organisationId, e);
+
             Map<String, Object> bag = Map.of(
                     Constants.NETSUITE_BAG_ADAPTER_INSTANCE_ID, netsuiteInstanceId,
                     Constants.NETSUITE_BAG_TECHNICAL_ERROR_MESSAGE, e.getMessage()
