@@ -419,9 +419,19 @@ public class FundingBulkImportService {
         return new ProjectMilestoneGroupOutcome(errors, 0, 0, 0, 0, 0);
     }
 
+    /**
+     * proId is permanent (see {@code ProjectEntity#proId}) — when the row's {@code Project ID} column
+     * is set, matching prefers it over the title, the reliable way to find a project that's since been
+     * renamed. When two row groups in the same file carry different titles but the same {@code Project
+     * ID}, both resolve to the same underlying row and are applied in file order — the later group's
+     * title is what the project ends up titled, a deliberate "last one in the file wins" rule rather
+     * than a rejected conflict, matching how bulk-import already resolves every other same-batch field
+     * change.
+     */
     private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> upsertRootProject(String organisationId, ProjectMilestoneCsvLine rootLine) {
-        Optional<ProjectEntity> existing = projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(
-                organisationId, rootLine.getProjectTitle());
+        Optional<ProjectEntity> existing = isBlank(rootLine.getProjectId())
+                ? projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(organisationId, rootLine.getProjectTitle())
+                : projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull(organisationId, rootLine.getProjectId());
 
         Either<ProblemDetail, BigDecimal> totalAmountE = parseDecimal(rootLine.getTotalAmount(), "Total Amount");
         if (totalAmountE.isLeft()) {
@@ -429,7 +439,7 @@ public class FundingBulkImportService {
         }
 
         if (existing.isPresent()) {
-            return updateProjectEntity(existing.get(), rootLine.getCurrency(), totalAmountE.get());
+            return updateProjectEntity(existing.get(), rootLine.getProjectTitle(), rootLine.getCurrency(), totalAmountE.get());
         }
         // CREATE — full data is required.
         if (totalAmountE.get() == null) {
@@ -440,9 +450,13 @@ public class FundingBulkImportService {
             return Either.left(Problems.badRequest(
                     "Currency is required to create project: " + rootLine.getProjectTitle(), ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
+        // Project ID is user-suppliable for a root project only (defaults to title when blank — see
+        // ProjectEntity#getProId()); it's never honored for sub-projects/milestones, whose ID columns
+        // are only ever used for matching, not for seeding a new row's proId.
         ProjectView view = projectService.createWithMilestones(ProjectWithMilestonesCreateRequest.builder()
                 .organisationId(organisationId)
                 .projectTitle(rootLine.getProjectTitle())
+                .proId(rootLine.getProjectId())
                 .totalAmount(totalAmountE.get())
                 .currency(rootLine.getCurrency())
                 .build());
@@ -454,8 +468,11 @@ public class FundingBulkImportService {
         return Either.right(new UpsertOutcome<>(created, true));
     }
 
+    /** See {@link #upsertRootProject}'s Javadoc — same proId-first matching and same-batch "last wins" rule. */
     private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> upsertSubProject(ProjectEntity root, ProjectMilestoneCsvLine line) {
-        Optional<ProjectEntity> existing = projectRepository.findByParentProjectIdAndProjectTitle(root.getId(), line.getSubProjectTitle());
+        Optional<ProjectEntity> existing = isBlank(line.getSubProjectId())
+                ? projectRepository.findByParentProjectIdAndProjectTitle(root.getId(), line.getSubProjectTitle())
+                : projectRepository.findByParentProjectIdAndProId(root.getId(), line.getSubProjectId());
 
         Either<ProblemDetail, BigDecimal> subAmountE = parseDecimal(line.getSubTotalAmount(), "Sub Total Amount");
         if (subAmountE.isLeft()) {
@@ -463,7 +480,7 @@ public class FundingBulkImportService {
         }
 
         if (existing.isPresent()) {
-            return updateProjectEntity(existing.get(), null, subAmountE.get());
+            return updateProjectEntity(existing.get(), line.getSubProjectTitle(), null, subAmountE.get());
         }
         // CREATE — full data is required. There is no "Sub Currency" column: a sub-project always
         // takes the root's currency (see ProjectStructureService.createSubProject).
@@ -471,8 +488,17 @@ public class FundingBulkImportService {
             return Either.left(Problems.badRequest(
                     "Sub Total Amount is required to create sub-project: " + line.getSubProjectTitle(), ErrorTitleConstants.PROJECT_AMOUNT_INVALID));
         }
+        // Sub Project ID is mandatory when creating via CSV (unlike the UI/API, which always
+        // auto-assigns it) — this is the one thing that lets the user later reference this exact row
+        // in an Events file upload without any export/lookup tooling: they already know the value,
+        // because they're the one who chose it.
+        if (isBlank(line.getSubProjectId())) {
+            return Either.left(Problems.badRequest(
+                    "Sub Project ID is required to create sub-project: " + line.getSubProjectTitle(),
+                    ErrorTitleConstants.SUBPROJECT_PROID_REQUIRED));
+        }
         Either<ProblemDetail, ProjectEntity> created = projectStructureService.createSubProject(
-                root, line.getSubProjectTitle(), null, subAmountE.get(), null);
+                root, line.getSubProjectTitle(), line.getSubProjectId(), null, subAmountE.get(), null);
         if (created.isLeft()) {
             return Either.left(created.getLeft());
         }
@@ -484,11 +510,13 @@ public class FundingBulkImportService {
      * the field's current stored value is treated the same way (also left out of the request) so that
      * re-uploading the same, unchanged CSV is a safe no-op — it must not re-trigger validations tied to
      * other state that can legitimately grow over time (e.g. a milestone's cumulative event
-     * allocations), which would otherwise reject a value that isn't actually changing. Title is never
-     * sent — it's immutable and already matched.
+     * allocations), which would otherwise reject a value that isn't actually changing. {@code title} is
+     * now sent when it differs from the row's matched (proId or title) row — title is no longer
+     * immutable (see LOB-2384); {@code existing}'s own proId is never touched either way.
      */
-    private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> updateProjectEntity(ProjectEntity existing, String currency, BigDecimal totalAmount) {
+    private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> updateProjectEntity(ProjectEntity existing, String title, String currency, BigDecimal totalAmount) {
         ProjectUpdateRequest updateRequest = ProjectUpdateRequest.builder()
+                .projectTitle(ifChanged(blankToNull(title), existing.getProjectTitle()))
                 .totalAmount(ifChanged(totalAmount, existing.getTotalAmount()))
                 .currency(ifChanged(blankToNull(currency), existing.getCurrency()))
                 .build();
@@ -520,16 +548,23 @@ public class FundingBulkImportService {
         LocalDate date = dateE.get();
         String currency = project.getCurrency();
 
-        Optional<MilestoneEntity> existing = milestoneService.findByProjectIdAndMilestoneTitle(project.getId(), line.getMilestoneTitle());
+        // proId is permanent (see MilestoneEntity#proId) — when the row's Milestone ID column is set,
+        // matching prefers it over the title, the reliable way to find a milestone that's since been
+        // renamed. See upsertRootProject's Javadoc for the same-batch "last group in the file wins" rule
+        // this produces for free when two rows share an ID under different titles.
+        Optional<MilestoneEntity> existing = isBlank(line.getMilestoneId())
+                ? milestoneService.findByProjectIdAndMilestoneTitle(project.getId(), line.getMilestoneTitle())
+                : milestoneService.findByProjectIdAndProId(project.getId(), line.getMilestoneId());
         if (existing.isPresent()) {
             // UPDATE — partial: a blank (or unchanged) value means "leave this field alone" — see
             // updateProjectEntity's Javadoc for why a resent-but-unchanged value must not be forwarded:
             // this milestone's amount can be unchanged while its cumulative event allocations have
             // legitimately grown (e.g. both a FUNDING and a SPENDING event allocated against it), and
             // resending the same amount must not spuriously trip that coverage check. milestoneTitle is
-            // never sent — it's immutable and we already matched the existing row by its exact title.
+            // no longer immutable (see LOB-2384) — sent when it differs from the matched row's title.
             MilestoneEntity current = existing.get();
             MilestoneUpdateRequest updateRequest = MilestoneUpdateRequest.builder()
+                    .milestoneTitle(ifChanged(blankToNull(line.getMilestoneTitle()), current.getMilestoneTitle()))
                     .milestoneAmount(ifChanged(amount, current.getMilestoneAmount()))
                     .currency(ifChanged(currency, current.getCurrency()))
                     .milestoneDate(ifChanged(date, current.getMilestoneDate()))
@@ -553,13 +588,20 @@ public class FundingBulkImportService {
                     "Project " + project.getProjectTitle() + " has no currency, required to create milestone: " + line.getMilestoneTitle(),
                     ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
+        // Milestone ID is mandatory when creating via CSV (unlike the UI/API, which always
+        // auto-assigns it) — see the matching comment in upsertSubProject for why.
+        if (isBlank(line.getMilestoneId())) {
+            return Either.left(Problems.badRequest(
+                    "Milestone ID is required to create milestone: " + line.getMilestoneTitle(),
+                    ErrorTitleConstants.MILESTONE_PROID_REQUIRED));
+        }
         MilestoneCreateRequest request = MilestoneCreateRequest.builder()
                 .milestoneTitle(line.getMilestoneTitle())
                 .milestoneAmount(amount)
                 .currency(currency)
                 .milestoneDate(date)
                 .build();
-        MilestoneView view = milestoneService.createMilestone(project.getId(), request);
+        MilestoneView view = milestoneService.createMilestone(project.getId(), request, line.getMilestoneId());
         Optional<ProblemDetail> error = view.getError();
         if (error.isPresent()) {
             return Either.left(error.get());
@@ -833,7 +875,8 @@ public class FundingBulkImportService {
             IndexedLine first = projectLines.get(0);
             // Validation only — the project must already exist, this file never creates one.
             Either<ProblemDetail, ProjectEntity> projectE = resolveExistingProjectEntity(
-                    organisationId, first.line().getProjectTitle(), first.line().getSubProjectTitle(), resolvedProjectIds);
+                    organisationId, first.line().getProjectTitle(), first.line().getProjectId(),
+                    first.line().getSubProjectTitle(), first.line().getSubProjectId(), resolvedProjectIds);
             if (projectE.isLeft()) {
                 errors.add(rowError(first.rowNumber(), projectE.getLeft()));
                 continue;
@@ -882,8 +925,12 @@ public class FundingBulkImportService {
                     ErrorTitleConstants.MILESTONE_FIELDS_REQUIRED)));
             return Optional.empty();
         }
-        // Validation only — the milestone must already exist, this file never creates one.
-        Optional<MilestoneEntity> milestone = milestoneService.findByProjectIdAndMilestoneTitle(project.getId(), line.getMilestoneTitle());
+        // Validation only — the milestone must already exist, this file never creates one. proId (see
+        // MilestoneEntity#proId), when the row's Milestone ID column is set, is preferred over title —
+        // the reliable way to reference a milestone that's since been renamed.
+        Optional<MilestoneEntity> milestone = isBlank(line.getMilestoneId())
+                ? milestoneService.findByProjectIdAndMilestoneTitle(project.getId(), line.getMilestoneTitle())
+                : milestoneService.findByProjectIdAndProId(project.getId(), line.getMilestoneId());
         if (milestone.isEmpty()) {
             // A project holds either milestones or sub-projects, never both — so if this "milestone not
             // found" project actually has sub-projects, the real problem isn't a typo'd milestone title,
@@ -928,6 +975,7 @@ public class FundingBulkImportService {
         return Optional.of(EventMilestoneAllocationRequest.builder()
                 .milestone(MilestoneCreateRequest.builder()
                         .milestoneTitle(line.getMilestoneTitle())
+                        .proId(line.getMilestoneId())
                         .build())
                 .allocatedAmount(allocatedAmount)
                 .build());
@@ -1024,11 +1072,21 @@ public class FundingBulkImportService {
      * the root lookup, so it's the way to disambiguate two same-titled sub-projects under different
      * roots.
      */
-    private Either<ProblemDetail, ProjectEntity> resolveExistingProjectEntity(String organisationId, String projectTitle,
-            String subProjectTitle, Map<String, String> resolvedProjectIds) {
+    /**
+     * proId is permanent (see {@code ProjectEntity#proId}) — {@code projectIdColumn}/{@code
+     * subProjectIdColumn}, when set, are preferred over the title columns, the reliable way to
+     * reference a project/sub-project that's since been renamed. Falls back to the title columns
+     * exactly as before when the ID column is blank or absent (older exported templates keep working
+     * unchanged).
+     */
+    private Either<ProblemDetail, ProjectEntity> resolveExistingProjectEntity(String organisationId,
+            String projectTitle, String projectIdColumn, String subProjectTitle, String subProjectIdColumn,
+            Map<String, String> resolvedProjectIds) {
 
-        if (isBlank(subProjectTitle)) {
-            Either<ProblemDetail, Optional<ProjectEntity>> existingE = findExistingProjectByTitle(organisationId, projectTitle);
+        if (isBlank(subProjectTitle) && isBlank(subProjectIdColumn)) {
+            Either<ProblemDetail, Optional<ProjectEntity>> existingE = isBlank(projectIdColumn)
+                    ? findExistingProjectByTitle(organisationId, projectTitle)
+                    : findExistingProjectByProId(organisationId, projectIdColumn);
             if (existingE.isLeft()) {
                 return Either.left(existingE.getLeft());
             }
@@ -1040,12 +1098,15 @@ public class FundingBulkImportService {
                     .orElseGet(() -> Either.left(Problems.projectReferenceNotFound(projectTitle)));
         }
 
-        Optional<ProjectEntity> root = projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(
-                organisationId, projectTitle);
+        Optional<ProjectEntity> root = isBlank(projectIdColumn)
+                ? projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(organisationId, projectTitle)
+                : projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull(organisationId, projectIdColumn);
         if (root.isEmpty()) {
             return Either.left(Problems.projectReferenceNotFound(projectTitle));
         }
-        Optional<ProjectEntity> sub = projectRepository.findByParentProjectIdAndProjectTitle(root.get().getId(), subProjectTitle);
+        Optional<ProjectEntity> sub = isBlank(subProjectIdColumn)
+                ? projectRepository.findByParentProjectIdAndProjectTitle(root.get().getId(), subProjectTitle)
+                : projectRepository.findByParentProjectIdAndProId(root.get().getId(), subProjectIdColumn);
         if (sub.isEmpty()) {
             return Either.left(Problems.subProjectReferenceNotFound(projectTitle, subProjectTitle));
         }
@@ -1058,6 +1119,15 @@ public class FundingBulkImportService {
         List<ProjectEntity> matches = projectRepository.findByOrganisationIdAndProjectTitle(organisationId, projectTitle);
         if (matches.size() > 1) {
             return Either.left(Problems.ambiguousProjectReference(projectTitle));
+        }
+        return Either.right(matches.isEmpty() ? Optional.empty() : Optional.of(matches.get(0)));
+    }
+
+    /** proId equivalent of {@link #findExistingProjectByTitle} — same "search broadly, flag ambiguity" contract. */
+    private Either<ProblemDetail, Optional<ProjectEntity>> findExistingProjectByProId(String organisationId, String proId) {
+        List<ProjectEntity> matches = projectRepository.findByOrganisationIdAndProId(organisationId, proId);
+        if (matches.size() > 1) {
+            return Either.left(Problems.ambiguousProjectReference(proId));
         }
         return Either.right(matches.isEmpty() ? Optional.empty() : Optional.of(matches.get(0)));
     }

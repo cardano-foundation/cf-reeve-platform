@@ -76,7 +76,7 @@ class ProjectServiceTest {
         // Real structure service over the mocked repo/milestone service, so sub-project creation
         // rules are exercised for real while everything else stays stubbed.
         projectService = new ProjectService(projectRepository, milestoneService, spendingEventService,
-                new ProjectStructureService(projectRepository, milestoneService),
+                new ProjectStructureService(projectRepository, milestoneService, new ProjectChildSequenceService(projectRepository)),
                 allocationRepository, keycloakSecurityHelper, organisationPublicApi, cascadeDeleteService);
         lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
         lenient().when(milestoneService.findByProjectId(any())).thenReturn(List.of());
@@ -84,11 +84,16 @@ class ProjectServiceTest {
         lenient().when(projectRepository.findByParentProjectId(any(String.class))).thenReturn(List.of());
         lenient().when(spendingEventService.findByProjectIdAndFilter(any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of()));
+        // A sub-project's proId is always system-assigned via a locked read of its parent (see
+        // ProjectChildSequenceService) — tests here don't assert on the exact assigned value unless
+        // they say otherwise, so a generic non-null stand-in is enough to avoid an NPE/ISE.
+        lenient().when(projectRepository.findWithLockById(any())).thenAnswer(invocation ->
+                Optional.of(ProjectEntity.builder().id(invocation.getArgument(0)).proId("parent").build()));
     }
 
     private ProjectEntity projectEntity() {
         return ProjectEntity.builder().id("p1").organisationId("org1").fundingId("GRANT-2025-001")
-                .externalProjectId("PROJ-AB").projectTitle("Project AB")
+                .externalProjectId("PROJ-AB").projectTitle("Project AB").proId("Project AB")
                 .totalAmount(new BigDecimal("200000.00")).currency("USD").build();
     }
 
@@ -273,7 +278,9 @@ class ProjectServiceTest {
         ProjectView result = projectService.createWithMilestones(request);
 
         assertThat(result.getError()).isEmpty();
-        verify(projectRepository, times(3)).saveAndFlush(any());   // root + 2 sub-projects
+        // root + 2 sub-projects, plus one extra saveAndFlush per sub-project to persist the parent's
+        // incremented nextChildSequence counter (see ProjectChildSequenceService#nextChildProId).
+        verify(projectRepository, times(5)).saveAndFlush(any());
         verify(milestoneService, times(2)).create(any(), any());   // one milestone per sub-project
     }
 
@@ -560,16 +567,32 @@ class ProjectServiceTest {
     }
 
     @Test
-    void update_returns400_whenProjectTitleChanged() {
-        // projectTitle is immutable — the project's id is derived from it. Attempting to change it is
-        // rejected outright, regardless of whether the new title would itself conflict with anything.
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity())); // title "Project AB"
+    void update_renamesTitle_whenChangedAndNoConflict() {
+        // projectTitle is no longer immutable (see ProjectEntity#proId, which stays fixed instead).
+        ProjectEntity project = projectEntity(); // title "Project AB"
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
+        when(projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNullAndIdNot("org1", "Renamed", "p1")).thenReturn(false);
+        when(projectRepository.saveAndFlush(project)).thenReturn(project);
 
         ProjectView result = projectService.updateProject("p1",
                 ProjectUpdateRequest.builder().projectTitle("Renamed").build());
 
-        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_TITLE_IMMUTABLE);
+        assertThat(result.getError()).isEmpty();
+        assertThat(project.getProjectTitle()).isEqualTo("Renamed");
+        assertThat(project.getProId()).isEqualTo("Project AB"); // proId is frozen, unaffected by the rename
+    }
+
+    @Test
+    void update_returnsConflict_whenRenamedTitleAlreadyExistsInScope() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity())); // title "Project AB"
+        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
+        when(projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNullAndIdNot("org1", "Renamed", "p1")).thenReturn(true);
+
+        ProjectView result = projectService.updateProject("p1",
+                ProjectUpdateRequest.builder().projectTitle("Renamed").build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS);
         verify(projectRepository, never()).saveAndFlush(any());
     }
 

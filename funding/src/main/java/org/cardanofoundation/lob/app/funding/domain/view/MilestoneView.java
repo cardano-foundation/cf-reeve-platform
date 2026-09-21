@@ -33,6 +33,11 @@ public class MilestoneView implements ErrorAware {
     @Schema(example = "Milestone AB")
     private String milestoneTitle;
 
+    @Schema(example = "Milestone AB", description = "Permanent identifier assigned at creation (defaults to the title as first typed) — "
+            + "never changes afterward, even when milestoneTitle is later renamed. Reference this, not milestoneTitle, when the "
+            + "milestone needs to be found reliably later (e.g. a subsequent event allocation or CSV re-upload).")
+    private String proId;
+
     @Schema(example = "50000.00")
     private BigDecimal milestoneAmount;
 

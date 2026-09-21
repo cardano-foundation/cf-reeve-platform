@@ -55,6 +55,8 @@ class MilestoneServiceTest {
     private FundingCascadeDeleteService cascadeDeleteService;
     @Mock
     private OrganisationPublicApiIF organisationPublicApi;
+    @Mock
+    private ProjectChildSequenceService childSequenceService;
 
     @InjectMocks
     private MilestoneService milestoneService;
@@ -69,6 +71,9 @@ class MilestoneServiceTest {
         Currency activeCurrency = new Currency(new Currency.Id("org1", "x"), "ISO_4217:x", true);
         lenient().when(organisationPublicApi.findCurrencyByCustomerCurrencyCode(any(), any()))
                 .thenReturn(Optional.of(activeCurrency));
+        // A milestone's proId is always system-assigned (see MilestoneEntity#getProId()) — tests that
+        // create a new milestone don't care about the exact assigned value unless they say otherwise.
+        lenient().when(childSequenceService.nextChildProId(any())).thenReturn("Milestone-1");
     }
 
     @Test
@@ -220,7 +225,7 @@ class MilestoneServiceTest {
     void resolveOrCreate_returnsExisting_whenMilestoneTitleAlreadyExistsInProject() {
         ProjectEntity project = projectEntity("p1");
         MilestoneEntity existing = milestoneEntity("m1");
-        when(milestoneRepository.findById(MilestoneEntity.id("p1", "Milestone AB"))).thenReturn(Optional.of(existing));
+        when(milestoneRepository.findByProjectIdAndMilestoneTitle("p1", "Milestone AB")).thenReturn(Optional.of(existing));
 
         // Reference-only: no creation fields supplied, just the title.
         MilestoneCreateRequest request = MilestoneCreateRequest.builder().milestoneTitle("Milestone AB").build();
@@ -234,7 +239,8 @@ class MilestoneServiceTest {
     @Test
     void resolveOrCreate_createsNew_whenTitleDoesNotExistAndFullDataProvided() {
         ProjectEntity project = projectEntity("p1");
-        when(milestoneRepository.findById(MilestoneEntity.id("p1", "New Milestone"))).thenReturn(Optional.empty());
+        when(milestoneRepository.findByProjectIdAndMilestoneTitle("p1", "New Milestone")).thenReturn(Optional.empty());
+        when(milestoneRepository.existsById(MilestoneEntity.id("p1", "New Milestone"))).thenReturn(false);
         when(milestoneRepository.findByProjectId("p1")).thenReturn(List.of());
         when(milestoneRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
@@ -251,7 +257,7 @@ class MilestoneServiceTest {
     @Test
     void resolveOrCreate_returnsNotFound_whenTitleDoesNotExistAndCreationFieldsIncomplete() {
         ProjectEntity project = projectEntity("p1");
-        when(milestoneRepository.findById(MilestoneEntity.id("p1", "Missing Milestone"))).thenReturn(Optional.empty());
+        when(milestoneRepository.findByProjectIdAndMilestoneTitle("p1", "Missing Milestone")).thenReturn(Optional.empty());
 
         // Title supplied but no amount/currency/date — not enough to create, and nothing to resolve to.
         MilestoneCreateRequest request = MilestoneCreateRequest.builder().milestoneTitle("Missing Milestone").build();
@@ -284,7 +290,7 @@ class MilestoneServiceTest {
 
     @Test
     void update_updatesAmountCurrencyDate_whenProvided() {
-        // milestoneTitle is immutable (the id is derived from it) — this covers every other field.
+        // Covers every field except title (see the dedicated rename tests above).
         MilestoneEntity milestone = milestoneEntity("m1");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
         when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
@@ -321,18 +327,35 @@ class MilestoneServiceTest {
     }
 
     @Test
-    void update_returnsError_whenMilestoneTitleChanged() {
-        // milestoneTitle is immutable — the milestone's id is derived from it. Attempting to change it
-        // is rejected outright, regardless of whether the new title would itself conflict.
+    void update_renamesTitle_whenChangedAndNoConflict() {
+        // milestoneTitle is no longer immutable (see MilestoneEntity#proId, which stays fixed instead).
         MilestoneEntity milestone = milestoneEntity("m1"); // title "Milestone AB"
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
         when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
+        when(milestoneRepository.existsByProjectIdAndMilestoneTitleAndIdNot("p1", "Renamed", "m1")).thenReturn(false);
+        when(milestoneRepository.findByProjectId("p1")).thenReturn(List.of(milestone));
+        when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1",
+                MilestoneUpdateRequest.builder().milestoneTitle("Renamed").build());
+
+        assertThat(result.isRight()).isTrue();
+        assertThat(milestone.getMilestoneTitle()).isEqualTo("Renamed");
+        assertThat(milestone.getProId()).isEqualTo("Milestone AB"); // proId is frozen, unaffected by the rename
+    }
+
+    @Test
+    void update_returnsConflict_whenRenamedTitleAlreadyExistsInProject() {
+        MilestoneEntity milestone = milestoneEntity("m1"); // title "Milestone AB"
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
+        when(milestoneRepository.existsByProjectIdAndMilestoneTitleAndIdNot("p1", "Renamed", "m1")).thenReturn(true);
 
         Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1",
                 MilestoneUpdateRequest.builder().milestoneTitle("Renamed").build());
 
         assertThat(result.isLeft()).isTrue();
-        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_TITLE_IMMUTABLE);
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_TITLE_ALREADY_EXISTS);
         verify(milestoneRepository, never()).saveAndFlush(any());
     }
 
@@ -714,6 +737,7 @@ class MilestoneServiceTest {
         return MilestoneEntity.builder()
                 .id(id)
                 .milestoneTitle("Milestone AB")
+                .proId("Milestone AB")
                 .milestoneAmount(new BigDecimal("50000.00"))
                 .currency("USD")
                 .milestoneDate(LocalDate.of(2025, 6, 30))
@@ -728,6 +752,7 @@ class MilestoneServiceTest {
                 .fundingId("GRANT-2025-001")
                 .externalProjectId("PROJ-AB")
                 .projectTitle("Project AB")
+                .proId("Project AB")
                 .totalAmount(new BigDecimal("200000.00"))
                 .currency("USD")
                 .build();

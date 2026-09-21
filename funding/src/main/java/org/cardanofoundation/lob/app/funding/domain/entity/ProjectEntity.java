@@ -51,6 +51,35 @@ public class ProjectEntity extends CommonEntity implements Persistable<String> {
     @Column(name = "project_title", nullable = false)
     private String projectTitle;
 
+    /**
+     * Permanent, human-readable identifier — set once at creation and never updated afterward,
+     * regardless of later title changes. Lets the project keep being found reliably (by the
+     * event-allocation flow, by CSV re-upload) after a rename, without exposing the opaque {@link #id}
+     * hash as the thing users reference. See LOB-2384.
+     *
+     * <p>For a root project ({@link #parentProject} null), this is user-suppliable at creation
+     * (defaulting to {@link #projectTitle} when omitted) — root-level codes are typically meaningful to
+     * the organisation (e.g. a grant reference) and worth letting them choose. For a sub-project, it is
+     * always system-assigned as {@code parent.proId + "-" + n} (n = {@link #nextChildSequence},
+     * atomically incremented on the parent at creation) — never user-suppliable, since a sub-project has
+     * no equivalent natural external code. See {@link MilestoneEntity#proId} for the same rule one
+     * level down.
+     */
+    @NotBlank
+    @Column(name = "pro_id", nullable = false)
+    private String proId;
+
+    /**
+     * Counter backing the next auto-assigned child's {@code proId} suffix (see {@link #proId}) —
+     * shared between sub-projects and milestones since a project has one or the other, never both
+     * (see {@code FundingValidations#milestonesXorSubProjects}). Incremented under a pessimistic lock
+     * on this row (see {@code FundingProjectRepository#findWithLockById}) so concurrent child creation
+     * never assigns the same number twice.
+     */
+    @Builder.Default
+    @Column(name = "next_child_sequence", nullable = false)
+    private int nextChildSequence = 0;
+
     /** Null for root projects; populated for sub-projects. */
     @Nullable
     @Column(name = "total_amount")

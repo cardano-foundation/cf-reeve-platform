@@ -83,9 +83,9 @@ class FundingBulkImportE2ETest {
     private static final String ORG_ID = "org1";
 
     private static final String PROJECTS_MILESTONES_TEMPLATE_CSV = """
-            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
-            Project A,100000.00,USD,Sub One,40000.00,Milestone One,20000.00,2026-06-30
-            Project A,,,Sub One,,Milestone Two,20000.00,2026-07-15
+            Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+            Project A,,100000.00,USD,Sub One,sub-one,40000.00,Milestone One,ms-one,20000.00,2026-06-30
+            Project A,,,,Sub One,,,Milestone Two,ms-two,20000.00,2026-07-15
             """;
 
     private static final String EVENTS_TEMPLATE_CSV = """
@@ -114,8 +114,8 @@ class FundingBulkImportE2ETest {
     // currency (USD; there is no "Sub Currency" column in the template at all), and is created
     // successfully.
     private static final String MISSING_SUB_CURRENCY_CSV = """
-            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
-            Project D,100000.00,USD,Sub One,40000.00,,,
+            Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+            Project D,,100000.00,USD,Sub One,sub-one,40000.00,,,,
             """;
 
     // Sub Project Title blank, but Sub Total Amount filled -> this is an orphaned amount with no
@@ -138,8 +138,8 @@ class FundingBulkImportE2ETest {
     // currency-cascade regression test below. The root can't carry a milestone of its own here: a
     // project holds either milestones or sub-projects, never both.
     private static final String CASCADE_SEED_CSV = """
-            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
-            Project Cascade,100000.00,USD,Sub One,40000.00,Sub Milestone,20000.00,2026-06-30
+            Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+            Project Cascade,,100000.00,USD,Sub One,sub-one,40000.00,Sub Milestone,sub-milestone,20000.00,2026-06-30
             """;
 
     // Only the root row's Currency cell changes; Sub Project/Milestone columns are left entirely
@@ -515,12 +515,12 @@ class FundingBulkImportE2ETest {
         when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
 
         String seedRootX = """
-                Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
-                Root X,50000.00,USD,Twin Sub,50000.00,Wrong Milestone,10000.00,2026-06-30
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Root X,,50000.00,USD,Twin Sub,x-twin-sub,50000.00,Wrong Milestone,x-wrong-milestone,10000.00,2026-06-30
                 """;
         String seedRootY = """
-                Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
-                Root Y,50000.00,USD,Twin Sub,50000.00,Milestone One,10000.00,2026-06-30
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Root Y,,50000.00,USD,Twin Sub,y-twin-sub,50000.00,Milestone One,y-milestone-one,10000.00,2026-06-30
                 """;
         FundingBulkImportResult seedXResult = bulkImportService.importFiles(BulkImportRequest.builder()
                 .organisationId(orgId).files(List.of(new MockMultipartFile("file", "x.csv", "text/csv", seedRootX.getBytes()))).build());
@@ -566,8 +566,11 @@ class FundingBulkImportE2ETest {
 
     /** Seeds a root project and one milestone directly on it, via the real Projects+Milestones CSV path. */
     private void seedProjectAndMilestone(String orgId, String projectTitle, String milestoneTitle) {
-        String csv = "Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date\n"
-                + projectTitle + ",50000.00,USD,,," + milestoneTitle + ",10000.00,2026-06-30\n";
+        // Milestone ID is mandatory when creating a milestone via CSV (see LOB-2384) — derived from the
+        // milestone title here purely for this helper's own readability, not a system convention.
+        String milestoneId = "ms-" + milestoneTitle.toLowerCase().replace(" ", "-");
+        String csv = "Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date\n"
+                + projectTitle + ",,50000.00,USD,,,," + milestoneTitle + "," + milestoneId + ",10000.00,2026-06-30\n";
         MultipartFile file = new MockMultipartFile("file", "seed.csv", "text/csv", csv.getBytes());
         FundingBulkImportResult result = bulkImportService.importFiles(BulkImportRequest.builder()
                 .organisationId(orgId).files(List.of(file)).build());
@@ -619,10 +622,10 @@ class FundingBulkImportE2ETest {
         when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
 
         String csv = """
-                Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
-                Project Cascade,200,CHF,,,,,
-                Project Cascade,,,Sub 1,190,Milestone 1,190,2026-10-08
-                Project Cascade,,,Sub 2,190,Milestone 1,190,2026-09-24
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Project Cascade,,200,CHF,,,,,,,
+                Project Cascade,,,,Sub 1,sub-1,190,Milestone 1,sub1-milestone-1,190,2026-10-08
+                Project Cascade,,,,Sub 2,sub-2,190,Milestone 1,sub2-milestone-1,190,2026-09-24
                 """;
         MultipartFile file = new MockMultipartFile("file", "funding-project_milestone.csv", "text/csv", csv.getBytes());
 
@@ -675,11 +678,11 @@ class FundingBulkImportE2ETest {
         when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
 
         String csv = """
-                Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
-                Project Test,100000.00,USD,,,,,
-                Project Test,,,Sub One,150000.00,Milestone One,20000.00,2026-06-30
-                Project Test,,,Sub One,50000.00,Milestone Two,20000.00,2026-07-15
-                Project Test,,,Sub One,30000.00,Milestone Three,25000.00,2026-08-01
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Project Test,,100000.00,USD,,,,,,,
+                Project Test,,,,Sub One,sub-one,150000.00,Milestone One,milestone-one,20000.00,2026-06-30
+                Project Test,,,,Sub One,sub-one,50000.00,Milestone Two,milestone-two,20000.00,2026-07-15
+                Project Test,,,,Sub One,sub-one,30000.00,Milestone Three,milestone-three,25000.00,2026-08-01
                 """;
         MultipartFile file = new MockMultipartFile("file", "funding-project_test_3_milestones.csv", "text/csv", csv.getBytes());
 
@@ -776,8 +779,8 @@ class FundingBulkImportE2ETest {
     // -------------------------------------------------------------------------
 
     private static final String TICKET_STRUCTURE_CSV = """
-            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
-            Ticket Project,100000.00,EUR,Ticket Sub,50000.00,Ticket Milestone,20000.00,2026-06-30
+            Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+            Ticket Project,,100000.00,EUR,Ticket Sub,ticket-sub,50000.00,Ticket Milestone,ticket-milestone,20000.00,2026-06-30
             """;
 
     private static final String TICKET_PUBLISHED_SEED_CSV = """

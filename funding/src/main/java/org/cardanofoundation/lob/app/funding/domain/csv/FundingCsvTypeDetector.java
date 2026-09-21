@@ -65,12 +65,25 @@ public class FundingCsvTypeDetector {
      * omitted column should still be rejected up front rather than surfacing later as a confusing,
      * unrelated business-rule error.
      */
+    /**
+     * A field's own {@code optional} binding profile (see {@link com.opencsv.bean.CsvToBeanBuilder}) only
+     * means its <em>value</em> may be blank once the column exists — this class's own check above still
+     * requires the header itself, by design (see the class Javadoc). {@code HEADER_OPTIONAL_PROFILE} is a
+     * second, distinct profile for a column that's allowed to be entirely absent from the file — used for
+     * columns introduced after a template already shipped without them (e.g. the {@code * ID} columns
+     * added for LOB-2384), so older exported templates that predate the column keep importing unchanged.
+     */
+    public static final String HEADER_OPTIONAL_PROFILE = "header-optional";
+
     public Set<String> missingHeaders(MultipartFile file, FundingCsvFileType type) {
         Set<String> headers = readHeaders(file);
         Set<String> missing = new java.util.LinkedHashSet<>();
         for (Field field : type.getLineType().getDeclaredFields()) {
             CsvBindByName bind = field.getAnnotation(CsvBindByName.class);
             if (bind == null) {
+                continue;
+            }
+            if (Arrays.stream(bind.profiles()).anyMatch(HEADER_OPTIONAL_PROFILE::equals)) {
                 continue;
             }
             String header = bind.column().isEmpty() ? field.getName() : bind.column();

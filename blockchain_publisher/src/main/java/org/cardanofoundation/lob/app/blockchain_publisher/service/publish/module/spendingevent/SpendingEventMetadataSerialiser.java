@@ -140,6 +140,9 @@ public class SpendingEventMetadataSerialiser {
         if (allocation.getProjectTitle() != null) {
             metadataMap.put("project_title", allocation.getProjectTitle());
         }
+        if (allocation.getProId() != null) {
+            metadataMap.put("pro_id", allocation.getProId());
+        }
 
         val milestoneList = MetadataBuilder.createList();
         for (val milestone : allocation.getMilestones()) {
@@ -151,6 +154,9 @@ public class SpendingEventMetadataSerialiser {
             subProjectMap.put("sub_project_id", allocation.getSubProjectId());
             if (allocation.getSubProjectTitle() != null) {
                 subProjectMap.put("sub_project_title", allocation.getSubProjectTitle());
+            }
+            if (allocation.getSubProjectProId() != null) {
+                subProjectMap.put("pro_id", allocation.getSubProjectProId());
             }
             subProjectMap.put("milestones", milestoneList);
             metadataMap.put("sub_project", subProjectMap);
@@ -167,6 +173,9 @@ public class SpendingEventMetadataSerialiser {
         metadataMap.put("milestone_id", milestone.getMilestoneId());
         if (milestone.getMilestoneTitle() != null) {
             metadataMap.put("milestone_title", milestone.getMilestoneTitle());
+        }
+        if (milestone.getProId() != null) {
+            metadataMap.put("pro_id", milestone.getProId());
         }
         if (milestone.getAllocatedAmount() != null) {
             metadataMap.put("allocated_amount", BigDecimals.normaliseString(milestone.getAllocatedAmount()));

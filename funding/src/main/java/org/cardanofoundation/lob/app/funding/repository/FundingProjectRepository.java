@@ -3,13 +3,25 @@ package org.cardanofoundation.lob.app.funding.repository;
 import java.util.List;
 import java.util.Optional;
 
+import jakarta.persistence.LockModeType;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 
 public interface FundingProjectRepository extends JpaRepository<ProjectEntity, String> {
+
+    /**
+     * Row-locked read of a project, used only to atomically increment {@code nextChildSequence} when
+     * assigning a new child's auto-generated proId (see {@code ProjectEntity#getProId()} /
+     * {@code ProjectChildSequenceService}) — without this lock, two children created for the same
+     * parent at nearly the same instant could read-and-increment the same counter value and collide.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    Optional<ProjectEntity> findWithLockById(String id);
 
     List<ProjectEntity> findByOrganisationId(String organisationId);
 
@@ -25,6 +37,9 @@ public interface FundingProjectRepository extends JpaRepository<ProjectEntity, S
     // ambiguity — see FundingBulkImportService.findExistingProjectByTitle.
     List<ProjectEntity> findByOrganisationIdAndProjectTitle(String organisationId, String projectTitle);
 
+    /** proId equivalent of the lookup above — see its Javadoc; same "search broadly, caller checks ambiguity" contract. */
+    List<ProjectEntity> findByOrganisationIdAndProId(String organisationId, String proId);
+
     boolean existsByOrganisationIdAndProjectTitleAndParentProjectIsNull(String organisationId, String projectTitle);
 
     boolean existsByOrganisationIdAndProjectTitleAndParentProjectIsNullAndIdNot(String organisationId, String projectTitle, String id);
@@ -36,6 +51,27 @@ public interface FundingProjectRepository extends JpaRepository<ProjectEntity, S
     Optional<ProjectEntity> findByParentProjectIdAndProjectTitle(String parentProjectId, String projectTitle);
 
     boolean existsByParentProjectIdAndProjectTitle(String parentProjectId, String projectTitle);
+
+    // proId is permanent (never updated after creation, see ProjectEntity#proId) — these are the
+    // lookups that let a renamed project keep being found by its stable identifier instead of its
+    // (now-changed) title. Scoped exactly like the title lookups above: root projects per
+    // organisation, sub-projects per parent.
+    Optional<ProjectEntity> findByOrganisationIdAndProIdAndParentProjectIsNull(String organisationId, String proId);
+
+    Optional<ProjectEntity> findByParentProjectIdAndProId(String parentProjectId, String proId);
+
+    // A sub-project's proId is normally system-assigned (never colliding by construction) — this is
+    // needed only for the CSV-bulk-import path, which is allowed to supply its own value explicitly
+    // (see ProjectStructureService#createSubProject's explicitProId overload) and therefore needs its
+    // own pre-check, same reasoning as the root-scope check above.
+    boolean existsByParentProjectIdAndProId(String parentProjectId, String proId);
+
+    // A root project's proId is user-suppliable (unlike a sub-project's or milestone's, which are
+    // always system-assigned — see ProjectEntity#getProId()), so — unlike those — it needs an explicit
+    // pre-check at creation to turn a collision into a clean conflict instead of a raw DB constraint
+    // violation. Only needed for the root scope; a sub-project's auto-generated proId can never collide
+    // by construction.
+    boolean existsByOrganisationIdAndProIdAndParentProjectIsNull(String organisationId, String proId);
 
     boolean existsByParentProjectIdAndProjectTitleAndIdNot(String parentProjectId, String projectTitle, String id);
 

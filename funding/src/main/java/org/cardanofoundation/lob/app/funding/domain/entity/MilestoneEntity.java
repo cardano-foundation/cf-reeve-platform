@@ -42,6 +42,16 @@ public class MilestoneEntity extends CommonEntity implements Persistable<String>
     @Column(name = "milestone_title", nullable = false)
     private String milestoneTitle;
 
+    /**
+     * Permanent, human-readable identifier — set once at creation and never updated afterward,
+     * regardless of later title changes. Always system-assigned as {@code project.proId + "-" + n}
+     * (never user-suppliable — a milestone has no equivalent natural external code, unlike a root
+     * project). See {@link ProjectEntity#proId}; LOB-2384.
+     */
+    @NotBlank
+    @Column(name = "pro_id", nullable = false)
+    private String proId;
+
     @NotNull
     @Column(name = "milestone_amount", nullable = false)
     private BigDecimal milestoneAmount;

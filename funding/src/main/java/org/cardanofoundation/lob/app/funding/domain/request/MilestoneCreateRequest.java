@@ -26,6 +26,14 @@ public class MilestoneCreateRequest {
     private String milestoneTitle;
 
     @Nullable
+    @Schema(example = "Q3-2-1", description = "Permanent identifier assigned when the milestone was created (see MilestoneView#proId). "
+            + "When supplied, matches the existing milestone by it directly — the reliable way to reference one that may have since been "
+            + "renamed. When omitted, falls back to matching by the current milestoneTitle. Only meaningful for matching an existing "
+            + "milestone — a milestone's proId is always system-assigned on creation and cannot be chosen, so this is ignored if no "
+            + "existing milestone matches and a new one is created instead.")
+    private String proId;
+
+    @Nullable
     @Schema(example = "50000.00")
     private BigDecimal milestoneAmount;
 

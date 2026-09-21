@@ -8,6 +8,10 @@ public final class ErrorTitleConstants {
     public static final String PROJECT_ALREADY_EXISTS = "PROJECT_ALREADY_EXISTS";
     public static final String PROJECT_TITLE_ALREADY_EXISTS = "PROJECT_TITLE_ALREADY_EXISTS";
     public static final String PROJECT_TITLE_IMMUTABLE = "PROJECT_TITLE_IMMUTABLE";
+    /** A "create new" title exactly matches another (still-existing) project's title as of its own creation — see LOB-2384. */
+    public static final String PROJECT_TITLE_PREVIOUSLY_USED = "PROJECT_TITLE_PREVIOUSLY_USED";
+    /** A caller-supplied proId collides with an existing one in the same scope (root: per organisation; sub-project: per parent) — see LOB-2384. */
+    public static final String PROJECT_PROID_ALREADY_EXISTS = "PROJECT_PROID_ALREADY_EXISTS";
     public static final String PROJECT_FUNDING_ID_ALREADY_USED = "PROJECT_FUNDING_ID_ALREADY_USED";
     public static final String PROJECT_FIELDS_REQUIRED = "PROJECT_FIELDS_REQUIRED";
     public static final String PROJECT_AMOUNT_INVALID = "PROJECT_AMOUNT_INVALID";
@@ -23,6 +27,10 @@ public final class ErrorTitleConstants {
     public static final String MILESTONE_ALREADY_EXISTS = "MILESTONE_ALREADY_EXISTS";
     public static final String MILESTONE_TITLE_ALREADY_EXISTS = "MILESTONE_TITLE_ALREADY_EXISTS";
     public static final String MILESTONE_TITLE_IMMUTABLE = "MILESTONE_TITLE_IMMUTABLE";
+    /** A "create new" title exactly matches another (still-existing) milestone's title as of its own creation — see LOB-2384. */
+    public static final String MILESTONE_TITLE_PREVIOUSLY_USED = "MILESTONE_TITLE_PREVIOUSLY_USED";
+    /** A CSV-supplied Milestone ID collides with an existing one in the same project — see LOB-2384. */
+    public static final String MILESTONE_PROID_ALREADY_EXISTS = "MILESTONE_PROID_ALREADY_EXISTS";
     public static final String MILESTONE_FIELDS_REQUIRED = "MILESTONE_FIELDS_REQUIRED";
     public static final String MILESTONE_AMOUNT_INVALID = "MILESTONE_AMOUNT_INVALID";
     public static final String MILESTONE_AMOUNT_EXCEEDS_PROJECT = "MILESTONE_AMOUNT_EXCEEDS_PROJECT";
@@ -66,5 +74,8 @@ public final class ErrorTitleConstants {
     public static final String PROJECT_NOT_CREATED_NO_SUBPROJECT = "PROJECT_NOT_CREATED_NO_SUBPROJECT";
     public static final String DUPLICATE_MILESTONE_ALLOCATION = "DUPLICATE_MILESTONE_ALLOCATION";
     public static final String SUBPROJECT_TITLE_REQUIRED = "SUBPROJECT_TITLE_REQUIRED";
+    /** CSV-only: creating a new sub-project/milestone via bulk-import requires an explicit ID column value — see LOB-2384. */
+    public static final String SUBPROJECT_PROID_REQUIRED = "SUBPROJECT_PROID_REQUIRED";
+    public static final String MILESTONE_PROID_REQUIRED = "MILESTONE_PROID_REQUIRED";
 
 }

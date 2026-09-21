@@ -33,6 +33,18 @@ public class ProjectStructureService {
 
     private final FundingProjectRepository projectRepository;
     private final MilestoneService milestoneService;
+    private final ProjectChildSequenceService childSequenceService;
+
+    /**
+     * Creates a sub-project of {@code parent}, auto-assigning its proId (see the other overload's
+     * Javadoc) — the path used by the UI-facing JSON API and the event-allocation flow, neither of
+     * which ever supplies one.
+     */
+    @Transactional
+    public Either<ProblemDetail, ProjectEntity> createSubProject(ProjectEntity parent,
+            String projectTitle, @Nullable String fundingId, @Nullable BigDecimal totalAmount, @Nullable String currency) {
+        return createSubProject(parent, projectTitle, null, fundingId, totalAmount, currency);
+    }
 
     /**
      * Creates a sub-project of {@code parent} after applying the structural and budget rules.
@@ -43,10 +55,18 @@ public class ProjectStructureService {
      * always populated by this point (a root project requires it to be created, and every
      * sub-project resolves and stores its own effective currency the same way), so this default
      * is available at any depth.
+     *
+     * <p>{@code explicitProId}, when supplied, is used as the new sub-project's proId as-is (after a
+     * uniqueness check) instead of the usual system-assigned {@code parent.proId + "-" + n}. This is
+     * CSV-bulk-import-only: the UI/API-facing overload above always passes {@code null}, since
+     * sub-projects created there are always auto-numbered — CSV creation is the one path that requires
+     * the caller to supply its own value (see LOB-2384's CSV-mandatory-ID decision), specifically
+     * because CSV is the only surface where a user needs to know the value again later (to reference
+     * this row in a subsequent Events file) without any export/lookup tooling.
      */
     @Transactional
-    public Either<ProblemDetail, ProjectEntity> createSubProject(ProjectEntity parent,
-            String projectTitle, @Nullable String fundingId, @Nullable BigDecimal totalAmount, @Nullable String currency) {
+    public Either<ProblemDetail, ProjectEntity> createSubProject(ProjectEntity parent, String projectTitle,
+            @Nullable String explicitProId, @Nullable String fundingId, @Nullable BigDecimal totalAmount, @Nullable String currency) {
 
         String effectiveCurrency = (currency != null && !currency.isBlank()) ? currency : parent.getCurrency();
 
@@ -85,11 +105,40 @@ public class ProjectStructureService {
             return Either.left(subAmount.get());
         }
 
+        String subProjectId = ProjectEntity.subId(parent.getId(), projectTitle);
+        // The title-uniqueness check above only rules out a sibling currently titled the same — it
+        // can't see a sibling that was originally created with this exact title and has since been
+        // renamed to something else, which still permanently owns this deterministic id (see
+        // ProjectEntity#proId). Without this guard the insert below would fail as a raw
+        // DataIntegrityViolationException instead of a clean, actionable conflict.
+        if (projectRepository.existsById(subProjectId)) {
+            return Either.left(Problems.conflict(
+                    "Sub-project title \"%s\" was already used under this parent to create a different sub-project that has since been renamed"
+                            .formatted(projectTitle),
+                    ErrorTitleConstants.PROJECT_TITLE_PREVIOUSLY_USED));
+        }
+
+        String proId;
+        if (explicitProId != null && !explicitProId.isBlank()) {
+            // CSV path only — see this method's Javadoc. Needs its own uniqueness pre-check since,
+            // unlike the auto-assigned case, a caller-chosen value isn't guaranteed unique by
+            // construction.
+            if (projectRepository.existsByParentProjectIdAndProId(parent.getId(), explicitProId)) {
+                return Either.left(Problems.conflict(
+                        "Sub Project ID already exists under this parent: " + explicitProId,
+                        ErrorTitleConstants.PROJECT_PROID_ALREADY_EXISTS));
+            }
+            proId = explicitProId;
+        } else {
+            proId = childSequenceService.nextChildProId(parent);
+        }
+
         return Either.right(projectRepository.saveAndFlush(ProjectEntity.builder()
-                .id(ProjectEntity.subId(parent.getId(), projectTitle))
+                .id(subProjectId)
                 .organisationId(parent.getOrganisationId())
                 .fundingId(fundingId)
                 .projectTitle(projectTitle)
+                .proId(proId)
                 .totalAmount(totalAmount)
                 .currency(effectiveCurrency)
                 .parentProject(parent)

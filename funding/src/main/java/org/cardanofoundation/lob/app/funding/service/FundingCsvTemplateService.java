@@ -37,9 +37,9 @@ public class FundingCsvTemplateService {
 
     private void writeProjectsMilestonesTemplate(CSVWriter csvWriter) {
         csvWriter.writeNext(new String[]{
-                "Project Title", "Total Amount", "Currency",
-                "Sub Project Title", "Sub Total Amount",
-                "Milestone Title", "Milestone Amount", "Milestone Date"
+                "Project Title", "Project ID", "Total Amount", "Currency",
+                "Sub Project Title", "Sub Project ID", "Sub Total Amount",
+                "Milestone Title", "Milestone ID", "Milestone Amount", "Milestone Date"
         }, false);
     }
 
@@ -47,7 +47,8 @@ public class FundingCsvTemplateService {
         csvWriter.writeNext(new String[]{
                 "Event Type", "Funding ID", "Funding Hash", "Funding Entity", "Currency RCY", "Event Date",
                 "Category", "Vendor", "Amount FCY", "Currency FCY", "FX Rate", "Amount RCY", "Hash", "Notes",
-                "Project Title", "Sub Project Title", "Milestone Title", "Allocated Amount"
+                "Project Title", "Project ID", "Sub Project Title", "Sub Project ID",
+                "Milestone Title", "Milestone ID", "Allocated Amount"
         }, false);
     }
 
