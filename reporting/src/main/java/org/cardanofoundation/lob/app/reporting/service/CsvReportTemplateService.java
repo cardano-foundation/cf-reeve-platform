@@ -39,6 +39,7 @@ import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
+import org.cardanofoundation.lob.app.reporting.model.enums.FieldSign;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportFieldDateRange;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
@@ -212,7 +213,13 @@ public class CsvReportTemplateService {
         }
         ReportFieldDateRange dateRange = dateRangeO.get();
         fieldEntity.setDateRange(dateRange);
-        fieldEntity.setNegated(templateCsvLine.getNegated());
+        Optional<FieldSign> signO = FieldSign.fromCsvLabel(templateCsvLine.getSign());
+        if (signO.isEmpty()) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid Sign value: " + templateCsvLine.getSign() + OPTIONS_ARE + String.join(", ", Arrays.stream(FieldSign.values()).map(FieldSign::getCsvLabel).toList()));
+            problem.setTitle(Constants.CSV_PARSING_ERROR);
+            return Either.left(problem);
+        }
+        fieldEntity.setNegated(signO.get().isNegated());
         String[] mappedAccounts = templateCsvLine.getAccounts().split(";");
         Set<ChartOfAccount> mappendAccountTypes = new HashSet<>();
         for (String mappedAccount : mappedAccounts) {
