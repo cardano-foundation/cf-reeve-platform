@@ -47,7 +47,14 @@ public final class ErrorTitleConstants {
     public static final String SPENDING_EVENT_ALREADY_EXISTS = "SPENDING_EVENT_ALREADY_EXISTS";
     public static final String FUNDING_EVENT_FUNDING_ID_ALREADY_USED = "FUNDING_EVENT_FUNDING_ID_ALREADY_USED";
     public static final String SPENDING_EVENT_ALREADY_PUBLISHED = "SPENDING_EVENT_ALREADY_PUBLISHED";
+    /** LOB-2365: publishing is refused while an event is {@code ERROR} — it no longer fits the current
+     * project/milestone structure and must be corrected (which clears it back to {@code DRAFT}) first. */
+    public static final String SPENDING_EVENT_HAS_ERROR = "SPENDING_EVENT_HAS_ERROR";
     public static final String CURRENCY_CHANGE_HAS_ALLOCATIONS = "CURRENCY_CHANGE_HAS_ALLOCATIONS";
+    /** LOB-2365: a milestone's description/amount/date update is rejected because a published event
+     * allocates to it — distinct from {@link #SPENDING_EVENT_ALREADY_PUBLISHED}'s wholesale block, since
+     * milestoneTitle stays editable on the very same request. */
+    public static final String MILESTONE_LOCKED = "MILESTONE_LOCKED";
     public static final String EVENT_TYPE_IMMUTABLE = "EVENT_TYPE_IMMUTABLE";
     public static final String FUNDING_ENTITY_REQUIRED = "FUNDING_ENTITY_REQUIRED";
     public static final String EVENT_DATE_IN_FUTURE = "EVENT_DATE_IN_FUTURE";

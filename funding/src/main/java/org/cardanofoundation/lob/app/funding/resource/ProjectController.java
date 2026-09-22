@@ -25,6 +25,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
+import org.cardanofoundation.lob.app.funding.domain.view.ProjectDraftStatusView;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.service.ProjectService;
 
@@ -81,6 +82,21 @@ public class ProjectController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<ProjectView> createProjectWithMilestones(@Valid @RequestBody ProjectWithMilestonesCreateRequest request) {
         return Responses.respond(projectService.createWithMilestones(request), HttpStatus.CREATED);
+    }
+
+    @Operation(description = "Whether this project has at least one linked event still in Draft status, "
+            + "anywhere in its own structure — the edit flow calls this before opening the edit form to "
+            + "decide whether to show the draft warning.", responses = {
+            @ApiResponse(content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                    schema = @Schema(implementation = ProjectDraftStatusView.class))})
+    })
+    @GetMapping(value = "/projects/{projectId}/has-draft-event", produces = APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<ProjectDraftStatusView> hasDraftEvent(
+            @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
+            @RequestParam String organisationId,
+            @PathVariable String projectId) {
+        return Responses.respond(projectService.hasDraftEvent(organisationId, projectId), HttpStatus.OK);
     }
 
     @Operation(description = "Update a project", responses = {

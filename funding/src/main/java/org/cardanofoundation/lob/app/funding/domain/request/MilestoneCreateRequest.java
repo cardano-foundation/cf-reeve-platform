@@ -34,6 +34,10 @@ public class MilestoneCreateRequest {
     private String proId;
 
     @Nullable
+    @Schema(example = "Site survey and vendor contract signature")
+    private String description;
+
+    @Nullable
     @Schema(example = "50000.00")
     private BigDecimal milestoneAmount;
 

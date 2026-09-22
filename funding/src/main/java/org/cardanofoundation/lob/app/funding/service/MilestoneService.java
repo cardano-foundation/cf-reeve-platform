@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.funding.service;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import jakarta.annotation.Nullable;
 
@@ -343,22 +344,42 @@ public class MilestoneService {
         }
 
         MilestoneEntity milestone = milestoneM.orElseThrow();
+        ProjectEntity project = milestone.getProject();
 
-        if (allocationRepository.existsByMilestoneIdAndEventStatus(milestoneId, EventStatus.PUBLISHED)) {
-            log.warn("Cannot update milestone linked to a published event: {}", milestoneId);
+        // Milestone-specific lock (LOB-2365): milestoneTitle/description/milestoneAmount/milestoneDate
+        // are all frozen once a PUBLISHED event allocates to THIS milestone — a field-aware replacement
+        // for what used to be a wholesale block on the entire request. milestoneTitle is editable right
+        // up until that point (LOB-2384), but once an event is published (i.e. on-chain), nothing about
+        // the milestone it references — including its title — can change; currency is governed by the
+        // separate, project-wide rule below, not this one.
+        boolean titleChanging = request.getMilestoneTitle() != null && !request.getMilestoneTitle().equals(milestone.getMilestoneTitle());
+        boolean touchesLockedField = titleChanging || request.getDescription() != null
+                || request.getMilestoneAmount() != null || request.getMilestoneDate() != null;
+        if (touchesLockedField && isLocked(milestoneId)) {
+            log.warn("Cannot update locked fields on milestone linked to a published event: {}", milestoneId);
             return Either.left(Problems.conflict(
-                    "Cannot update milestone linked to a published event: %s".formatted(milestoneId),
-                    ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED));
+                    "Cannot update milestoneTitle, description, milestoneAmount, or milestoneDate: milestone %s is locked because a published event is allocated to it"
+                            .formatted(milestoneId),
+                    ErrorTitleConstants.MILESTONE_LOCKED));
+        }
+
+        // Currency lock (LOB-2365): cascades from the project level — once any PUBLISHED event exists
+        // anywhere in the milestone's owning project's own subtree, currency is blocked there too,
+        // mirroring ProjectService#updateProject's matching check for that same project id.
+        boolean currencyChanging = request.getCurrency() != null && !request.getCurrency().equals(milestone.getCurrency());
+        if (currencyChanging && allocationRepository.existsByMilestoneProjectIdInAndEventStatus(
+                ProjectTreeSupport.subtreeProjectIds(projectRepository, project.getId()), EventStatus.PUBLISHED)) {
+            return Either.left(Problems.conflict(
+                    "Cannot change currency: a published event exists in this project's structure",
+                    ErrorTitleConstants.CURRENCY_CHANGE_HAS_ALLOCATIONS));
         }
 
         // Validate only the supplied fields against the milestone's project; cumulative budget
         // excludes this milestone's current amount so an unchanged amount can't trip the check.
-        ProjectEntity project = milestone.getProject();
 
-        // milestoneTitle is now a freely editable display attribute (see MilestoneEntity#proId, which
+        // milestoneTitle is editable up until the milestone locks (see MilestoneEntity#proId, which
         // stays fixed and is what everything needing a stable reference uses instead) — still subject
         // to the same per-project uniqueness title always had.
-        boolean titleChanging = request.getMilestoneTitle() != null && !request.getMilestoneTitle().equals(milestone.getMilestoneTitle());
         if (titleChanging && milestoneRepository.existsByProjectIdAndMilestoneTitleAndIdNot(
                 project.getId(), request.getMilestoneTitle(), milestoneId)) {
             return Either.left(Problems.conflict(
@@ -379,15 +400,28 @@ public class MilestoneService {
         }
 
         if (request.getMilestoneAmount() != null) {
+            // Shrinking below what's already allocated used to be rejected outright. That's relaxed
+            // now (LOB-2365, same mechanism as ProjectService#updateProject's total-amount case one
+            // level up): the edit proceeds exactly as typed — the allocation's own recorded figure is
+            // never rewritten — and every draft event fully allocated to this milestone is marked
+            // ERROR instead, for a human to review and fix. An event that also allocates to a
+            // milestone outside this one is still a hard block, same cross-project rule as the
+            // project-level case.
             Optional<ProblemDetail> coverage = FundingValidations.milestoneCoversAllocations(
                     request.getMilestoneAmount(), allocationRepository.sumAllocatedByMilestoneId(milestoneId));
             if (coverage.isPresent()) {
-                return Either.left(coverage.get());
+                Optional<ProblemDetail> blocked = cascadeDeleteService.markContainedEventsAsErrorOrBlock(Set.of(milestoneId));
+                if (blocked.isPresent()) {
+                    return Either.left(blocked.get());
+                }
             }
         }
 
         if (titleChanging) {
             milestone.setMilestoneTitle(request.getMilestoneTitle());
+        }
+        if (request.getDescription() != null) {
+            milestone.setDescription(request.getDescription());
         }
         if (request.getMilestoneAmount() != null) {
             milestone.setMilestoneAmount(request.getMilestoneAmount());
@@ -413,18 +447,30 @@ public class MilestoneService {
                 .projectId(milestone.getProject().getId())
                 .milestoneTitle(milestone.getMilestoneTitle())
                 .proId(milestone.getProId())
+                .description(milestone.getDescription())
                 .milestoneAmount(milestone.getMilestoneAmount())
                 .currency(milestone.getCurrency())
                 .milestoneDate(milestone.getMilestoneDate())
                 .spentAmount(allocationRepository.spentAmountByMilestoneId(
                         milestone.getId(), EventType.SPENDING))
+                .locked(isLocked(milestone.getId()))
                 .build();
+    }
+
+    /**
+     * Whether {@code milestoneTitle}/{@code description}/{@code milestoneAmount}/{@code milestoneDate}
+     * are locked on this milestone — {@code true} once at least one PUBLISHED event allocates to it,
+     * i.e. once the milestone is referenced by data that's gone on-chain (LOB-2365).
+     */
+    private boolean isLocked(String milestoneId) {
+        return allocationRepository.existsByMilestoneIdAndEventStatus(milestoneId, EventStatus.PUBLISHED);
     }
 
     /** proId and id are deliberately not set here — see where they're assigned in {@link #validateAndSave}. */
     private MilestoneEntity toEntity(MilestoneCreateRequest request, ProjectEntity project) {
         return MilestoneEntity.builder()
                 .milestoneTitle(request.getMilestoneTitle())
+                .description(request.getDescription())
                 .milestoneAmount(request.getMilestoneAmount())
                 .currency(request.getCurrency())
                 .milestoneDate(request.getMilestoneDate())

@@ -994,6 +994,43 @@ class SpendingEventServiceTest {
     }
 
     @Test
+    void update_clearsErrorStatusBackToDraft_onSuccess() {
+        // LOB-2365: an ERROR event (structural edit made its allocation no longer fit) is exactly what a
+        // successful update fixes — every allocation is re-validated against the milestone's *current*
+        // amount, so reaching a successful save means the event fits again and the flag can come off.
+        FundingEventEntity existing = eventEntity(EventType.FUNDING, EventStatus.ERROR);
+        stubExistingProjectAndMilestone("MS-1");
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(existing));
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.update("e1",
+                fundingRequest(fundingMilestone("MS-1", ALLOCATED)));
+
+        assertThat(result.isRight()).isTrue();
+        assertThat(result.get().getStatus()).isEqualTo(EventStatus.DRAFT);
+    }
+
+    @Test
+    void update_leavesErrorEventUnpersisted_whenTheAttemptedFixStillDoesNotValidate() {
+        // The ERROR -> DRAFT reset happens up front, before the allocation is re-validated — this
+        // confirms a still-broken fix attempt never reaches saveAndFlush at all (the in-memory status
+        // flip is discarded along with everything else via updateEvent's rollbackAndError in the real,
+        // transactional call path; at the unit level, not calling saveAndFlush is what we can assert).
+        FundingEventEntity existing = eventEntity(EventType.FUNDING, EventStatus.ERROR);
+        stubExistingProjectAndMilestone("MS-1"); // milestone amount 50000
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(existing));
+
+        SpendingEventCreateRequest request = fundingRequest(fundingMilestone("MS-1", new BigDecimal("60000.00")));
+        request.setAmountRcy(new BigDecimal("60000.00"));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.update("e1", request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_OVERFUNDED);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void update_returnsLeft_whenOrganisationMismatch() {
         // The body claims a different organisation than the event's — must not re-target its projects.
         when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.FUNDING, EventStatus.DRAFT)));
@@ -1050,6 +1087,21 @@ class SpendingEventServiceTest {
         when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.PUBLISHED)));
 
         assertThat(spendingEventService.publish("e1").getLeft().getTitle()).isEqualTo("SPENDING_EVENT_ALREADY_PUBLISHED");
+    }
+
+    @Test
+    void publish_returnsLeft_whenInErrorState() {
+        // LOB-2365: an ERROR event no longer fits the current project/milestone structure — publishing
+        // it as-is would push a mismatched allocation on-chain, so it must be corrected via update()
+        // first (which clears it back to DRAFT) before it can ever be published.
+        FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.ERROR);
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.publish("e1");
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_HAS_ERROR);
+        assertThat(event.getStatus()).isEqualTo(EventStatus.ERROR); // untouched
+        verify(fundingEventRepository, never()).saveAndFlush(any());
     }
 
     @Test

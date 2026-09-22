@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -351,7 +352,6 @@ class MilestoneServiceTest {
         // Sending the same (unchanged) title back is not a "change" — it's a no-op, not rejected.
         MilestoneEntity milestone = milestoneEntity("m1"); // title "Milestone AB"
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
-        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
         when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
 
         Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1",
@@ -365,7 +365,6 @@ class MilestoneServiceTest {
         // milestoneTitle is no longer immutable (see MilestoneEntity#proId, which stays fixed instead).
         MilestoneEntity milestone = milestoneEntity("m1"); // title "Milestone AB"
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
-        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
         when(milestoneRepository.existsByProjectIdAndMilestoneTitleAndIdNot("p1", "Renamed", "m1")).thenReturn(false);
         when(milestoneRepository.findByProjectId("p1")).thenReturn(List.of(milestone));
         when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
@@ -382,7 +381,6 @@ class MilestoneServiceTest {
     void update_returnsConflict_whenRenamedTitleAlreadyExistsInProject() {
         MilestoneEntity milestone = milestoneEntity("m1"); // title "Milestone AB"
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
-        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
         when(milestoneRepository.existsByProjectIdAndMilestoneTitleAndIdNot("p1", "Renamed", "m1")).thenReturn(true);
 
         Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1",
@@ -393,17 +391,118 @@ class MilestoneServiceTest {
         verify(milestoneRepository, never()).saveAndFlush(any());
     }
 
+    // -------------------------------------------------------------------------
+    // LOB-2365: milestone-specific field lock — milestoneTitle/description/amount/date all frozen once
+    // a PUBLISHED event allocates to this milestone. Title is editable up until that point (LOB-2384).
+    // -------------------------------------------------------------------------
+
     @Test
-    void update_returnsConflict_whenLinkedToPublishedEvent() {
+    void update_returnsConflict_whenLockedAndAmountChanged() {
         MilestoneEntity milestone = milestoneEntity("m1");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
         when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(true);
 
-        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1", MilestoneUpdateRequest.builder().milestoneTitle("New").build());
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1",
+                MilestoneUpdateRequest.builder().milestoneAmount(new BigDecimal("99000.00")).build());
 
         assertThat(result.isLeft()).isTrue();
-        assertThat(result.getLeft().getTitle()).isEqualTo("SPENDING_EVENT_ALREADY_PUBLISHED");
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_LOCKED);
         verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_returnsConflict_whenLockedAndDescriptionChanged() {
+        MilestoneEntity milestone = milestoneEntity("m1");
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(true);
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1",
+                MilestoneUpdateRequest.builder().description("New description").build());
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_LOCKED);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_returnsConflict_whenLockedAndDateChanged() {
+        MilestoneEntity milestone = milestoneEntity("m1");
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(true);
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1",
+                MilestoneUpdateRequest.builder().milestoneDate(FUTURE_DATE).build());
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_LOCKED);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_allowsTitleOnlyChange_whenNotLocked() {
+        // milestoneTitle is editable up until a published event allocates to this milestone — same lock
+        // check as description/amount/date, not exempt from it (LOB-2365 correction: once a linked
+        // event has gone on-chain, nothing about the milestone it references can change).
+        MilestoneEntity milestone = milestoneEntity("m1"); // title "Milestone AB"
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
+        when(milestoneRepository.existsByProjectIdAndMilestoneTitleAndIdNot("p1", "Renamed", "m1")).thenReturn(false);
+        when(milestoneRepository.findByProjectId("p1")).thenReturn(List.of(milestone));
+        when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1",
+                MilestoneUpdateRequest.builder().milestoneTitle("Renamed").build());
+
+        assertThat(result.isRight()).isTrue();
+        assertThat(milestone.getMilestoneTitle()).isEqualTo("Renamed");
+    }
+
+    @Test
+    void update_blocksTitleOnlyChange_whenLockedByPublishedEvent() {
+        MilestoneEntity milestone = milestoneEntity("m1"); // title "Milestone AB"
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(true);
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1",
+                MilestoneUpdateRequest.builder().milestoneTitle("Renamed").build());
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_LOCKED);
+        assertThat(milestone.getMilestoneTitle()).isEqualTo("Milestone AB"); // untouched
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_returnsConflict_whenCurrencyChangedAndPublishedEventExistsInProjectStructure() {
+        MilestoneEntity milestone = milestoneEntity("m1"); // currency "USD"
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of());
+        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(Set.of("p1"), EventStatus.PUBLISHED)).thenReturn(true);
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1",
+                MilestoneUpdateRequest.builder().currency("EUR").build());
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.CURRENCY_CHANGE_HAS_ALLOCATIONS);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_allowsCurrencyChange_whenOnlyDraftEventsExistInProjectStructure() {
+        // The currency-lock rule triggers on PUBLISHED specifically, not on any allocation — a
+        // draft-only allocation in the project's structure must not block a milestone's own currency
+        // change either (mirrors ProjectService#updateProject's matching rule).
+        MilestoneEntity milestone = milestoneEntity("m1");
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of());
+        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(Set.of("p1"), EventStatus.PUBLISHED)).thenReturn(false);
+        when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1",
+                MilestoneUpdateRequest.builder().currency("EUR").build());
+
+        assertThat(result.isRight()).isTrue();
+        assertThat(milestone.getCurrency()).isEqualTo("EUR");
     }
 
     @Test
@@ -422,7 +521,6 @@ class MilestoneServiceTest {
     void update_skipsNullFields() {
         MilestoneEntity milestone = milestoneEntity("m1");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
-        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
         when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
 
         MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().build();
@@ -455,14 +553,18 @@ class MilestoneServiceTest {
     @Test
     void toView_mapsAllFields() {
         MilestoneEntity milestone = milestoneEntity("m1");
+        milestone.setDescription("Site survey and vendor contract signature");
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
 
         MilestoneView view = milestoneService.toView(milestone);
 
         assertThat(view.getMilestoneId()).isEqualTo("m1");
         assertThat(view.getMilestoneTitle()).isEqualTo("Milestone AB");
+        assertThat(view.getDescription()).isEqualTo("Site survey and vendor contract signature");
         assertThat(view.getMilestoneAmount()).isEqualByComparingTo("50000.00");
         assertThat(view.getCurrency()).isEqualTo("USD");
         assertThat(view.getMilestoneDate()).isEqualTo(LocalDate.of(2025, 6, 30));
+        assertThat(view.isLocked()).isFalse();
     }
 
     @Test
@@ -474,6 +576,16 @@ class MilestoneServiceTest {
         MilestoneView view = milestoneService.toView(milestone);
 
         assertThat(view.getSpentAmount()).isEqualByComparingTo("12000.00");
+    }
+
+    @Test
+    void toView_setsLockedTrue_whenPublishedEventAllocatesToThisMilestone() {
+        MilestoneEntity milestone = milestoneEntity("m1");
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(true);
+
+        MilestoneView view = milestoneService.toView(milestone);
+
+        assertThat(view.isLocked()).isTrue();
     }
 
     // -------------------------------------------------------------------------
@@ -699,17 +811,45 @@ class MilestoneServiceTest {
     }
 
     @Test
-    void update_returnsLeft_whenNewAmountBelowTotalAllocated() {
+    void update_allowsShrinkBelowTotalAllocated_andMarksContainedEventsAsError() {
+        // LOB-2365: shrinking a milestone's amount below what's already allocated to it no longer
+        // rejects outright — the edit proceeds (the allocation's own recorded figure is untouched) and
+        // every draft event fully allocated to this milestone is instead marked ERROR, the same
+        // mechanism ProjectService#updateProject uses for its own total-amount case one level up.
         MilestoneEntity milestone = milestoneEntity("m1");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
         when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
         when(allocationRepository.sumAllocatedByMilestoneId("m1")).thenReturn(new BigDecimal("60000.00"));
+        when(cascadeDeleteService.markContainedEventsAsErrorOrBlock(Set.of("m1"))).thenReturn(Optional.empty());
+        when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
 
         MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().milestoneAmount(new BigDecimal("50000.00")).build();
 
         Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1", request);
 
-        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_AMOUNT_BELOW_ALLOCATED);
+        assertThat(result.isRight()).isTrue();
+        assertThat(milestone.getMilestoneAmount()).isEqualByComparingTo("50000.00");
+        verify(cascadeDeleteService).markContainedEventsAsErrorOrBlock(Set.of("m1"));
+    }
+
+    @Test
+    void update_blocksShrinkBelowTotalAllocated_whenAContainedEventReachesOutsideTheMilestone() {
+        // Same cross-project safety net as the project-level case: if flagging would touch an event
+        // that also allocates to a different milestone, the whole update is rejected instead.
+        ProblemDetail crossProjectConflict = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "Cannot update: an associated event also allocates to other projects");
+        crossProjectConflict.setTitle(ErrorTitleConstants.EVENT_ALLOCATED_TO_OTHER_PROJECTS);
+        MilestoneEntity milestone = milestoneEntity("m1");
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
+        when(allocationRepository.sumAllocatedByMilestoneId("m1")).thenReturn(new BigDecimal("60000.00"));
+        when(cascadeDeleteService.markContainedEventsAsErrorOrBlock(Set.of("m1"))).thenReturn(Optional.of(crossProjectConflict));
+
+        MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().milestoneAmount(new BigDecimal("50000.00")).build();
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1", request);
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_ALLOCATED_TO_OTHER_PROJECTS);
         verify(milestoneRepository, never()).saveAndFlush(any());
     }
 

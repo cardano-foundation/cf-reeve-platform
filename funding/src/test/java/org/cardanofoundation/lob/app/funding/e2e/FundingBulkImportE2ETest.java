@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import java.io.ByteArrayOutputStream;
 import java.io.StringReader;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -43,6 +44,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.FundingEventEntity;
+import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
@@ -293,10 +295,12 @@ class FundingBulkImportE2ETest {
                 .organisationId(orgId).files(List.of(eventsFile)).build());
         assertThat(reasons(fundResult)).isEmpty();
 
-        // Attempting to shrink the milestone below its already-allocated 10000.00 must still fail —
-        // this is a real change, not a same-value resend. Total Amount/Currency/Sub Project
-        // Title/Sub Total Amount are present in the header but left blank: this row only touches the
-        // milestone, not the root project.
+        // LOB-2365: shrinking the milestone below its already-allocated 10000.00 no longer rejects
+        // outright — this is a real change, not a same-value resend, but the edit proceeds exactly as
+        // typed (the FUNDING event's own allocation is never rewritten) and the linked draft event is
+        // instead marked ERROR for a human to review. Total Amount/Currency/Sub Project Title/Sub
+        // Total Amount are present in the header but left blank: this row only touches the milestone,
+        // not the root project.
         String shrinkCsv = """
                 Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
                 Change Project,,,,,,,Change Milestone,,5000.00,2026-06-30
@@ -305,10 +309,21 @@ class FundingBulkImportE2ETest {
         FundingBulkImportResult shrinkResult = bulkImportService.importFiles(BulkImportRequest.builder()
                 .organisationId(orgId).files(List.of(shrinkFile)).build());
 
-        assertThat(reasons(shrinkResult)).containsExactly(
-                "Milestone amount 5000.00 is below the total already allocated to it 10000.00. "
-                        + "All changes for project \"Change Project\" in this request were rolled back because of this error.");
-        assertThat(shrinkResult.getMilestonesUpdated()).isZero();
+        assertThat(reasons(shrinkResult)).isEmpty();
+        assertThat(shrinkResult.getMilestonesUpdated()).isEqualTo(1);
+        MilestoneEntity milestone = milestoneRepository.findByProjectIdAndMilestoneTitle(
+                projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(orgId, "Change Project")
+                        .orElseThrow().getId(),
+                "Change Milestone").orElseThrow();
+        assertThat(milestone.getMilestoneAmount()).isEqualByComparingTo("5000.00"); // the milestone's own figure IS updated...
+        String fundingEventId = FundingEventEntity.id(orgId, EventType.FUNDING, "GRANT-CHANGE", null,
+                "Cardano Foundation", "USD", null, null, null, null, null, new BigDecimal("10000.00"), LocalDate.of(2026, 7, 1));
+        assertThat(fundingEventRepository.findById(fundingEventId).orElseThrow().getStatus())
+                .as("the linked FUNDING event is flagged for human review, not silently left inconsistent")
+                .isEqualTo(EventStatus.ERROR);
+        // ...but the event's own already-recorded allocation is never rewritten — only its status changed.
+        assertThat(fundingEventRepository.findById(fundingEventId).orElseThrow().getAmountRcy())
+                .isEqualByComparingTo("10000.00");
     }
 
     @Test
@@ -649,9 +664,11 @@ class FundingBulkImportE2ETest {
         String reason = result.getFiles().get(0).getRowErrors().get(0).getReason();
         // The message must make the rollback itself visible, not just the validation failure — otherwise
         // there's no hint that row 2's already-succeeded sub-project and milestone were undone too.
+        // The budget-exceeded text itself is the LOB-2365-standardized generic string (no longer names
+        // which sub-project/milestone — see FundingValidations.ENTERED_AMOUNTS_EXCEED_PROJECT_TOTAL);
+        // this test's own single row-error (asserted above) already pins it to the one offending row.
         assertThat(reason)
-                .contains("exceeds project")
-                .contains("Sub 2")
+                .contains("Entered amounts cannot exceed the total project amount")
                 .contains("rolled back")
                 .contains("Project Cascade");
         // Nothing from the group survives — not the root, not the first (successful-on-its-own)
@@ -702,13 +719,15 @@ class FundingBulkImportE2ETest {
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
         // Both underlying issues are reported, and every one of them is annotated with the rollback
-        // note for this project's group.
+        // note for this project's group. Both budget-exceeded messages are now the same LOB-2365-
+        // standardized generic string (see FundingValidations.ENTERED_AMOUNTS_EXCEED_PROJECT_TOTAL) —
+        // row 1's sub-project-level and row 3's milestone-level failures are no longer distinguishable
+        // by message text alone, only by which row each FundingRowError is attached to.
         assertThat(result.getFiles()).hasSize(1);
         List<String> reasons = reasons(result);
         assertThat(reasons)
                 .hasSize(2)
-                .anySatisfy(reason -> assertThat(reason).contains("exceeds project").contains("Sub One"))
-                .anySatisfy(reason -> assertThat(reason).contains("exceeds the project total"))
+                .allSatisfy(reason -> assertThat(reason).contains("Entered amounts cannot exceed the total project amount"))
                 .allSatisfy(reason -> assertThat(reason).contains("rolled back").contains("Project Test"));
         // Nothing from the group survives — not the root, not Sub One (regardless of which amount it
         // was ever set to), not Milestone Two, which was individually clean and would have persisted

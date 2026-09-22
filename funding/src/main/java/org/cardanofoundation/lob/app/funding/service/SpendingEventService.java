@@ -196,6 +196,17 @@ public class SpendingEventService {
         Optional<ProblemDetail> draftProblem = requireDraft(event, "Cannot update event with Funding ID %s: it is already published");
         if (draftProblem.isPresent()) return Either.left(draftProblem.get());
 
+        // An ERROR event (LOB-2365 — a project/milestone structural edit made its allocation no longer
+        // fit) is exactly what this update is meant to fix. Setting it back to DRAFT up front is safe
+        // even though validation hasn't run yet: every allocation is fully re-validated against the
+        // milestone's *current* amount below (see populateNode's FundingValidations.allocation call), so
+        // reaching the final saveAndFlush at all means the fix actually worked; if validation fails
+        // instead, updateEvent's rollbackAndError marks the whole transaction rollback-only, so this
+        // in-memory change (like the allocations already cleared just below) is discarded, not persisted.
+        if (event.getStatus() == EventStatus.ERROR) {
+            event.setStatus(EventStatus.DRAFT);
+        }
+
         // The event's identity — organisation and type — is fixed at creation; the update payload
         // must not silently target another organisation's projects or change the event's semantics.
         if (!event.getOrganisationId().equals(request.getOrganisationId())) {
@@ -340,6 +351,16 @@ public class SpendingEventService {
         FundingEventEntity event = eventOrError.get();
         Optional<ProblemDetail> draftProblem = requireDraft(event, "Event with Funding ID %s is already published");
         if (draftProblem.isPresent()) return Either.left(draftProblem.get());
+
+        // An ERROR event (LOB-2365) no longer fits the current project/milestone structure — publishing
+        // it as-is would push a mismatched allocation on-chain. It must be corrected via update() first
+        // (which re-validates it and clears the flag back to DRAFT) before it can ever be published.
+        if (event.getStatus() == EventStatus.ERROR) {
+            return Either.left(Problems.conflict(
+                    "Cannot publish event with Funding ID %s: it no longer fits the current project/milestone structure and must be corrected first"
+                            .formatted(event.getFundingId()),
+                    ErrorTitleConstants.SPENDING_EVENT_HAS_ERROR));
+        }
 
         event.setStatus(EventStatus.PUBLISHED);
         event.setLedgerDispatchApproved(true);

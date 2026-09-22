@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -162,6 +163,104 @@ class FundingCascadeDeleteServiceTest {
         assertThat(result.orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_ALLOCATED_TO_OTHER_PROJECTS);
         verify(projectRepository, never()).delete(any());
         verify(fundingEventRepository, never()).delete(any());
+    }
+
+    // --- markContainedEventsAsErrorOrBlock (LOB-2365) ---
+
+    @Test
+    void markContainedEventsAsErrorOrBlock_flagsFullyContainedDraftEvent() {
+        EventMilestoneAllocationEntity alloc = allocation("e1", "m1", "50000");
+        FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, alloc); // status DRAFT
+        when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of());
+        when(milestoneRepository.findByProjectIdIn(any())).thenReturn(List.of(milestone("m1")));
+        when(allocationRepository.findById_MilestoneIdIn(any())).thenReturn(List.of(alloc));
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
+
+        Optional<ProblemDetail> result = service.markContainedEventsAsErrorOrBlock("p1");
+
+        assertThat(result).isEmpty();
+        assertThat(event.getStatus()).isEqualTo(EventStatus.ERROR);
+        verify(fundingEventRepository).saveAll(List.of(event));
+        // Never deleted, and never touches the allocation's own recorded amount — only the status changes.
+        verify(fundingEventRepository, never()).delete(any());
+        assertThat(alloc.getAllocatedAmount()).isEqualByComparingTo("50000");
+    }
+
+    @Test
+    void markContainedEventsAsErrorOrBlock_blocks_whenAnEventAlsoAllocatesOutsideTheSubtree() {
+        EventMilestoneAllocationEntity insideAlloc = allocation("e1", "m1", "60000");
+        EventMilestoneAllocationEntity outsideAlloc = allocation("e1", "m-other", "40000");
+        FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, insideAlloc, outsideAlloc);
+        when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of());
+        when(milestoneRepository.findByProjectIdIn(any())).thenReturn(List.of(milestone("m1")));
+        when(allocationRepository.findById_MilestoneIdIn(any())).thenReturn(List.of(insideAlloc));
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
+
+        Optional<ProblemDetail> result = service.markContainedEventsAsErrorOrBlock("p1");
+
+        assertThat(result.orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_ALLOCATED_TO_OTHER_PROJECTS);
+        assertThat(event.getStatus()).isEqualTo(EventStatus.DRAFT); // untouched
+        verify(fundingEventRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void markContainedEventsAsErrorOrBlock_isIdempotent_leavesAlreadyErroredEventsAlone() {
+        EventMilestoneAllocationEntity alloc = allocation("e1", "m1", "50000");
+        FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, alloc);
+        event.setStatus(EventStatus.ERROR);
+        when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of());
+        when(milestoneRepository.findByProjectIdIn(any())).thenReturn(List.of(milestone("m1")));
+        when(allocationRepository.findById_MilestoneIdIn(any())).thenReturn(List.of(alloc));
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
+
+        Optional<ProblemDetail> result = service.markContainedEventsAsErrorOrBlock("p1");
+
+        assertThat(result).isEmpty();
+        verify(fundingEventRepository).saveAll(List.of()); // nothing new to flag
+    }
+
+    @Test
+    void markContainedEventsAsErrorOrBlock_noOp_whenNoEventsInSubtree() {
+        when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of());
+        when(milestoneRepository.findByProjectIdIn(any())).thenReturn(List.of());
+
+        Optional<ProblemDetail> result = service.markContainedEventsAsErrorOrBlock("p1");
+
+        assertThat(result).isEmpty();
+        verify(fundingEventRepository).saveAll(List.of()); // harmless no-op save of an empty list
+    }
+
+    @Test
+    void markContainedEventsAsErrorOrBlock_withMilestoneIdSet_flagsFullyContainedDraftEvent() {
+        // Exercises the Set<String> overload directly, bypassing the project-subtree walk —
+        // this is exactly how MilestoneService#update calls it, for a single shrunk milestone.
+        EventMilestoneAllocationEntity alloc = allocation("e1", "m1", "50000");
+        FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, alloc);
+        when(allocationRepository.findById_MilestoneIdIn(Set.of("m1"))).thenReturn(List.of(alloc));
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
+
+        Optional<ProblemDetail> result = service.markContainedEventsAsErrorOrBlock(Set.of("m1"));
+
+        assertThat(result).isEmpty();
+        assertThat(event.getStatus()).isEqualTo(EventStatus.ERROR);
+        verify(fundingEventRepository).saveAll(List.of(event));
+        verify(projectRepository, never()).findByParentProjectId(any());
+        verify(milestoneRepository, never()).findByProjectIdIn(any());
+    }
+
+    @Test
+    void markContainedEventsAsErrorOrBlock_withMilestoneIdSet_blocks_whenAnEventAlsoAllocatesOutsideTheSet() {
+        EventMilestoneAllocationEntity insideAlloc = allocation("e1", "m1", "60000");
+        EventMilestoneAllocationEntity outsideAlloc = allocation("e1", "m-other", "40000");
+        FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, insideAlloc, outsideAlloc);
+        when(allocationRepository.findById_MilestoneIdIn(Set.of("m1"))).thenReturn(List.of(insideAlloc));
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
+
+        Optional<ProblemDetail> result = service.markContainedEventsAsErrorOrBlock(Set.of("m1"));
+
+        assertThat(result.orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_ALLOCATED_TO_OTHER_PROJECTS);
+        assertThat(event.getStatus()).isEqualTo(EventStatus.DRAFT); // untouched
+        verify(fundingEventRepository, never()).saveAll(any());
     }
 
     // --- helpers ---

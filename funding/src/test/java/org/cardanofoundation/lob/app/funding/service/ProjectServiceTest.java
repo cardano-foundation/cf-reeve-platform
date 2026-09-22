@@ -34,12 +34,14 @@ import org.cardanofoundation.lob.app.funding.domain.entity.FundingEventEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
+import org.cardanofoundation.lob.app.funding.domain.enums.ProjectLockStatus;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectTreeNodeRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
+import org.cardanofoundation.lob.app.funding.domain.view.ProjectDraftStatusView;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
@@ -173,6 +175,61 @@ class ProjectServiceTest {
         assertThat(result.getError()).isEmpty();
         assertThat(result.getEvents()).hasSize(1);
         assertThat(result.getEvents().get(0).getEventId()).isEqualTo("e1");
+    }
+
+    // --- hasDraftEvent (LOB-2365) ---
+
+    @Test
+    void hasDraftEvent_notFound() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(projectRepository.findById("p1")).thenReturn(Optional.empty());
+
+        ProjectDraftStatusView result = projectService.hasDraftEvent("org1", "p1");
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
+    }
+
+    @Test
+    void hasDraftEvent_notFound_whenProjectBelongsToADifferentOrganisation() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org2")).thenReturn(true);
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity())); // organisationId "org1"
+
+        ProjectDraftStatusView result = projectService.hasDraftEvent("org2", "p1");
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
+    }
+
+    @Test
+    void hasDraftEvent_unauthorized() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        ProjectDraftStatusView result = projectService.hasDraftEvent("org1", "p1");
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+    }
+
+    @Test
+    void hasDraftEvent_true_whenADraftEventAllocatesAnywhereInTheSubtree() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.DRAFT))).thenReturn(true);
+
+        ProjectDraftStatusView result = projectService.hasDraftEvent("org1", "p1");
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.isHasDraftEvent()).isTrue();
+    }
+
+    @Test
+    void hasDraftEvent_false_whenNoDraftEventExists() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.DRAFT))).thenReturn(false);
+
+        ProjectDraftStatusView result = projectService.hasDraftEvent("org1", "p1");
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.isHasDraftEvent()).isFalse();
     }
 
     // --- createWithMilestones ---
@@ -440,6 +497,83 @@ class ProjectServiceTest {
         assertThat(result.getSpentAmount()).isEqualByComparingTo("12000.00");
     }
 
+    // -------------------------------------------------------------------------
+    // LOB-2365: aggregate lockStatus — computed purely from already-built milestoneViews/
+    // subProjectViews (no extra queries), see ProjectService#lockStatus.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void toView_lockStatusEditable_whenStructureIsEmpty() {
+        ProjectEntity project = projectEntity(); // no milestones or sub-projects (lenient empty)
+
+        assertThat(projectService.toView(project).getLockStatus()).isEqualTo(ProjectLockStatus.EDITABLE);
+    }
+
+    @Test
+    void toView_lockStatusEditable_whenMilestonesExistButNoneLocked() {
+        ProjectEntity project = projectEntity();
+        MilestoneEntity m1 = MilestoneEntity.builder().id("m1").build();
+        MilestoneEntity m2 = MilestoneEntity.builder().id("m2").build();
+        when(milestoneService.findByProjectId("p1")).thenReturn(List.of(m1, m2));
+        when(milestoneService.toView(m1)).thenReturn(MilestoneView.builder().milestoneId("m1").locked(false).build());
+        when(milestoneService.toView(m2)).thenReturn(MilestoneView.builder().milestoneId("m2").locked(false).build());
+
+        assertThat(projectService.toView(project).getLockStatus()).isEqualTo(ProjectLockStatus.EDITABLE);
+    }
+
+    @Test
+    void toView_lockStatusLocked_whenEveryMilestoneIsLocked() {
+        ProjectEntity project = projectEntity();
+        MilestoneEntity m1 = MilestoneEntity.builder().id("m1").build();
+        MilestoneEntity m2 = MilestoneEntity.builder().id("m2").build();
+        when(milestoneService.findByProjectId("p1")).thenReturn(List.of(m1, m2));
+        when(milestoneService.toView(m1)).thenReturn(MilestoneView.builder().milestoneId("m1").locked(true).build());
+        when(milestoneService.toView(m2)).thenReturn(MilestoneView.builder().milestoneId("m2").locked(true).build());
+
+        assertThat(projectService.toView(project).getLockStatus()).isEqualTo(ProjectLockStatus.LOCKED);
+    }
+
+    @Test
+    void toView_lockStatusPartlyLocked_whenOnlySomeMilestonesAreLocked() {
+        ProjectEntity project = projectEntity();
+        MilestoneEntity m1 = MilestoneEntity.builder().id("m1").build();
+        MilestoneEntity m2 = MilestoneEntity.builder().id("m2").build();
+        when(milestoneService.findByProjectId("p1")).thenReturn(List.of(m1, m2));
+        when(milestoneService.toView(m1)).thenReturn(MilestoneView.builder().milestoneId("m1").locked(true).build());
+        when(milestoneService.toView(m2)).thenReturn(MilestoneView.builder().milestoneId("m2").locked(false).build());
+
+        assertThat(projectService.toView(project).getLockStatus()).isEqualTo(ProjectLockStatus.PARTLY_LOCKED);
+    }
+
+    @Test
+    void toView_lockStatusLocked_whenEverySubProjectIsFullyLocked() {
+        ProjectEntity root = projectEntity(); // p1
+        ProjectEntity sub = ProjectEntity.builder().id("sub1").organisationId("org1").parentProject(root).build();
+        MilestoneEntity subMilestone = MilestoneEntity.builder().id("sm1").build();
+        when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of(sub));
+        when(milestoneService.findByProjectId("sub1")).thenReturn(List.of(subMilestone));
+        when(milestoneService.toView(subMilestone)).thenReturn(MilestoneView.builder().milestoneId("sm1").locked(true).build());
+
+        assertThat(projectService.toView(root).getLockStatus()).isEqualTo(ProjectLockStatus.LOCKED);
+    }
+
+    @Test
+    void toView_lockStatusPartlyLocked_whenOneSubProjectIsLockedButAnotherIsStructurallyEmpty() {
+        // The key edge case: an empty (childless, no-milestone) sub-project is a not-yet-allocated
+        // structural component, so its own status is EDITABLE — which correctly keeps the parent from
+        // reading as fully LOCKED even though its one populated sub-project is entirely locked.
+        ProjectEntity root = projectEntity(); // p1
+        ProjectEntity lockedSub = ProjectEntity.builder().id("sub1").organisationId("org1").parentProject(root).build();
+        ProjectEntity emptySub = ProjectEntity.builder().id("sub2").organisationId("org1").parentProject(root).build();
+        MilestoneEntity subMilestone = MilestoneEntity.builder().id("sm1").build();
+        when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of(lockedSub, emptySub));
+        when(milestoneService.findByProjectId("sub1")).thenReturn(List.of(subMilestone));
+        when(milestoneService.toView(subMilestone)).thenReturn(MilestoneView.builder().milestoneId("sm1").locked(true).build());
+        // sub2: no milestones (lenient default empty), no children (lenient default empty) → EDITABLE.
+
+        assertThat(projectService.toView(root).getLockStatus()).isEqualTo(ProjectLockStatus.PARTLY_LOCKED);
+    }
+
     private ProjectTreeNodeRequest node(String extId, BigDecimal total,
             List<MilestoneCreateRequest> milestones, List<ProjectTreeNodeRequest> subProjects) {
         return ProjectTreeNodeRequest.builder()
@@ -465,12 +599,74 @@ class ProjectServiceTest {
 
     @Test
     void update_conflict_whenLinkedToPublishedEvent() {
+        // LOB-2365: totalAmount/currency/parentProjectId lock project-wide once a published event
+        // exists anywhere in the subtree — projectTitle does not (see the dedicated exemption test).
         when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(true);
 
-        ProjectView result = projectService.updateProject("p1", ProjectUpdateRequest.builder().projectTitle("New").build());
+        ProjectView result = projectService.updateProject("p1",
+                ProjectUpdateRequest.builder().totalAmount(new BigDecimal("300000.00")).build());
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+    }
+
+    @Test
+    void update_blocksCurrencyOnlyChange_whenLockedByPublishedEvent() {
+        ProjectEntity project = projectEntity(); // currency "USD"
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(true);
+
+        ProjectView result = projectService.updateProject("p1", ProjectUpdateRequest.builder().currency("EUR").build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+        assertThat(project.getCurrency()).isEqualTo("USD"); // untouched
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_blocksParentProjectIdOnlyChange_whenLockedByPublishedEvent() {
+        ProjectEntity project = projectEntity();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(true);
+
+        ProjectView result = projectService.updateProject("p1",
+                ProjectUpdateRequest.builder().parentProjectId("parent1").build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+        assertThat(project.getParentProject()).isNull(); // untouched
+        verify(projectRepository, never()).findById("parent1"); // never even resolves the parent
+    }
+
+    @Test
+    void update_allowsTitleOnlyChange_whenNotLocked() {
+        // projectTitle is editable up until a published event exists anywhere in the subtree — same
+        // lock check as totalAmount/currency/parentProjectId, not exempt from it (LOB-2365 correction:
+        // once a linked event has gone on-chain, nothing about the project it references can change).
+        ProjectEntity project = projectEntity(); // title "Project AB"
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
+        when(projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNullAndIdNot("org1", "Renamed", "p1")).thenReturn(false);
+        when(projectRepository.saveAndFlush(project)).thenReturn(project);
+
+        ProjectView result = projectService.updateProject("p1",
+                ProjectUpdateRequest.builder().projectTitle("Renamed").build());
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(project.getProjectTitle()).isEqualTo("Renamed");
+    }
+
+    @Test
+    void update_blocksTitleOnlyChange_whenLockedByPublishedEvent() {
+        ProjectEntity project = projectEntity(); // title "Project AB"
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(true);
+
+        ProjectView result = projectService.updateProject("p1",
+                ProjectUpdateRequest.builder().projectTitle("Renamed").build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+        assertThat(project.getProjectTitle()).isEqualTo("Project AB"); // untouched
+        verify(projectRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -495,7 +691,6 @@ class ProjectServiceTest {
                 .parentProject(root).build();
         when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
-        when(allocationRepository.existsByMilestoneProjectIdIn(any())).thenReturn(false);
         when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of(sub));
         when(projectRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
@@ -509,22 +704,26 @@ class ProjectServiceTest {
     }
 
     @Test
-    void update_rejected_whenCurrencyChangedButAllocationsExistAnywhereInSubtree() {
-        // Even a draft (non-published) allocation blocks a currency change — not just a published one,
-        // which is already covered by update_conflict_whenLinkedToPublishedEvent.
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+    void update_allowsCurrencyChange_whenOnlyDraftAllocationsExistAnywhereInSubtree() {
+        // LOB-2365: the currency lock triggers on PUBLISHED specifically, not on any allocation — a
+        // draft-only allocation anywhere in the subtree must not block a currency change (this used to
+        // be rejected before LOB-2365's currency-lock-rule fix; PUBLISHED-only is covered by
+        // update_conflict_whenLinkedToPublishedEvent).
+        ProjectEntity project = projectEntity();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
-        when(allocationRepository.existsByMilestoneProjectIdIn(any())).thenReturn(true);
+        when(projectRepository.saveAndFlush(project)).thenReturn(project);
 
         ProjectView result = projectService.updateProject("p1", ProjectUpdateRequest.builder().currency("EUR").build());
 
-        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.CURRENCY_CHANGE_HAS_ALLOCATIONS);
-        verify(projectRepository, never()).saveAndFlush(any());
+        assertThat(result.getError()).isEmpty();
+        assertThat(project.getCurrency()).isEqualTo("EUR");
     }
 
     @Test
-    void update_allowed_whenAllocationsExistButCurrencyUnchanged() {
-        // Resending the same currency (or changing another field) must not trip the allocations guard.
+    void update_allowed_whenCurrencyUnchanged() {
+        // Resending the same currency (or changing another locked field) must not trip the lock check
+        // a second, redundant time beyond the one already exercised for totalAmount.
         ProjectEntity project = projectEntity(); // currency USD
         when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
@@ -535,7 +734,6 @@ class ProjectServiceTest {
 
         assertThat(result.getError()).isEmpty();
         assertThat(project.getTotalAmount()).isEqualByComparingTo("250000.00");
-        verify(allocationRepository, never()).existsByMilestoneProjectIdIn(any());
     }
 
     @Test
@@ -543,7 +741,6 @@ class ProjectServiceTest {
         // Sending the same (unchanged) title back is not a "change" — it's a no-op, not rejected.
         ProjectEntity project = projectEntity(); // title "Project AB"
         when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
-        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(projectRepository.saveAndFlush(project)).thenReturn(project);
 
         ProjectView result = projectService.updateProject("p1",
@@ -554,8 +751,8 @@ class ProjectServiceTest {
 
     @Test
     void update_conflict_whenDescendantSubProjectHasPublishedEvent() {
-        // p1 has a sub-project sub1 whose milestone is tied to a published event → editing p1 (an
-        // ancestor) is locked even though p1 itself owns no published milestone.
+        // p1 has a sub-project sub1 whose milestone is tied to a published event → editing a locked
+        // field on p1 (an ancestor) is blocked even though p1 itself owns no published milestone.
         ProjectEntity sub = ProjectEntity.builder().id("sub1").organisationId("org1").build();
         when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
         when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of(sub));
@@ -563,7 +760,7 @@ class ProjectServiceTest {
                 argThat(ids -> ids.contains("sub1")), eq(EventStatus.PUBLISHED))).thenReturn(true);
 
         ProjectView result = projectService.updateProject("p1",
-                ProjectUpdateRequest.builder().projectTitle("New").build());
+                ProjectUpdateRequest.builder().totalAmount(new BigDecimal("300000.00")).build());
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
         verify(projectRepository, never()).saveAndFlush(any());
@@ -574,7 +771,6 @@ class ProjectServiceTest {
         // projectTitle is no longer immutable (see ProjectEntity#proId, which stays fixed instead).
         ProjectEntity project = projectEntity(); // title "Project AB"
         when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
-        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNullAndIdNot("org1", "Renamed", "p1")).thenReturn(false);
         when(projectRepository.saveAndFlush(project)).thenReturn(project);
 
@@ -589,7 +785,6 @@ class ProjectServiceTest {
     @Test
     void update_returnsConflict_whenRenamedTitleAlreadyExistsInScope() {
         when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity())); // title "Project AB"
-        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNullAndIdNot("org1", "Renamed", "p1")).thenReturn(true);
 
         ProjectView result = projectService.updateProject("p1",
@@ -856,34 +1051,66 @@ class ProjectServiceTest {
     }
 
     @Test
-    void update_returns400_whenNewTotalBelowMilestonesTotal() {
-        // Milestones already claim 150000; shrinking the project to 100000 would leave them uncovered.
+    void update_allowsShrinkBelowMilestonesTotal_andMarksContainedEventsAsError() {
+        // LOB-2365: milestones already claim 150000, but shrinking the project to 100000 no longer
+        // rejects outright — the update proceeds (milestone amounts untouched) and any fully-contained
+        // draft event is instead marked ERROR via FundingCascadeDeleteService.
+        ProjectEntity project = projectEntity();
+        MilestoneEntity milestone = MilestoneEntity.builder().id("m1").milestoneAmount(new BigDecimal("150000.00")).build();
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
+        when(milestoneService.findByProjectId("p1")).thenReturn(List.of(milestone));
+        when(milestoneService.toView(milestone)).thenReturn(MilestoneView.builder().milestoneId("m1").build());
+        when(cascadeDeleteService.markContainedEventsAsErrorOrBlock("p1")).thenReturn(Optional.empty());
+        when(projectRepository.saveAndFlush(project)).thenReturn(project);
+
+        ProjectView result = projectService.updateProject("p1",
+                ProjectUpdateRequest.builder().totalAmount(new BigDecimal("100000.00")).build());
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(project.getTotalAmount()).isEqualByComparingTo("100000.00");
+        verify(cascadeDeleteService).markContainedEventsAsErrorOrBlock("p1");
+    }
+
+    @Test
+    void update_blocksShrinkBelowMilestonesTotal_whenAContainedEventReachesOutsideTheSubtree() {
+        // The cross-project safety net still applies even though the coverage check itself no longer
+        // rejects: if flagging would touch an event that also allocates elsewhere, the whole update is
+        // rejected instead (same shape as the existing delete-cascade's own cross-project rule).
+        ProblemDetail crossProjectConflict = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "Cannot update: an associated event also allocates to other projects");
+        crossProjectConflict.setTitle(ErrorTitleConstants.EVENT_ALLOCATED_TO_OTHER_PROJECTS);
         when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(milestoneService.findByProjectId("p1")).thenReturn(List.of(
                 MilestoneEntity.builder().id("m1").milestoneAmount(new BigDecimal("150000.00")).build()));
+        when(cascadeDeleteService.markContainedEventsAsErrorOrBlock("p1")).thenReturn(Optional.of(crossProjectConflict));
 
         ProjectView result = projectService.updateProject("p1",
                 ProjectUpdateRequest.builder().totalAmount(new BigDecimal("100000.00")).build());
 
-        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_AMOUNT_BELOW_MILESTONES);
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_ALLOCATED_TO_OTHER_PROJECTS);
         verify(projectRepository, never()).saveAndFlush(any());
     }
 
     @Test
-    void update_returns400_whenNewTotalBelowSubProjectsTotal() {
-        // Sub-projects already claim 150000; the parent cannot shrink below that.
+    void update_allowsShrinkBelowSubProjectsTotal_andMarksContainedEventsAsError() {
+        // Same relaxation, sub-projects-coverage side.
+        ProjectEntity project = projectEntity();
         ProjectEntity subProject = ProjectEntity.builder().id("sub1").organisationId("org1")
                 .totalAmount(new BigDecimal("150000.00")).build();
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of(subProject));
+        when(cascadeDeleteService.markContainedEventsAsErrorOrBlock("p1")).thenReturn(Optional.empty());
+        when(projectRepository.saveAndFlush(project)).thenReturn(project);
 
         ProjectView result = projectService.updateProject("p1",
                 ProjectUpdateRequest.builder().totalAmount(new BigDecimal("100000.00")).build());
 
-        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_AMOUNT_BELOW_SUBPROJECTS);
-        verify(projectRepository, never()).saveAndFlush(any());
+        assertThat(result.getError()).isEmpty();
+        assertThat(project.getTotalAmount()).isEqualByComparingTo("100000.00");
+        verify(cascadeDeleteService).markContainedEventsAsErrorOrBlock("p1");
     }
 
     @Test

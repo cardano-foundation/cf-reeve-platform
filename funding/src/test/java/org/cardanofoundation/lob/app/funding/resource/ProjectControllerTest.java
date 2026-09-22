@@ -23,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
+import org.cardanofoundation.lob.app.funding.domain.view.ProjectDraftStatusView;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.service.ProjectService;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
@@ -95,6 +96,31 @@ class ProjectControllerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(((ProjectView) response.getBody()).getError().orElseThrow().getTitle())
+                .isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
+    }
+
+    // --- hasDraftEvent (LOB-2365) ---
+
+    @Test
+    void hasDraftEvent_returns200_withView() {
+        ProjectDraftStatusView view = ProjectDraftStatusView.builder().hasDraftEvent(true).build();
+        when(projectService.hasDraftEvent("org1", "p1")).thenReturn(view);
+
+        ResponseEntity<?> response = projectController.hasDraftEvent("org1", "p1");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo(view);
+    }
+
+    @Test
+    void hasDraftEvent_returns404_withProblem() {
+        when(projectService.hasDraftEvent("org1", "p1"))
+                .thenReturn(ProjectDraftStatusView.error(problem(HttpStatus.NOT_FOUND, ErrorTitleConstants.PROJECT_NOT_FOUND)));
+
+        ResponseEntity<?> response = projectController.hasDraftEvent("org1", "p1");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(((ProjectDraftStatusView) response.getBody()).getError().orElseThrow().getTitle())
                 .isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
     }
 

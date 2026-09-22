@@ -14,6 +14,8 @@ import org.springframework.http.ProblemDetail;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import org.cardanofoundation.lob.app.funding.domain.enums.ProjectLockStatus;
+
 @Getter
 @Builder
 @AllArgsConstructor
@@ -68,6 +70,15 @@ public class ProjectView implements ErrorAware {
 
     /** Sub-projects; empty for leaf nodes. */
     private List<ProjectView> subProjects;
+
+    /**
+     * Calculated (not stored): aggregate structural lock status for this project's own subtree (its
+     * milestones and, recursively, its sub-projects) — see {@link ProjectLockStatus}. LOB-2365.
+     */
+    @Schema(description = "EDITABLE (no published events anywhere in this project's structure), "
+            + "PARTLY_LOCKED (at least one published event exists somewhere, but at least one milestone/sub-project remains unallocated), "
+            + "or LOCKED (every milestone/structural component is tied to a published event).")
+    private ProjectLockStatus lockStatus;
 
     /** Events (FUNDING/SPENDING/REFUND) allocated to this project. Populated on get-by-id only. */
     @Nullable

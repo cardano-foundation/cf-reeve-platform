@@ -29,6 +29,16 @@ public final class FundingValidations {
     }
 
     /**
+     * LOB-2365: shared message text for every "a budgeted amount exceeds its parent's total" case —
+     * a milestone's own amount or the project's cumulative milestone total exceeding the project's
+     * total, and a sub-project's own total or the parent's cumulative sub-project total exceeding the
+     * parent's total. These four cases used to have four different message templates naming the
+     * specific title/amount involved; standardized to one consistent string (matching the FE's own
+     * copy) — the four {@code ErrorTitleConstants} stay distinct for callers that key off the code.
+     */
+    static final String ENTERED_AMOUNTS_EXCEED_PROJECT_TOTAL = "Entered amounts cannot exceed the total project amount";
+
+    /**
      * Returns the first value that occurs more than once (case-sensitive), ignoring nulls. Used to
      * reject duplicate sibling titles inside a single create request up front — before any entity is
      * persisted — so same-request duplicates can't slip past a per-row database check.
@@ -58,17 +68,18 @@ public final class FundingValidations {
                     ErrorTitleConstants.MILESTONE_AMOUNT_INVALID));
         }
         if (project.getTotalAmount() != null && amount != null) {
+            // LOB-2365: message text standardized to match the sub-project path below (and the FE's
+            // own copy) — the two error titles stay distinct (single milestone vs. cumulative total)
+            // for callers that key off the code, only the human-readable message is now shared.
             if (amount.compareTo(project.getTotalAmount()) > 0) {
                 return Optional.of(Problems.badRequest(
-                        "Milestone amount %s exceeds the project total %s".formatted(
-                                formatAmount(amount), formatAmount(project.getTotalAmount())),
+                        ENTERED_AMOUNTS_EXCEED_PROJECT_TOTAL,
                         ErrorTitleConstants.MILESTONE_AMOUNT_EXCEEDS_PROJECT));
             }
             BigDecimal cumulative = otherMilestonesTotal.add(amount);
             if (cumulative.compareTo(project.getTotalAmount()) > 0) {
                 return Optional.of(Problems.badRequest(
-                        "Milestones total %s exceeds the project total %s".formatted(
-                                formatAmount(cumulative), formatAmount(project.getTotalAmount())),
+                        ENTERED_AMOUNTS_EXCEED_PROJECT_TOTAL,
                         ErrorTitleConstants.MILESTONE_TOTAL_EXCEEDS_PROJECT));
             }
         }
@@ -296,17 +307,16 @@ public final class FundingValidations {
         if (parent.getTotalAmount() == null || childTotal == null) {
             return Optional.empty();
         }
+        // LOB-2365: message text standardized to match the milestone path above — see its comment.
         if (childTotal.compareTo(parent.getTotalAmount()) > 0) {
             return Optional.of(Problems.badRequest(
-                    "Sub-project '%s' total %s exceeds project '%s' total %s".formatted(
-                            childTitle, formatAmount(childTotal), parent.getProjectTitle(), formatAmount(parent.getTotalAmount())),
+                    ENTERED_AMOUNTS_EXCEED_PROJECT_TOTAL,
                     ErrorTitleConstants.SUBPROJECT_AMOUNT_EXCEEDS_PARENT));
         }
         BigDecimal cumulative = otherSubProjectsTotal.add(childTotal);
         if (cumulative.compareTo(parent.getTotalAmount()) > 0) {
             return Optional.of(Problems.badRequest(
-                    "Sub-projects total %s (including sub-project '%s') exceeds project '%s' total %s".formatted(
-                            formatAmount(cumulative), childTitle, parent.getProjectTitle(), formatAmount(parent.getTotalAmount())),
+                    ENTERED_AMOUNTS_EXCEED_PROJECT_TOTAL,
                     ErrorTitleConstants.SUBPROJECT_TOTAL_EXCEEDS_PARENT));
         }
         return Optional.empty();

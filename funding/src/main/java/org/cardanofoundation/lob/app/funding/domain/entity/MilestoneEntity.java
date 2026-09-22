@@ -55,6 +55,15 @@ public class MilestoneEntity extends CommonEntity implements Persistable<String>
     @Column(name = "pro_id", nullable = false)
     private String proId;
 
+    /**
+     * Free-text description of the milestone's scope/deliverable — part of the locked/editable field
+     * set alongside {@link #milestoneAmount} and {@link #milestoneDate}: read-only once a published
+     * event allocates to this milestone (see {@code MilestoneService#update}; LOB-2365).
+     */
+    @Nullable
+    @Column(name = "description")
+    private String description;
+
     @NotNull
     @Column(name = "milestone_amount", nullable = false)
     private BigDecimal milestoneAmount;
