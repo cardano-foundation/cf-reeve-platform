@@ -403,6 +403,39 @@ class FundingBulkImportServiceTest {
     }
 
     @Test
+    void createsNewSubProject_withBlankSubProjectId_autoAssignsInsteadOfRejecting() {
+        // Sub Project ID is no longer mandatory on a CSV creation row (see LOB-2384's CSV-optional-ID
+        // follow-up, which dropped SUBPROJECT_PROID_REQUIRED entirely) — a blank value must auto-assign
+        // via ProjectStructureService (explicitProId null), exactly the same as the JSON API, not be
+        // rejected as a row error.
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+
+        ProjectMilestoneCsvLine line = rootLine("Project A", "100000.00", "USD");
+        line.setSubProjectTitle("Sub One");
+        line.setSubTotalAmount("40000.00");
+        // Sub Project ID deliberately left unset.
+
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
+        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
+                .thenReturn(Optional.empty());
+        when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
+        ProjectEntity root = projectEntity("p1", "Project A", "USD");
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
+        // No Sub Project ID on the row -> matching falls back to title (findByParentProjectIdAndProjectTitle,
+        // unstubbed -> empty, "not found"), same as before this feature.
+        when(projectStructureService.createSubProject(eq(root), eq("Sub One"), isNull(), any(), any(), any()))
+                .thenReturn(Either.right(subProjectEntity("s1", "Sub One", "USD", root)));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getFiles().get(0).getRowErrors()).isEmpty();
+        assertThat(result.getProjectsCreated()).isEqualTo(2); // root + sub
+        verify(projectStructureService).createSubProject(eq(root), eq("Sub One"), isNull(), any(), any(), any());
+    }
+
+    @Test
     void updatesExistingSubProject() {
         MultipartFile file = file("import.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
@@ -718,6 +751,36 @@ class FundingBulkImportServiceTest {
         assertThat(result.getMilestonesCreated()).isEqualTo(1);
         assertThat(result.getFiles().get(0).getRowErrors()).isEmpty();
         verify(milestoneService).createMilestone(eq("p1"), any(), any());
+    }
+
+    @Test
+    void createsNewMilestone_withBlankMilestoneId_autoAssignsInsteadOfRejecting() {
+        // Milestone ID is no longer mandatory on a CSV creation row (see LOB-2384's CSV-optional-ID
+        // follow-up, which dropped MILESTONE_PROID_REQUIRED entirely) — a blank value must auto-assign
+        // via MilestoneService (explicitProId null), exactly the same as the JSON API, not be rejected
+        // as a row error.
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+        ProjectMilestoneCsvLine line = rootLine("Project B", "20000.00", "USD");
+        line.setMilestoneTitle("Milestone One");
+        line.setMilestoneAmount("20000.00");
+        line.setMilestoneDate("2026-06-30");
+        // Milestone ID deliberately left unset.
+
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
+        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project B"))
+                .thenReturn(Optional.empty());
+        when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
+        ProjectEntity root = projectEntity("p1", "Project B", "USD");
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
+        when(milestoneService.createMilestone(eq("p1"), any(), isNull())).thenReturn(MilestoneView.builder().milestoneId("m1").build());
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getMilestonesCreated()).isEqualTo(1);
+        assertThat(result.getFiles().get(0).getRowErrors()).isEmpty();
+        verify(milestoneService).createMilestone(eq("p1"), any(), isNull());
     }
 
     @Test

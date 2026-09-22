@@ -5,6 +5,7 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.Optional;
 
@@ -127,8 +128,14 @@ public class FundingCsvExportService {
         };
     }
 
+    /**
+     * The amount columns are stored at whatever scale the DB column defines (observed as high as 10
+     * decimal places on a real Postgres instance, e.g. {@code 100000.0000000000}) — not the 2 decimal
+     * places every amount in this module's CSVs, examples, and fixtures otherwise uses. Fixed to 2dp
+     * here so the export reads like every other amount in the app instead of a raw column dump.
+     */
     private static String str(@Nullable BigDecimal value) {
-        return value == null ? "" : value.toPlainString();
+        return value == null ? "" : value.setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 
     private static String nullToEmpty(@Nullable String value) {

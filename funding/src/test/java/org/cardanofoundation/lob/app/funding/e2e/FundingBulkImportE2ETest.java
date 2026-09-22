@@ -7,12 +7,15 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayOutputStream;
+import java.io.StringReader;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Pageable;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -32,6 +35,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import com.opencsv.CSVReader;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -50,6 +55,7 @@ import org.cardanofoundation.lob.app.funding.repository.FundingEventRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 import org.cardanofoundation.lob.app.funding.repository.MilestoneRepository;
 import org.cardanofoundation.lob.app.funding.service.FundingBulkImportService;
+import org.cardanofoundation.lob.app.funding.service.FundingCsvExportService;
 import org.cardanofoundation.lob.app.funding.service.SpendingEventService;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
@@ -180,6 +186,8 @@ class FundingBulkImportE2ETest {
     private FundingEventRepository fundingEventRepository;
     @Autowired
     private SpendingEventService spendingEventService;
+    @Autowired
+    private FundingCsvExportService fundingCsvExportService;
     @MockitoBean
     private OrganisationPublicApiIF organisationPublicApi;
     @MockitoBean
@@ -566,8 +574,9 @@ class FundingBulkImportE2ETest {
 
     /** Seeds a root project and one milestone directly on it, via the real Projects+Milestones CSV path. */
     private void seedProjectAndMilestone(String orgId, String projectTitle, String milestoneTitle) {
-        // Milestone ID is mandatory when creating a milestone via CSV (see LOB-2384) — derived from the
-        // milestone title here purely for this helper's own readability, not a system convention.
+        // Milestone ID is optional on CSV creation (auto-assigns when blank, same as the API — see
+        // LOB-2384's CSV-optional-ID follow-up) — supplied explicitly here purely so a deterministic
+        // value can be asserted on in tests, not because it's required.
         String milestoneId = "ms-" + milestoneTitle.toLowerCase().replace(" ", "-");
         String csv = "Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date\n"
                 + projectTitle + ",,50000.00,USD,,,," + milestoneTitle + "," + milestoneId + ",10000.00,2026-06-30\n";
@@ -850,6 +859,55 @@ class FundingBulkImportE2ETest {
         assertThat(errors.get(4).getReason()).contains("TICKET-PUBLISHED").contains("published");
 
         assertThat(result.getEventsCreated()).isZero();
+    }
+
+    // -------------------------------------------------------------------------
+    // Projects+Milestones export endpoint — real DB, proves the new derived repository queries
+    // (findByOrganisationIdAndParentProjectIsNull / findByOrganisationIdAndProIdInAndParentProjectIsNull)
+    // actually resolve correctly, which FundingCsvExportServiceTest's mocked unit tests can't prove.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void exportProjectsMilestones_reflectsTheRealDbTree_forASeededProject() throws Exception {
+        String orgId = "org-export-seeded";
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+        // Seeds Project A (proId defaults to its title, its "Project ID" cell is blank) with one
+        // sub-project (Sub One / sub-one) carrying two milestones (Milestone One+Two / ms-one/ms-two) —
+        // exactly the downloadable template's own shape, see PROJECTS_MILESTONES_TEMPLATE_CSV.
+        seedProjectsAndMilestonesTemplate(orgId);
+
+        List<String[]> rows = exportAndParse(orgId, null);
+
+        assertThat(rows).hasSize(3); // header + one row per milestone under Sub One
+        assertThat(rows.get(1)).containsExactly("Project A", "Project A", "100000.00", "USD",
+                "Sub One", "sub-one", "40000.00", "Milestone One", "ms-one", "20000.00", "2026-06-30");
+        assertThat(rows.get(2)).containsExactly("Project A", "Project A", "100000.00", "USD",
+                "Sub One", "sub-one", "40000.00", "Milestone Two", "ms-two", "20000.00", "2026-07-15");
+    }
+
+    @Test
+    void exportProjectsMilestones_withProIds_filtersToJustThoseRoots_realDb() throws Exception {
+        String orgId = "org-export-filtered";
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+        seedProjectAndMilestone(orgId, "Keep Project", "Keep Milestone");
+        seedProjectAndMilestone(orgId, "Skip Project", "Skip Milestone");
+
+        // Both projects' proId default to their own title (their CSV "Project ID" cell was left
+        // blank by seedProjectAndMilestone) — filtering to "Keep Project" must exclude "Skip Project"
+        // even though both exist in the same organisation.
+        List<String[]> rows = exportAndParse(orgId, List.of("Keep Project"));
+
+        assertThat(rows).hasSize(2); // header + Keep Project's one milestone row
+        assertThat(rows.get(1)[0]).isEqualTo("Keep Project");
+        assertThat(rows.get(1)[8]).isEqualTo("ms-keep-milestone");
+    }
+
+    private List<String[]> exportAndParse(String orgId, List<String> proIds) throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        fundingCsvExportService.writeProjectsMilestonesExport(orgId, proIds, Pageable.unpaged(), out);
+        try (CSVReader reader = new CSVReader(new StringReader(out.toString()))) {
+            return reader.readAll();
+        }
     }
 
     @Configuration
