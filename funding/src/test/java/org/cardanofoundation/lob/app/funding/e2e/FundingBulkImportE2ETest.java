@@ -664,9 +664,9 @@ class FundingBulkImportE2ETest {
         String reason = result.getFiles().get(0).getRowErrors().get(0).getReason();
         // The message must make the rollback itself visible, not just the validation failure — otherwise
         // there's no hint that row 2's already-succeeded sub-project and milestone were undone too.
-        // The budget-exceeded text itself is the LOB-2365-standardized generic string (no longer names
-        // which sub-project/milestone — see FundingValidations.ENTERED_AMOUNTS_EXCEED_PROJECT_TOTAL);
-        // this test's own single row-error (asserted above) already pins it to the one offending row.
+        // The budget-exceeded text itself is the LOB-2365-standardized generic string — it no longer
+        // names which sub-project/milestone (see FundingValidations#ENTERED_AMOUNTS_EXCEED_PROJECT_TOTAL)
+        // — this test's own single row-error (asserted above) already pins it to the one offending row.
         assertThat(reason)
                 .contains("Entered amounts cannot exceed the total project amount")
                 .contains("rolled back")

@@ -98,7 +98,9 @@ public class FundingCascadeDeleteService {
         Set<String> milestoneIds = milestoneRepository.findByProjectIdIn(subtreeProjectIds).stream()
                 .map(MilestoneEntity::getId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
-        return markContainedEventsAsErrorOrBlock(milestoneIds);
+        // Calls the shared helper directly rather than the Set<String> overload below via `this` — a
+        // same-class call to another @Transactional method bypasses Spring's AOP proxy entirely.
+        return doMarkContainedEventsAsErrorOrBlock(milestoneIds);
     }
 
     /**
@@ -122,6 +124,10 @@ public class FundingCascadeDeleteService {
      */
     @Transactional
     public Optional<ProblemDetail> markContainedEventsAsErrorOrBlock(Set<String> milestoneIds) {
+        return doMarkContainedEventsAsErrorOrBlock(milestoneIds);
+    }
+
+    private Optional<ProblemDetail> doMarkContainedEventsAsErrorOrBlock(Set<String> milestoneIds) {
         Either<ProblemDetail, List<FundingEventEntity>> eventsOrBlocked = resolveEventsFullyContained(milestoneIds, "update");
         if (eventsOrBlocked.isLeft()) {
             return Optional.of(eventsOrBlocked.getLeft());
