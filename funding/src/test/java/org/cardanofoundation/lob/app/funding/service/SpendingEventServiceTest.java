@@ -216,7 +216,6 @@ class SpendingEventServiceTest {
 
     @Test
     void create_successWithNewProjectAndNewMilestone() {
-        when(projectRepository.existsById(any())).thenReturn(false);
         when(projectRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
         when(milestoneRepository.saveAndFlush(any())).thenAnswer(i -> milestoneEntity("m-new"));
         when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
@@ -779,7 +778,11 @@ class SpendingEventServiceTest {
     @Test
     void create_createsSubProjectTreeWithBudget_onTheFly() {
         ProjectEntity root = projectEntity(); // id "p1", total 200000
-        String subId = ProjectEntity.subId("p1", "Work Package 1");
+        // The sub-project is created on the fly with an auto-assigned proId (see @BeforeEach's generic
+        // findWithLockById stub, which always returns proId "parent") — the deterministic id is derived
+        // from that proId ("parent-1"), never from the title "Work Package 1".
+        String subProId = "parent-1";
+        String subId = ProjectEntity.subId("p1", subProId);
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull("org1", "Project AB")).thenReturn(Optional.of(root));
         when(milestoneRepository.existsByProjectId("p1")).thenReturn(false);
         when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of());
@@ -802,7 +805,8 @@ class SpendingEventServiceTest {
         verify(projectRepository).saveAndFlush(argThat(p ->
                 p.getParentProject() != null && "p1".equals(p.getParentProject().getId())
                         && new BigDecimal("100000.00").compareTo(p.getTotalAmount()) == 0
-                        && p.getId().equals(ProjectEntity.subId("p1", "Work Package 1"))));
+                        && subProId.equals(p.getProId())
+                        && p.getId().equals(subId)));
     }
 
     @Test

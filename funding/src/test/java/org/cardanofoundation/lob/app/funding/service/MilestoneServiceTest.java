@@ -214,7 +214,10 @@ class MilestoneServiceTest {
         Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", request);
 
         assertThat(result.isRight()).isTrue();
-        assertThat(result.get().getId()).isEqualTo(MilestoneEntity.id("p1", "Milestone AB"));
+        // Id is derived from the auto-assigned proId (see @BeforeEach's stub), not the title — a later
+        // title rename must not leave the id stale.
+        assertThat(result.get().getProId()).isEqualTo("Milestone-1");
+        assertThat(result.get().getId()).isEqualTo(MilestoneEntity.id("p1", "Milestone-1"));
     }
 
     // -------------------------------------------------------------------------
@@ -270,7 +273,6 @@ class MilestoneServiceTest {
     void resolveOrCreate_createsNew_whenTitleDoesNotExistAndFullDataProvided() {
         ProjectEntity project = projectEntity("p1");
         when(milestoneRepository.findByProjectIdAndMilestoneTitle("p1", "New Milestone")).thenReturn(Optional.empty());
-        when(milestoneRepository.existsById(MilestoneEntity.id("p1", "New Milestone"))).thenReturn(false);
         when(milestoneRepository.findByProjectId("p1")).thenReturn(List.of());
         when(milestoneRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
@@ -280,7 +282,9 @@ class MilestoneServiceTest {
         Either<ProblemDetail, MilestoneEntity> result = milestoneService.resolveOrCreate(project, request);
 
         assertThat(result.isRight()).isTrue();
-        assertThat(result.get().getId()).isEqualTo(MilestoneEntity.id("p1", "New Milestone"));
+        // Id is derived from the auto-assigned proId (see @BeforeEach's stub), not the title.
+        assertThat(result.get().getProId()).isEqualTo("Milestone-1");
+        assertThat(result.get().getId()).isEqualTo(MilestoneEntity.id("p1", "Milestone-1"));
         verify(milestoneRepository).saveAndFlush(any());
     }
 
