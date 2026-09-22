@@ -421,6 +421,7 @@ class CsvReportTemplateServiceTest {
         ArgumentCaptor<ReportTemplateDto> dtoCaptor = ArgumentCaptor.forClass(ReportTemplateDto.class);
         when(reportTemplateMapper.toEntity(dtoCaptor.capture(), isNull())).thenReturn(mock(ReportTemplateEntity.class));
         when(reportTemplateMapper.toResponseDto(any())).thenReturn(mock(ReportTemplateResponseDto.class));
+        when(reportTemplateServiceDependency.validateDataMode(any(ReportTemplateDto.class))).thenReturn(Either.right(null));
 
         Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
 
@@ -611,6 +612,7 @@ class CsvReportTemplateServiceTest {
             when(line.getReportType()).thenReturn("Balance sheet");
             when(line.getAccounts()).thenReturn("");
             when(line.getDateRange()).thenReturn("End-of-Period balance");
+            when(line.getSign()).thenReturn("Positive");
         }
         when(revenueLine.getDataMode()).thenReturn("Automatic");
         when(revenueLine.getAccountingRegime()).thenReturn("IFRS");
