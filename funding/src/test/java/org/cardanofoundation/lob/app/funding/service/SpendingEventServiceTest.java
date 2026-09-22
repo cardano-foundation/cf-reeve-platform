@@ -352,6 +352,44 @@ class SpendingEventServiceTest {
         assertThat(result.isRight()).isTrue();
     }
 
+    @Test
+    void create_resolvesRootProjectByProId_whenSuppliedAndTitleIsStale() {
+        ProjectEntity project = projectEntity();
+        MilestoneEntity m1 = milestoneEntityWithAmount("m1", "Milestone One", new BigDecimal("150000.00"));
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1")).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProjectIdAndMilestoneTitle(project.getId(), "Milestone One")).thenReturn(Optional.of(m1));
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        SpendingEventCreateRequest request = fundingRequest(EventProjectAllocationRequest.builder()
+                .projectTitle("Renamed Since").proId("PRJ-1")
+                .milestones(List.of(fundingMilestone("Milestone One", new BigDecimal("150000.00"))))
+                .build());
+        request.setAmountRcy(new BigDecimal("150000.00"));
+
+        assertThat(spendingEventService.create(request).isRight()).isTrue();
+        verify(projectRepository, never()).findByOrganisationIdAndProjectTitleAndParentProjectIsNull(any(), any());
+    }
+
+    @Test
+    void create_resolvesRootProjectByTitle_whenProIdIsBlank() {
+        ProjectEntity project = projectEntity();
+        MilestoneEntity m1 = milestoneEntityWithAmount("m1", "Milestone One", new BigDecimal("150000.00"));
+        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull("org1", "Project AB")).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProjectIdAndMilestoneTitle(project.getId(), "Milestone One")).thenReturn(Optional.of(m1));
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        // A blank proId (e.g. "" from a JSON client) means "not supplied", same as null — it must not be
+        // searched for literally, which would miss the existing project and then collide on create.
+        SpendingEventCreateRequest request = fundingRequest(EventProjectAllocationRequest.builder()
+                .projectTitle("Project AB").proId("")
+                .milestones(List.of(fundingMilestone("Milestone One", new BigDecimal("150000.00"))))
+                .build());
+        request.setAmountRcy(new BigDecimal("150000.00"));
+
+        assertThat(spendingEventService.create(request).isRight()).isTrue();
+        verify(projectRepository, never()).findByOrganisationIdAndProIdAndParentProjectIsNull(any(), any());
+    }
+
     // --- create/update: FUNDING event identity (Funding ID + Hash + Entity + Currency + Event Date) ---
 
     @Test

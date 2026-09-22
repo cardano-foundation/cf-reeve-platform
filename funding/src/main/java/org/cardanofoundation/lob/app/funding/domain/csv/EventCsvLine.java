@@ -82,10 +82,9 @@ public class EventCsvLine {
     /**
      * The referenced project's permanent identifier (see {@code ProjectEntity#proId}) — when present,
      * resolution prefers this over {@link #projectTitle}, the only reliable way to reference a project
-     * that's since been renamed. {@code header-optional}: absent entirely from older exported templates,
-     * which keep importing (matching by title alone, as before) unaffected.
+     * that's since been renamed.
      */
-    @CsvBindByName(column = "Project ID", profiles = {"optional", FundingCsvTypeDetector.HEADER_OPTIONAL_PROFILE})
+    @CsvBindByName(column = "Project ID", profiles = "optional")
     private String projectId;
 
     /**
@@ -101,14 +100,14 @@ public class EventCsvLine {
     private String subProjectTitle;
 
     /** See {@link #projectId} — same semantics, for the sub-project named by {@link #subProjectTitle}. */
-    @CsvBindByName(column = "Sub Project ID", profiles = {"optional", FundingCsvTypeDetector.HEADER_OPTIONAL_PROFILE})
+    @CsvBindByName(column = "Sub Project ID", profiles = "optional")
     private String subProjectId;
 
     @CsvBindByName(column = "Milestone Title")
     private String milestoneTitle;
 
     /** See {@link #projectId} — same semantics, for the referenced milestone. */
-    @CsvBindByName(column = "Milestone ID", profiles = {"optional", FundingCsvTypeDetector.HEADER_OPTIONAL_PROFILE})
+    @CsvBindByName(column = "Milestone ID", profiles = "optional")
     private String milestoneId;
 
     @CsvBindByName(column = "Allocated Amount")

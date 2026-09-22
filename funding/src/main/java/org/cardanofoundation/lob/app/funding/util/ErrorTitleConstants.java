@@ -7,9 +7,6 @@ public final class ErrorTitleConstants {
     public static final String PROJECT_NOT_FOUND = "PROJECT_NOT_FOUND";
     public static final String PROJECT_ALREADY_EXISTS = "PROJECT_ALREADY_EXISTS";
     public static final String PROJECT_TITLE_ALREADY_EXISTS = "PROJECT_TITLE_ALREADY_EXISTS";
-    public static final String PROJECT_TITLE_IMMUTABLE = "PROJECT_TITLE_IMMUTABLE";
-    /** A "create new" title exactly matches another (still-existing) project's title as of its own creation — see LOB-2384. */
-    public static final String PROJECT_TITLE_PREVIOUSLY_USED = "PROJECT_TITLE_PREVIOUSLY_USED";
     /** A caller-supplied proId collides with an existing one in the same scope (root: per organisation; sub-project: per parent) — see LOB-2384. */
     public static final String PROJECT_PROID_ALREADY_EXISTS = "PROJECT_PROID_ALREADY_EXISTS";
     public static final String PROJECT_FUNDING_ID_ALREADY_USED = "PROJECT_FUNDING_ID_ALREADY_USED";
@@ -26,9 +23,6 @@ public final class ErrorTitleConstants {
     public static final String MILESTONE_NOT_FOUND = "MILESTONE_NOT_FOUND";
     public static final String MILESTONE_ALREADY_EXISTS = "MILESTONE_ALREADY_EXISTS";
     public static final String MILESTONE_TITLE_ALREADY_EXISTS = "MILESTONE_TITLE_ALREADY_EXISTS";
-    public static final String MILESTONE_TITLE_IMMUTABLE = "MILESTONE_TITLE_IMMUTABLE";
-    /** A "create new" title exactly matches another (still-existing) milestone's title as of its own creation — see LOB-2384. */
-    public static final String MILESTONE_TITLE_PREVIOUSLY_USED = "MILESTONE_TITLE_PREVIOUSLY_USED";
     /** A CSV-supplied Milestone ID collides with an existing one in the same project — see LOB-2384. */
     public static final String MILESTONE_PROID_ALREADY_EXISTS = "MILESTONE_PROID_ALREADY_EXISTS";
     public static final String MILESTONE_FIELDS_REQUIRED = "MILESTONE_FIELDS_REQUIRED";

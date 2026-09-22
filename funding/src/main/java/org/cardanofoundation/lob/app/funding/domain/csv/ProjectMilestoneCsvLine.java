@@ -32,10 +32,9 @@ public class ProjectMilestoneCsvLine {
     /**
      * The project's permanent identifier (see {@code ProjectEntity#proId}) — when present, matching
      * against an existing row prefers this over {@link #projectTitle}, which is the only way to find a
-     * project that's since been renamed. {@code header-optional}: absent entirely from older exported
-     * templates, which keep importing (matching by title alone, as before) unaffected.
+     * project that's since been renamed.
      */
-    @CsvBindByName(column = "Project ID", profiles = {"optional", FundingCsvTypeDetector.HEADER_OPTIONAL_PROFILE})
+    @CsvBindByName(column = "Project ID", profiles = "optional")
     private String projectId;
 
     @CsvBindByName(column = "Total Amount", profiles = "optional")
@@ -48,7 +47,7 @@ public class ProjectMilestoneCsvLine {
     private String subProjectTitle;
 
     /** See {@link #projectId} — same semantics, for the sub-project this row carries. */
-    @CsvBindByName(column = "Sub Project ID", profiles = {"optional", FundingCsvTypeDetector.HEADER_OPTIONAL_PROFILE})
+    @CsvBindByName(column = "Sub Project ID", profiles = "optional")
     private String subProjectId;
 
     @CsvBindByName(column = "Sub Total Amount", profiles = "optional")
@@ -58,7 +57,7 @@ public class ProjectMilestoneCsvLine {
     private String milestoneTitle;
 
     /** See {@link #projectId} — same semantics, for the milestone this row carries. */
-    @CsvBindByName(column = "Milestone ID", profiles = {"optional", FundingCsvTypeDetector.HEADER_OPTIONAL_PROFILE})
+    @CsvBindByName(column = "Milestone ID", profiles = "optional")
     private String milestoneId;
 
     @CsvBindByName(column = "Milestone Amount", profiles = "optional")

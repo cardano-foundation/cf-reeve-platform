@@ -221,7 +221,8 @@ public class MilestoneService {
         // current title only resolves a milestone whose title still matches; recomputing the id hash
         // from the request's title (the old strategy) is deliberately not done here any more — see the
         // matching comment in SpendingEventService#resolveOrCreateRootProject for why.
-        Optional<MilestoneEntity> existing = request.getProId() != null
+        // A blank proId means "not supplied" — same as null — and falls back to title matching.
+        Optional<MilestoneEntity> existing = (request.getProId() != null && !request.getProId().isBlank())
                 ? milestoneRepository.findByProjectIdAndProId(project.getId(), request.getProId())
                 : milestoneRepository.findByProjectIdAndMilestoneTitle(project.getId(), request.getMilestoneTitle());
         if (existing.isPresent()) {
@@ -254,17 +255,6 @@ public class MilestoneService {
                     "Milestone title already exists in this project: " + entity.getMilestoneTitle(),
                     ErrorTitleConstants.MILESTONE_TITLE_ALREADY_EXISTS));
         }
-        // The title-uniqueness check above only rules out another milestone currently titled the same —
-        // it can't see one that was originally created with this exact title and has since been renamed
-        // to something else, which still permanently owns this deterministic id (see
-        // MilestoneEntity#proId). Without this guard the insert below would fail as a raw
-        // DataIntegrityViolationException instead of a clean, actionable conflict.
-        if (milestoneRepository.existsById(entity.getId())) {
-            return Either.left(Problems.conflict(
-                    "Milestone title \"%s\" was already used to create a different milestone that has since been renamed"
-                            .formatted(entity.getMilestoneTitle()),
-                    ErrorTitleConstants.MILESTONE_TITLE_PREVIOUSLY_USED));
-        }
         Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(
                 request.getCurrency(), isCurrencyRegisteredAndActive(project.getOrganisationId(), request.getCurrency()));
         if (currencyProblem.isPresent()) {
@@ -293,6 +283,9 @@ public class MilestoneService {
         } else {
             entity.setProId(childSequenceService.nextChildProId(project));
         }
+        // The primary key is derived from the proId (unique within the project), never from the
+        // editable title — so it can only be set once the proId is known.
+        entity.setId(MilestoneEntity.id(project.getId(), entity.getProId()));
         return Either.right(milestoneRepository.saveAndFlush(entity));
     }
 
@@ -407,10 +400,9 @@ public class MilestoneService {
                 .build();
     }
 
-    /** proId is deliberately not set here — see the comment where it's assigned in {@link #validateAndSave}. */
+    /** proId and id are deliberately not set here — see where they're assigned in {@link #validateAndSave}. */
     private MilestoneEntity toEntity(MilestoneCreateRequest request, ProjectEntity project) {
         return MilestoneEntity.builder()
-                .id(MilestoneEntity.id(project.getId(), request.getMilestoneTitle()))
                 .milestoneTitle(request.getMilestoneTitle())
                 .milestoneAmount(request.getMilestoneAmount())
                 .currency(request.getCurrency())

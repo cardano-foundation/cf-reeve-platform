@@ -153,22 +153,10 @@ public class ProjectService {
         if (fundingIdProblem.isPresent()) {
             return Either.left(fundingIdProblem.get());
         }
-        String projectId = ProjectEntity.id(request.getOrganisationId(), request.getProjectTitle());
-        // The title-uniqueness check above only rules out another project currently titled the same —
-        // it can't see a project that was originally created with this exact title and has since been
-        // renamed to something else, which still permanently owns this deterministic id (see
-        // ProjectEntity#proId). Without this guard the insert below would fail as a raw
-        // DataIntegrityViolationException instead of a clean, actionable conflict.
-        if (projectRepository.existsById(projectId)) {
-            return Either.left(Problems.conflict(
-                    "Project title \"%s\" was already used to create a different project that has since been renamed"
-                            .formatted(request.getProjectTitle()),
-                    ErrorTitleConstants.PROJECT_TITLE_PREVIOUSLY_USED));
-        }
         // A root project's proId is user-suppliable (unlike a sub-project's or milestone's, which are
         // always system-assigned — see ProjectEntity#getProId()); when omitted it defaults to the
         // title, same as before this field existed. Since it's caller-chosen, it needs its own
-        // uniqueness pre-check — the id/title checks above can't catch a colliding proId on their own.
+        // uniqueness pre-check — the title check above can't catch a colliding proId on its own.
         String proId = (request.getProId() != null && !request.getProId().isBlank())
                 ? request.getProId() : request.getProjectTitle();
         if (projectRepository.existsByOrganisationIdAndProIdAndParentProjectIsNull(request.getOrganisationId(), proId)) {
@@ -176,6 +164,9 @@ public class ProjectService {
                     "Project ID already exists in this organisation: " + proId,
                     ErrorTitleConstants.PROJECT_PROID_ALREADY_EXISTS));
         }
+        // The primary key is derived from the proId (unique in this scope, checked above) — never from
+        // the title, which is a freely editable field.
+        String projectId = ProjectEntity.id(request.getOrganisationId(), proId);
         return Either.right(projectRepository.saveAndFlush(toEntity(request, projectId, proId)));
     }
 

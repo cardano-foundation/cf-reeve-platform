@@ -48,7 +48,7 @@ public class ProjectStructureService {
 
     /**
      * Creates a sub-project of {@code parent} after applying the structural and budget rules.
-     * The new project's id is the deterministic {@code (parentId, projectTitle)} sub-id and
+     * The new project's id is the deterministic {@code (parentId, proId)} sub-id and
      * its organisation is inherited from the parent. When {@code currency} is null/blank, it
      * defaults to the parent's currency — mirroring how a milestone's currency is always taken
      * from its owning project rather than specified independently. The parent's own currency is
@@ -105,19 +105,6 @@ public class ProjectStructureService {
             return Either.left(subAmount.get());
         }
 
-        String subProjectId = ProjectEntity.subId(parent.getId(), projectTitle);
-        // The title-uniqueness check above only rules out a sibling currently titled the same — it
-        // can't see a sibling that was originally created with this exact title and has since been
-        // renamed to something else, which still permanently owns this deterministic id (see
-        // ProjectEntity#proId). Without this guard the insert below would fail as a raw
-        // DataIntegrityViolationException instead of a clean, actionable conflict.
-        if (projectRepository.existsById(subProjectId)) {
-            return Either.left(Problems.conflict(
-                    "Sub-project title \"%s\" was already used under this parent to create a different sub-project that has since been renamed"
-                            .formatted(projectTitle),
-                    ErrorTitleConstants.PROJECT_TITLE_PREVIOUSLY_USED));
-        }
-
         String proId;
         if (explicitProId != null && !explicitProId.isBlank()) {
             // CSV path only — see this method's Javadoc. Needs its own uniqueness pre-check since,
@@ -134,7 +121,7 @@ public class ProjectStructureService {
         }
 
         return Either.right(projectRepository.saveAndFlush(ProjectEntity.builder()
-                .id(subProjectId)
+                .id(ProjectEntity.subId(parent.getId(), proId)) // derived from proId, never from the editable title
                 .organisationId(parent.getOrganisationId())
                 .fundingId(fundingId)
                 .projectTitle(projectTitle)

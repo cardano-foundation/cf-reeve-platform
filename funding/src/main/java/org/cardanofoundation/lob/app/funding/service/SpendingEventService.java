@@ -563,7 +563,9 @@ public class SpendingEventService {
         // title (the old strategy) is deliberately not done here any more — it only ever "accidentally"
         // found a project by its *original* creation-time title, never a project referenced by its new
         // one, which is exactly the bug this fixes.
-        Optional<ProjectEntity> existing = req.getProId() != null
+        // A blank proId (e.g. "" from a JSON client) means "not supplied" — same as null — so it must
+        // fall back to title matching rather than searching for a project whose proId is literally "".
+        Optional<ProjectEntity> existing = (req.getProId() != null && !req.getProId().isBlank())
                 ? projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull(organisationId, req.getProId())
                 : projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(organisationId, req.getProjectTitle());
         if (existing.isPresent()) {
@@ -590,19 +592,8 @@ public class SpendingEventService {
             return Either.left(fundingIdProblem.get());
         }
 
-        String projectId = ProjectEntity.id(organisationId, req.getProjectTitle());
-        // See the matching guard in ProjectService#createRootProject — a project originally created
-        // under this exact title, since renamed, still permanently owns this deterministic id.
-        if (projectRepository.existsById(projectId)) {
-            return Either.left(Problems.conflict(
-                    "Project title \"%s\" was already used to create a different project that has since been renamed"
-                            .formatted(req.getProjectTitle()),
-                    ErrorTitleConstants.PROJECT_TITLE_PREVIOUSLY_USED));
-        }
-
         // A root project's proId is user-suppliable — same fallback-to-title rule as
-        // ProjectService#createRootProject — so it needs its own uniqueness pre-check, independent of
-        // the id/title checks above.
+        // ProjectService#createRootProject — so it needs its own uniqueness pre-check.
         String proId = (req.getProId() != null && !req.getProId().isBlank()) ? req.getProId() : req.getProjectTitle();
         if (projectRepository.existsByOrganisationIdAndProIdAndParentProjectIsNull(organisationId, proId)) {
             return Either.left(Problems.conflict(
@@ -611,7 +602,7 @@ public class SpendingEventService {
         }
 
         ProjectEntity newProject = ProjectEntity.builder()
-                .id(projectId)
+                .id(ProjectEntity.id(organisationId, proId)) // derived from proId, never from the editable title
                 .organisationId(organisationId)
                 .fundingId(req.getFundingId())
                 .projectTitle(req.getProjectTitle())
@@ -629,7 +620,7 @@ public class SpendingEventService {
         }
 
         // See resolveOrCreateRootProject's comment on why this no longer recomputes the id hash from title.
-        Optional<ProjectEntity> existing = subReq.getProId() != null
+        Optional<ProjectEntity> existing = (subReq.getProId() != null && !subReq.getProId().isBlank())
                 ? projectRepository.findByParentProjectIdAndProId(parent.getId(), subReq.getProId())
                 : projectRepository.findByParentProjectIdAndProjectTitle(parent.getId(), subReq.getProjectTitle());
         if (existing.isPresent()) {

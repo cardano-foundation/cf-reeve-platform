@@ -237,6 +237,36 @@ class MilestoneServiceTest {
     }
 
     @Test
+    void resolveOrCreate_matchesByProId_whenSupplied_evenIfTitleWasRenamed() {
+        ProjectEntity project = projectEntity("p1");
+        MilestoneEntity renamed = milestoneEntity("m1");
+        when(milestoneRepository.findByProjectIdAndProId("p1", "PRJ-1-1")).thenReturn(Optional.of(renamed));
+
+        // The request carries a stale title, but proId identifies the row — title is never consulted.
+        MilestoneCreateRequest request = MilestoneCreateRequest.builder()
+                .milestoneTitle("Old Title").proId("PRJ-1-1").build();
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.resolveOrCreate(project, request);
+
+        assertThat(result.get()).isEqualTo(renamed);
+        verify(milestoneRepository, never()).findByProjectIdAndMilestoneTitle(any(), any());
+    }
+
+    @Test
+    void resolveOrCreate_fallsBackToTitle_whenProIdIsBlank() {
+        ProjectEntity project = projectEntity("p1");
+        MilestoneEntity existing = milestoneEntity("m1");
+        when(milestoneRepository.findByProjectIdAndMilestoneTitle("p1", "Milestone AB")).thenReturn(Optional.of(existing));
+
+        // A blank proId (e.g. "" from a JSON client) means "not supplied", same as null.
+        MilestoneCreateRequest request = MilestoneCreateRequest.builder()
+                .milestoneTitle("Milestone AB").proId("").build();
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.resolveOrCreate(project, request);
+
+        assertThat(result.get()).isEqualTo(existing);
+        verify(milestoneRepository, never()).findByProjectIdAndProId(any(), any());
+    }
+
+    @Test
     void resolveOrCreate_createsNew_whenTitleDoesNotExistAndFullDataProvided() {
         ProjectEntity project = projectEntity("p1");
         when(milestoneRepository.findByProjectIdAndMilestoneTitle("p1", "New Milestone")).thenReturn(Optional.empty());

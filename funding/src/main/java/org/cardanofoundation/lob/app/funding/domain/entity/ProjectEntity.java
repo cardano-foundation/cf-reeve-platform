@@ -42,7 +42,7 @@ public class ProjectEntity extends CommonEntity implements Persistable<String> {
     @Column(name = "funding_id")
     private String fundingId;
 
-    /** User-defined project identifier. No longer used for lookups or id generation; title-based now. */
+    /** User-defined project identifier. No longer used for lookups or id generation; matching is by proId or title, and the id derives from proId. */
     @Nullable
     @Column(name = "external_project_id")
     private String externalProjectId;
@@ -59,11 +59,15 @@ public class ProjectEntity extends CommonEntity implements Persistable<String> {
      *
      * <p>For a root project ({@link #parentProject} null), this is user-suppliable at creation
      * (defaulting to {@link #projectTitle} when omitted) — root-level codes are typically meaningful to
-     * the organisation (e.g. a grant reference) and worth letting them choose. For a sub-project, it is
-     * always system-assigned as {@code parent.proId + "-" + n} (n = {@link #nextChildSequence},
-     * atomically incremented on the parent at creation) — never user-suppliable, since a sub-project has
-     * no equivalent natural external code. See {@link MilestoneEntity#proId} for the same rule one
-     * level down.
+     * the organisation (e.g. a grant reference) and worth letting them choose. For a sub-project created
+     * through the JSON API or the event-allocation flow, it is always system-assigned as
+     * {@code parent.proId + "-" + n} (n = {@link #nextChildSequence}, atomically incremented on the
+     * parent at creation) — never user-suppliable there, since a sub-project has no equivalent natural
+     * external code. CSV bulk-import is the one exception: it requires the caller to supply the value
+     * (see {@code ProjectStructureService#createSubProject}'s {@code explicitProId} overload), because
+     * a CSV author needs to already know it to reference the row from a later Events file. Pre-existing
+     * sub-projects keep the title-based value from the LOB-2384 backfill. See
+     * {@link MilestoneEntity#proId} for the same rule one level down.
      */
     @NotBlank
     @Column(name = "pro_id", nullable = false)
@@ -109,14 +113,18 @@ public class ProjectEntity extends CommonEntity implements Persistable<String> {
     @OneToMany(mappedBy = "project", cascade = CascadeType.ALL)
     private List<MilestoneEntity> milestones = new ArrayList<>();
 
-    /** Deterministic id for a root project — unique per organisation by its title. */
-    public static String id(String organisationId, String projectTitle) {
-        return SHA3.digestAsHex("%s::%s".formatted(organisationId, projectTitle));
+    /**
+     * Deterministic id for a root project — unique per organisation by its {@link #proId}, never its
+     * title (which is freely editable, so can't be part of a permanent key). Rows that predate proId
+     * have {@code proId == title}, so their existing ids already follow this rule.
+     */
+    public static String id(String organisationId, String proId) {
+        return SHA3.digestAsHex("%s::%s".formatted(organisationId, proId));
     }
 
-    /** Deterministic id for a sub-project — unique within its parent by its title. */
-    public static String subId(String parentProjectId, String projectTitle) {
-        return SHA3.digestAsHex("%s::%s".formatted(parentProjectId, projectTitle));
+    /** Deterministic id for a sub-project — unique within its parent by its {@link #proId}; see {@link #id(String, String)}. */
+    public static String subId(String parentProjectId, String proId) {
+        return SHA3.digestAsHex("%s::%s".formatted(parentProjectId, proId));
     }
 
     @Override
