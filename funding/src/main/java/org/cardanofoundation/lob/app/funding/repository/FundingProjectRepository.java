@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.funding.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -26,6 +27,15 @@ public interface FundingProjectRepository extends JpaRepository<ProjectEntity, S
     List<ProjectEntity> findByOrganisationId(String organisationId);
 
     Page<ProjectEntity> findByOrganisationId(String organisationId, Pageable pageable);
+
+    // Root-only paged listing — same paginated-list convention as findByOrganisationId above (used by
+    // ProjectService#listProjects), scoped to roots for FundingCsvExportService, which expands each
+    // page's roots into their full sub-project/milestone tree.
+    Page<ProjectEntity> findByOrganisationIdAndParentProjectIsNull(String organisationId, Pageable pageable);
+
+    /** Same as above, additionally filtered to a caller-supplied set of root proIds — see FundingCsvExportService. */
+    Page<ProjectEntity> findByOrganisationIdAndProIdInAndParentProjectIsNull(
+            String organisationId, Collection<String> proIds, Pageable pageable);
 
     boolean existsByOrganisationIdAndExternalProjectId(String organisationId, String externalProjectId);
 

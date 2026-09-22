@@ -488,15 +488,12 @@ public class FundingBulkImportService {
             return Either.left(Problems.badRequest(
                     "Sub Total Amount is required to create sub-project: " + line.getSubProjectTitle(), ErrorTitleConstants.PROJECT_AMOUNT_INVALID));
         }
-        // Sub Project ID is mandatory when creating via CSV (unlike the UI/API, which always
-        // auto-assigns it) — this is the one thing that lets the user later reference this exact row
-        // in an Events file upload without any export/lookup tooling: they already know the value,
-        // because they're the one who chose it.
-        if (isBlank(line.getSubProjectId())) {
-            return Either.left(Problems.badRequest(
-                    "Sub Project ID is required to create sub-project: " + line.getSubProjectTitle(),
-                    ErrorTitleConstants.SUBPROJECT_PROID_REQUIRED));
-        }
+        // Sub Project ID is optional on creation, same as the UI/API: a caller-supplied value is used
+        // as-is (after the uniqueness check inside createSubProject), and a blank one auto-assigns
+        // <parent's proId>-<n> exactly like the JSON API/event-allocation flow — no CSV-specific
+        // mandatory rule any more. Discoverability of an auto-assigned value is handled by the
+        // Projects+Milestones export endpoint instead (returns the same template shape populated with
+        // every row's actual proId), not by forcing the user to invent one at upload time.
         Either<ProblemDetail, ProjectEntity> created = projectStructureService.createSubProject(
                 root, line.getSubProjectTitle(), line.getSubProjectId(), null, subAmountE.get(), null);
         if (created.isLeft()) {
@@ -588,13 +585,8 @@ public class FundingBulkImportService {
                     "Project " + project.getProjectTitle() + " has no currency, required to create milestone: " + line.getMilestoneTitle(),
                     ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
-        // Milestone ID is mandatory when creating via CSV (unlike the UI/API, which always
-        // auto-assigns it) — see the matching comment in upsertSubProject for why.
-        if (isBlank(line.getMilestoneId())) {
-            return Either.left(Problems.badRequest(
-                    "Milestone ID is required to create milestone: " + line.getMilestoneTitle(),
-                    ErrorTitleConstants.MILESTONE_PROID_REQUIRED));
-        }
+        // Milestone ID is optional on creation, same as the UI/API — see the matching comment in
+        // upsertSubProject for why this is no longer CSV-specific mandatory.
         MilestoneCreateRequest request = MilestoneCreateRequest.builder()
                 .milestoneTitle(line.getMilestoneTitle())
                 .milestoneAmount(amount)

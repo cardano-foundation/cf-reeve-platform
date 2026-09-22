@@ -68,8 +68,5 @@ public final class ErrorTitleConstants {
     public static final String PROJECT_NOT_CREATED_NO_SUBPROJECT = "PROJECT_NOT_CREATED_NO_SUBPROJECT";
     public static final String DUPLICATE_MILESTONE_ALLOCATION = "DUPLICATE_MILESTONE_ALLOCATION";
     public static final String SUBPROJECT_TITLE_REQUIRED = "SUBPROJECT_TITLE_REQUIRED";
-    /** CSV-only: creating a new sub-project/milestone via bulk-import requires an explicit ID column value — see LOB-2384. */
-    public static final String SUBPROJECT_PROID_REQUIRED = "SUBPROJECT_PROID_REQUIRED";
-    public static final String MILESTONE_PROID_REQUIRED = "MILESTONE_PROID_REQUIRED";
 
 }
