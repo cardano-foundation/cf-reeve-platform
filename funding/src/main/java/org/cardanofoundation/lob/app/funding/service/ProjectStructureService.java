@@ -43,7 +43,7 @@ public class ProjectStructureService {
     @Transactional
     public Either<ProblemDetail, ProjectEntity> createSubProject(ProjectEntity parent,
             String projectTitle, @Nullable String fundingId, @Nullable BigDecimal totalAmount, @Nullable String currency) {
-        return createSubProject(parent, projectTitle, null, fundingId, totalAmount, currency);
+        return createSubProjectInternal(parent, projectTitle, null, fundingId, totalAmount, currency);
     }
 
     /**
@@ -66,6 +66,18 @@ public class ProjectStructureService {
      */
     @Transactional
     public Either<ProblemDetail, ProjectEntity> createSubProject(ProjectEntity parent, String projectTitle,
+            @Nullable String explicitProId, @Nullable String fundingId, @Nullable BigDecimal totalAmount, @Nullable String currency) {
+        return createSubProjectInternal(parent, projectTitle, explicitProId, fundingId, totalAmount, currency);
+    }
+
+    /**
+     * Shared body for both {@code createSubProject} overloads above — a plain, non-{@code @Transactional}
+     * private method, so the 5-arg overload doesn't reach this logic via a self-invoked
+     * {@code this.createSubProject(...)} call that would silently bypass Spring's proxy-based
+     * transaction management; each public overload carries its own {@code @Transactional} instead,
+     * since each is independently called from outside this class.
+     */
+    private Either<ProblemDetail, ProjectEntity> createSubProjectInternal(ProjectEntity parent, String projectTitle,
             @Nullable String explicitProId, @Nullable String fundingId, @Nullable BigDecimal totalAmount, @Nullable String currency) {
 
         String effectiveCurrency = (currency != null && !currency.isBlank()) ? currency : parent.getCurrency();

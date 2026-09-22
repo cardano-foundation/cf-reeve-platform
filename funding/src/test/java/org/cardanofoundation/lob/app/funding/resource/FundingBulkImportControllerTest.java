@@ -107,7 +107,7 @@ class FundingBulkImportControllerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getHeaders().getFirst("Content-Disposition"))
                 .isEqualTo("attachment; filename=\"funding_projects_milestones_export.csv\"");
-        assertThat(response.getHeaders().getContentType().toString()).isEqualTo("text/csv");
+        assertThat(response.getHeaders().getContentType()).hasToString("text/csv");
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ((StreamingResponseBody) response.getBody()).writeTo(out);

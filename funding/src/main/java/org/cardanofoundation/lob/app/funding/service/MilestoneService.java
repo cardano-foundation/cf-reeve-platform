@@ -75,17 +75,27 @@ public class MilestoneService {
 
     @Transactional
     public MilestoneView createMilestone(String projectId, MilestoneCreateRequest request) {
-        return createMilestone(projectId, request, null);
+        return createMilestoneInternal(projectId, request, null);
     }
 
     /** CSV-bulk-import-only: see {@link #create(String, MilestoneCreateRequest, String)}'s Javadoc. */
     @Transactional
     public MilestoneView createMilestone(String projectId, MilestoneCreateRequest request, @Nullable String explicitProId) {
+        return createMilestoneInternal(projectId, request, explicitProId);
+    }
+
+    /**
+     * Shared body for both {@code createMilestone} overloads above — calling {@link #createInternal}
+     * directly (not the public, {@code @Transactional} {@link #create} methods) so neither overload
+     * invokes another {@code @Transactional} method via {@code this}, which would silently bypass
+     * Spring's proxy-based transaction management.
+     */
+    private MilestoneView createMilestoneInternal(String projectId, MilestoneCreateRequest request, @Nullable String explicitProId) {
         Optional<ProblemDetail> denied = authorizeProject(projectId);
         if (denied.isPresent()) {
             return MilestoneView.error(denied.get());
         }
-        return create(projectId, request, explicitProId).fold(MilestoneView::error, this::toView);
+        return createInternal(projectId, request, explicitProId).fold(MilestoneView::error, this::toView);
     }
 
     @Transactional
@@ -178,7 +188,7 @@ public class MilestoneService {
     /** Creates a milestone with an auto-assigned proId — the UI-facing JSON API entry point, which never supplies one. */
     @Transactional
     public Either<ProblemDetail, MilestoneEntity> create(String projectId, MilestoneCreateRequest request) {
-        return create(projectId, request, null);
+        return createInternal(projectId, request, null);
     }
 
     /**
@@ -189,6 +199,17 @@ public class MilestoneService {
      */
     @Transactional
     public Either<ProblemDetail, MilestoneEntity> create(String projectId, MilestoneCreateRequest request, @Nullable String explicitProId) {
+        return createInternal(projectId, request, explicitProId);
+    }
+
+    /**
+     * Shared body for both {@code create} overloads above (and for {@link #createMilestoneInternal}) —
+     * a plain, non-{@code @Transactional} private method, so nothing here is ever reached via a
+     * self-invoked {@code this.create(...)} call that would silently bypass Spring's proxy-based
+     * transaction management; each public overload above carries its own {@code @Transactional}
+     * instead, since each is independently called from outside this class.
+     */
+    private Either<ProblemDetail, MilestoneEntity> createInternal(String projectId, MilestoneCreateRequest request, @Nullable String explicitProId) {
         if (missingCreationFields(request)) {
             log.warn("Missing required fields for milestone creation in project: {}", projectId);
             return Either.left(milestoneFieldsRequired());

@@ -104,7 +104,7 @@ public class FundingBulkImportController {
     )
     @GetMapping(value = "/bulk-import/export/projects-milestones")
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<?> exportProjectsMilestones(
+    public ResponseEntity<Object> exportProjectsMilestones(
             @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
             @RequestParam String organisationId,
             @Parameter(description = "Restricts the export to these root projects' proId (and their full descendant tree) instead of the whole organisation")
