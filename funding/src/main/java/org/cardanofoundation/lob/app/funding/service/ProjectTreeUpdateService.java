@@ -1,6 +1,5 @@
 package org.cardanofoundation.lob.app.funding.service;
 
-import java.math.BigDecimal;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -21,6 +20,7 @@ import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectTreeNodeRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
@@ -62,7 +62,6 @@ public class ProjectTreeUpdateService {
     private final ProjectService projectService;
     private final ProjectStructureService projectStructureService;
     private final EventMilestoneAllocationRepository allocationRepository;
-    private final FundingCascadeDeleteService cascadeDeleteService;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
 
     @Transactional
@@ -102,9 +101,8 @@ public class ProjectTreeUpdateService {
         }
 
         Set<String> touchedProjectIds = new LinkedHashSet<>();
-        Set<String> shrunkMilestoneIds = new LinkedHashSet<>();
         Optional<ProblemDetail> childrenProblem = applyChildren(
-                root, request.getMilestones(), request.getSubProjects(), touchedProjectIds, shrunkMilestoneIds);
+                root, request.getMilestones(), request.getSubProjects(), touchedProjectIds);
         if (childrenProblem.isPresent()) {
             rollbackOnly();
             return ProjectView.error(childrenProblem.get());
@@ -114,14 +112,6 @@ public class ProjectTreeUpdateService {
         if (coverage.isPresent()) {
             rollbackOnly();
             return ProjectView.error(coverage.get());
-        }
-
-        if (!shrunkMilestoneIds.isEmpty()) {
-            Optional<ProblemDetail> blocked = cascadeDeleteService.markContainedEventsAsErrorOrBlock(shrunkMilestoneIds);
-            if (blocked.isPresent()) {
-                rollbackOnly();
-                return ProjectView.error(blocked.get());
-            }
         }
 
         return projectService.toView(root);
@@ -181,17 +171,16 @@ public class ProjectTreeUpdateService {
     /**
      * Matches and applies every milestone/sub-project under {@code project}, recursively — proId first,
      * falling back to title, creating a new node when neither matches (same pattern used everywhere
-     * else in this codebase). Records every project id touched (for the final coverage pass) and every
-     * milestone id whose amount actually decreased (for the ERROR-flagging pass).
+     * else in this codebase). Records every project id touched, for the final coverage pass.
      */
     private Optional<ProblemDetail> applyChildren(ProjectEntity project,
             List<MilestoneCreateRequest> milestoneRequests, List<ProjectTreeNodeRequest> subProjectRequests,
-            Set<String> touchedProjectIds, Set<String> shrunkMilestoneIds) {
+            Set<String> touchedProjectIds) {
 
         touchedProjectIds.add(project.getId());
 
         for (MilestoneCreateRequest milestoneRequest : milestoneRequests) {
-            Optional<ProblemDetail> problem = applyMilestone(project, milestoneRequest, shrunkMilestoneIds);
+            Optional<ProblemDetail> problem = applyMilestone(project, milestoneRequest);
             if (problem.isPresent()) {
                 return problem;
             }
@@ -206,65 +195,104 @@ public class ProjectTreeUpdateService {
         }
 
         for (ProjectTreeNodeRequest node : subProjectRequests) {
-            Optional<ProblemDetail> nodeXor = FundingValidations.milestonesXorSubProjects(
-                    !node.getMilestones().isEmpty(), !node.getSubProjects().isEmpty());
-            if (nodeXor.isPresent()) {
-                return nodeXor;
-            }
-
-            Optional<ProjectEntity> existing = (node.getProId() != null && !node.getProId().isBlank())
-                    ? projectRepository.findByParentProjectIdAndProId(project.getId(), node.getProId())
-                    : (node.getProjectTitle() != null
-                            ? projectRepository.findByParentProjectIdAndProjectTitle(project.getId(), node.getProjectTitle())
-                            : Optional.empty());
-
-            ProjectEntity subProject;
-            if (existing.isPresent()) {
-                subProject = existing.get();
-                Optional<ProblemDetail> problem = applySubProjectFields(subProject, node);
-                if (problem.isPresent()) {
-                    return problem;
-                }
-            } else {
-                Either<ProblemDetail, ProjectEntity> created = projectStructureService.createSubProject(
-                        project, node.getProjectTitle(), node.getProId(), node.getFundingId(), node.getTotalAmount(), node.getCurrency());
-                if (created.isLeft()) {
-                    return Optional.of(created.getLeft());
-                }
-                subProject = created.get();
-            }
-
-            Optional<ProblemDetail> childProblem = applyChildren(
-                    subProject, node.getMilestones(), node.getSubProjects(), touchedProjectIds, shrunkMilestoneIds);
-            if (childProblem.isPresent()) {
-                return childProblem;
+            Optional<ProblemDetail> problem = applySubProjectNode(project, node, touchedProjectIds);
+            if (problem.isPresent()) {
+                return problem;
             }
         }
         return Optional.empty();
     }
 
-    private Optional<ProblemDetail> applyMilestone(ProjectEntity project, MilestoneCreateRequest request, Set<String> shrunkMilestoneIds) {
-        Optional<MilestoneEntity> existing = (request.getProId() != null && !request.getProId().isBlank())
-                ? milestoneRepository.findByProjectIdAndProId(project.getId(), request.getProId())
-                : (request.getMilestoneTitle() != null
-                        ? milestoneRepository.findByProjectIdAndMilestoneTitle(project.getId(), request.getMilestoneTitle())
-                        : Optional.empty());
+    private Optional<ProblemDetail> applySubProjectNode(ProjectEntity project, ProjectTreeNodeRequest node, Set<String> touchedProjectIds) {
+        Optional<ProblemDetail> nodeXor = FundingValidations.milestonesXorSubProjects(
+                !node.getMilestones().isEmpty(), !node.getSubProjects().isEmpty());
+        if (nodeXor.isPresent()) {
+            return nodeXor;
+        }
 
+        Either<ProblemDetail, ProjectEntity> subProject = resolveOrCreateSubProject(project, node);
+        if (subProject.isLeft()) {
+            return Optional.of(subProject.getLeft());
+        }
+
+        return applyChildren(subProject.get(), node.getMilestones(), node.getSubProjects(), touchedProjectIds);
+    }
+
+    /** Matches an existing sub-project by proId (falling back to title) and applies the node's fields to it, or creates a new one when neither matches. */
+    private Either<ProblemDetail, ProjectEntity> resolveOrCreateSubProject(ProjectEntity parent, ProjectTreeNodeRequest node) {
+        Optional<ProjectEntity> existing = findExistingSubProject(parent, node);
+        if (existing.isEmpty()) {
+            return projectStructureService.createSubProject(
+                    parent, node.getProjectTitle(), node.getProId(), node.getFundingId(), node.getTotalAmount(), node.getCurrency());
+        }
+        ProjectEntity subProject = existing.get();
+        Optional<ProblemDetail> problem = applySubProjectFields(subProject, node);
+        return problem.isPresent() ? Either.left(problem.get()) : Either.right(subProject);
+    }
+
+    private Optional<ProjectEntity> findExistingSubProject(ProjectEntity parent, ProjectTreeNodeRequest node) {
+        if (node.getProId() != null && !node.getProId().isBlank()) {
+            return projectRepository.findByParentProjectIdAndProId(parent.getId(), node.getProId());
+        }
+        if (node.getProjectTitle() != null) {
+            return projectRepository.findByParentProjectIdAndProjectTitle(parent.getId(), node.getProjectTitle());
+        }
+        return Optional.empty();
+    }
+
+    private Optional<ProblemDetail> applyMilestone(ProjectEntity project, MilestoneCreateRequest request) {
+        Optional<MilestoneEntity> existing = findExistingMilestone(project, request);
         if (existing.isEmpty()) {
             Either<ProblemDetail, MilestoneEntity> created = milestoneService.create(project.getId(), request, request.getProId());
             return created.isLeft() ? Optional.of(created.getLeft()) : Optional.empty();
         }
+        return applyExistingMilestone(project, existing.get(), request);
+    }
 
-        MilestoneEntity milestone = existing.get();
-        boolean titleChanging = request.getMilestoneTitle() != null && !request.getMilestoneTitle().equals(milestone.getMilestoneTitle());
-        if (titleChanging && milestoneRepository.existsByProjectIdAndMilestoneTitleAndIdNot(
-                project.getId(), request.getMilestoneTitle(), milestone.getId())) {
-            return Optional.of(Problems.conflict(
-                    "Milestone title already exists in this project: " + request.getMilestoneTitle(),
-                    ErrorTitleConstants.MILESTONE_TITLE_ALREADY_EXISTS));
+    private Optional<MilestoneEntity> findExistingMilestone(ProjectEntity project, MilestoneCreateRequest request) {
+        if (request.getProId() != null && !request.getProId().isBlank()) {
+            return milestoneRepository.findByProjectIdAndProId(project.getId(), request.getProId());
         }
+        if (request.getMilestoneTitle() != null) {
+            return milestoneRepository.findByProjectIdAndMilestoneTitle(project.getId(), request.getMilestoneTitle());
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Applies a matched, already-existing milestone's field changes — reusing
+     * {@code MilestoneService}'s own lock/title-conflict/shrink-flagging/apply logic exactly as
+     * {@code MilestoneService#update} does (package-visible for this — see that class's Javadoc), minus
+     * only {@code FundingValidations#milestone}'s parent-fit half, deliberately deferred to the
+     * whole-tree coverage pass in {@link #updateWithMilestones}. Scenario B (shrinking below what's
+     * already allocated to this milestone) has no such ordering hazard — a milestone's own allocations
+     * are never compared against sibling milestones — so {@code handleAmountShrink} still runs
+     * immediately here, exactly like the narrow endpoint.
+     *
+     * <p>Package-visible so {@code FundingBulkImportService} can apply the identical logic for an
+     * existing CSV milestone row, instead of going through {@code MilestoneService#update} (whose
+     * embedded parent-fit check has the same stale-sibling problem this whole class exists to avoid —
+     * see the class Javadoc — for a CSV group touching more than one milestone under the same project).
+     */
+    Optional<ProblemDetail> applyExistingMilestone(ProjectEntity project, MilestoneEntity milestone, MilestoneCreateRequest request) {
+        boolean titleChanging = request.getMilestoneTitle() != null && !request.getMilestoneTitle().equals(milestone.getMilestoneTitle());
+        MilestoneUpdateRequest updateRequest = MilestoneUpdateRequest.builder()
+                .milestoneTitle(request.getMilestoneTitle())
+                .description(request.getDescription())
+                .milestoneAmount(request.getMilestoneAmount())
+                .currency(request.getCurrency())
+                .milestoneDate(request.getMilestoneDate())
+                .build();
+
+        Optional<ProblemDetail> lockProblem = milestoneService.checkFieldLock(milestone.getId(), updateRequest, titleChanging)
+                .or(() -> milestoneService.checkCurrencyLock(project, milestone, updateRequest))
+                .or(() -> milestoneService.checkTitleConflict(project, milestone.getId(), updateRequest, titleChanging));
+        if (lockProblem.isPresent()) {
+            return lockProblem;
+        }
+
         // Positivity is independent of the parent-fit half of FundingValidations#milestone (deliberately
-        // deferred to the whole-tree pass below) — no reason to skip it too.
+        // deferred to the whole-tree pass) — no reason to skip it too.
         Optional<ProblemDetail> amountProblem = FundingValidations.milestoneAmountPositive(request.getMilestoneAmount());
         if (amountProblem.isPresent()) {
             return amountProblem;
@@ -278,28 +306,13 @@ public class ProjectTreeUpdateService {
             }
         }
 
-        BigDecimal oldAmount = milestone.getMilestoneAmount();
-        if (titleChanging) {
-            milestone.setMilestoneTitle(request.getMilestoneTitle());
+        Optional<ProblemDetail> shrinkProblem = milestoneService.handleAmountShrink(milestone.getId(), updateRequest);
+        if (shrinkProblem.isPresent()) {
+            return shrinkProblem;
         }
-        if (request.getDescription() != null) {
-            milestone.setDescription(request.getDescription());
-        }
-        if (request.getMilestoneAmount() != null) {
-            milestone.setMilestoneAmount(request.getMilestoneAmount());
-        }
-        if (currencyChanging) {
-            milestone.setCurrency(request.getCurrency());
-        }
-        if (request.getMilestoneDate() != null) {
-            milestone.setMilestoneDate(request.getMilestoneDate());
-        }
-        milestoneRepository.saveAndFlush(milestone);
 
-        // Real recorded money vs. a budget figure (Scenario B) — flag, don't block; see EventStatus#ERROR.
-        if (request.getMilestoneAmount() != null && oldAmount != null && request.getMilestoneAmount().compareTo(oldAmount) < 0) {
-            shrunkMilestoneIds.add(milestone.getId());
-        }
+        milestoneService.applyChanges(milestone, updateRequest, titleChanging);
+        milestoneRepository.saveAndFlush(milestone);
         return Optional.empty();
     }
 

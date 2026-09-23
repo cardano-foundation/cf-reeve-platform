@@ -386,8 +386,11 @@ public class MilestoneService {
      * point (LOB-2384), but once an event is published (i.e. on-chain), nothing about the milestone it
      * references — including its title — can change; currency is governed by the separate, project-wide
      * rule below, not this one.
+     *
+     * <p>Package-visible (not private) so {@code ProjectTreeUpdateService} can run the identical check
+     * for a milestone matched inside the whole-tree PUT/CSV update path, instead of duplicating it.
      */
-    private Optional<ProblemDetail> checkFieldLock(String milestoneId, MilestoneUpdateRequest request, boolean titleChanging) {
+    Optional<ProblemDetail> checkFieldLock(String milestoneId, MilestoneUpdateRequest request, boolean titleChanging) {
         boolean touchesLockedField = titleChanging || request.getDescription() != null
                 || request.getMilestoneAmount() != null || request.getMilestoneDate() != null;
         if (touchesLockedField && isLocked(milestoneId)) {
@@ -403,9 +406,10 @@ public class MilestoneService {
     /**
      * Currency lock (LOB-2365): cascades from the project level — once any PUBLISHED event exists
      * anywhere in the milestone's owning project's own subtree, currency is blocked there too, mirroring
-     * ProjectService#updateProject's matching check for that same project id.
+     * ProjectService#updateProject's matching check for that same project id. Package-visible for reuse
+     * by {@code ProjectTreeUpdateService} — see {@link #checkFieldLock}'s Javadoc.
      */
-    private Optional<ProblemDetail> checkCurrencyLock(ProjectEntity project, MilestoneEntity milestone, MilestoneUpdateRequest request) {
+    Optional<ProblemDetail> checkCurrencyLock(ProjectEntity project, MilestoneEntity milestone, MilestoneUpdateRequest request) {
         boolean currencyChanging = request.getCurrency() != null && !request.getCurrency().equals(milestone.getCurrency());
         if (currencyChanging && allocationRepository.existsByMilestoneProjectIdInAndEventStatus(
                 ProjectTreeSupport.subtreeProjectIds(projectRepository, project.getId()), EventStatus.PUBLISHED)) {
@@ -419,9 +423,10 @@ public class MilestoneService {
     /**
      * milestoneTitle is editable up until the milestone locks (see MilestoneEntity#proId, which stays
      * fixed and is what everything needing a stable reference uses instead) — still subject to the same
-     * per-project uniqueness title always had.
+     * per-project uniqueness title always had. Package-visible for reuse by {@code ProjectTreeUpdateService}
+     * — see {@link #checkFieldLock}'s Javadoc.
      */
-    private Optional<ProblemDetail> checkTitleConflict(ProjectEntity project, String milestoneId, MilestoneUpdateRequest request, boolean titleChanging) {
+    Optional<ProblemDetail> checkTitleConflict(ProjectEntity project, String milestoneId, MilestoneUpdateRequest request, boolean titleChanging) {
         if (titleChanging && milestoneRepository.existsByProjectIdAndMilestoneTitleAndIdNot(
                 project.getId(), request.getMilestoneTitle(), milestoneId)) {
             return Optional.of(Problems.conflict(
@@ -437,9 +442,12 @@ public class MilestoneService {
      * edit proceeds exactly as typed — the allocation's own recorded figure is never rewritten — and
      * every draft event fully allocated to this milestone is marked ERROR instead, for a human to review
      * and fix. An event that also allocates to a milestone outside this one is still a hard block, same
-     * cross-project rule as the project-level case.
+     * cross-project rule as the project-level case. Package-visible for reuse by
+     * {@code ProjectTreeUpdateService} — no ordering hazard here (a single milestone's own allocations,
+     * never compared against sibling milestones), so it's safe to run immediately, per-milestone, exactly
+     * like this method already does — unlike {@code FundingValidations#milestone}'s parent-fit half.
      */
-    private Optional<ProblemDetail> handleAmountShrink(String milestoneId, MilestoneUpdateRequest request) {
+    Optional<ProblemDetail> handleAmountShrink(String milestoneId, MilestoneUpdateRequest request) {
         if (request.getMilestoneAmount() == null) {
             return Optional.empty();
         }
@@ -451,7 +459,8 @@ public class MilestoneService {
         return Optional.empty();
     }
 
-    private void applyChanges(MilestoneEntity milestone, MilestoneUpdateRequest request, boolean titleChanging) {
+    /** Package-visible for reuse by {@code ProjectTreeUpdateService} — see {@link #checkFieldLock}'s Javadoc. */
+    void applyChanges(MilestoneEntity milestone, MilestoneUpdateRequest request, boolean titleChanging) {
         if (titleChanging) {
             milestone.setMilestoneTitle(request.getMilestoneTitle());
         }

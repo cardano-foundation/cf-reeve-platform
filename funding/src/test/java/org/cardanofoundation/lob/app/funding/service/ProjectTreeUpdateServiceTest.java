@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.funding.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -12,7 +13,6 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -29,6 +29,7 @@ import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectTreeNodeRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
@@ -47,7 +48,6 @@ class ProjectTreeUpdateServiceTest {
     @Mock private ProjectService projectService;
     @Mock private ProjectStructureService projectStructureService;
     @Mock private EventMilestoneAllocationRepository allocationRepository;
-    @Mock private FundingCascadeDeleteService cascadeDeleteService;
     @Mock private KeycloakSecurityHelper keycloakSecurityHelper;
 
     private ProjectTreeUpdateService service;
@@ -55,10 +55,33 @@ class ProjectTreeUpdateServiceTest {
     @BeforeEach
     void setUp() {
         service = new ProjectTreeUpdateService(projectRepository, milestoneRepository, milestoneService,
-                projectService, projectStructureService, allocationRepository, cascadeDeleteService, keycloakSecurityHelper);
+                projectService, projectStructureService, allocationRepository, keycloakSecurityHelper);
         lenient().when(keycloakSecurityHelper.canUserAccessOrg(anyString())).thenReturn(true);
         lenient().when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         lenient().when(projectService.toView(any())).thenReturn(ProjectView.builder().projectId("root").build());
+        // applyExistingMilestone delegates the actual field mutation to milestoneService.applyChanges —
+        // mocked here, so it's a no-op unless told to behave like the real implementation.
+        lenient().doAnswer(invocation -> {
+            MilestoneEntity milestone = invocation.getArgument(0);
+            MilestoneUpdateRequest request = invocation.getArgument(1);
+            boolean titleChanging = invocation.getArgument(2);
+            if (titleChanging) {
+                milestone.setMilestoneTitle(request.getMilestoneTitle());
+            }
+            if (request.getDescription() != null) {
+                milestone.setDescription(request.getDescription());
+            }
+            if (request.getMilestoneAmount() != null) {
+                milestone.setMilestoneAmount(request.getMilestoneAmount());
+            }
+            if (request.getCurrency() != null) {
+                milestone.setCurrency(request.getCurrency());
+            }
+            if (request.getMilestoneDate() != null) {
+                milestone.setMilestoneDate(request.getMilestoneDate());
+            }
+            return null;
+        }).when(milestoneService).applyChanges(any(), any(), anyBoolean());
     }
 
     private ProjectEntity root(BigDecimal total) {
@@ -127,7 +150,7 @@ class ProjectTreeUpdateServiceTest {
         assertThat(root.getTotalAmount()).isEqualByComparingTo("100000");
         assertThat(sub1.getTotalAmount()).isEqualByComparingTo("40000");
         assertThat(sub2.getTotalAmount()).isEqualByComparingTo("60000");
-        verify(cascadeDeleteService, never()).markContainedEventsAsErrorOrBlock(any(Set.class));
+        verify(milestoneService, never()).handleAmountShrink(any(), any());
     }
 
     @Test
@@ -165,7 +188,7 @@ class ProjectTreeUpdateServiceTest {
         when(milestoneRepository.findByProjectIdAndProId("root", "PRJ-1000-M1")).thenReturn(Optional.of(milestone));
         when(milestoneService.findByProjectId("root")).thenReturn(List.of(milestone));
         when(projectRepository.findById("root")).thenReturn(Optional.of(root));
-        when(cascadeDeleteService.markContainedEventsAsErrorOrBlock(Set.of("m1"))).thenReturn(Optional.empty());
+        when(milestoneService.handleAmountShrink(eq("m1"), any())).thenReturn(Optional.empty());
 
         ProjectWithMilestonesCreateRequest request = request(null);
         request.setMilestones(List.of(MilestoneCreateRequest.builder()
@@ -175,7 +198,7 @@ class ProjectTreeUpdateServiceTest {
 
         assertThat(result.getError()).isEmpty();
         assertThat(milestone.getMilestoneAmount()).isEqualByComparingTo("50000");
-        verify(cascadeDeleteService).markContainedEventsAsErrorOrBlock(Set.of("m1"));
+        verify(milestoneService).handleAmountShrink(eq("m1"), any());
     }
 
     @Test
@@ -186,11 +209,9 @@ class ProjectTreeUpdateServiceTest {
         when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
         when(projectRepository.findByParentProjectId("root")).thenReturn(List.of());
         when(milestoneRepository.findByProjectIdAndProId("root", "PRJ-1000-M1")).thenReturn(Optional.of(milestone));
-        when(milestoneService.findByProjectId("root")).thenReturn(List.of(milestone));
-        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
         ProblemDetail crossProjectConflict = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "reaches outside");
         crossProjectConflict.setTitle(ErrorTitleConstants.EVENT_ALLOCATED_TO_OTHER_PROJECTS);
-        when(cascadeDeleteService.markContainedEventsAsErrorOrBlock(Set.of("m1"))).thenReturn(Optional.of(crossProjectConflict));
+        when(milestoneService.handleAmountShrink(eq("m1"), any())).thenReturn(Optional.of(crossProjectConflict));
 
         ProjectWithMilestonesCreateRequest request = request(null);
         request.setMilestones(List.of(MilestoneCreateRequest.builder()
@@ -208,7 +229,7 @@ class ProjectTreeUpdateServiceTest {
         when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
         when(projectRepository.findByParentProjectId("root")).thenReturn(List.of());
         when(projectRepository.findByParentProjectIdAndProId("root", "PRJ-1000-3")).thenReturn(Optional.empty());
-        when(projectStructureService.createSubProject(eq(root), eq("New Sub"), eq("PRJ-1000-3"), eq(null), eq(new BigDecimal("50000")), eq(null)))
+        when(projectStructureService.createSubProject(root, "New Sub", "PRJ-1000-3", null, new BigDecimal("50000"), null))
                 .thenReturn(Either.right(newSub));
         when(milestoneService.findByProjectId("root")).thenReturn(List.of());
         when(milestoneService.findByProjectId("sub-new")).thenReturn(List.of());

@@ -272,6 +272,101 @@ public class SpendingEventController {
                                                         }
                                                       ]
                                                     }"""
+                                    ),
+                                    @ExampleObject(
+                                            name = "FUNDING – fund \"Project Orion\" (see the whole-tree PUT /projects example)",
+                                            summary = "Full ERROR-lifecycle walkthrough, step 1: after creating \"Project Orion\" (PRJ-1000) via the "
+                                                    + "POST /projects example above, fund it fully — 286,728.71 to Sub 1's milestone and "
+                                                    + "418,974.15 to Sub 2's milestone, matching their current budgets exactly. Next steps: "
+                                                    + "record a SPENDING event too (next example), then shrink the project with the PUT "
+                                                    + "/projects example — both events will flip to ERROR since their allocations no longer "
+                                                    + "fit the shrunk milestones — then fix each one with the PUT /events/{eventId} examples "
+                                                    + "below to bring them back to DRAFT",
+                                            value = """
+                                                    {
+                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                                                      "eventType": "FUNDING",
+                                                      "fundingId": "GRANT-2025-F0001",
+                                                      "fundingHash": "30c82819cf06cd9264e2ffd3ba858ebf0a3b0b71ada17b5a11fd6da66f120ce7",
+                                                      "fundingEntity": "Cardano Foundation",
+                                                      "currencyRcy": "ADA",
+                                                      "eventDate": "2026-09-01",
+                                                      "amountRcy": "705702.86",
+                                                      "allocations": [
+                                                        {
+                                                          "projectTitle": "Project Orion",
+                                                          "subProjects": [
+                                                            {
+                                                              "projectTitle": "Sub 1",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone 1" },
+                                                                  "allocatedAmount": "286728.71"
+                                                                }
+                                                              ]
+                                                            },
+                                                            {
+                                                              "projectTitle": "Sub 2",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone 1" },
+                                                                  "allocatedAmount": "418974.15"
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }"""
+                                    ),
+                                    @ExampleObject(
+                                            name = "SPENDING – record spend against \"Project Orion\"",
+                                            summary = "Full ERROR-lifecycle walkthrough, step 2: records 120,000 of actual spend against the "
+                                                    + "same two milestones just funded above (well within their current budgets) — 50,000 "
+                                                    + "against Sub 1's milestone, 70,000 against Sub 2's — so there are two DRAFT events "
+                                                    + "(this one and the FUNDING one above) in the tree when it's shrunk in the next step",
+                                            value = """
+                                                    {
+                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                                                      "eventType": "SPENDING",
+                                                      "fundingId": "GRANT-2025-1000",
+                                                      "fundingHash": "de68ed7879484aa88442b7932641e72d44013e5719c197ebba90770949877056",
+                                                      "currencyRcy": "ADA",
+                                                      "eventDate": "2026-09-10",
+                                                      "category": "Personnel",
+                                                      "vendor": "Vendor AB",
+                                                      "amountFcy": "120000.00",
+                                                      "currencyFcy": "USD",
+                                                      "fxRate": "1.0",
+                                                      "amountRcy": "120000.00",
+                                                      "hash": "sha256:demo-spend-0001",
+                                                      "notes": "Invoice #INV-2026-0001",
+                                                      "allocations": [
+                                                        {
+                                                          "projectTitle": "Project Orion",
+                                                          "subProjects": [
+                                                            {
+                                                              "projectTitle": "Sub 1",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone 1" },
+                                                                  "allocatedAmount": "50000.00"
+                                                                }
+                                                              ]
+                                                            },
+                                                            {
+                                                              "projectTitle": "Sub 2",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone 1" },
+                                                                  "allocatedAmount": "70000.00"
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }"""
                                     )
                             }
                     )
@@ -318,6 +413,99 @@ public class SpendingEventController {
                                                             {
                                                               "milestone": { "milestoneTitle": "Milestone AB-1" },
                                                               "allocatedAmount": "150000.00"
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }"""
+                                    ),
+                                    @ExampleObject(
+                                            name = "FUNDING – fix an ERROR event after the project was shrunk",
+                                            summary = "Full ERROR-lifecycle walkthrough, step 4a: after \"Project Orion\" is shrunk via the "
+                                                    + "whole-tree PUT /projects example (Sub 1's milestone down to 35,000, Sub 2's down to "
+                                                    + "55,000), the FUNDING event created above no longer fits (286,728.71/418,974.15 each "
+                                                    + "exceed the new amounts) and flips to ERROR. Call this on that event's id with smaller "
+                                                    + "allocations that fit the new budgets — the update succeeds and the event resets from "
+                                                    + "ERROR back to DRAFT automatically",
+                                            value = """
+                                                    {
+                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                                                      "eventType": "FUNDING",
+                                                      "fundingId": "GRANT-2025-F0001",
+                                                      "fundingHash": "30c82819cf06cd9264e2ffd3ba858ebf0a3b0b71ada17b5a11fd6da66f120ce7",
+                                                      "fundingEntity": "Cardano Foundation",
+                                                      "currencyRcy": "ADA",
+                                                      "eventDate": "2026-09-01",
+                                                      "amountRcy": "50000.00",
+                                                      "allocations": [
+                                                        {
+                                                          "projectTitle": "Project Orion",
+                                                          "subProjects": [
+                                                            {
+                                                              "projectTitle": "Sub 1",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone 1" },
+                                                                  "allocatedAmount": "20000.00"
+                                                                }
+                                                              ]
+                                                            },
+                                                            {
+                                                              "projectTitle": "Sub 2",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone 1" },
+                                                                  "allocatedAmount": "30000.00"
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }"""
+                                    ),
+                                    @ExampleObject(
+                                            name = "SPENDING – fix an ERROR event after the project was shrunk",
+                                            summary = "Full ERROR-lifecycle walkthrough, step 4b: same fix, for the SPENDING event (its "
+                                                    + "50,000/70,000 allocations also no longer fit the shrunk 35,000/55,000 milestones) — "
+                                                    + "smaller allocations that fit bring it back to DRAFT too",
+                                            value = """
+                                                    {
+                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                                                      "eventType": "SPENDING",
+                                                      "fundingId": "GRANT-2025-1000",
+                                                      "fundingHash": "de68ed7879484aa88442b7932641e72d44013e5719c197ebba90770949877056",
+                                                      "currencyRcy": "ADA",
+                                                      "eventDate": "2026-09-10",
+                                                      "category": "Personnel",
+                                                      "vendor": "Vendor AB",
+                                                      "amountFcy": "40000.00",
+                                                      "currencyFcy": "USD",
+                                                      "fxRate": "1.0",
+                                                      "amountRcy": "40000.00",
+                                                      "hash": "sha256:demo-spend-0001",
+                                                      "notes": "Invoice #INV-2026-0001 (revised)",
+                                                      "allocations": [
+                                                        {
+                                                          "projectTitle": "Project Orion",
+                                                          "subProjects": [
+                                                            {
+                                                              "projectTitle": "Sub 1",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone 1" },
+                                                                  "allocatedAmount": "15000.00"
+                                                                }
+                                                              ]
+                                                            },
+                                                            {
+                                                              "projectTitle": "Sub 2",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone 1" },
+                                                                  "allocatedAmount": "25000.00"
+                                                                }
+                                                              ]
                                                             }
                                                           ]
                                                         }

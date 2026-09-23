@@ -223,21 +223,6 @@ class FundingCascadeDeleteServiceTest {
         verify(fundingEventRepository).saveAll(List.of()); // harmless no-op save of an empty list
     }
 
-    @Test
-    void markContainedEventsAsErrorOrBlock_withMilestoneIdSet_blocks_whenAnEventAlsoAllocatesOutsideTheSet() {
-        EventMilestoneAllocationEntity insideAlloc = allocation("e1", "m1", "60000");
-        EventMilestoneAllocationEntity outsideAlloc = allocation("e1", "m-other", "40000");
-        FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, insideAlloc, outsideAlloc);
-        when(allocationRepository.findById_MilestoneIdIn(Set.of("m1"))).thenReturn(List.of(insideAlloc));
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
-
-        Optional<ProblemDetail> result = service.markContainedEventsAsErrorOrBlock(Set.of("m1"));
-
-        assertThat(result.orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_ALLOCATED_TO_OTHER_PROJECTS);
-        assertThat(event.getStatus()).isEqualTo(EventStatus.DRAFT); // untouched
-        verify(fundingEventRepository, never()).saveAll(any());
-    }
-
     // --- helpers ---
 
     private ProjectEntity project(String id) {

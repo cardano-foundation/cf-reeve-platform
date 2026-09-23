@@ -39,7 +39,6 @@ import org.cardanofoundation.lob.app.funding.domain.request.EventMilestoneAlloca
 import org.cardanofoundation.lob.app.funding.domain.request.EventProjectAllocationRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.EventSubProjectAllocationRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
-import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectTreeNodeRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
@@ -610,15 +609,21 @@ public class FundingBulkImportService {
             // legitimately grown (e.g. both a FUNDING and a SPENDING event allocated against it), and
             // resending the same amount must not spuriously trip that coverage check. milestoneTitle is
             // no longer immutable (see LOB-2384) — sent when it differs from the matched row's title.
+            //
+            // Applied via ProjectTreeUpdateService#applyExistingMilestone, not MilestoneService#update —
+            // same reason as updateProjectEntity above: update()'s embedded parent-fit check would read
+            // this group's other, not-yet-processed milestone rows' stale totals if more than one
+            // milestone under the same project is being resized in the same CSV group. The group's whole-
+            // tree coverage check (processProjectMilestoneGroup) validates the parent-fit rule once,
+            // after every row has been applied, instead.
             MilestoneEntity current = existing.get();
-            MilestoneUpdateRequest updateRequest = MilestoneUpdateRequest.builder()
+            MilestoneCreateRequest applyRequest = MilestoneCreateRequest.builder()
                     .milestoneTitle(ifChanged(blankToNull(line.getMilestoneTitle()), current.getMilestoneTitle()))
                     .milestoneAmount(ifChanged(amount, current.getMilestoneAmount()))
                     .currency(ifChanged(currency, current.getCurrency()))
                     .milestoneDate(ifChanged(date, current.getMilestoneDate()))
                     .build();
-            MilestoneView view = milestoneService.updateMilestone(project.getId(), current.getId(), updateRequest);
-            Optional<ProblemDetail> error = view.getError();
+            Optional<ProblemDetail> error = projectTreeUpdateService.applyExistingMilestone(project, current, applyRequest);
             if (error.isPresent()) {
                 return Either.left(error.get());
             }
