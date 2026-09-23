@@ -944,7 +944,7 @@ class FundingBulkImportServiceTest {
 
         assertThat(result.getMilestonesUpdated()).isEqualTo(1);
         ArgumentCaptor<MilestoneCreateRequest> captor = ArgumentCaptor.forClass(MilestoneCreateRequest.class);
-        verify(projectTreeUpdateService).applyExistingMilestone(eq(root), eq(existing), captor.capture());
+        verify(projectTreeUpdateService).applyExistingMilestone(eq(root), eq(existing), captor.capture(), any());
         assertThat(captor.getValue().getMilestoneTitle()).isNull();
         assertThat(captor.getValue().getCurrency()).isEqualTo("USD");
         assertThat(captor.getValue().getMilestoneAmount()).isEqualByComparingTo("25000.00");
@@ -1091,7 +1091,7 @@ class FundingBulkImportServiceTest {
                 .thenReturn(Optional.of(root));
         MilestoneEntity existing = MilestoneEntity.builder().id("m1").milestoneTitle("Milestone One").build();
         when(milestoneService.findByProjectIdAndMilestoneTitle("p1", "Milestone One")).thenReturn(Optional.of(existing));
-        when(projectTreeUpdateService.applyExistingMilestone(eq(root), eq(existing), any()))
+        when(projectTreeUpdateService.applyExistingMilestone(eq(root), eq(existing), any(), any()))
                 .thenReturn(Optional.of(problem(HttpStatus.CONFLICT, "SPENDING_EVENT_ALREADY_PUBLISHED")));
 
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();

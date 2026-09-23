@@ -347,9 +347,10 @@ public class FundingBulkImportService {
         int milestonesCreated = 0;
         int milestonesUpdated = 0;
         Set<String> touchedProjectIds = new LinkedHashSet<>(Set.of(root.getId()));
+        Set<String> shrunkMilestoneIds = new LinkedHashSet<>();
 
         for (int idx : idxs) {
-            RowOutcome row = processGroupRow(root, idx, lines.get(idx), resolvedProjectIds);
+            RowOutcome row = processGroupRow(root, idx, lines.get(idx), resolvedProjectIds, shrunkMilestoneIds);
             if (row.error() != null) {
                 errors.add(row.error());
             }
@@ -375,6 +376,16 @@ public class FundingBulkImportService {
             }
         }
 
+        // Flag every milestone shrunk anywhere in this group together, in one call — see
+        // ProjectTreeUpdateService#flagShrunkMilestones's Javadoc for why this must be batched across
+        // the whole group rather than done per-row, immediately, as each milestone is processed.
+        if (errors.isEmpty()) {
+            Optional<ProblemDetail> flagged = projectTreeUpdateService.flagShrunkMilestones(shrunkMilestoneIds);
+            if (flagged.isPresent()) {
+                errors.add(rowError(idxs.get(0) + 1, flagged.get()));
+            }
+        }
+
         return new ProjectMilestoneGroupOutcome(errors, succeeded, projectsCreated, projectsUpdated, milestonesCreated, milestonesUpdated);
     }
 
@@ -389,7 +400,8 @@ public class FundingBulkImportService {
      * being silently dropped or (for a sub-project amount with no sub-project title) attached to
      * the wrong project.
      */
-    private RowOutcome processGroupRow(ProjectEntity root, int idx, ProjectMilestoneCsvLine line, Map<String, String> resolvedProjectIds) {
+    private RowOutcome processGroupRow(ProjectEntity root, int idx, ProjectMilestoneCsvLine line,
+            Map<String, String> resolvedProjectIds, Set<String> shrunkMilestoneIds) {
         ProjectEntity target = root;
         int succeeded = 0;
         int projectsCreated = 0;
@@ -424,7 +436,7 @@ public class FundingBulkImportService {
             return new RowOutcome(null, succeeded, projectsCreated, projectsUpdated, 0, 0, touchedSubProjectId);
         }
 
-        Either<ProblemDetail, Boolean> msE = upsertMilestoneRow(target, line);
+        Either<ProblemDetail, Boolean> msE = upsertMilestoneRow(target, line, shrunkMilestoneIds);
         if (msE.isLeft()) {
             return new RowOutcome(rowError(idx + 1, msE.getLeft()), succeeded, projectsCreated, projectsUpdated, 0, 0, touchedSubProjectId);
         }
@@ -582,7 +594,7 @@ public class FundingBulkImportService {
      * entity rather than the CSV row (which may leave the row-level {@code Currency} cell blank on a
      * continuation row that doesn't re-declare the project).
      */
-    private Either<ProblemDetail, Boolean> upsertMilestoneRow(ProjectEntity project, ProjectMilestoneCsvLine line) {
+    private Either<ProblemDetail, Boolean> upsertMilestoneRow(ProjectEntity project, ProjectMilestoneCsvLine line, Set<String> shrunkMilestoneIds) {
         Either<ProblemDetail, BigDecimal> amountE = parseDecimal(line.getMilestoneAmount(), "Milestone Amount");
         if (amountE.isLeft()) {
             return Either.left(amountE.getLeft());
@@ -623,7 +635,7 @@ public class FundingBulkImportService {
                     .currency(ifChanged(currency, current.getCurrency()))
                     .milestoneDate(ifChanged(date, current.getMilestoneDate()))
                     .build();
-            Optional<ProblemDetail> error = projectTreeUpdateService.applyExistingMilestone(project, current, applyRequest);
+            Optional<ProblemDetail> error = projectTreeUpdateService.applyExistingMilestone(project, current, applyRequest, shrunkMilestoneIds);
             if (error.isPresent()) {
                 return Either.left(error.get());
             }

@@ -62,6 +62,7 @@ public class ProjectTreeUpdateService {
     private final ProjectService projectService;
     private final ProjectStructureService projectStructureService;
     private final EventMilestoneAllocationRepository allocationRepository;
+    private final FundingCascadeDeleteService cascadeDeleteService;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
 
     @Transactional
@@ -101,8 +102,9 @@ public class ProjectTreeUpdateService {
         }
 
         Set<String> touchedProjectIds = new LinkedHashSet<>();
+        Set<String> shrunkMilestoneIds = new LinkedHashSet<>();
         Optional<ProblemDetail> childrenProblem = applyChildren(
-                root, request.getMilestones(), request.getSubProjects(), touchedProjectIds);
+                root, request.getMilestones(), request.getSubProjects(), touchedProjectIds, shrunkMilestoneIds);
         if (childrenProblem.isPresent()) {
             rollbackOnly();
             return ProjectView.error(childrenProblem.get());
@@ -114,7 +116,28 @@ public class ProjectTreeUpdateService {
             return ProjectView.error(coverage.get());
         }
 
+        Optional<ProblemDetail> flagged = flagShrunkMilestones(shrunkMilestoneIds);
+        if (flagged.isPresent()) {
+            rollbackOnly();
+            return ProjectView.error(flagged.get());
+        }
+
         return projectService.toView(root);
+    }
+
+    /**
+     * Flags every milestone in {@code shrunkMilestoneIds} together, in one call — never per-milestone,
+     * immediately, as each is processed (see {@code MilestoneService#handleAmountShrink}'s Javadoc for
+     * why: an event allocating to two milestones that are <em>both</em> being shrunk in this same
+     * request must see both as "in scope" for the cross-project check, not just whichever one happens
+     * to be processed first). Package-visible so {@code FundingBulkImportService} can apply the same
+     * whole-group batching for CSV.
+     */
+    Optional<ProblemDetail> flagShrunkMilestones(Set<String> shrunkMilestoneIds) {
+        if (shrunkMilestoneIds.isEmpty()) {
+            return Optional.empty();
+        }
+        return cascadeDeleteService.markContainedEventsAsErrorOrBlock(shrunkMilestoneIds);
     }
 
     /**
@@ -175,12 +198,12 @@ public class ProjectTreeUpdateService {
      */
     private Optional<ProblemDetail> applyChildren(ProjectEntity project,
             List<MilestoneCreateRequest> milestoneRequests, List<ProjectTreeNodeRequest> subProjectRequests,
-            Set<String> touchedProjectIds) {
+            Set<String> touchedProjectIds, Set<String> shrunkMilestoneIds) {
 
         touchedProjectIds.add(project.getId());
 
         for (MilestoneCreateRequest milestoneRequest : milestoneRequests) {
-            Optional<ProblemDetail> problem = applyMilestone(project, milestoneRequest);
+            Optional<ProblemDetail> problem = applyMilestone(project, milestoneRequest, shrunkMilestoneIds);
             if (problem.isPresent()) {
                 return problem;
             }
@@ -195,7 +218,7 @@ public class ProjectTreeUpdateService {
         }
 
         for (ProjectTreeNodeRequest node : subProjectRequests) {
-            Optional<ProblemDetail> problem = applySubProjectNode(project, node, touchedProjectIds);
+            Optional<ProblemDetail> problem = applySubProjectNode(project, node, touchedProjectIds, shrunkMilestoneIds);
             if (problem.isPresent()) {
                 return problem;
             }
@@ -203,7 +226,8 @@ public class ProjectTreeUpdateService {
         return Optional.empty();
     }
 
-    private Optional<ProblemDetail> applySubProjectNode(ProjectEntity project, ProjectTreeNodeRequest node, Set<String> touchedProjectIds) {
+    private Optional<ProblemDetail> applySubProjectNode(ProjectEntity project, ProjectTreeNodeRequest node,
+            Set<String> touchedProjectIds, Set<String> shrunkMilestoneIds) {
         Optional<ProblemDetail> nodeXor = FundingValidations.milestonesXorSubProjects(
                 !node.getMilestones().isEmpty(), !node.getSubProjects().isEmpty());
         if (nodeXor.isPresent()) {
@@ -215,7 +239,7 @@ public class ProjectTreeUpdateService {
             return Optional.of(subProject.getLeft());
         }
 
-        return applyChildren(subProject.get(), node.getMilestones(), node.getSubProjects(), touchedProjectIds);
+        return applyChildren(subProject.get(), node.getMilestones(), node.getSubProjects(), touchedProjectIds, shrunkMilestoneIds);
     }
 
     /** Matches an existing sub-project by proId (falling back to title) and applies the node's fields to it, or creates a new one when neither matches. */
@@ -240,13 +264,13 @@ public class ProjectTreeUpdateService {
         return Optional.empty();
     }
 
-    private Optional<ProblemDetail> applyMilestone(ProjectEntity project, MilestoneCreateRequest request) {
+    private Optional<ProblemDetail> applyMilestone(ProjectEntity project, MilestoneCreateRequest request, Set<String> shrunkMilestoneIds) {
         Optional<MilestoneEntity> existing = findExistingMilestone(project, request);
         if (existing.isEmpty()) {
             Either<ProblemDetail, MilestoneEntity> created = milestoneService.create(project.getId(), request, request.getProId());
             return created.isLeft() ? Optional.of(created.getLeft()) : Optional.empty();
         }
-        return applyExistingMilestone(project, existing.get(), request);
+        return applyExistingMilestone(project, existing.get(), request, shrunkMilestoneIds);
     }
 
     private Optional<MilestoneEntity> findExistingMilestone(ProjectEntity project, MilestoneCreateRequest request) {
@@ -261,20 +285,24 @@ public class ProjectTreeUpdateService {
 
     /**
      * Applies a matched, already-existing milestone's field changes — reusing
-     * {@code MilestoneService}'s own lock/title-conflict/shrink-flagging/apply logic exactly as
-     * {@code MilestoneService#update} does (package-visible for this — see that class's Javadoc), minus
-     * only {@code FundingValidations#milestone}'s parent-fit half, deliberately deferred to the
-     * whole-tree coverage pass in {@link #updateWithMilestones}. Scenario B (shrinking below what's
-     * already allocated to this milestone) has no such ordering hazard — a milestone's own allocations
-     * are never compared against sibling milestones — so {@code handleAmountShrink} still runs
-     * immediately here, exactly like the narrow endpoint.
+     * {@code MilestoneService}'s own lock/title-conflict/apply logic exactly as {@code MilestoneService#update}
+     * does (package-visible for this — see that class's Javadoc), minus only
+     * {@code FundingValidations#milestone}'s parent-fit half, deliberately deferred to the whole-tree
+     * coverage pass in {@link #updateWithMilestones}. Scenario B (shrinking below what's already
+     * allocated to this milestone) is deferred too, for the same reason: {@code milestoneId} is added to
+     * {@code shrunkMilestoneIds} instead of flagging immediately, so every milestone shrunk anywhere in
+     * this request can be flagged together in one call at the end — see
+     * {@code MilestoneService#handleAmountShrink}'s Javadoc for why flagging immediately, one milestone
+     * at a time, would wrongly cross-project-block an event that allocates to two milestones both being
+     * shrunk in this same request.
      *
      * <p>Package-visible so {@code FundingBulkImportService} can apply the identical logic for an
      * existing CSV milestone row, instead of going through {@code MilestoneService#update} (whose
      * embedded parent-fit check has the same stale-sibling problem this whole class exists to avoid —
      * see the class Javadoc — for a CSV group touching more than one milestone under the same project).
      */
-    Optional<ProblemDetail> applyExistingMilestone(ProjectEntity project, MilestoneEntity milestone, MilestoneCreateRequest request) {
+    Optional<ProblemDetail> applyExistingMilestone(ProjectEntity project, MilestoneEntity milestone,
+            MilestoneCreateRequest request, Set<String> shrunkMilestoneIds) {
         boolean titleChanging = request.getMilestoneTitle() != null && !request.getMilestoneTitle().equals(milestone.getMilestoneTitle());
         MilestoneUpdateRequest updateRequest = MilestoneUpdateRequest.builder()
                 .milestoneTitle(request.getMilestoneTitle())
@@ -306,9 +334,8 @@ public class ProjectTreeUpdateService {
             }
         }
 
-        Optional<ProblemDetail> shrinkProblem = milestoneService.handleAmountShrink(milestone.getId(), updateRequest);
-        if (shrinkProblem.isPresent()) {
-            return shrinkProblem;
+        if (milestoneService.needsErrorFlagging(milestone.getId(), request.getMilestoneAmount())) {
+            shrunkMilestoneIds.add(milestone.getId());
         }
 
         milestoneService.applyChanges(milestone, updateRequest, titleChanging);

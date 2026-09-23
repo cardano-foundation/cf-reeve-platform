@@ -442,21 +442,37 @@ public class MilestoneService {
      * edit proceeds exactly as typed — the allocation's own recorded figure is never rewritten — and
      * every draft event fully allocated to this milestone is marked ERROR instead, for a human to review
      * and fix. An event that also allocates to a milestone outside this one is still a hard block, same
-     * cross-project rule as the project-level case. Package-visible for reuse by
-     * {@code ProjectTreeUpdateService} — no ordering hazard here (a single milestone's own allocations,
-     * never compared against sibling milestones), so it's safe to run immediately, per-milestone, exactly
-     * like this method already does — unlike {@code FundingValidations#milestone}'s parent-fit half.
+     * cross-project rule as the project-level case.
+     *
+     * <p>Only safe to flag immediately, scoped to just this one milestone, when the caller can only ever
+     * touch one milestone per call — true for this class's own {@link #update}. It is <strong>not</strong>
+     * safe for a caller that can resize several milestones in the same request (e.g.
+     * {@code ProjectTreeUpdateService}/CSV import): an event allocating to two milestones that are
+     * <em>both</em> being shrunk in that same request would wrongly hit the cross-project block here
+     * (it "reaches outside" this one milestone's singleton scope) instead of being flagged, even though
+     * every milestone it touches is in fact part of the same edit. Those callers must use
+     * {@link #needsErrorFlagging} to collect every milestone needing the flag across the whole request,
+     * then flag them all together in one {@code markContainedEventsAsErrorOrBlock} call with the full set.
      */
     Optional<ProblemDetail> handleAmountShrink(String milestoneId, MilestoneUpdateRequest request) {
-        if (request.getMilestoneAmount() == null) {
+        if (!needsErrorFlagging(milestoneId, request.getMilestoneAmount())) {
             return Optional.empty();
         }
-        Optional<ProblemDetail> coverage = FundingValidations.milestoneCoversAllocations(
-                request.getMilestoneAmount(), allocationRepository.sumAllocatedByMilestoneId(milestoneId));
-        if (coverage.isPresent()) {
-            return cascadeDeleteService.markContainedEventsAsErrorOrBlock(Set.of(milestoneId));
+        return cascadeDeleteService.markContainedEventsAsErrorOrBlock(Set.of(milestoneId));
+    }
+
+    /**
+     * Whether shrinking {@code milestoneId} to {@code newAmount} would leave it covering less than
+     * what's already allocated to it — i.e. whether it needs {@code ERROR}-flagging — without actually
+     * performing that flagging. See {@link #handleAmountShrink}'s Javadoc for why a caller that can
+     * touch several milestones in one request must use this instead of that method directly.
+     */
+    boolean needsErrorFlagging(String milestoneId, BigDecimal newAmount) {
+        if (newAmount == null) {
+            return false;
         }
-        return Optional.empty();
+        return FundingValidations.milestoneCoversAllocations(
+                newAmount, allocationRepository.sumAllocatedByMilestoneId(milestoneId)).isPresent();
     }
 
     /** Package-visible for reuse by {@code ProjectTreeUpdateService} — see {@link #checkFieldLock}'s Javadoc. */

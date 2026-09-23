@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -48,6 +49,7 @@ class ProjectTreeUpdateServiceTest {
     @Mock private ProjectService projectService;
     @Mock private ProjectStructureService projectStructureService;
     @Mock private EventMilestoneAllocationRepository allocationRepository;
+    @Mock private FundingCascadeDeleteService cascadeDeleteService;
     @Mock private KeycloakSecurityHelper keycloakSecurityHelper;
 
     private ProjectTreeUpdateService service;
@@ -55,7 +57,7 @@ class ProjectTreeUpdateServiceTest {
     @BeforeEach
     void setUp() {
         service = new ProjectTreeUpdateService(projectRepository, milestoneRepository, milestoneService,
-                projectService, projectStructureService, allocationRepository, keycloakSecurityHelper);
+                projectService, projectStructureService, allocationRepository, cascadeDeleteService, keycloakSecurityHelper);
         lenient().when(keycloakSecurityHelper.canUserAccessOrg(anyString())).thenReturn(true);
         lenient().when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         lenient().when(projectService.toView(any())).thenReturn(ProjectView.builder().projectId("root").build());
@@ -150,7 +152,7 @@ class ProjectTreeUpdateServiceTest {
         assertThat(root.getTotalAmount()).isEqualByComparingTo("100000");
         assertThat(sub1.getTotalAmount()).isEqualByComparingTo("40000");
         assertThat(sub2.getTotalAmount()).isEqualByComparingTo("60000");
-        verify(milestoneService, never()).handleAmountShrink(any(), any());
+        verify(cascadeDeleteService, never()).markContainedEventsAsErrorOrBlock(any());
     }
 
     @Test
@@ -188,7 +190,8 @@ class ProjectTreeUpdateServiceTest {
         when(milestoneRepository.findByProjectIdAndProId("root", "PRJ-1000-M1")).thenReturn(Optional.of(milestone));
         when(milestoneService.findByProjectId("root")).thenReturn(List.of(milestone));
         when(projectRepository.findById("root")).thenReturn(Optional.of(root));
-        when(milestoneService.handleAmountShrink(eq("m1"), any())).thenReturn(Optional.empty());
+        when(milestoneService.needsErrorFlagging(eq("m1"), any())).thenReturn(true);
+        when(cascadeDeleteService.markContainedEventsAsErrorOrBlock(Set.of("m1"))).thenReturn(Optional.empty());
 
         ProjectWithMilestonesCreateRequest request = request(null);
         request.setMilestones(List.of(MilestoneCreateRequest.builder()
@@ -198,7 +201,7 @@ class ProjectTreeUpdateServiceTest {
 
         assertThat(result.getError()).isEmpty();
         assertThat(milestone.getMilestoneAmount()).isEqualByComparingTo("50000");
-        verify(milestoneService).handleAmountShrink(eq("m1"), any());
+        verify(cascadeDeleteService).markContainedEventsAsErrorOrBlock(Set.of("m1"));
     }
 
     @Test
@@ -209,9 +212,12 @@ class ProjectTreeUpdateServiceTest {
         when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
         when(projectRepository.findByParentProjectId("root")).thenReturn(List.of());
         when(milestoneRepository.findByProjectIdAndProId("root", "PRJ-1000-M1")).thenReturn(Optional.of(milestone));
+        when(milestoneService.findByProjectId("root")).thenReturn(List.of(milestone));
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+        when(milestoneService.needsErrorFlagging(eq("m1"), any())).thenReturn(true);
         ProblemDetail crossProjectConflict = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "reaches outside");
         crossProjectConflict.setTitle(ErrorTitleConstants.EVENT_ALLOCATED_TO_OTHER_PROJECTS);
-        when(milestoneService.handleAmountShrink(eq("m1"), any())).thenReturn(Optional.of(crossProjectConflict));
+        when(cascadeDeleteService.markContainedEventsAsErrorOrBlock(Set.of("m1"))).thenReturn(Optional.of(crossProjectConflict));
 
         ProjectWithMilestonesCreateRequest request = request(null);
         request.setMilestones(List.of(MilestoneCreateRequest.builder()

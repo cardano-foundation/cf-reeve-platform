@@ -821,6 +821,120 @@ class FundingBulkImportE2ETest {
         assertThat(sub1.getTotalAmount()).isEqualByComparingTo("286728.71"); // rolled back
     }
 
+    @Test
+    void fullCsvLifecycle_createFundAndSpend_shrinkTriggersError_fixEventsBringsBackToDraft() {
+        // The full CSV counterpart to the JSON PUT /projects + PUT /events walkthrough: create a project
+        // via CSV, fund and spend it via CSV (one event of each type, each allocating across BOTH
+        // sub-projects' milestones — the exact shape that would wrongly hit the cross-project block
+        // instead of ERROR if Scenario B flagging weren't batched across the whole CSV group), shrink
+        // the project via CSV (both events now exceed their milestones' new, smaller amounts and flip to
+        // ERROR), then fix each event via a follow-up Events CSV and confirm it resets to DRAFT.
+        String orgId = "org-csv-full-lifecycle";
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+
+        // 1. Create "Project Orion" with two sub-projects, each with one milestone.
+        String createCsv = """
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Project Orion,Project Orion,1000000.00,ADA,,,,,,,
+                Project Orion,,,,Sub 1,sub-1,400000.00,Milestone 1,sub1-m1,400000.00,2026-10-08
+                Project Orion,,,,Sub 2,sub-2,600000.00,Milestone 1,sub2-m1,600000.00,2026-09-24
+                """;
+        FundingBulkImportResult createResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(new MockMultipartFile("file", "create.csv", "text/csv", createCsv.getBytes())))
+                .build());
+        assertThat(reasons(createResult)).isEmpty();
+
+        // 2. Fund it fully — one FUNDING event allocating across both sub-projects' milestones.
+        String fundCsv = """
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+                FUNDING,GRANT-CSV-0001,,Cardano Foundation,ADA,2026-09-01,,,,,,1000000.00,,,Project Orion,,Sub 1,,Milestone 1,,400000.00
+                FUNDING,GRANT-CSV-0001,,Cardano Foundation,ADA,2026-09-01,,,,,,1000000.00,,,Project Orion,,Sub 2,,Milestone 1,,600000.00
+                """;
+        FundingBulkImportResult fundResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(new MockMultipartFile("file", "fund.csv", "text/csv", fundCsv.getBytes())))
+                .build());
+        assertThat(reasons(fundResult)).isEmpty();
+
+        // 3. Spend some of it — one SPENDING event, also allocating across both sub-projects' milestones.
+        String spendCsv = """
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+                SPENDING,GRANT-CSV-1000,,,ADA,2026-09-10,Personnel,Vendor AB,250000.00,USD,1.0,250000.00,sha256:demo-csv-0001,Invoice #CSV-0001,Project Orion,,Sub 1,,Milestone 1,,100000.00
+                SPENDING,GRANT-CSV-1000,,,ADA,2026-09-10,Personnel,Vendor AB,250000.00,USD,1.0,250000.00,sha256:demo-csv-0001,Invoice #CSV-0001,Project Orion,,Sub 2,,Milestone 1,,150000.00
+                """;
+        FundingBulkImportResult spendResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(new MockMultipartFile("file", "spend.csv", "text/csv", spendCsv.getBytes())))
+                .build());
+        assertThat(reasons(spendResult)).isEmpty();
+
+        String fundingEventId = FundingEventEntity.id(orgId, EventType.FUNDING, "GRANT-CSV-0001", null,
+                "Cardano Foundation", "ADA", null, null, null, null, null, null, LocalDate.of(2026, 9, 1));
+        String spendingEventId = FundingEventEntity.id(orgId, EventType.SPENDING, "GRANT-CSV-1000", null, null, "ADA",
+                "Personnel", "Vendor AB", "sha256:demo-csv-0001", new BigDecimal("250000.00"), "USD",
+                new BigDecimal("250000.00"), LocalDate.of(2026, 9, 10));
+        assertThat(fundingEventRepository.findById(fundingEventId).orElseThrow().getStatus()).isEqualTo(EventStatus.DRAFT);
+        assertThat(fundingEventRepository.findById(spendingEventId).orElseThrow().getStatus()).isEqualTo(EventStatus.DRAFT);
+
+        // 4. Shrink the project — both sub-projects' milestones shrink together, in the same CSV group.
+        // Their combined new capacity (90,000 + 160,000 = 250,000) exactly matches the SPENDING event's
+        // total, so it stays fixable purely by redistributing (its amountRcy is part of its identity —
+        // see FundingEventEntity#id — so it can't just be lowered like FUNDING's can). Both milestones'
+        // new amounts are still well below what the FUNDING event already allocated (400,000/600,000),
+        // so it needs a real reduction, which — unlike SPENDING — it's free to do.
+        String shrinkCsv = """
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Project Orion,,300000.00,,,,,,,,
+                Project Orion,,,,Sub 1,,120000.00,Milestone 1,,90000.00,
+                Project Orion,,,,Sub 2,,180000.00,Milestone 1,,160000.00,
+                """;
+        FundingBulkImportResult shrinkResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(new MockMultipartFile("file", "shrink.csv", "text/csv", shrinkCsv.getBytes())))
+                .build());
+        assertThat(reasons(shrinkResult)).isEmpty();
+        assertThat(shrinkResult.getMilestonesUpdated()).isEqualTo(2);
+
+        // Both events must be flagged ERROR — proving they're batched across the whole shrink group
+        // (both milestones are in scope together), not checked one at a time (which would wrongly
+        // cross-project-block instead, since each event allocates to both milestones).
+        assertThat(fundingEventRepository.findById(fundingEventId).orElseThrow().getStatus())
+                .as("FUNDING event no longer fits the shrunk milestones").isEqualTo(EventStatus.ERROR);
+        assertThat(fundingEventRepository.findById(spendingEventId).orElseThrow().getStatus())
+                .as("SPENDING event no longer fits the shrunk milestones").isEqualTo(EventStatus.ERROR);
+        // Neither event's own recorded figures were ever rewritten by the shrink.
+        assertThat(fundingEventRepository.findById(fundingEventId).orElseThrow().getAmountRcy()).isEqualByComparingTo("1000000.00");
+        assertThat(fundingEventRepository.findById(spendingEventId).orElseThrow().getAmountRcy()).isEqualByComparingTo("250000.00");
+
+        // 5. Fix the FUNDING event — same identity fields (fundingId/hash/entity/currencyRcy/eventDate,
+        // none of which include amountRcy for FUNDING), smaller allocations that fit the shrunk budgets.
+        String fixFundingCsv = """
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+                FUNDING,GRANT-CSV-0001,,Cardano Foundation,ADA,2026-09-01,,,,,,50000.00,,,Project Orion,,Sub 1,,Milestone 1,,20000.00
+                FUNDING,GRANT-CSV-0001,,Cardano Foundation,ADA,2026-09-01,,,,,,50000.00,,,Project Orion,,Sub 2,,Milestone 1,,30000.00
+                """;
+        FundingBulkImportResult fixFundingResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(new MockMultipartFile("file", "fix-funding.csv", "text/csv", fixFundingCsv.getBytes())))
+                .build());
+        assertThat(reasons(fixFundingResult)).isEmpty();
+        assertThat(fundingEventRepository.findById(fundingEventId).orElseThrow().getStatus())
+                .as("fixed FUNDING event resets from ERROR back to DRAFT").isEqualTo(EventStatus.DRAFT);
+        assertThat(fundingEventRepository.findById(fundingEventId).orElseThrow().getAmountRcy()).isEqualByComparingTo("50000.00");
+
+        // 6. Fix the SPENDING event — amountRcy is part of its identity, so it must stay exactly
+        // 250,000.00 (same as before) for this to resolve to the same event; only the split across the
+        // two milestones changes, to exactly their new capacities (90,000 + 160,000 = 250,000).
+        String fixSpendingCsv = """
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+                SPENDING,GRANT-CSV-1000,,,ADA,2026-09-10,Personnel,Vendor AB,250000.00,USD,1.0,250000.00,sha256:demo-csv-0001,Invoice #CSV-0001,Project Orion,,Sub 1,,Milestone 1,,90000.00
+                SPENDING,GRANT-CSV-1000,,,ADA,2026-09-10,Personnel,Vendor AB,250000.00,USD,1.0,250000.00,sha256:demo-csv-0001,Invoice #CSV-0001,Project Orion,,Sub 2,,Milestone 1,,160000.00
+                """;
+        FundingBulkImportResult fixSpendingResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(new MockMultipartFile("file", "fix-spending.csv", "text/csv", fixSpendingCsv.getBytes())))
+                .build());
+        assertThat(reasons(fixSpendingResult)).isEmpty();
+        assertThat(fundingEventRepository.findById(spendingEventId).orElseThrow().getStatus())
+                .as("fixed SPENDING event resets from ERROR back to DRAFT").isEqualTo(EventStatus.DRAFT);
+        assertThat(fundingEventRepository.findById(spendingEventId).orElseThrow().getAmountRcy()).isEqualByComparingTo("250000.00");
+    }
+
     /**
      * Sweeps the "missing-*"/edge-case fixtures for the merged Projects+Milestones row shape. Every
      * fixture's header carries the full template — only the {@code value} in a given cell is missing
