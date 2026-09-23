@@ -11,8 +11,13 @@ import com.opencsv.bean.CsvBindByName;
  * One row of the Events bulk-import CSV — one milestone allocation per row. Event-level columns
  * (everything except the allocation columns) are repeated on every row belonging to the same event;
  * consecutive rows sharing the same event natural key ({@code fundingId} + {@code eventType} +
- * {@code fundingHash} + {@code currencyRcy}) are grouped into one event with multiple allocations,
- * mirroring the Projects+Milestones file's project grouping.
+ * {@code fundingHash} + {@code fundingEntity} + {@code currencyRcy} + {@code category} +
+ * {@code vendor} + {@code hash} + {@code amountFcy} + {@code currencyFcy} + {@code amountRcy}
+ * (SPENDING only) + {@code eventDate}) are grouped into one event with multiple allocations,
+ * mirroring the Projects+Milestones file's project grouping. That key mirrors the "Create event"
+ * UI, where those fields are entered once per event — two rows differing in any of them are
+ * distinct real-world transactions, not two allocations of the same one. FUNDING/REFUND rows carry
+ * no spend detail, so for them this reduces to Funding ID, Hash, Entity, Currency and Date.
  *
  * <p>Both {@code projectTitle} and {@code milestoneTitle} must reference an <em>already-existing</em>
  * project and milestone — this file carries only allocation data (which milestone gets how much of
@@ -75,6 +80,14 @@ public class EventCsvLine {
     private String projectTitle;
 
     /**
+     * The referenced project's permanent identifier (see {@code ProjectEntity#proId}) — when present,
+     * resolution prefers this over {@link #projectTitle}, the only reliable way to reference a project
+     * that's since been renamed.
+     */
+    @CsvBindByName(column = "Project ID", profiles = "optional")
+    private String projectId;
+
+    /**
      * Disambiguates which sub-project {@code Project Title} + this column refers to, when a
      * sub-project title alone isn't unique across the organisation (sub-project titles are only
      * guaranteed unique within their parent). When set, {@code Project Title} is resolved as the
@@ -86,8 +99,16 @@ public class EventCsvLine {
     @CsvBindByName(column = "Sub Project Title", profiles = "optional")
     private String subProjectTitle;
 
+    /** See {@link #projectId} — same semantics, for the sub-project named by {@link #subProjectTitle}. */
+    @CsvBindByName(column = "Sub Project ID", profiles = "optional")
+    private String subProjectId;
+
     @CsvBindByName(column = "Milestone Title")
     private String milestoneTitle;
+
+    /** See {@link #projectId} — same semantics, for the referenced milestone. */
+    @CsvBindByName(column = "Milestone ID", profiles = "optional")
+    private String milestoneId;
 
     @CsvBindByName(column = "Allocated Amount")
     private String allocatedAmount;

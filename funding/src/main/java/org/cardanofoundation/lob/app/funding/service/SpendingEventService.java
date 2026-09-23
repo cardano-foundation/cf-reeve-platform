@@ -176,9 +176,11 @@ public class SpendingEventService {
             // Named by the natural key that actually determines the id (see FundingEventEntity#id) —
             // the id itself is an opaque hash, meaningless to a user reading the error.
             String fundingHash = event.getFundingHash() == null ? "(none)" : event.getFundingHash();
+            String fundingEntity = event.getFundingEntity() == null ? "(none)" : event.getFundingEntity();
             return Either.left(Problems.conflict(
-                    "An event with Funding ID %s, Type %s, Hash %s and Currency %s already exists".formatted(
-                            event.getFundingId(), event.getEventType(), fundingHash, event.getCurrencyRcy()),
+                    "An event with Funding ID %s, Type %s, Hash %s, Entity %s, Currency %s and Event Date %s already exists".formatted(
+                            event.getFundingId(), event.getEventType(), fundingHash, fundingEntity,
+                            event.getCurrencyRcy(), event.getEventDate()),
                     ErrorTitleConstants.SPENDING_EVENT_ALREADY_EXISTS));
         }
         return validateAndPersist(event, request);
@@ -251,39 +253,43 @@ public class SpendingEventService {
         try {
             return Either.right(fundingEventRepository.saveAndFlush(event));
         } catch (DataIntegrityViolationException e) {
-            // Last-resort safety net behind fundingEventIdAvailable's app-level check above (see the
-            // uq_funding_event_org_funding_id_funding_type partial unique index) — catches a duplicate
-            // Funding ID that slips past it via a race between two concurrent submissions. Any other
-            // constraint violation is a genuine bug, not a handleable client error, so it is rethrown.
-            if (event.getEventType() == EventType.FUNDING && isUniqueFundingIdViolation(e)) {
+            // Last-resort safety net behind fundingEventIdAvailable's app-level check above — the
+            // event's id (see FundingEventEntity#id) is the table's primary key, so a race between two
+            // concurrent submissions that resolve to the exact same natural key surfaces as a
+            // pk_funding_event violation. Any other constraint violation is a genuine bug, not a
+            // handleable client error, so it is rethrown.
+            if (event.getEventType() == EventType.FUNDING && isDuplicateEventIdViolation(e)) {
                 return Either.left(Problems.fundingEventIdAlreadyUsed(event.getFundingId()));
             }
             throw e;
         }
     }
 
-    private static boolean isUniqueFundingIdViolation(DataIntegrityViolationException e) {
+    private static boolean isDuplicateEventIdViolation(DataIntegrityViolationException e) {
         String message = String.valueOf(e.getMostSpecificCause().getMessage());
-        return message.contains("uq_funding_event_org_funding_id_funding_type");
+        return message.contains("pk_funding_event");
     }
 
     /**
-     * A Funding ID must identify a single FUNDING (allocation) event per organisation — enforced at
-     * the DB level by the {@code uq_funding_event_org_funding_id_funding_type} partial unique index
-     * (scoped to {@code event_type = 'FUNDING'} only: a SPENDING/REFUND event is expected to reuse
-     * the Funding ID of the FUNDING event it spends against or refunds, which is not a duplicate).
-     * Validated here too so callers get a clean 409 instead of a data-integrity 500 in the common
-     * case; {@link #isUniqueFundingIdViolation} is the fallback for a race that slips past this.
-     * {@code event.getId()} is used to exclude the event's own row, so re-saving an existing FUNDING
-     * event with its own (unchanged) Funding ID never flags itself — this is a no-op exclusion on
-     * create, since that id does not exist yet.
+     * A FUNDING event's identity is its full natural key — organisation, Funding ID, Funding Hash,
+     * Funding Entity, Currency and Event Date (see {@link FundingEventEntity#id}); if any one of
+     * those differs from every other FUNDING event, it is a distinct event, not a duplicate. Create
+     * already rejects an exact-key collision up front (see {@link #create}); this exists for {@link
+     * #update}, where the event's row keeps its original id while its natural-key fields can
+     * change, so a change that happens to land on another FUNDING event's exact key must still be
+     * caught — otherwise two different rows would describe the same real-world grant. Recomputing
+     * the candidate id from the event's (possibly just-changed) fields and checking for a
+     * <em>different</em> existing row with that id catches exactly that case; on create the
+     * candidate always equals the event's own not-yet-persisted id, so this is a no-op there.
      */
     private Optional<ProblemDetail> fundingEventIdAvailable(FundingEventEntity event) {
         if (event.getEventType() != EventType.FUNDING) {
             return Optional.empty();
         }
-        boolean exists = fundingEventRepository.existsByOrganisationIdAndEventTypeAndFundingIdAndIdNot(
-                event.getOrganisationId(), EventType.FUNDING, event.getFundingId(), event.getId());
+        String candidateId = FundingEventEntity.id(event.getOrganisationId(), event.getEventType(),
+                event.getFundingId(), event.getFundingHash(), event.getFundingEntity(), event.getCurrencyRcy(),
+                null, null, null, null, null, null, event.getEventDate());
+        boolean exists = !candidateId.equals(event.getId()) && fundingEventRepository.existsById(candidateId);
         if (exists) {
             return Optional.of(Problems.fundingEventIdAlreadyUsed(event.getFundingId()));
         }
@@ -551,9 +557,19 @@ public class SpendingEventService {
                     ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
 
-        String projectId = ProjectEntity.id(organisationId, req.getProjectTitle());
-        if (projectRepository.existsById(projectId)) {
-            return Either.right(projectRepository.findById(projectId).orElseThrow());
+        // proId is permanent (see ProjectEntity#proId) — when the caller supplies it, it's the reliable
+        // way to find a project that may have since been renamed. Falling back to the current title
+        // only resolves a project whose title still matches; recomputing the id hash from the request's
+        // title (the old strategy) is deliberately not done here any more — it only ever "accidentally"
+        // found a project by its *original* creation-time title, never a project referenced by its new
+        // one, which is exactly the bug this fixes.
+        // A blank proId (e.g. "" from a JSON client) means "not supplied" — same as null — so it must
+        // fall back to title matching rather than searching for a project whose proId is literally "".
+        Optional<ProjectEntity> existing = (req.getProId() != null && !req.getProId().isBlank())
+                ? projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull(organisationId, req.getProId())
+                : projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(organisationId, req.getProjectTitle());
+        if (existing.isPresent()) {
+            return Either.right(existing.get());
         }
 
         // A root that directly carries milestones needs a budget; one that only holds sub-projects may omit it.
@@ -576,11 +592,21 @@ public class SpendingEventService {
             return Either.left(fundingIdProblem.get());
         }
 
+        // A root project's proId is user-suppliable — same fallback-to-title rule as
+        // ProjectService#createRootProject — so it needs its own uniqueness pre-check.
+        String proId = (req.getProId() != null && !req.getProId().isBlank()) ? req.getProId() : req.getProjectTitle();
+        if (projectRepository.existsByOrganisationIdAndProIdAndParentProjectIsNull(organisationId, proId)) {
+            return Either.left(Problems.conflict(
+                    "Project ID already exists in this organisation: " + proId,
+                    ErrorTitleConstants.PROJECT_PROID_ALREADY_EXISTS));
+        }
+
         ProjectEntity newProject = ProjectEntity.builder()
-                .id(projectId)
+                .id(ProjectEntity.id(organisationId, proId)) // derived from proId, never from the editable title
                 .organisationId(organisationId)
                 .fundingId(req.getFundingId())
                 .projectTitle(req.getProjectTitle())
+                .proId(proId)
                 .totalAmount(req.getTotalAmount())
                 .currency(req.getCurrency())
                 .build();
@@ -593,8 +619,10 @@ public class SpendingEventService {
                     ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
 
-        String subProjectUid = ProjectEntity.subId(parent.getId(), subReq.getProjectTitle());
-        Optional<ProjectEntity> existing = projectRepository.findById(subProjectUid);
+        // See resolveOrCreateRootProject's comment on why this no longer recomputes the id hash from title.
+        Optional<ProjectEntity> existing = (subReq.getProId() != null && !subReq.getProId().isBlank())
+                ? projectRepository.findByParentProjectIdAndProId(parent.getId(), subReq.getProId())
+                : projectRepository.findByParentProjectIdAndProjectTitle(parent.getId(), subReq.getProjectTitle());
         if (existing.isPresent()) {
             return Either.right(existing.get());
         }
@@ -673,10 +701,12 @@ public class SpendingEventService {
                     return SpendingEventPublishView.ProjectAllocation.builder()
                             .projectId(root.getId())
                             .projectTitle(root.getProjectTitle())
+                            .proId(root.getProId())
                             .subProject(isSubProject
                                     ? SpendingEventPublishView.SubProject.builder()
                                             .subProjectId(project.getId())
                                             .subProjectTitle(project.getProjectTitle())
+                                            .proId(project.getProId())
                                             .milestones(milestones)
                                             .build()
                                     : null)
@@ -717,6 +747,7 @@ public class SpendingEventService {
         return SpendingEventPublishView.Milestone.builder()
                 .milestoneId(am.allocation().getId().getMilestoneId())
                 .milestoneTitle(am.milestone().getMilestoneTitle())
+                .proId(am.milestone().getProId())
                 .milestoneAmount(am.milestone().getMilestoneAmount())
                 .allocatedAmount(am.allocation().getAllocatedAmount())
                 .currency(toCurrency(am.milestone().getCurrency()))
@@ -731,7 +762,15 @@ public class SpendingEventService {
                         request.getEventType(),
                         request.getFundingId(),
                         request.getFundingHash(),
-                        request.getCurrencyRcy()))
+                        request.getFundingEntity(),
+                        request.getCurrencyRcy(),
+                        request.getCategory(),
+                        request.getVendor(),
+                        request.getHash(),
+                        request.getAmountFcy(),
+                        request.getCurrencyFcy(),
+                        request.getAmountRcy(),
+                        request.getEventDate()))
                 .eventType(request.getEventType())
                 .status(EventStatus.DRAFT)
                 .organisationId(request.getOrganisationId())

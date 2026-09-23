@@ -35,6 +35,13 @@ public class ProjectView implements ErrorAware {
     @Schema(example = "Project AB")
     private String projectTitle;
 
+    @Schema(example = "Project AB", description = "Permanent identifier assigned at creation — never changes afterward, even when projectTitle is later renamed. "
+            + "Root project: the value supplied at creation, or the title as first typed when none was. Sub-project: '<parent proId>-<n>' "
+            + "when created via the API or an event allocation, or the value supplied when created via CSV (sub-projects that predate "
+            + "this field keep their original title). Reference this, not projectTitle, when the project "
+            + "needs to be found reliably later (e.g. a subsequent event allocation or CSV re-upload).")
+    private String proId;
+
     @Nullable
     @Schema(example = "200000.00", description = "Null for sub-projects.")
     private BigDecimal totalAmount;
