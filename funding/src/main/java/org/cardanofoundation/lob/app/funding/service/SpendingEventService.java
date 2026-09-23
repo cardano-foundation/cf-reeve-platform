@@ -613,9 +613,16 @@ public class SpendingEventService {
             return Either.left(fundingIdProblem.get());
         }
 
-        // A root project's proId is user-suppliable — same fallback-to-title rule as
-        // ProjectService#createRootProject — so it needs its own uniqueness pre-check.
-        String proId = (req.getProId() != null && !req.getProId().isBlank()) ? req.getProId() : req.getProjectTitle();
+        // A root project's proId is user-suppliable and, per the product design, mandatory to create a
+        // new one — same rule as ProjectService#createRootProject (see its comment for the reasoning).
+        // Note this check only applies here, once creation is the only remaining path: a blank proId is
+        // still perfectly fine above, where it just means "match by title instead."
+        if (req.getProId() == null || req.getProId().isBlank()) {
+            return Either.left(Problems.badRequest(
+                    "proId is required to create a new root project: " + req.getProjectTitle(), ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
+        }
+        String proId = req.getProId();
+        // Caller-chosen, so it needs its own uniqueness pre-check.
         if (projectRepository.existsByOrganisationIdAndProIdAndParentProjectIsNull(organisationId, proId)) {
             return Either.left(Problems.conflict(
                     "Project ID already exists in this organisation: " + proId,

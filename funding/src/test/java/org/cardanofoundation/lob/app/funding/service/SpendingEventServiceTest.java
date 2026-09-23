@@ -221,7 +221,7 @@ class SpendingEventServiceTest {
         when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         SpendingEventCreateRequest request = fundingRequest(EventProjectAllocationRequest.builder()
-                .externalProjectId("PROJ-NEW").projectTitle("New Project").fundingId("GRANT-2025-001")
+                .externalProjectId("PROJ-NEW").projectTitle("New Project").proId("New Project").fundingId("GRANT-2025-001")
                 .totalAmount(new BigDecimal("100000.00")).currency("USD")
                 .milestones(List.of(EventMilestoneAllocationRequest.builder()
                         .milestone(MilestoneCreateRequest.builder().milestoneTitle("New MS")
@@ -233,6 +233,24 @@ class SpendingEventServiceTest {
 
         assertThat(result.isRight()).isTrue();
         verify(milestoneRepository).saveAndFlush(any());
+    }
+
+    @Test
+    void create_rejectsNewRootProject_whenProIdMissing() {
+        SpendingEventCreateRequest request = fundingRequest(EventProjectAllocationRequest.builder()
+                .externalProjectId("PROJ-NEW").projectTitle("New Project Without ProId").fundingId("GRANT-2025-001")
+                .totalAmount(new BigDecimal("100000.00")).currency("USD")
+                .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                        .milestone(MilestoneCreateRequest.builder().milestoneTitle("New MS")
+                                .milestoneAmount(new BigDecimal("60000.00")).currency("USD").milestoneDate(FUTURE_DATE).build())
+                        .allocatedAmount(ALLOCATED).build()))
+                .build());
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_FIELDS_REQUIRED);
+        verify(projectRepository, never()).saveAndFlush(any());
     }
 
     @Test

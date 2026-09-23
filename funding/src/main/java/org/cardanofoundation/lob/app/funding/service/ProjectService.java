@@ -178,11 +178,19 @@ public class ProjectService {
             return Either.left(fundingIdProblem.get());
         }
         // A root project's proId is user-suppliable (unlike a sub-project's or milestone's, which are
-        // always system-assigned — see ProjectEntity#getProId()); when omitted it defaults to the
-        // title, same as before this field existed. Since it's caller-chosen, it needs its own
-        // uniqueness pre-check — the title check above can't catch a colliding proId on its own.
-        String proId = (request.getProId() != null && !request.getProId().isBlank())
-                ? request.getProId() : request.getProjectTitle();
+        // always system-assigned — see ProjectEntity#getProId()) and, per the product design, mandatory:
+        // it's the value a caller must hold onto to reliably reference this project later (e.g. a CSV
+        // update row), since title alone can drift after a rename. The DTO itself doesn't enforce this
+        // via @NotBlank since the same field is also used for sub-project creation, where it's ignored
+        // (see the Currency check above for the same reasoning) — so it's checked explicitly here,
+        // matching the FE's own required-field treatment of this input.
+        if (request.getProId() == null || request.getProId().isBlank()) {
+            return Either.left(Problems.badRequest(
+                    "Project ID is required to create a root project: " + request.getProjectTitle(), ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
+        }
+        String proId = request.getProId();
+        // Caller-chosen, so it needs its own uniqueness pre-check — the title check above can't catch a
+        // colliding proId on its own.
         if (projectRepository.existsByOrganisationIdAndProIdAndParentProjectIsNull(request.getOrganisationId(), proId)) {
             return Either.left(Problems.conflict(
                     "Project ID already exists in this organisation: " + proId,

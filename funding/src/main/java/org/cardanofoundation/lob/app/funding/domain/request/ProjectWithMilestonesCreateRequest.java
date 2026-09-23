@@ -36,10 +36,11 @@ public class ProjectWithMilestonesCreateRequest extends BaseRequest {
     private String projectTitle;
 
     @Nullable
-    @Schema(example = "PRU-KSKS", description = "Root project only (ignored when parentProjectId is set — a "
-            + "sub-project's proId is always system-assigned, never user-supplied). Permanent identifier: when "
-            + "given, used as-is and frozen forever after; when omitted, defaults to projectTitle. Unique per "
-            + "organisation among root projects.")
+    @Schema(example = "PRU-KSKS", description = "Mandatory when creating a root project (ignored, and not required, "
+            + "when parentProjectId is set — a sub-project's proId is always system-assigned, never user-supplied). "
+            + "Not enforced via bean validation here since this same field is ignored for that sub-project case; a "
+            + "missing value is rejected explicitly when actually creating a root project. Permanent identifier: "
+            + "used as-is and frozen forever after. Unique per organisation among root projects.")
     private String proId;
 
     @NotNull

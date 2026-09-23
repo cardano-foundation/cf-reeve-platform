@@ -450,9 +450,16 @@ public class FundingBulkImportService {
             return Either.left(Problems.badRequest(
                     "Currency is required to create project: " + rootLine.getProjectTitle(), ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
-        // Project ID is optional for a root project (defaults to title when blank — see
-        // ProjectEntity#getProId()). Sub Project ID / Milestone ID work differently: they're mandatory
-        // when a row creates one (see upsertSubProject / upsertMilestoneRow) and seed the new row's proId.
+        // Project ID is mandatory for a root project, matching the UI's own required-field treatment of
+        // this input — it's the value a caller must hold onto to reliably reference this project later
+        // (e.g. an update row after a rename), since matching by title alone can drift. Sub Project ID /
+        // Milestone ID work differently: they stay optional on creation, auto-assigning <parent's
+        // proId>-<n> when blank (see upsertSubProject / upsertMilestoneRow) — only the root level needs
+        // a caller-chosen value, since a sub-project's/milestone's proId is always system-assigned.
+        if (isBlank(rootLine.getProjectId())) {
+            return Either.left(Problems.badRequest(
+                    "Project ID is required to create project: " + rootLine.getProjectTitle(), ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
+        }
         ProjectView view = projectService.createWithMilestones(ProjectWithMilestonesCreateRequest.builder()
                 .organisationId(organisationId)
                 .projectTitle(rootLine.getProjectTitle())

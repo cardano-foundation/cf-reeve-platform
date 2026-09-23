@@ -286,6 +286,21 @@ class ProjectServiceTest {
     }
 
     @Test
+    void create_rejectsRootProject_whenProIdMissing() {
+        // proId is mandatory to create a root project (matching the FE's own required-field treatment
+        // of this input) — no more defaulting to projectTitle when omitted.
+        ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
+                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Project AB")
+                .fundingId("GRANT-2025-001").totalAmount(new BigDecimal("200000.00")).currency("USD")
+                .milestones(List.of()).build();
+
+        ProjectView result = projectService.createWithMilestones(request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_FIELDS_REQUIRED);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void create_rejected_whenCurrencyIsNotAValidIsoCode() {
         when(milestoneService.isCurrencyRegisteredAndActive(any(), eq("ABC"))).thenReturn(false);
 
@@ -304,7 +319,7 @@ class ProjectServiceTest {
     void create_returnsError_whenMilestoneFails() {
         MilestoneCreateRequest milestoneReq = MilestoneCreateRequest.builder().milestoneTitle("MS").build();
         ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
-                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Project AB")
+                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Project AB").proId("Project AB")
                 .fundingId("GRANT-2025-001").totalAmount(new BigDecimal("200000.00")).currency("USD")
                 .milestones(List.of(milestoneReq)).build();
         when(projectRepository.saveAndFlush(any())).thenReturn(projectEntity());
@@ -324,7 +339,7 @@ class ProjectServiceTest {
         when(milestoneService.create(any(), any())).thenReturn(Either.right(mock(MilestoneEntity.class)));
 
         ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
-                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Root")
+                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Root").proId("Root")
                 .totalAmount(new BigDecimal("200000.00")).currency("USD")
                 .milestones(List.of()) // root has sub-projects, not milestones
                 .subProjects(List.of(
@@ -344,7 +359,7 @@ class ProjectServiceTest {
     @Test
     void createTree_returns400_whenRootHasBothMilestonesAndSubProjects() {
         ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
-                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Root")
+                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Root").proId("Root")
                 .totalAmount(new BigDecimal("200000.00")).currency("USD")
                 .milestones(List.of(milestoneReq()))
                 .subProjects(List.of(node("WP-1", new BigDecimal("100000.00"), List.of(milestoneReq()), List.of())))
@@ -363,7 +378,7 @@ class ProjectServiceTest {
         ProjectTreeNodeRequest badNode = node("WP-1", new BigDecimal("100000.00"),
                 List.of(milestoneReq()), List.of(node("WP-1-A", new BigDecimal("10000.00"), List.of(milestoneReq()), List.of())));
         ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
-                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Root")
+                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Root").proId("Root")
                 .totalAmount(new BigDecimal("200000.00")).currency("USD")
                 .milestones(List.of()).subProjects(List.of(badNode)).build();
 
@@ -378,7 +393,7 @@ class ProjectServiceTest {
         when(projectRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
-                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Root")
+                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Root").proId("Root")
                 .totalAmount(new BigDecimal("200000.00")).currency("USD")
                 .milestones(List.of())
                 .subProjects(List.of(
@@ -401,7 +416,7 @@ class ProjectServiceTest {
         when(projectRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
-                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Root")
+                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Root").proId("Root")
                 .totalAmount(new BigDecimal("200000.00")).currency("USD")
                 .milestones(List.of())
                 .subProjects(List.of(node("WP-1", new BigDecimal("250000.00"), List.of(milestoneReq()), List.of())))
@@ -1150,7 +1165,7 @@ class ProjectServiceTest {
 
     private ProjectWithMilestonesCreateRequest createRequest() {
         return ProjectWithMilestonesCreateRequest.builder()
-                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Project AB")
+                .organisationId("org1").externalProjectId("PROJ-AB").projectTitle("Project AB").proId("Project AB")
                 .fundingId("GRANT-2025-001").totalAmount(new BigDecimal("200000.00")).currency("USD")
                 .milestones(List.of()).build();
     }
