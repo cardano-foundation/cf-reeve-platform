@@ -153,8 +153,21 @@ public class ProjectService {
         if (fundingIdProblem.isPresent()) {
             return Either.left(fundingIdProblem.get());
         }
-        String projectId = ProjectEntity.id(request.getOrganisationId(), request.getProjectTitle());
-        return Either.right(projectRepository.saveAndFlush(toEntity(request, projectId)));
+        // A root project's proId is user-suppliable (unlike a sub-project's or milestone's, which are
+        // always system-assigned — see ProjectEntity#getProId()); when omitted it defaults to the
+        // title, same as before this field existed. Since it's caller-chosen, it needs its own
+        // uniqueness pre-check — the title check above can't catch a colliding proId on its own.
+        String proId = (request.getProId() != null && !request.getProId().isBlank())
+                ? request.getProId() : request.getProjectTitle();
+        if (projectRepository.existsByOrganisationIdAndProIdAndParentProjectIsNull(request.getOrganisationId(), proId)) {
+            return Either.left(Problems.conflict(
+                    "Project ID already exists in this organisation: " + proId,
+                    ErrorTitleConstants.PROJECT_PROID_ALREADY_EXISTS));
+        }
+        // The primary key is derived from the proId (unique in this scope, checked above) — never from
+        // the title, which is a freely editable field.
+        String projectId = ProjectEntity.id(request.getOrganisationId(), proId);
+        return Either.right(projectRepository.saveAndFlush(toEntity(request, projectId, proId)));
     }
 
     /** The parent for a project created as a sub-project: must exist and belong to the same organisation. */
@@ -290,20 +303,24 @@ public class ProjectService {
                 return ProjectView.error(parentProblem.get());
             }
         }
-        // projectTitle is immutable — the project's id is derived from it, so changing it would leave
-        // the id stale relative to its new title.
-        if (request.getProjectTitle() != null && !request.getProjectTitle().equals(project.getProjectTitle())) {
-            return ProjectView.error(Problems.badRequest(
-                    "projectTitle cannot be changed on update (id is derived from it)",
-                    ErrorTitleConstants.PROJECT_TITLE_IMMUTABLE));
-        }
-        // A re-parent can still collide with a same-named sibling under the new parent, even though
-        // the title itself doesn't change.
-        if (request.getParentProjectId() != null) {
-            Optional<ProblemDetail> titleConflict = projectTitleConflict(project, project.getProjectTitle());
+        // projectTitle is now a freely editable display attribute (see ProjectEntity#proId, which stays
+        // fixed and is what everything that needs a stable reference uses instead) — still subject to
+        // the same per-scope uniqueness title always had, checked against every sibling except this
+        // project itself so an unchanged title never conflicts with its own prior value.
+        boolean titleChanging = request.getProjectTitle() != null && !request.getProjectTitle().equals(project.getProjectTitle());
+        String effectiveTitle = titleChanging ? request.getProjectTitle() : project.getProjectTitle();
+        if (titleChanging || request.getParentProjectId() != null) {
+            // A re-parent can also collide with a same-named sibling under the new parent, even when
+            // the title itself doesn't change — projectTitleConflict below checks against the project's
+            // *current* parent association, so this must run after assignParent (above) has already
+            // updated it when both happen in the same request.
+            Optional<ProblemDetail> titleConflict = projectTitleConflict(project, effectiveTitle);
             if (titleConflict.isPresent()) {
                 return ProjectView.error(titleConflict.get());
             }
+        }
+        if (titleChanging) {
+            project.setProjectTitle(request.getProjectTitle());
         }
         if (request.getTotalAmount() != null) project.setTotalAmount(request.getTotalAmount());
         if (currencyChanging) {
@@ -458,6 +475,7 @@ public class ProjectService {
                 .fundingId(project.getFundingId())
                 .externalProjectId(project.getExternalProjectId())
                 .projectTitle(project.getProjectTitle())
+                .proId(project.getProId())
                 .totalAmount(project.getTotalAmount())
                 .currency(project.getCurrency())
                 .parentProjectId(parentProjectId)
@@ -482,12 +500,13 @@ public class ProjectService {
                 .toList();
     }
 
-    private ProjectEntity toEntity(ProjectWithMilestonesCreateRequest request, String projectId) {
+    private ProjectEntity toEntity(ProjectWithMilestonesCreateRequest request, String projectId, String proId) {
         return ProjectEntity.builder()
                 .id(projectId)
                 .organisationId(request.getOrganisationId())
                 .fundingId(request.getFundingId())
                 .projectTitle(request.getProjectTitle())
+                .proId(proId)
                 .totalAmount(request.getTotalAmount())
                 .currency(request.getCurrency())
                 .build();

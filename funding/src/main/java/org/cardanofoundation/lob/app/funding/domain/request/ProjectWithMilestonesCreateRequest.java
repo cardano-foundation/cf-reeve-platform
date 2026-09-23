@@ -35,6 +35,13 @@ public class ProjectWithMilestonesCreateRequest extends BaseRequest {
     @Schema(example = "Project AB")
     private String projectTitle;
 
+    @Nullable
+    @Schema(example = "PRU-KSKS", description = "Root project only (ignored when parentProjectId is set — a "
+            + "sub-project's proId is always system-assigned, never user-supplied). Permanent identifier: when "
+            + "given, used as-is and frozen forever after; when omitted, defaults to projectTitle. Unique per "
+            + "organisation among root projects.")
+    private String proId;
+
     @NotNull
     @Schema(example = "200000.00")
     private BigDecimal totalAmount;

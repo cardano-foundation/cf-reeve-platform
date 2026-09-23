@@ -34,6 +34,14 @@ public class EventSubProjectAllocationRequest {
     private String projectTitle;
 
     @Nullable
+    @Schema(example = "PRU-KSKS-1", description = "Permanent identifier assigned when the sub-project was created (see ProjectView#proId). "
+            + "When supplied, matches the existing sub-project by it directly — the reliable way to reference one that may have since been "
+            + "renamed. When omitted, falls back to matching by the current projectTitle. Only meaningful for matching an existing "
+            + "sub-project — a sub-project's proId is always system-assigned on creation (parent's proId + a sequence number) and cannot "
+            + "be chosen, so this is ignored if no existing sub-project matches and a new one is created instead.")
+    private String proId;
+
+    @Nullable
     @Schema(example = "GRANT-2025-001-SUB1", description = "Optional funding reference of the sub-project. Unique per organisation — no two projects may share it.")
     private String fundingId;
 

@@ -557,9 +557,19 @@ public class SpendingEventService {
                     ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
 
-        String projectId = ProjectEntity.id(organisationId, req.getProjectTitle());
-        if (projectRepository.existsById(projectId)) {
-            return Either.right(projectRepository.findById(projectId).orElseThrow());
+        // proId is permanent (see ProjectEntity#proId) — when the caller supplies it, it's the reliable
+        // way to find a project that may have since been renamed. Falling back to the current title
+        // only resolves a project whose title still matches; recomputing the id hash from the request's
+        // title (the old strategy) is deliberately not done here any more — it only ever "accidentally"
+        // found a project by its *original* creation-time title, never a project referenced by its new
+        // one, which is exactly the bug this fixes.
+        // A blank proId (e.g. "" from a JSON client) means "not supplied" — same as null — so it must
+        // fall back to title matching rather than searching for a project whose proId is literally "".
+        Optional<ProjectEntity> existing = (req.getProId() != null && !req.getProId().isBlank())
+                ? projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull(organisationId, req.getProId())
+                : projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(organisationId, req.getProjectTitle());
+        if (existing.isPresent()) {
+            return Either.right(existing.get());
         }
 
         // A root that directly carries milestones needs a budget; one that only holds sub-projects may omit it.
@@ -582,11 +592,21 @@ public class SpendingEventService {
             return Either.left(fundingIdProblem.get());
         }
 
+        // A root project's proId is user-suppliable — same fallback-to-title rule as
+        // ProjectService#createRootProject — so it needs its own uniqueness pre-check.
+        String proId = (req.getProId() != null && !req.getProId().isBlank()) ? req.getProId() : req.getProjectTitle();
+        if (projectRepository.existsByOrganisationIdAndProIdAndParentProjectIsNull(organisationId, proId)) {
+            return Either.left(Problems.conflict(
+                    "Project ID already exists in this organisation: " + proId,
+                    ErrorTitleConstants.PROJECT_PROID_ALREADY_EXISTS));
+        }
+
         ProjectEntity newProject = ProjectEntity.builder()
-                .id(projectId)
+                .id(ProjectEntity.id(organisationId, proId)) // derived from proId, never from the editable title
                 .organisationId(organisationId)
                 .fundingId(req.getFundingId())
                 .projectTitle(req.getProjectTitle())
+                .proId(proId)
                 .totalAmount(req.getTotalAmount())
                 .currency(req.getCurrency())
                 .build();
@@ -599,8 +619,10 @@ public class SpendingEventService {
                     ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
 
-        String subProjectUid = ProjectEntity.subId(parent.getId(), subReq.getProjectTitle());
-        Optional<ProjectEntity> existing = projectRepository.findById(subProjectUid);
+        // See resolveOrCreateRootProject's comment on why this no longer recomputes the id hash from title.
+        Optional<ProjectEntity> existing = (subReq.getProId() != null && !subReq.getProId().isBlank())
+                ? projectRepository.findByParentProjectIdAndProId(parent.getId(), subReq.getProId())
+                : projectRepository.findByParentProjectIdAndProjectTitle(parent.getId(), subReq.getProjectTitle());
         if (existing.isPresent()) {
             return Either.right(existing.get());
         }
@@ -679,10 +701,12 @@ public class SpendingEventService {
                     return SpendingEventPublishView.ProjectAllocation.builder()
                             .projectId(root.getId())
                             .projectTitle(root.getProjectTitle())
+                            .proId(root.getProId())
                             .subProject(isSubProject
                                     ? SpendingEventPublishView.SubProject.builder()
                                             .subProjectId(project.getId())
                                             .subProjectTitle(project.getProjectTitle())
+                                            .proId(project.getProId())
                                             .milestones(milestones)
                                             .build()
                                     : null)
@@ -723,6 +747,7 @@ public class SpendingEventService {
         return SpendingEventPublishView.Milestone.builder()
                 .milestoneId(am.allocation().getId().getMilestoneId())
                 .milestoneTitle(am.milestone().getMilestoneTitle())
+                .proId(am.milestone().getProId())
                 .milestoneAmount(am.milestone().getMilestoneAmount())
                 .allocatedAmount(am.allocation().getAllocatedAmount())
                 .currency(toCurrency(am.milestone().getCurrency()))
