@@ -54,6 +54,21 @@ public final class FundingValidations {
     }
 
     /**
+     * A milestone's amount must be positive when supplied — split out from {@link #milestone} so
+     * callers that defer the parent-fit half of that check (e.g. {@code ProjectTreeUpdateService},
+     * which validates fit once for the whole tree at the end instead of per-node) can still run this
+     * independent half immediately, exactly like every other caller.
+     */
+    public static Optional<ProblemDetail> milestoneAmountPositive(BigDecimal amount) {
+        if (amount != null && amount.signum() <= 0) {
+            return Optional.of(Problems.badRequest(
+                    "Milestone amount must be greater than zero",
+                    ErrorTitleConstants.MILESTONE_AMOUNT_INVALID));
+        }
+        return Optional.empty();
+    }
+
+    /**
      * Validates a milestone's amount against its project. {@code amount} is the effective value
      * (a null value is left unchecked, so this also serves partial updates).
      * {@code otherMilestonesTotal} is the summed amount of the project's <em>other</em> milestones
@@ -62,10 +77,9 @@ public final class FundingValidations {
      */
     public static Optional<ProblemDetail> milestone(BigDecimal amount,
             ProjectEntity project, BigDecimal otherMilestonesTotal) {
-        if (amount != null && amount.signum() <= 0) {
-            return Optional.of(Problems.badRequest(
-                    "Milestone amount must be greater than zero",
-                    ErrorTitleConstants.MILESTONE_AMOUNT_INVALID));
+        Optional<ProblemDetail> positive = milestoneAmountPositive(amount);
+        if (positive.isPresent()) {
+            return positive;
         }
         if (project.getTotalAmount() != null && amount != null) {
             // LOB-2365: message text standardized to match the sub-project path below (and the FE's
@@ -371,9 +385,11 @@ public final class FundingValidations {
     }
 
     /**
-     * When a project's total budget is changed, it must still cover what has already been planned
-     * under it: the summed amounts of its milestones and the summed totals of its sub-projects.
-     * Skipped when no new total is supplied.
+     * A project's new total budget must still cover what has already been declared under it: the
+     * summed amounts of its milestones and the summed totals of its sub-projects. Unlike an event's own
+     * allocated figure (see {@link #isOverspend}/{@code EventStatus.ERROR}), this compares two budget
+     * declarations against each other, not a budget against real recorded money — so it's a hard reject
+     * at update time, exactly like at creation, not a flag. Skipped when no new total is supplied.
      */
     public static Optional<ProblemDetail> projectTotalCoversChildren(BigDecimal newTotal,
             BigDecimal milestonesTotal, BigDecimal subProjectsTotal) {

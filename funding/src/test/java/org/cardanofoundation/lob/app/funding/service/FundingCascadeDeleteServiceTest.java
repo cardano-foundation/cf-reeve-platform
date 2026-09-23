@@ -171,12 +171,10 @@ class FundingCascadeDeleteServiceTest {
     void markContainedEventsAsErrorOrBlock_flagsFullyContainedDraftEvent() {
         EventMilestoneAllocationEntity alloc = allocation("e1", "m1", "50000");
         FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, alloc); // status DRAFT
-        when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of());
-        when(milestoneRepository.findByProjectIdIn(any())).thenReturn(List.of(milestone("m1")));
-        when(allocationRepository.findById_MilestoneIdIn(any())).thenReturn(List.of(alloc));
+        when(allocationRepository.findById_MilestoneIdIn(Set.of("m1"))).thenReturn(List.of(alloc));
         when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
 
-        Optional<ProblemDetail> result = service.markContainedEventsAsErrorOrBlock("p1");
+        Optional<ProblemDetail> result = service.markContainedEventsAsErrorOrBlock(Set.of("m1"));
 
         assertThat(result).isEmpty();
         assertThat(event.getStatus()).isEqualTo(EventStatus.ERROR);
@@ -191,12 +189,10 @@ class FundingCascadeDeleteServiceTest {
         EventMilestoneAllocationEntity insideAlloc = allocation("e1", "m1", "60000");
         EventMilestoneAllocationEntity outsideAlloc = allocation("e1", "m-other", "40000");
         FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, insideAlloc, outsideAlloc);
-        when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of());
-        when(milestoneRepository.findByProjectIdIn(any())).thenReturn(List.of(milestone("m1")));
-        when(allocationRepository.findById_MilestoneIdIn(any())).thenReturn(List.of(insideAlloc));
+        when(allocationRepository.findById_MilestoneIdIn(Set.of("m1"))).thenReturn(List.of(insideAlloc));
         when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
 
-        Optional<ProblemDetail> result = service.markContainedEventsAsErrorOrBlock("p1");
+        Optional<ProblemDetail> result = service.markContainedEventsAsErrorOrBlock(Set.of("m1"));
 
         assertThat(result.orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_ALLOCATED_TO_OTHER_PROJECTS);
         assertThat(event.getStatus()).isEqualTo(EventStatus.DRAFT); // untouched
@@ -208,12 +204,10 @@ class FundingCascadeDeleteServiceTest {
         EventMilestoneAllocationEntity alloc = allocation("e1", "m1", "50000");
         FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, alloc);
         event.setStatus(EventStatus.ERROR);
-        when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of());
-        when(milestoneRepository.findByProjectIdIn(any())).thenReturn(List.of(milestone("m1")));
-        when(allocationRepository.findById_MilestoneIdIn(any())).thenReturn(List.of(alloc));
+        when(allocationRepository.findById_MilestoneIdIn(Set.of("m1"))).thenReturn(List.of(alloc));
         when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
 
-        Optional<ProblemDetail> result = service.markContainedEventsAsErrorOrBlock("p1");
+        Optional<ProblemDetail> result = service.markContainedEventsAsErrorOrBlock(Set.of("m1"));
 
         assertThat(result).isEmpty();
         verify(fundingEventRepository).saveAll(List.of()); // nothing new to flag
@@ -221,31 +215,12 @@ class FundingCascadeDeleteServiceTest {
 
     @Test
     void markContainedEventsAsErrorOrBlock_noOp_whenNoEventsInSubtree() {
-        when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of());
-        when(milestoneRepository.findByProjectIdIn(any())).thenReturn(List.of());
-
-        Optional<ProblemDetail> result = service.markContainedEventsAsErrorOrBlock("p1");
-
-        assertThat(result).isEmpty();
-        verify(fundingEventRepository).saveAll(List.of()); // harmless no-op save of an empty list
-    }
-
-    @Test
-    void markContainedEventsAsErrorOrBlock_withMilestoneIdSet_flagsFullyContainedDraftEvent() {
-        // Exercises the Set<String> overload directly, bypassing the project-subtree walk —
-        // this is exactly how MilestoneService#update calls it, for a single shrunk milestone.
-        EventMilestoneAllocationEntity alloc = allocation("e1", "m1", "50000");
-        FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, alloc);
-        when(allocationRepository.findById_MilestoneIdIn(Set.of("m1"))).thenReturn(List.of(alloc));
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
+        when(allocationRepository.findById_MilestoneIdIn(Set.of("m1"))).thenReturn(List.of());
 
         Optional<ProblemDetail> result = service.markContainedEventsAsErrorOrBlock(Set.of("m1"));
 
         assertThat(result).isEmpty();
-        assertThat(event.getStatus()).isEqualTo(EventStatus.ERROR);
-        verify(fundingEventRepository).saveAll(List.of(event));
-        verify(projectRepository, never()).findByParentProjectId(any());
-        verify(milestoneRepository, never()).findByProjectIdIn(any());
+        verify(fundingEventRepository).saveAll(List.of()); // harmless no-op save of an empty list
     }
 
     @Test

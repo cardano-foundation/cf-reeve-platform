@@ -13,6 +13,7 @@ public final class ErrorTitleConstants {
     public static final String PROJECT_FIELDS_REQUIRED = "PROJECT_FIELDS_REQUIRED";
     public static final String PROJECT_AMOUNT_INVALID = "PROJECT_AMOUNT_INVALID";
     public static final String CURRENCY_INVALID = "CURRENCY_INVALID";
+    /** A project's new total no longer covers its own milestones'/sub-projects' already-declared totals — a hard reject, not a flag; see LOB-2365 follow-up. */
     public static final String PROJECT_AMOUNT_BELOW_MILESTONES = "PROJECT_AMOUNT_BELOW_MILESTONES";
     public static final String PROJECT_AMOUNT_BELOW_SUBPROJECTS = "PROJECT_AMOUNT_BELOW_SUBPROJECTS";
     public static final String PARENT_PROJECT_NOT_FOUND = "PARENT_PROJECT_NOT_FOUND";

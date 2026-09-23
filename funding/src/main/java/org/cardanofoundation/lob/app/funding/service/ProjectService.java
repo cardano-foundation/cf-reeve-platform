@@ -310,24 +310,18 @@ public class ProjectService {
         BigDecimal effectiveTotal = request.getTotalAmount() != null ? request.getTotalAmount() : project.getTotalAmount();
 
         if (request.getTotalAmount() != null) {
-            // Shrinking the budget below what children currently claim used to be rejected outright.
-            // For an update specifically (creation still rejects outright — see
-            // ProjectStructureService#createSubProject / ProjectService#createRootProject, neither of
-            // which is reachable from here), that's relaxed instead: the edit goes through exactly as
-            // typed — children's own recorded amounts, and every event's own allocated figures, are
-            // never rewritten — and every draft event fully contained in this project's subtree is
-            // marked ERROR instead, since a human now has to review and fix it before it can ever be
-            // published (LOB-2365). An event that also reaches into a different, untouched project is
-            // still a hard block, the same cross-project rule the existing delete-cascade already uses.
+            // A project's total must still cover its own milestones'/sub-projects' already-declared
+            // totals — exactly like at creation, this is a hard reject, not a flag (LOB-2365 follow-up:
+            // this used to be relaxed into an ERROR-flagging pass, but that conflated two different
+            // things — two budget *declarations* disagreeing with each other, vs. a budget disagreeing
+            // with money actually already recorded against it. Only the latter (see
+            // MilestoneService#handleAmountShrink) still gets the flag-instead-of-block treatment).
             Optional<ProblemDetail> coverage = FundingValidations.projectTotalCoversChildren(
                     effectiveTotal,
                     FundingValidations.sumMilestoneAmounts(milestoneService.findByProjectId(projectId), null),
                     FundingValidations.sumProjectTotals(projectRepository.findByParentProjectId(projectId), null));
             if (coverage.isPresent()) {
-                Optional<ProblemDetail> blocked = cascadeDeleteService.markContainedEventsAsErrorOrBlock(projectId);
-                if (blocked.isPresent()) {
-                    return ProjectView.error(blocked.get());
-                }
+                return ProjectView.error(coverage.get());
             }
             // A sub-project's new budget must still fit its (unchanged) parent.
             if (request.getParentProjectId() == null && project.getParentProject() != null) {
@@ -382,7 +376,9 @@ public class ProjectService {
      * column, which only exists on the root row) — so once a currency changes, this must be the only
      * value left standing anywhere in the tree.
      */
-    private void cascadeCurrency(ProjectEntity project, String currency) {
+    // Package-private (not private) so ProjectTreeUpdateService can reuse the same recursion for the
+    // whole-tree PUT endpoint instead of duplicating it.
+    void cascadeCurrency(ProjectEntity project, String currency) {
         project.setCurrency(currency);
         projectRepository.saveAndFlush(project);
         milestoneService.updateCurrencyForProject(project.getId(), currency);

@@ -36,6 +36,15 @@ public class ProjectTreeNodeRequest {
     private String fundingId;
 
     @Nullable
+    @Schema(example = "PRJ-1000-1", description = "Permanent identifier assigned when this sub-project was created "
+            + "(see ProjectView#proId). When supplied on an update, matches the existing sub-project by it directly — "
+            + "the reliable way to reference one that may have since been renamed. When omitted, falls back to "
+            + "matching by the current projectTitle. Ignored on create (a sub-project's proId is always "
+            + "system-assigned) unless no existing sub-project matches, in which case a new one is created and this "
+            + "value, if present, is used as its proId as-is instead of the usual auto-assigned one.")
+    private String proId;
+
+    @Nullable
     @Schema(example = "100000.00", description = "Must be > 0 when set, and not exceed the parent's total.")
     private BigDecimal totalAmount;
 

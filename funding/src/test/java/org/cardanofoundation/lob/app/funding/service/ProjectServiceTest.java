@@ -9,6 +9,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -1066,66 +1067,39 @@ class ProjectServiceTest {
     }
 
     @Test
-    void update_allowsShrinkBelowMilestonesTotal_andMarksContainedEventsAsError() {
-        // LOB-2365: milestones already claim 150000, but shrinking the project to 100000 no longer
-        // rejects outright — the update proceeds (milestone amounts untouched) and any fully-contained
-        // draft event is instead marked ERROR via FundingCascadeDeleteService.
+    void update_returns400_whenShrinkingBelowMilestonesTotal() {
+        // LOB-2365 follow-up: a project's total must still cover its own milestones' already-declared
+        // amounts — exactly like at creation, this is a hard reject now, not an ERROR-flagging pass.
         ProjectEntity project = projectEntity();
         MilestoneEntity milestone = MilestoneEntity.builder().id("m1").milestoneAmount(new BigDecimal("150000.00")).build();
         when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(milestoneService.findByProjectId("p1")).thenReturn(List.of(milestone));
-        when(milestoneService.toView(milestone)).thenReturn(MilestoneView.builder().milestoneId("m1").build());
-        when(cascadeDeleteService.markContainedEventsAsErrorOrBlock("p1")).thenReturn(Optional.empty());
-        when(projectRepository.saveAndFlush(project)).thenReturn(project);
 
         ProjectView result = projectService.updateProject("p1",
                 ProjectUpdateRequest.builder().totalAmount(new BigDecimal("100000.00")).build());
 
-        assertThat(result.getError()).isEmpty();
-        assertThat(project.getTotalAmount()).isEqualByComparingTo("100000.00");
-        verify(cascadeDeleteService).markContainedEventsAsErrorOrBlock("p1");
-    }
-
-    @Test
-    void update_blocksShrinkBelowMilestonesTotal_whenAContainedEventReachesOutsideTheSubtree() {
-        // The cross-project safety net still applies even though the coverage check itself no longer
-        // rejects: if flagging would touch an event that also allocates elsewhere, the whole update is
-        // rejected instead (same shape as the existing delete-cascade's own cross-project rule).
-        ProblemDetail crossProjectConflict = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
-                "Cannot update: an associated event also allocates to other projects");
-        crossProjectConflict.setTitle(ErrorTitleConstants.EVENT_ALLOCATED_TO_OTHER_PROJECTS);
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
-        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
-        when(milestoneService.findByProjectId("p1")).thenReturn(List.of(
-                MilestoneEntity.builder().id("m1").milestoneAmount(new BigDecimal("150000.00")).build()));
-        when(cascadeDeleteService.markContainedEventsAsErrorOrBlock("p1")).thenReturn(Optional.of(crossProjectConflict));
-
-        ProjectView result = projectService.updateProject("p1",
-                ProjectUpdateRequest.builder().totalAmount(new BigDecimal("100000.00")).build());
-
-        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_ALLOCATED_TO_OTHER_PROJECTS);
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_AMOUNT_BELOW_MILESTONES);
         verify(projectRepository, never()).saveAndFlush(any());
+        verifyNoInteractions(cascadeDeleteService);
     }
 
     @Test
-    void update_allowsShrinkBelowSubProjectsTotal_andMarksContainedEventsAsError() {
-        // Same relaxation, sub-projects-coverage side.
+    void update_returns400_whenShrinkingBelowSubProjectsTotal() {
+        // Same rule, sub-projects-coverage side.
         ProjectEntity project = projectEntity();
         ProjectEntity subProject = ProjectEntity.builder().id("sub1").organisationId("org1")
                 .totalAmount(new BigDecimal("150000.00")).build();
         when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of(subProject));
-        when(cascadeDeleteService.markContainedEventsAsErrorOrBlock("p1")).thenReturn(Optional.empty());
-        when(projectRepository.saveAndFlush(project)).thenReturn(project);
 
         ProjectView result = projectService.updateProject("p1",
                 ProjectUpdateRequest.builder().totalAmount(new BigDecimal("100000.00")).build());
 
-        assertThat(result.getError()).isEmpty();
-        assertThat(project.getTotalAmount()).isEqualByComparingTo("100000.00");
-        verify(cascadeDeleteService).markContainedEventsAsErrorOrBlock("p1");
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_AMOUNT_BELOW_SUBPROJECTS);
+        verify(projectRepository, never()).saveAndFlush(any());
+        verifyNoInteractions(cascadeDeleteService);
     }
 
     @Test

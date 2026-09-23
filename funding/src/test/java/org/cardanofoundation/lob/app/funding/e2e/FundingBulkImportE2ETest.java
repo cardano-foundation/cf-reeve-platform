@@ -740,6 +740,87 @@ class FundingBulkImportE2ETest {
         assertThat(projectRepository.findByOrganisationIdAndProjectTitle(orgId, "Sub One")).isEmpty();
     }
 
+    @Test
+    void updateGroupShrinksRootAndBothSubProjectsTogether_succeedsWhenTheWholeTreeStaysConsistent() {
+        // Reproduces the real production scenario this whole feature was built for: a root project's
+        // total, and both its sub-projects' (and their milestones') totals, shrink together in the same
+        // CSV upload. Before this fix, ProjectService#updateProject's per-row coverage check would have
+        // rejected the root's row against whichever sub-project's row hadn't been processed yet in this
+        // same group (still at its old, larger total) — this proves the whole group is now validated as
+        // one consistent unit, once, after every row in it has been applied.
+        String orgId = "org-csv-tree-shrink";
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+
+        String seedCsv = """
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Project Orion,Project Orion,705702.86,ADA,,,,,,,
+                Project Orion,,,,Sub 1,sub-1,286728.71,Milestone 1,sub1-milestone-1,286728.71,2026-10-08
+                Project Orion,,,,Sub 2,sub-2,418974.15,Milestone 1,sub2-milestone-1,418974.15,2026-09-24
+                """;
+        MultipartFile seedFile = new MockMultipartFile("file", "seed.csv", "text/csv", seedCsv.getBytes());
+        FundingBulkImportResult seedResult = bulkImportService.importFiles(
+                BulkImportRequest.builder().organisationId(orgId).files(List.of(seedFile)).build());
+        assertThat(seedResult.getFiles().get(0).getRowErrors()).isEmpty();
+
+        String updateCsv = """
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Project Orion,Project Orion,100000,ADA,,,,,,,
+                Project Orion,,,,Sub 1,sub-1,40000,Milestone 1,sub1-milestone-1,35000,2026-10-08
+                Project Orion,,,,Sub 2,sub-2,60000,Milestone 1,sub2-milestone-1,55000,2026-09-24
+                """;
+        MultipartFile updateFile = new MockMultipartFile("file", "update.csv", "text/csv", updateCsv.getBytes());
+        FundingBulkImportResult result = bulkImportService.importFiles(
+                BulkImportRequest.builder().organisationId(orgId).files(List.of(updateFile)).build());
+
+        assertThat(result.getFiles().get(0).getRowErrors()).isEmpty();
+        assertThat(result.getProjectsUpdated()).isEqualTo(3); // root + 2 sub-projects
+        assertThat(result.getMilestonesUpdated()).isEqualTo(2);
+
+        ProjectEntity root = projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(orgId, "Project Orion").orElseThrow();
+        assertThat(root.getTotalAmount()).isEqualByComparingTo("100000");
+        ProjectEntity sub1 = projectRepository.findByOrganisationIdAndProjectTitle(orgId, "Sub 1").get(0);
+        ProjectEntity sub2 = projectRepository.findByOrganisationIdAndProjectTitle(orgId, "Sub 2").get(0);
+        assertThat(sub1.getTotalAmount()).isEqualByComparingTo("40000");
+        assertThat(sub2.getTotalAmount()).isEqualByComparingTo("60000");
+    }
+
+    @Test
+    void updateGroupShrinksRootOnly_rollsBackWholeGroup_whenASubProjectStillDoesNotFitAfterward() {
+        // Same starting tree as above, but only the root and Sub 1 are resized down in the update file —
+        // Sub 2 is left completely untouched at its old, larger total, so the root's new total still
+        // can't cover its children even after every row in this group has been applied. The whole group
+        // must roll back, including Sub 1's own (individually valid) shrink.
+        String orgId = "org-csv-tree-shrink-inconsistent";
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+
+        String seedCsv = """
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Project Orion 2,Project Orion 2,705702.86,ADA,,,,,,,
+                Project Orion 2,,,,Sub 1,sub-1,286728.71,Milestone 1,sub1-milestone-1,286728.71,2026-10-08
+                Project Orion 2,,,,Sub 2,sub-2,418974.15,Milestone 1,sub2-milestone-1,418974.15,2026-09-24
+                """;
+        MultipartFile seedFile = new MockMultipartFile("file", "seed.csv", "text/csv", seedCsv.getBytes());
+        FundingBulkImportResult seedResult = bulkImportService.importFiles(
+                BulkImportRequest.builder().organisationId(orgId).files(List.of(seedFile)).build());
+        assertThat(seedResult.getFiles().get(0).getRowErrors()).isEmpty();
+
+        String updateCsv = """
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Project Orion 2,Project Orion 2,100000,ADA,,,,,,,
+                Project Orion 2,,,,Sub 1,sub-1,40000,Milestone 1,sub1-milestone-1,35000,2026-10-08
+                """;
+        MultipartFile updateFile = new MockMultipartFile("file", "update.csv", "text/csv", updateCsv.getBytes());
+        FundingBulkImportResult result = bulkImportService.importFiles(
+                BulkImportRequest.builder().organisationId(orgId).files(List.of(updateFile)).build());
+
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        assertThat(result.getProjectsUpdated()).isZero();
+        ProjectEntity root = projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(orgId, "Project Orion 2").orElseThrow();
+        assertThat(root.getTotalAmount()).isEqualByComparingTo("705702.86"); // rolled back
+        ProjectEntity sub1 = projectRepository.findByOrganisationIdAndProjectTitle(orgId, "Sub 1").get(0);
+        assertThat(sub1.getTotalAmount()).isEqualByComparingTo("286728.71"); // rolled back
+    }
+
     /**
      * Sweeps the "missing-*"/edge-case fixtures for the merged Projects+Milestones row shape. Every
      * fixture's header carries the full template — only the {@code value} in a given cell is missing

@@ -33,7 +33,7 @@ import org.cardanofoundation.lob.app.funding.util.Problems;
  * or to an event that also allocates to projects outside the deleted scope; otherwise the object and
  * everything it owns is removed, along with the draft events that lived entirely within that scope.
  * The same "resolve every event fully contained in a scope, or block if one reaches outside it" logic
- * is also reused by {@link #markContainedEventsAsErrorOrBlock} for LOB-2365's project-total-shrink
+ * is also reused by {@link #markContainedEventsAsErrorOrBlock} for LOB-2365's milestone-amount-shrink
  * flow, which needs the same cross-project safety net but a different outcome (flag, not delete).
  */
 @Slf4j
@@ -85,49 +85,28 @@ public class FundingCascadeDeleteService {
     }
 
     /**
-     * Marks every draft event fully contained in {@code projectId}'s subtree as {@link EventStatus#ERROR}
-     * — used when a project's total amount is shrunk below what its children currently claim (see
-     * {@code FundingValidations#projectTotalCoversChildren}), which {@code ProjectService#updateProject}
-     * now allows through rather than rejecting outright (LOB-2365). See
-     * {@link #markContainedEventsAsErrorOrBlock(Set)} for the shared mechanics, also used by
-     * {@code MilestoneService#update} for the exact same relaxation one level down.
-     */
-    @Transactional
-    public Optional<ProblemDetail> markContainedEventsAsErrorOrBlock(String projectId) {
-        Set<String> subtreeProjectIds = ProjectTreeSupport.subtreeProjectIds(projectRepository, projectId);
-        Set<String> milestoneIds = milestoneRepository.findByProjectIdIn(subtreeProjectIds).stream()
-                .map(MilestoneEntity::getId)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-        // Calls the shared helper directly rather than the Set<String> overload below via `this` — a
-        // same-class call to another @Transactional method bypasses Spring's AOP proxy entirely.
-        return doMarkContainedEventsAsErrorOrBlock(milestoneIds);
-    }
-
-    /**
      * Marks every draft event fully contained in {@code milestoneIds} as {@link EventStatus#ERROR} —
      * nothing about any milestone's own recorded amount, or any event's own allocated figures, is ever
      * rewritten; only the event's status changes, flagging that a human needs to review and fix it
-     * before it can ever be published. Used by {@code ProjectService#updateProject} (a whole subtree's
-     * worth of milestone ids) and by {@code MilestoneService#update} (a single milestone's id, when its
-     * own amount is shrunk below what's already allocated to it — see
-     * {@code FundingValidations#milestoneCoversAllocations}, which that method now allows through
-     * rather than rejecting outright, the same relaxation as the project-level case, one level down).
+     * before it can ever be published. Used by {@code MilestoneService#update} when a milestone's own
+     * amount is shrunk below what's already allocated to it (see
+     * {@code FundingValidations#milestoneCoversAllocations}, which that method allows through rather
+     * than rejecting outright — real recorded money can't be un-recorded, so a human has to reconcile
+     * it instead). A project's own total vs. its children's *declared* budgets is a different,
+     * stricter case — see {@code FundingValidations#projectTotalCoversChildren}, a hard reject at
+     * {@code ProjectService#updateProject}, not a flag (LOB-2365 follow-up).
      *
      * <p>An event that also allocates to a milestone outside this set (i.e. it also represents money
      * somewhere untouched by the current edit) is still a hard block instead — same cross-project
      * safety net {@link #deleteAssociatedEventsOrBlock} already uses, reused here via
      * {@link #resolveEventsFullyContained}. No published event can be fully contained here in
-     * practice: both callers' own lock checks already reject their respective edit outright once any
-     * published event exists in scope, before this method is ever reached — this mechanism is
-     * exclusively a project/milestone *structural-update* concern, never something the event
-     * create/update/delete endpoints themselves trigger or are affected by.
+     * practice: the caller's own lock check already rejects the edit outright once any published event
+     * exists in scope, before this method is ever reached — this mechanism is exclusively a milestone
+     * *structural-update* concern, never something the event create/update/delete endpoints themselves
+     * trigger or are affected by.
      */
     @Transactional
     public Optional<ProblemDetail> markContainedEventsAsErrorOrBlock(Set<String> milestoneIds) {
-        return doMarkContainedEventsAsErrorOrBlock(milestoneIds);
-    }
-
-    private Optional<ProblemDetail> doMarkContainedEventsAsErrorOrBlock(Set<String> milestoneIds) {
         Either<ProblemDetail, List<FundingEventEntity>> eventsOrBlocked = resolveEventsFullyContained(milestoneIds, "update");
         if (eventsOrBlocked.isLeft()) {
             return Optional.of(eventsOrBlocked.getLeft());

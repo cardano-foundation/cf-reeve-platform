@@ -26,6 +26,7 @@ import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectDraftStatusView;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.service.ProjectService;
+import org.cardanofoundation.lob.app.funding.service.ProjectTreeUpdateService;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,6 +34,8 @@ class ProjectControllerTest {
 
     @Mock
     private ProjectService projectService;
+    @Mock
+    private ProjectTreeUpdateService projectTreeUpdateService;
 
     @InjectMocks
     private ProjectController projectController;
@@ -162,6 +165,33 @@ class ProjectControllerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(((ProjectView) response.getBody()).getError().orElseThrow().getTitle())
                 .isEqualTo(ErrorTitleConstants.PROJECT_ALREADY_EXISTS);
+    }
+
+    // --- updateProjectWithMilestones (whole-tree PUT) ---
+
+    @Test
+    void updateWithMilestones_returns200_withView() {
+        ProjectView view = projectView();
+        ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder().proId("PRJ-1000").build();
+        when(projectTreeUpdateService.updateWithMilestones(request)).thenReturn(view);
+
+        ResponseEntity<?> response = projectController.updateProjectWithMilestones(request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo(view);
+    }
+
+    @Test
+    void updateWithMilestones_returns404_withProblem() {
+        ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder().proId("PRJ-1000").build();
+        when(projectTreeUpdateService.updateWithMilestones(request))
+                .thenReturn(ProjectView.error(problem(HttpStatus.NOT_FOUND, ErrorTitleConstants.PROJECT_NOT_FOUND)));
+
+        ResponseEntity<?> response = projectController.updateProjectWithMilestones(request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(((ProjectView) response.getBody()).getError().orElseThrow().getTitle())
+                .isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
     }
 
     // --- updateProject ---
