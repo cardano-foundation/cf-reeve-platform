@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -250,6 +251,338 @@ class ProjectTreeUpdateServiceTest {
         ProjectView result = service.updateWithMilestones(request);
 
         assertThat(result.getError()).isEmpty();
+    }
+
+    @Test
+    void update_returns400_whenProIdBlank() {
+        ProjectView result = service.updateWithMilestones(
+                ProjectWithMilestonesCreateRequest.builder().organisationId("org1").externalProjectId("x").proId("").build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_FIELDS_REQUIRED);
+    }
+
+    @Test
+    void update_returns401_whenOrgAccessDenied() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        ProjectView result = service.updateWithMilestones(request(null));
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.UNAUTHORIZED);
+    }
+
+    @Test
+    void update_returns400_whenBothMilestonesAndSubProjectsPresentAtRoot() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setMilestones(List.of(MilestoneCreateRequest.builder().milestoneTitle("M1").build()));
+        request.setSubProjects(List.of(ProjectTreeNodeRequest.builder().externalProjectId("x").projectTitle("Sub").build()));
+
+        ProjectView result = service.updateWithMilestones(request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_NOT_ALLOWED_WITH_MILESTONES);
+    }
+
+    @Test
+    void update_returns409_whenRootTitleConflictsWithAnotherRootProject() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
+        when(projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNullAndIdNot("org1", "New Title", "root")).thenReturn(true);
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setProjectTitle("New Title");
+
+        ProjectView result = service.updateWithMilestones(request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS);
+    }
+
+    @Test
+    void update_returns400_whenRootTotalAmountInvalid() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
+
+        ProjectView result = service.updateWithMilestones(request(new BigDecimal("-1")));
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_AMOUNT_INVALID);
+    }
+
+    @Test
+    void update_returns400_whenRootCurrencyInvalid() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
+        when(milestoneService.isCurrencyRegisteredAndActive("org1", "XXX")).thenReturn(false);
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setCurrency("XXX");
+
+        ProjectView result = service.updateWithMilestones(request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.CURRENCY_INVALID);
+    }
+
+    @Test
+    void update_appliesRootTitleChange_whenNoConflict() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
+        when(projectRepository.findByParentProjectId("root")).thenReturn(List.of());
+        when(milestoneService.findByProjectId("root")).thenReturn(List.of());
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setProjectTitle("Brand New Title");
+
+        ProjectView result = service.updateWithMilestones(request);
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(root.getProjectTitle()).isEqualTo("Brand New Title");
+    }
+
+    @Test
+    void update_rollsBackWholeTree_whenARootLevelMilestoneFailsValidation() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
+        ProblemDetail milestoneProblem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "bad milestone");
+        milestoneProblem.setTitle(ErrorTitleConstants.MILESTONE_FIELDS_REQUIRED);
+        when(milestoneService.create(eq("root"), any(), isNull())).thenReturn(Either.left(milestoneProblem));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setMilestones(List.of(MilestoneCreateRequest.builder().milestoneTitle("New Milestone").build()));
+
+        ProjectView result = service.updateWithMilestones(request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_FIELDS_REQUIRED);
+        verify(projectRepository, never()).findById(any());
+    }
+
+    @Test
+    void update_createsNewMilestoneDirectlyUnderRoot_whenNoExistingMilestoneMatches() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        MilestoneEntity created = MilestoneEntity.builder().id("m-new").proId("PRJ-1000-N1")
+                .milestoneTitle("New Milestone").milestoneAmount(new BigDecimal("1000")).project(root).build();
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
+        when(milestoneService.create(eq("root"), any(), isNull())).thenReturn(Either.right(created));
+        when(projectRepository.findByParentProjectId("root")).thenReturn(List.of());
+        when(milestoneService.findByProjectId("root")).thenReturn(List.of(created));
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setMilestones(List.of(MilestoneCreateRequest.builder()
+                .milestoneTitle("New Milestone").milestoneAmount(new BigDecimal("1000")).build()));
+
+        ProjectView result = service.updateWithMilestones(request);
+
+        assertThat(result.getError()).isEmpty();
+    }
+
+    @Test
+    void update_returns400_whenExistingMilestoneAmountInvalid() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        MilestoneEntity milestone = MilestoneEntity.builder().id("m1").proId("PRJ-1000-M1")
+                .milestoneTitle("Milestone 1").milestoneAmount(new BigDecimal("50000")).currency("USD").project(root).build();
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
+        when(milestoneRepository.findByProjectIdAndProId("root", "PRJ-1000-M1")).thenReturn(Optional.of(milestone));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setMilestones(List.of(MilestoneCreateRequest.builder().proId("PRJ-1000-M1")
+                .milestoneTitle("Milestone 1").milestoneAmount(new BigDecimal("-5")).build()));
+
+        ProjectView result = service.updateWithMilestones(request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_AMOUNT_INVALID);
+    }
+
+    @Test
+    void update_returns409_whenTwoSiblingSubProjectsShareTheSameTitle() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setSubProjects(List.of(
+                ProjectTreeNodeRequest.builder().externalProjectId("x").projectTitle("Sub Dup").build(),
+                ProjectTreeNodeRequest.builder().externalProjectId("x").projectTitle("Sub Dup").build()));
+
+        ProjectView result = service.updateWithMilestones(request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS);
+    }
+
+    @Test
+    void update_returns400_whenASubProjectNodeHasBothMilestonesAndSubProjects() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setSubProjects(List.of(ProjectTreeNodeRequest.builder().externalProjectId("x").projectTitle("Bad Node")
+                .milestones(List.of(MilestoneCreateRequest.builder().milestoneTitle("M").build()))
+                .subProjects(List.of(ProjectTreeNodeRequest.builder().externalProjectId("x").projectTitle("Nested").build()))
+                .build()));
+
+        ProjectView result = service.updateWithMilestones(request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_NOT_ALLOWED_WITH_MILESTONES);
+    }
+
+    @Test
+    void update_returns409_whenCreatingNewSubProjectFails() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
+        when(projectRepository.findByParentProjectIdAndProjectTitle("root", "New Sub")).thenReturn(Optional.empty());
+        ProblemDetail conflict = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "dup");
+        conflict.setTitle(ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS);
+        when(projectStructureService.createSubProject(eq(root), eq("New Sub"), isNull(), isNull(), eq(new BigDecimal("1000")), isNull()))
+                .thenReturn(Either.left(conflict));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setSubProjects(List.of(ProjectTreeNodeRequest.builder().externalProjectId("x").projectTitle("New Sub")
+                .totalAmount(new BigDecimal("1000")).build()));
+
+        ProjectView result = service.updateWithMilestones(request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS);
+    }
+
+    @Test
+    void update_matchesExistingSubProject_byTitleFallback_whenProIdBlank() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        ProjectEntity sub = subProject(root, "sub1", "PRJ-1000-1", new BigDecimal("50000"));
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
+        when(projectRepository.findByParentProjectIdAndProjectTitle("root", "PRJ-1000-1")).thenReturn(Optional.of(sub));
+        when(milestoneService.findByProjectId("root")).thenReturn(List.of());
+        when(milestoneService.findByProjectId("sub1")).thenReturn(List.of());
+        when(projectRepository.findByParentProjectId("root")).thenReturn(List.of(sub));
+        when(projectRepository.findByParentProjectId("sub1")).thenReturn(List.of());
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+        when(projectRepository.findById("sub1")).thenReturn(Optional.of(sub));
+
+        ProjectWithMilestonesCreateRequest request = request(new BigDecimal("200000"));
+        request.setSubProjects(List.of(ProjectTreeNodeRequest.builder().externalProjectId("x")
+                .projectTitle("PRJ-1000-1").totalAmount(new BigDecimal("60000")).build()));
+
+        ProjectView result = service.updateWithMilestones(request);
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(sub.getTotalAmount()).isEqualByComparingTo("60000");
+        verify(projectRepository, never()).findByParentProjectIdAndProId(any(), any());
+    }
+
+    @Test
+    void update_matchesExistingMilestone_byTitleFallback_whenProIdBlank() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        MilestoneEntity milestone = MilestoneEntity.builder().id("m1").proId("PRJ-1000-M1")
+                .milestoneTitle("Milestone 1").milestoneAmount(new BigDecimal("50000")).currency("USD").project(root).build();
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
+        when(milestoneRepository.findByProjectIdAndMilestoneTitle("root", "Milestone 1")).thenReturn(Optional.of(milestone));
+        when(projectRepository.findByParentProjectId("root")).thenReturn(List.of());
+        when(milestoneService.findByProjectId("root")).thenReturn(List.of(milestone));
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setMilestones(List.of(MilestoneCreateRequest.builder().milestoneTitle("Milestone 1")
+                .milestoneAmount(new BigDecimal("60000")).build()));
+
+        ProjectView result = service.updateWithMilestones(request);
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(milestone.getMilestoneAmount()).isEqualByComparingTo("60000");
+        verify(milestoneRepository, never()).findByProjectIdAndProId(any(), any());
+    }
+
+    @Test
+    void update_returns400_whenExistingMilestoneCurrencyInvalid() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        MilestoneEntity milestone = MilestoneEntity.builder().id("m1").proId("PRJ-1000-M1")
+                .milestoneTitle("Milestone 1").milestoneAmount(new BigDecimal("50000")).currency("USD").project(root).build();
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
+        when(milestoneRepository.findByProjectIdAndProId("root", "PRJ-1000-M1")).thenReturn(Optional.of(milestone));
+        when(milestoneService.isCurrencyRegisteredAndActive("org1", "XXX")).thenReturn(false);
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setMilestones(List.of(MilestoneCreateRequest.builder().proId("PRJ-1000-M1")
+                .milestoneTitle("Milestone 1").currency("XXX").build()));
+
+        ProjectView result = service.updateWithMilestones(request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.CURRENCY_INVALID);
+    }
+
+    @Test
+    void update_propagatesMilestoneTitleConflict_whenRenamingToAnExistingSiblingTitle() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        MilestoneEntity milestone = MilestoneEntity.builder().id("m1").proId("PRJ-1000-M1")
+                .milestoneTitle("Milestone 1").milestoneAmount(new BigDecimal("50000")).currency("USD").project(root).build();
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
+        when(milestoneRepository.findByProjectIdAndProId("root", "PRJ-1000-M1")).thenReturn(Optional.of(milestone));
+        ProblemDetail conflict = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "dup title");
+        conflict.setTitle(ErrorTitleConstants.MILESTONE_TITLE_ALREADY_EXISTS);
+        when(milestoneService.checkTitleConflict(eq(root), eq("m1"), any(), eq(true))).thenReturn(Optional.of(conflict));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setMilestones(List.of(MilestoneCreateRequest.builder().proId("PRJ-1000-M1")
+                .milestoneTitle("Milestone 2").build()));
+
+        ProjectView result = service.updateWithMilestones(request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_TITLE_ALREADY_EXISTS);
+    }
+
+    @Test
+    void update_returns409_whenSubProjectTitleConflictsWithSibling() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        ProjectEntity sub = subProject(root, "sub1", "PRJ-1000-1", new BigDecimal("50000"));
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
+        when(projectRepository.findByParentProjectIdAndProId("root", "PRJ-1000-1")).thenReturn(Optional.of(sub));
+        when(projectRepository.existsByParentProjectIdAndProjectTitleAndIdNot("root", "Renamed Sub", "sub1")).thenReturn(true);
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setSubProjects(List.of(ProjectTreeNodeRequest.builder().externalProjectId("x").proId("PRJ-1000-1")
+                .projectTitle("Renamed Sub").build()));
+
+        ProjectView result = service.updateWithMilestones(request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS);
+    }
+
+    @Test
+    void update_returns400_whenSubProjectTotalAmountInvalid() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        ProjectEntity sub = subProject(root, "sub1", "PRJ-1000-1", new BigDecimal("50000"));
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
+        when(projectRepository.findByParentProjectIdAndProId("root", "PRJ-1000-1")).thenReturn(Optional.of(sub));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setSubProjects(List.of(ProjectTreeNodeRequest.builder().externalProjectId("x").proId("PRJ-1000-1")
+                .totalAmount(new BigDecimal("-5")).build()));
+
+        ProjectView result = service.updateWithMilestones(request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_AMOUNT_INVALID);
+    }
+
+    @Test
+    void update_appliesSubProjectTitleChange_whenNoConflict() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        ProjectEntity sub = subProject(root, "sub1", "PRJ-1000-1", new BigDecimal("50000"));
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull("org1", "PRJ-1000")).thenReturn(Optional.of(root));
+        when(projectRepository.findByParentProjectIdAndProId("root", "PRJ-1000-1")).thenReturn(Optional.of(sub));
+        when(milestoneService.findByProjectId("root")).thenReturn(List.of());
+        when(milestoneService.findByProjectId("sub1")).thenReturn(List.of());
+        when(projectRepository.findByParentProjectId("root")).thenReturn(List.of(sub));
+        when(projectRepository.findByParentProjectId("sub1")).thenReturn(List.of());
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+        when(projectRepository.findById("sub1")).thenReturn(Optional.of(sub));
+
+        ProjectWithMilestonesCreateRequest request = request(new BigDecimal("200000"));
+        request.setSubProjects(List.of(ProjectTreeNodeRequest.builder().externalProjectId("x").proId("PRJ-1000-1")
+                .projectTitle("Renamed Sub").build()));
+
+        ProjectView result = service.updateWithMilestones(request);
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(sub.getProjectTitle()).isEqualTo("Renamed Sub");
     }
 
     private ProjectWithMilestonesCreateRequest request(BigDecimal totalAmount) {
