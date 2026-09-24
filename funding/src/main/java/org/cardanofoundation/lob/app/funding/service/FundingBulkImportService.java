@@ -549,11 +549,11 @@ public class FundingBulkImportService {
      * now sent when it differs from the row's matched (proId or title) row — title is no longer
      * immutable (see LOB-2384); {@code existing}'s own proId is never touched either way.
      *
-     * <p>Applies the field values directly via {@link ProjectTreeUpdateService}, the same
-     * apply-then-validate-whole-group-once path used by the JSON tree-update endpoint — <em>not</em>
-     * {@code ProjectService#updateProject}, whose embedded coverage check would read this group's other,
+     * <p>Applies the field values directly via {@link ProjectTreeUpdateService}'s package-visible
+     * apply-then-validate-whole-group-once helpers, the same path used by the JSON tree-update endpoint —
+     * deliberately not an embedded, per-row coverage check, which would read this group's other,
      * not-yet-processed rows' stale (pre-update) totals (see {@code ProjectTreeUpdateService}'s class
-     * Javadoc). The publish lock that method also carries is replicated explicitly here instead
+     * Javadoc). The publish lock that endpoint also carries is replicated explicitly here instead
      * ({@link ProjectTreeUpdateService#isLockedByPublishedEvent}), since it isn't part of what's deferred.
      * The whole group's structural coverage is validated once, after every row in it has been applied —
      * see {@link #processProjectMilestoneGroup}.

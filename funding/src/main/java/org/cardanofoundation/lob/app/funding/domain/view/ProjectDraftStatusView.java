@@ -14,7 +14,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * Whether a project has at least one linked event still in Draft status — lets the edit flow decide
  * whether to show the draft warning before opening the edit form (LOB-2365). Checked across the whole
  * subtree (the project itself and every descendant sub-project), mirroring the scope
- * {@code ProjectService#updateProject}'s own published-event lock check already uses.
+ * {@code ProjectTreeUpdateService#updateWithMilestones}'s own published-event lock check already uses.
  */
 @Getter
 @Builder

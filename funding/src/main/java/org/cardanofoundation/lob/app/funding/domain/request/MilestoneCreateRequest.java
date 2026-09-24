@@ -50,4 +50,11 @@ public class MilestoneCreateRequest {
     @Schema(example = "2025-06-30")
     private LocalDate milestoneDate;
 
+    @Nullable
+    @Schema(example = "DELETE", description = "When set to \"DELETE\", this milestone (matched by proId, "
+            + "falling back to milestoneTitle, same as for an update) is deleted instead of created/updated. "
+            + "All other fields on this node are ignored. Omit, or leave null, for the normal "
+            + "create-or-update behavior.")
+    private String action;
+
 }

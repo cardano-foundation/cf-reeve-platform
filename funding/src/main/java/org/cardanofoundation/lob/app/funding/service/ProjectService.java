@@ -22,8 +22,8 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.ProjectLockStatus;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectTreeNodeRequest;
-import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.CascadeDeletionView;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectDraftStatusView;
@@ -82,10 +82,11 @@ public class ProjectService {
      * Whether the project has at least one linked event still in Draft status, anywhere in its own
      * subtree — the edit flow calls this before opening the edit form to decide whether to show the
      * draft warning (LOB-2365). Same subtree scope as the published-event lock check in
-     * {@link #updateProject}, just checking {@code DRAFT} instead of {@code PUBLISHED}. {@code organisationId}
-     * is required explicitly rather than only derived from the loaded project, matching this module's
-     * other explicit-organisationId endpoints (e.g. {@link #listProjects}) — a project id belonging to a
-     * different organisation than the one supplied is treated as not found, same as an unknown id.
+     * {@code ProjectTreeUpdateService#updateWithMilestones}, just checking {@code DRAFT} instead of
+     * {@code PUBLISHED}. {@code organisationId} is required explicitly rather than only derived from the
+     * loaded project, matching this module's other explicit-organisationId endpoints (e.g.
+     * {@link #listProjects}) — a project id belonging to a different organisation than the one supplied
+     * is treated as not found, same as an unknown id.
      */
     public ProjectDraftStatusView hasDraftEvent(String organisationId, String projectId) {
         if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
@@ -264,109 +265,6 @@ public class ProjectService {
         return Optional.empty();
     }
 
-    @Transactional
-    public ProjectView updateProject(String projectId, ProjectUpdateRequest request) {
-        Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
-        if (projectM.isEmpty()) {
-            return ProjectView.error(Problems.projectNotFound(projectId));
-        }
-        ProjectEntity project = projectM.get();
-        if (!keycloakSecurityHelper.canUserAccessOrg(project.getOrganisationId())) {
-            return ProjectView.error(Problems.unauthorized());
-        }
-        // Project-level lock (LOB-2365): projectTitle, totalAmount, currency, and re-parenting are all
-        // frozen project-wide once any PUBLISHED event exists anywhere in this project's own subtree —
-        // once a linked event has gone on-chain, nothing about the project it references can change,
-        // including its title. projectTitle is editable right up until that point (LOB-2384). This
-        // replaces the old wholesale block, which used to reject the entire request the instant any
-        // published event existed anywhere in the subtree, regardless of which field it touched.
-        boolean titleChanging = request.getProjectTitle() != null && !request.getProjectTitle().equals(project.getProjectTitle());
-        boolean touchesLockedProjectField = titleChanging || request.getTotalAmount() != null
-                || request.getCurrency() != null || request.getParentProjectId() != null;
-        if (touchesLockedProjectField && allocationRepository.existsByMilestoneProjectIdInAndEventStatus(
-                ProjectTreeSupport.subtreeProjectIds(projectRepository, projectId), EventStatus.PUBLISHED)) {
-            return ProjectView.error(Problems.conflict(
-                    "Cannot update projectTitle, totalAmount, currency, or parentProjectId: project %s is locked because a published event exists in its structure"
-                            .formatted(projectId),
-                    ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED));
-        }
-        Optional<ProblemDetail> amountProblem = FundingValidations.projectAmount(request.getTotalAmount());
-        if (amountProblem.isPresent()) {
-            return ProjectView.error(amountProblem.get());
-        }
-        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(request.getCurrency(),
-                milestoneService.isCurrencyRegisteredAndActive(project.getOrganisationId(), request.getCurrency()));
-        if (currencyProblem.isPresent()) {
-            return ProjectView.error(currencyProblem.get());
-        }
-
-        // A currency change cascades to every descendant sub-project and milestone (see
-        // cascadeCurrency) — the lock above already rejects it once a PUBLISHED event exists anywhere
-        // in the subtree; this flag just records whether a change was actually requested, for the
-        // cascade call further down.
-        boolean currencyChanging = request.getCurrency() != null && !request.getCurrency().equals(project.getCurrency());
-
-        // The budget the project ends up with — parent-fit and child-coverage checks validate this value.
-        BigDecimal effectiveTotal = request.getTotalAmount() != null ? request.getTotalAmount() : project.getTotalAmount();
-
-        if (request.getTotalAmount() != null) {
-            // A project's total must still cover its own milestones'/sub-projects' already-declared
-            // totals — exactly like at creation, this is a hard reject, not a flag (LOB-2365 follow-up:
-            // this used to be relaxed into an ERROR-flagging pass, but that conflated two different
-            // things — two budget *declarations* disagreeing with each other, vs. a budget disagreeing
-            // with money actually already recorded against it. Only the latter (see
-            // MilestoneService#handleAmountShrink) still gets the flag-instead-of-block treatment).
-            Optional<ProblemDetail> coverage = FundingValidations.projectTotalCoversChildren(
-                    effectiveTotal,
-                    FundingValidations.sumMilestoneAmounts(milestoneService.findByProjectId(projectId), null),
-                    FundingValidations.sumProjectTotals(projectRepository.findByParentProjectId(projectId), null));
-            if (coverage.isPresent()) {
-                return ProjectView.error(coverage.get());
-            }
-            // A sub-project's new budget must still fit its (unchanged) parent.
-            if (request.getParentProjectId() == null && project.getParentProject() != null) {
-                ProjectEntity parent = project.getParentProject();
-                BigDecimal otherSubProjectsTotal = FundingValidations.sumProjectTotals(
-                        projectRepository.findByParentProjectId(parent.getId()), project.getId());
-                Optional<ProblemDetail> fit = FundingValidations.subProjectAmount(
-                        effectiveTotal, project.getProjectTitle(), parent, otherSubProjectsTotal);
-                if (fit.isPresent()) {
-                    return ProjectView.error(fit.get());
-                }
-            }
-        }
-
-        if (request.getParentProjectId() != null) {
-            Optional<ProblemDetail> parentProblem = assignParent(project, request.getParentProjectId(), effectiveTotal);
-            if (parentProblem.isPresent()) {
-                return ProjectView.error(parentProblem.get());
-            }
-        }
-        // projectTitle is editable up until the project locks (see ProjectEntity#proId, which stays
-        // fixed and is what everything that needs a stable reference uses instead) — still subject to
-        // the same per-scope uniqueness title always had, checked against every sibling except this
-        // project itself so an unchanged title never conflicts with its own prior value.
-        String effectiveTitle = titleChanging ? request.getProjectTitle() : project.getProjectTitle();
-        if (titleChanging || request.getParentProjectId() != null) {
-            // A re-parent can also collide with a same-named sibling under the new parent, even when
-            // the title itself doesn't change — projectTitleConflict below checks against the project's
-            // *current* parent association, so this must run after assignParent (above) has already
-            // updated it when both happen in the same request.
-            Optional<ProblemDetail> titleConflict = projectTitleConflict(project, effectiveTitle);
-            if (titleConflict.isPresent()) {
-                return ProjectView.error(titleConflict.get());
-            }
-        }
-        if (titleChanging) {
-            project.setProjectTitle(request.getProjectTitle());
-        }
-        if (request.getTotalAmount() != null) project.setTotalAmount(request.getTotalAmount());
-        if (currencyChanging) {
-            cascadeCurrency(project, request.getCurrency());
-        }
-        return toView(projectRepository.saveAndFlush(project));
-    }
-
     /**
      * Sets {@code project}'s currency to {@code currency} and propagates it down the whole subtree:
      * every descendant sub-project (recursively) and every milestone belonging to {@code project} or
@@ -387,90 +285,21 @@ public class ProjectService {
         }
     }
 
-    /**
-     * Attaches {@code project} under {@code parentProjectId} as a sub-project. The parent must exist,
-     * belong to the same organisation, and assigning it must not introduce a cycle (i.e. the parent
-     * may not be the project itself or one of its descendants). {@code effectiveTotal} is the budget
-     * the project ends up with (an updated amount from the same request wins over the stored one).
-     */
-    private Optional<ProblemDetail> assignParent(ProjectEntity project, String parentProjectId, BigDecimal effectiveTotal) {
-        Optional<ProjectEntity> parentM = projectRepository.findById(parentProjectId);
-        if (parentM.isEmpty()) {
-            return Optional.of(Problems.notFound(
-                    "Parent project not found: " + parentProjectId, ErrorTitleConstants.PARENT_PROJECT_NOT_FOUND));
-        }
-        ProjectEntity parent = parentM.get();
-        if (!parent.getOrganisationId().equals(project.getOrganisationId())) {
-            return Optional.of(Problems.badRequest(
-                    "Parent project %s belongs to a different organisation".formatted(parentProjectId),
-                    ErrorTitleConstants.PARENT_PROJECT_ORG_MISMATCH));
-        }
-        if (createsCycle(project.getId(), parent)) {
-            return Optional.of(Problems.badRequest(
-                    "Assigning parent %s to project %s would create a circular dependency".formatted(parentProjectId, project.getId()),
-                    ErrorTitleConstants.PROJECT_CIRCULAR_DEPENDENCY));
-        }
-        Optional<ProblemDetail> structure = FundingValidations.subProjectAllowed(milestoneService.hasMilestones(parent.getId()));
-        if (structure.isPresent()) {
-            return structure;
-        }
-        BigDecimal otherSubProjectsTotal = FundingValidations.sumProjectTotals(
-                projectRepository.findByParentProjectId(parent.getId()), project.getId());
-        Optional<ProblemDetail> amountProblem = FundingValidations.subProjectAmount(
-                effectiveTotal, project.getProjectTitle(), parent, otherSubProjectsTotal);
-        if (amountProblem.isPresent()) {
-            return amountProblem;
-        }
-        project.setParentProject(parent);
-        return Optional.empty();
-    }
-
-    /**
-     * A project title must be unique within its scope: root projects per organisation, sub-projects
-     * within their parent. The check excludes the project itself so an unchanged title never conflicts.
-     */
-    private Optional<ProblemDetail> projectTitleConflict(ProjectEntity project, String title) {
-        boolean exists = project.getParentProject() == null
-                ? projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNullAndIdNot(
-                        project.getOrganisationId(), title, project.getId())
-                : projectRepository.existsByParentProjectIdAndProjectTitleAndIdNot(
-                        project.getParentProject().getId(), title, project.getId());
-        if (exists) {
-            return Optional.of(Problems.conflict(
-                    "Project title already exists in this scope: " + title,
-                    ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS));
-        }
-        return Optional.empty();
-    }
-
-    /**
-     * True when {@code projectId} already appears in the candidate parent's ancestor chain — which
-     * includes the candidate parent being the project itself (self-parenting) or one of its
-     * descendants. Walking up the single parent link terminates at a root project.
-     */
-    private static boolean createsCycle(String projectId, ProjectEntity candidateParent) {
-        ProjectEntity cursor = candidateParent;
-        while (cursor != null) {
-            if (projectId.equals(cursor.getId())) {
-                return true;
-            }
-            cursor = cursor.getParentProject();
-        }
-        return false;
-    }
-
     @Transactional
-    public Optional<ProblemDetail> deleteProject(String projectId) {
+    public CascadeDeletionView deleteProject(String projectId) {
         Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
         if (projectM.isEmpty()) {
-            return Optional.of(Problems.projectNotFound(projectId));
+            return CascadeDeletionView.error(Problems.projectNotFound(projectId));
         }
         if (!keycloakSecurityHelper.canUserAccessOrg(projectM.get().getOrganisationId())) {
-            return Optional.of(Problems.unauthorized());
+            return CascadeDeletionView.error(Problems.unauthorized());
         }
         // Cascade: fails when any published event is associated anywhere in the subtree; otherwise the
-        // project, its sub-projects, milestones and the referencing draft-event allocations are removed.
-        return cascadeDeleteService.deleteProjectSubtree(projectM.get());
+        // project, its sub-projects and milestones are removed, and every non-published event that had
+        // an allocation into the subtree is detached from it and flagged ERROR (see
+        // FundingCascadeDeleteService) — those are reported back so the UI can warn about them.
+        return cascadeDeleteService.deleteProjectSubtree(projectM.get())
+                .fold(CascadeDeletionView::error, events -> CascadeDeletionView.success(FundingCascadeDeleteService.toAffectedEventViews(events)));
     }
 
     // -------------------------------------------------------------------------

@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.funding.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -31,6 +32,7 @@ import org.cardanofoundation.lob.app.funding.domain.entity.*;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.*;
+import org.cardanofoundation.lob.app.funding.domain.view.OrphanEventsCleanupView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventPublishView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
@@ -1443,6 +1445,57 @@ class SpendingEventServiceTest {
 
         assertThat(spendingEventService.deleteEvent("e1")).isEmpty();
         verify(fundingEventRepository).delete(event);
+    }
+
+    // --- deleteOrphanedErrorEvents (LOB-2365 follow-up) ---
+
+    @Test
+    void deleteOrphanedErrorEvents_returns401_whenUserCannotAccessOrg() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        OrphanEventsCleanupView result = spendingEventService.deleteOrphanedErrorEvents("org1");
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(fundingEventRepository, never()).deleteAll(any());
+    }
+
+    @Test
+    void deleteOrphanedErrorEvents_returns400_whenOrganisationNotFound() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.empty());
+
+        OrphanEventsCleanupView result = spendingEventService.deleteOrphanedErrorEvents("org1");
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.ORGANISATION_NOT_FOUND);
+        verify(fundingEventRepository, never()).deleteAll(any());
+    }
+
+    @Test
+    void deleteOrphanedErrorEvents_deletesOnlyFullyUnallocatedErrorEvents() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
+        FundingEventEntity orphan = eventEntity(EventType.FUNDING, EventStatus.ERROR);
+        when(fundingEventRepository.findOrphanedEvents("org1", EventStatus.ERROR)).thenReturn(List.of(orphan));
+
+        OrphanEventsCleanupView result = spendingEventService.deleteOrphanedErrorEvents("org1");
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getDeletedEvents()).extracting("eventId", "fundingId")
+                .containsExactly(tuple("e1", "GRANT-2025-001"));
+        verify(fundingEventRepository).deleteAll(List.of(orphan));
+    }
+
+    @Test
+    void deleteOrphanedErrorEvents_noOp_whenNoneMatch() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
+        when(fundingEventRepository.findOrphanedEvents("org1", EventStatus.ERROR)).thenReturn(List.of());
+
+        OrphanEventsCleanupView result = spendingEventService.deleteOrphanedErrorEvents("org1");
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getDeletedEvents()).isEmpty();
+        verify(fundingEventRepository).deleteAll(List.of());
     }
 
     // --- helpers ---

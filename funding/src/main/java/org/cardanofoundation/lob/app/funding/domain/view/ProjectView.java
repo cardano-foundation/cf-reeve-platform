@@ -17,7 +17,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import org.cardanofoundation.lob.app.funding.domain.enums.ProjectLockStatus;
 
 @Getter
-@Builder
+@Builder(toBuilder = true)
 @AllArgsConstructor
 public class ProjectView implements ErrorAware {
 
@@ -83,6 +83,12 @@ public class ProjectView implements ErrorAware {
     /** Events (FUNDING/SPENDING/REFUND) allocated to this project. Populated on get-by-id only. */
     @Nullable
     private List<SpendingEventView> events;
+
+    @Builder.Default
+    @Schema(description = "Non-published events that had an allocation removed by a DELETE node in this same "
+            + "update and were flagged ERROR as a result (LOB-2365 follow-up) — see CascadeDeletionView. "
+            + "Empty when this update deleted nothing, or deleted nothing that affected an event.")
+    private List<AffectedEventView> affectedEvents = List.of();
 
     @Builder.Default
     @Schema(description = "Problem detail describing the failure; absent on success")

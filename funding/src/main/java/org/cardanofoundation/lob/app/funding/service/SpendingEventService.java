@@ -132,6 +132,27 @@ public class SpendingEventService {
         return delete(eventId).fold(Optional::of, ignored -> Optional.empty());
     }
 
+    /**
+     * Bulk-deletes every "orphan" event for this organisation — an {@code ERROR} event with no
+     * milestone allocation left at all (see {@link FundingEventRepository#findOrphanedEvents}) — so a
+     * human can clear them out in one action instead of finding and deleting each one individually
+     * (LOB-2365 follow-up). An {@code ERROR} event that still has at least one real allocation left is
+     * never touched here; that one may still hold data worth fixing, so it stays for the normal
+     * event edit/delete flow.
+     */
+    @Transactional
+    public OrphanEventsCleanupView deleteOrphanedErrorEvents(String organisationId) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return OrphanEventsCleanupView.error(Problems.unauthorized());
+        }
+        if (organisationPublicApi.findByOrganisationId(organisationId).isEmpty()) {
+            return OrphanEventsCleanupView.error(Problems.organisationNotFound(organisationId));
+        }
+        List<FundingEventEntity> orphans = fundingEventRepository.findOrphanedEvents(organisationId, EventStatus.ERROR);
+        fundingEventRepository.deleteAll(orphans);
+        return OrphanEventsCleanupView.success(FundingCascadeDeleteService.toAffectedEventViews(orphans));
+    }
+
     /** 401 when the event exists and the caller cannot access its organisation; empty otherwise. */
     private Optional<ProblemDetail> denyIfNoEventAccess(String eventId) {
         Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);

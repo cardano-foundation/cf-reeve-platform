@@ -227,7 +227,6 @@ class FundingBulkImportServiceTest {
         assertThat(captor.getValue().getProjectTitle()).isEqualTo("Project A");
         assertThat(captor.getValue().getTotalAmount()).isEqualByComparingTo("100000.00");
         assertThat(captor.getValue().getCurrency()).isEqualTo("USD");
-        verify(projectService, never()).updateProject(any(), any());
     }
 
     @Test

@@ -52,6 +52,14 @@ public class ProjectTreeNodeRequest {
     @Schema(example = "USD")
     private String currency;
 
+    @Nullable
+    @Schema(example = "DELETE", description = "When set to \"DELETE\", this sub-project (matched by proId, "
+            + "falling back to projectTitle, same as for an update) and its entire subtree — every nested "
+            + "sub-project and milestone below it, regardless of what this node's own milestones/subProjects "
+            + "lists contain — are deleted instead of created/updated. All other fields on this node are "
+            + "ignored. Omit, or leave null, for the normal create-or-update behavior.")
+    private String action;
+
     /** Milestones of this node — mutually exclusive with {@code subProjects}. */
     @Builder.Default
     @Valid

@@ -5,6 +5,8 @@ public final class ErrorTitleConstants {
     private ErrorTitleConstants() {}
 
     public static final String PROJECT_NOT_FOUND = "PROJECT_NOT_FOUND";
+    /** PUT /projects/{projectId} only updates a project's whole structure starting from a root — a sub-project id is rejected (LOB-2365 follow-up). */
+    public static final String PROJECT_NOT_ROOT = "PROJECT_NOT_ROOT";
     public static final String PROJECT_ALREADY_EXISTS = "PROJECT_ALREADY_EXISTS";
     public static final String PROJECT_TITLE_ALREADY_EXISTS = "PROJECT_TITLE_ALREADY_EXISTS";
     /** A caller-supplied proId collides with an existing one in the same scope (root: per organisation; sub-project: per parent) — see LOB-2384. */
@@ -18,7 +20,6 @@ public final class ErrorTitleConstants {
     public static final String PROJECT_AMOUNT_BELOW_SUBPROJECTS = "PROJECT_AMOUNT_BELOW_SUBPROJECTS";
     public static final String PARENT_PROJECT_NOT_FOUND = "PARENT_PROJECT_NOT_FOUND";
     public static final String PARENT_PROJECT_ORG_MISMATCH = "PARENT_PROJECT_ORG_MISMATCH";
-    public static final String PROJECT_CIRCULAR_DEPENDENCY = "PROJECT_CIRCULAR_DEPENDENCY";
     public static final String SUBPROJECT_AMOUNT_EXCEEDS_PARENT = "SUBPROJECT_AMOUNT_EXCEEDS_PARENT";
     public static final String SUBPROJECT_TOTAL_EXCEEDS_PARENT = "SUBPROJECT_TOTAL_EXCEEDS_PARENT";
     public static final String MILESTONE_NOT_FOUND = "MILESTONE_NOT_FOUND";

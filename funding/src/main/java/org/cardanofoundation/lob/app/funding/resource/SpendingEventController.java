@@ -30,6 +30,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.OrphanEventsCleanupView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.service.SpendingEventService;
@@ -559,6 +560,24 @@ public class SpendingEventController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<ProblemDetail> deleteEvent(@PathVariable String eventId) {
         return Responses.respondDelete(spendingEventService.deleteEvent(eventId));
+    }
+
+    @Operation(summary = "Bulk-delete orphaned ERROR events",
+            description = "Deletes every ERROR event for this organisation that has no milestone allocation "
+                    + "left at all — every one was removed by an earlier project/milestone cascade delete "
+                    + "(LOB-2365 follow-up), so there is nothing left on them to reconcile. An ERROR event "
+                    + "that still has at least one real allocation left is never touched by this endpoint.",
+            responses = {
+                    @ApiResponse(responseCode = "200", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = OrphanEventsCleanupView.class))}),
+                    @ApiResponse(responseCode = "400", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ProblemDetail.class))})
+            }
+    )
+    @DeleteMapping(value = "/events/orphans", produces = APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<OrphanEventsCleanupView> deleteOrphanedErrorEvents(@RequestParam String organisationId) {
+        return Responses.respond(spendingEventService.deleteOrphanedErrorEvents(organisationId), HttpStatus.OK);
     }
 
 }

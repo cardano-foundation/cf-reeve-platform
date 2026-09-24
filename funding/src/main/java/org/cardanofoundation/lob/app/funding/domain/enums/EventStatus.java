@@ -18,8 +18,9 @@ public enum EventStatus {
      * <p>This is distinct from a project's total no longer covering its milestones'/sub-projects' own
      * *declared* budgets — that's two budget declarations disagreeing with each other rather than a
      * budget disagreeing with real recorded money, and is a hard reject at
-     * {@code ProjectService#updateProject} (see {@code FundingValidations#projectTotalCoversChildren}),
-     * not a path to this status (LOB-2365 follow-up).
+     * {@code ProjectTreeUpdateService#updateWithMilestones} (see
+     * {@code FundingValidations#projectTotalCoversChildren}), not a path to this status (LOB-2365
+     * follow-up).
      *
      * <p>A {@code PUBLISHED} event can never reach this state: LOB-2365's lock rules (a milestone with a
      * published allocation is field-locked project-wide the moment any published event exists anywhere

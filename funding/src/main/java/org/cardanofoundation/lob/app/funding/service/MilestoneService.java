@@ -24,6 +24,7 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.CascadeDeletionView;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
@@ -112,18 +113,20 @@ public class MilestoneService {
     }
 
     @Transactional
-    public Optional<ProblemDetail> deleteMilestone(String projectId, String milestoneId) {
+    public CascadeDeletionView deleteMilestone(String projectId, String milestoneId) {
         Optional<ProblemDetail> denied = authorizeProject(projectId);
         if (denied.isPresent()) {
-            return denied;
+            return CascadeDeletionView.error(denied.get());
         }
         Optional<MilestoneEntity> milestoneM = milestoneRepository.findByIdAndProjectId(milestoneId, projectId);
         if (milestoneM.isEmpty()) {
-            return Optional.of(Problems.milestoneNotFound(milestoneId));
+            return CascadeDeletionView.error(Problems.milestoneNotFound(milestoneId));
         }
-        // Cascade: fails when the milestone is linked to a published event; otherwise the referencing
-        // draft-event allocations are cleaned up and the milestone is removed.
-        return cascadeDeleteService.deleteMilestone(milestoneM.get());
+        // Cascade: fails when the milestone is linked to a published event; otherwise it is removed, and
+        // every non-published event that had an allocation to it is detached from it and flagged ERROR
+        // (see FundingCascadeDeleteService) — those are reported back so the UI can warn about them.
+        return cascadeDeleteService.deleteMilestone(milestoneM.get())
+                .fold(CascadeDeletionView::error, events -> CascadeDeletionView.success(FundingCascadeDeleteService.toAffectedEventViews(events)));
     }
 
     private Optional<ProblemDetail> authorizeProject(String projectId) {
@@ -406,7 +409,7 @@ public class MilestoneService {
     /**
      * Currency lock (LOB-2365): cascades from the project level — once any PUBLISHED event exists
      * anywhere in the milestone's owning project's own subtree, currency is blocked there too, mirroring
-     * ProjectService#updateProject's matching check for that same project id. Package-visible for reuse
+     * ProjectTreeUpdateService#updateWithMilestones's matching check for that same project id. Package-visible for reuse
      * by {@code ProjectTreeUpdateService} — see {@link #checkFieldLock}'s Javadoc.
      */
     Optional<ProblemDetail> checkCurrencyLock(ProjectEntity project, MilestoneEntity milestone, MilestoneUpdateRequest request) {
@@ -438,7 +441,7 @@ public class MilestoneService {
 
     /**
      * Shrinking below what's already allocated used to be rejected outright. That's relaxed now
-     * (LOB-2365, same mechanism as ProjectService#updateProject's total-amount case one level up): the
+     * (LOB-2365, same mechanism as ProjectTreeUpdateService#updateWithMilestones's total-amount case one level up): the
      * edit proceeds exactly as typed — the allocation's own recorded figure is never rewritten — and
      * every draft event fully allocated to this milestone is marked ERROR instead, for a human to review
      * and fix. An event that also allocates to a milestone outside this one is still a hard block, same

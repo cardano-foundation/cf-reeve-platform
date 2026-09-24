@@ -23,6 +23,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.CascadeDeletionView;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.service.MilestoneService;
@@ -86,17 +87,20 @@ public class MilestoneController {
         return Responses.respond(milestoneService.updateMilestone(projectId, milestoneId, request), HttpStatus.OK);
     }
 
-    @Operation(description = "Delete a milestone", responses = {
-            @ApiResponse(responseCode = "204"),
+    @Operation(description = "Delete a milestone. On success, lists any non-published events that had an "
+            + "allocation removed by this delete and were flagged ERROR as a result (LOB-2365 follow-up) — "
+            + "the events themselves are not deleted.", responses = {
+            @ApiResponse(responseCode = "200", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                    schema = @Schema(implementation = CascadeDeletionView.class))}),
             @ApiResponse(responseCode = "404", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
                     schema = @Schema(implementation = ProblemDetail.class))})
     })
     @DeleteMapping(value = "/projects/{projectId}/milestones/{milestoneId}", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<ProblemDetail> deleteMilestone(
+    public ResponseEntity<CascadeDeletionView> deleteMilestone(
             @PathVariable String projectId,
             @PathVariable String milestoneId) {
-        return Responses.respondDelete(milestoneService.deleteMilestone(projectId, milestoneId));
+        return Responses.respond(milestoneService.deleteMilestone(projectId, milestoneId), HttpStatus.OK);
     }
 
 }

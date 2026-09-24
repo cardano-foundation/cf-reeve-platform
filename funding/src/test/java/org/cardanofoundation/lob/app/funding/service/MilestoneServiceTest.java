@@ -31,6 +31,7 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.CascadeDeletionView;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
@@ -713,9 +714,9 @@ class MilestoneServiceTest {
         when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
-        Optional<ProblemDetail> result = milestoneService.deleteMilestone("p1", "m1");
+        CascadeDeletionView result = milestoneService.deleteMilestone("p1", "m1");
 
-        assertThat(result.orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
         verify(cascadeDeleteService, never()).deleteMilestone(any());
     }
 
@@ -725,9 +726,9 @@ class MilestoneServiceTest {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
         when(milestoneRepository.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.empty());
 
-        Optional<ProblemDetail> result = milestoneService.deleteMilestone("p1", "m1");
+        CascadeDeletionView result = milestoneService.deleteMilestone("p1", "m1");
 
-        assertThat(result.orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_FOUND);
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_FOUND);
         verify(cascadeDeleteService, never()).deleteMilestone(any());
     }
 
@@ -737,11 +738,12 @@ class MilestoneServiceTest {
         when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1")));
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
         when(milestoneRepository.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.of(milestone));
-        when(cascadeDeleteService.deleteMilestone(milestone)).thenReturn(Optional.empty());
+        when(cascadeDeleteService.deleteMilestone(milestone)).thenReturn(Either.right(List.of()));
 
-        Optional<ProblemDetail> result = milestoneService.deleteMilestone("p1", "m1");
+        CascadeDeletionView result = milestoneService.deleteMilestone("p1", "m1");
 
-        assertThat(result).isEmpty();
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getAffectedEvents()).isEmpty();
         verify(cascadeDeleteService).deleteMilestone(milestone);
     }
 
@@ -753,11 +755,11 @@ class MilestoneServiceTest {
         when(milestoneRepository.findByIdAndProjectId("m1", "p1")).thenReturn(Optional.of(milestone));
         ProblemDetail conflict = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         conflict.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
-        when(cascadeDeleteService.deleteMilestone(milestone)).thenReturn(Optional.of(conflict));
+        when(cascadeDeleteService.deleteMilestone(milestone)).thenReturn(Either.left(conflict));
 
-        Optional<ProblemDetail> result = milestoneService.deleteMilestone("p1", "m1");
+        CascadeDeletionView result = milestoneService.deleteMilestone("p1", "m1");
 
-        assertThat(result.orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
     }
 
     // -------------------------------------------------------------------------

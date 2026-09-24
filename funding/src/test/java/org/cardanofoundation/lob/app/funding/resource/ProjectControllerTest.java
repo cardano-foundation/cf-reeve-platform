@@ -5,7 +5,6 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Optional;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -20,8 +19,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.CascadeDeletionView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectDraftStatusView;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
@@ -167,40 +166,13 @@ class ProjectControllerTest {
                 .isEqualTo(ErrorTitleConstants.PROJECT_ALREADY_EXISTS);
     }
 
-    // --- updateProjectWithMilestones (whole-tree PUT) ---
-
-    @Test
-    void updateWithMilestones_returns200_withView() {
-        ProjectView view = projectView();
-        ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder().proId("PRJ-1000").build();
-        when(projectTreeUpdateService.updateWithMilestones(request)).thenReturn(view);
-
-        ResponseEntity<?> response = projectController.updateProjectWithMilestones(request);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isEqualTo(view);
-    }
-
-    @Test
-    void updateWithMilestones_returns404_withProblem() {
-        ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder().proId("PRJ-1000").build();
-        when(projectTreeUpdateService.updateWithMilestones(request))
-                .thenReturn(ProjectView.error(problem(HttpStatus.NOT_FOUND, ErrorTitleConstants.PROJECT_NOT_FOUND)));
-
-        ResponseEntity<?> response = projectController.updateProjectWithMilestones(request);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(((ProjectView) response.getBody()).getError().orElseThrow().getTitle())
-                .isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
-    }
-
-    // --- updateProject ---
+    // --- updateProject (whole-tree PUT /projects/{projectId}) ---
 
     @Test
     void update_returns200_withView() {
         ProjectView view = projectView();
-        ProjectUpdateRequest request = ProjectUpdateRequest.builder().projectTitle("New").build();
-        when(projectService.updateProject("p1", request)).thenReturn(view);
+        ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder().proId("PRJ-1000").build();
+        when(projectTreeUpdateService.updateWithMilestones("p1", request)).thenReturn(view);
 
         ResponseEntity<?> response = projectController.updateProject("p1", request);
 
@@ -208,26 +180,41 @@ class ProjectControllerTest {
         assertThat(response.getBody()).isEqualTo(view);
     }
 
+    @Test
+    void update_returns404_withProblem() {
+        ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder().proId("PRJ-1000").build();
+        when(projectTreeUpdateService.updateWithMilestones("p1", request))
+                .thenReturn(ProjectView.error(problem(HttpStatus.NOT_FOUND, ErrorTitleConstants.PROJECT_NOT_FOUND)));
+
+        ResponseEntity<?> response = projectController.updateProject("p1", request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(((ProjectView) response.getBody()).getError().orElseThrow().getTitle())
+                .isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
+    }
+
     // --- deleteProject ---
 
     @Test
-    void delete_returns204_whenNoError() {
-        when(projectService.deleteProject("p1")).thenReturn(Optional.empty());
+    void delete_returns200_withAffectedEvents_whenNoError() {
+        CascadeDeletionView view = CascadeDeletionView.success(List.of());
+        when(projectService.deleteProject("p1")).thenReturn(view);
 
         ResponseEntity<?> response = projectController.deleteProject("p1");
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo(view);
     }
 
     @Test
     void delete_returns404_withProblem() {
         ProblemDetail p = problem(HttpStatus.NOT_FOUND, ErrorTitleConstants.PROJECT_NOT_FOUND);
-        when(projectService.deleteProject("p1")).thenReturn(Optional.of(p));
+        when(projectService.deleteProject("p1")).thenReturn(CascadeDeletionView.error(p));
 
         ResponseEntity<?> response = projectController.deleteProject("p1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
+        assertThat(((CascadeDeletionView) response.getBody()).getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
     }
 
 }

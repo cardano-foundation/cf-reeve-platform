@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.funding.service;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -16,6 +17,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import io.vavr.control.Either;
 
+import org.cardanofoundation.lob.app.funding.domain.entity.FundingEventEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
@@ -23,6 +25,7 @@ import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateReque
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectTreeNodeRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.AffectedEventView;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
@@ -33,23 +36,31 @@ import org.cardanofoundation.lob.app.funding.util.Problems;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 /**
- * Updates an existing project's whole structure (itself, plus every sub-project and milestone under
- * it) in one atomic call — the update-side counterpart to {@link ProjectService#createWithMilestones}.
- * Reuses the exact same request shape ({@link ProjectWithMilestonesCreateRequest}), matched by
- * {@code proId} instead of an internal id (see {@link ProjectTreeNodeRequest#proId} /
- * {@link MilestoneCreateRequest#proId}), so a single PUT can resize the project and its children
- * together.
+ * Updates an existing root project's whole structure (itself, plus every sub-project and milestone
+ * under it) in one atomic call — the update-side counterpart to
+ * {@link ProjectService#createWithMilestones}, and, since LOB-2365's follow-up API-consistency pass,
+ * the <em>only</em> project-update endpoint: {@code PUT /projects/{projectId}} identifies its target by
+ * the internal id in the URL path (same meaning {@code GET}/{@code DELETE /projects/{projectId}}
+ * already use), matching how {@code PUT /events/{eventId}} identifies an event — never a body field.
+ * {@code projectId} must name a root project (no parent); the request's own {@code proId} field, if
+ * present, is accepted but ignored for matching (a project's proId is immutable and was never editable
+ * through this endpoint anyway). Nested nodes are still matched by {@code proId}, falling back to title
+ * (see {@link ProjectTreeNodeRequest#proId} / {@link MilestoneCreateRequest#proId}), so a single PUT can
+ * create, resize, or delete ({@link ProjectTreeNodeRequest#action}/{@link MilestoneCreateRequest#action})
+ * the project and its children together.
  *
- * <p>This exists because the narrow single-entity endpoints ({@code ProjectService#updateProject},
- * {@code MilestoneService#update}) each validate budget-fit against whatever is <em>currently
- * persisted</em> for a node's siblings — correct for editing one node in isolation, but wrong for
- * resizing several related levels in the same request: shrinking a parent before its children hits the
- * new hard block (see {@code FundingValidations#projectTotalCoversChildren}), and shrinking a child
- * before its parent hits the existing one ({@code FundingValidations#subProjectAmount}/{@code #milestone}).
- * This service instead applies every field value across the whole touched tree first (top-down, so a
- * parent's new value is already in memory before its children are processed), then runs one
- * consolidated structural pass over the whole touched tree afterward using only final values — never a
- * mid-walk, stale-sibling comparison.
+ * <p>This exists because validating budget-fit against whatever is <em>currently persisted</em> for a
+ * node's siblings is correct for editing one node in isolation, but wrong for resizing several related
+ * levels in the same request: shrinking a parent before its children hits the new hard block (see
+ * {@code FundingValidations#projectTotalCoversChildren}), and shrinking a child before its parent hits
+ * the existing one ({@code FundingValidations#subProjectAmount}/{@code #milestone}). This service instead
+ * applies every field value across the whole touched tree first (top-down, so a parent's new value is
+ * already in memory before its children are processed), then runs one consolidated structural pass over
+ * the whole touched tree afterward using only final values — never a mid-walk, stale-sibling comparison.
+ *
+ * <p>Re-parenting a project (moving it to a different parent tree entirely) is deliberately not
+ * supported by this endpoint — it used to be a narrow-endpoint-only capability, dropped in the LOB-2365
+ * merge as an intentionally unsupported scenario (delete and recreate under the new parent instead).
  */
 @Slf4j
 @Service
@@ -66,19 +77,20 @@ public class ProjectTreeUpdateService {
     private final KeycloakSecurityHelper keycloakSecurityHelper;
 
     @Transactional
-    public ProjectView updateWithMilestones(ProjectWithMilestonesCreateRequest request) {
-        if (request.getProId() == null || request.getProId().isBlank()) {
-            return ProjectView.error(Problems.badRequest(
-                    "proId is required to identify the project to update", ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
-        }
-        Optional<ProjectEntity> rootM = projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull(
-                request.getOrganisationId(), request.getProId());
+    public ProjectView updateWithMilestones(String projectId, ProjectWithMilestonesCreateRequest request) {
+        Optional<ProjectEntity> rootM = projectRepository.findById(projectId);
         if (rootM.isEmpty()) {
-            return ProjectView.error(Problems.projectNotFound(request.getProId()));
+            return ProjectView.error(Problems.projectNotFound(projectId));
         }
         ProjectEntity root = rootM.get();
         if (!keycloakSecurityHelper.canUserAccessOrg(root.getOrganisationId())) {
             return ProjectView.error(Problems.unauthorized());
+        }
+        if (root.getParentProject() != null) {
+            return ProjectView.error(Problems.badRequest(
+                    "PUT /projects/{projectId} only updates a root project's whole structure; %s is a sub-project"
+                            .formatted(projectId),
+                    ErrorTitleConstants.PROJECT_NOT_ROOT));
         }
 
         // Whole-subtree publish lock, unconditional: if any PUBLISHED event exists anywhere in this
@@ -103,8 +115,9 @@ public class ProjectTreeUpdateService {
 
         Set<String> touchedProjectIds = new LinkedHashSet<>();
         Set<String> shrunkMilestoneIds = new LinkedHashSet<>();
+        List<AffectedEventView> affectedEvents = new ArrayList<>();
         Optional<ProblemDetail> childrenProblem = applyChildren(
-                root, request.getMilestones(), request.getSubProjects(), touchedProjectIds, shrunkMilestoneIds);
+                root, request.getMilestones(), request.getSubProjects(), touchedProjectIds, shrunkMilestoneIds, affectedEvents);
         if (childrenProblem.isPresent()) {
             rollbackOnly();
             return ProjectView.error(childrenProblem.get());
@@ -122,7 +135,7 @@ public class ProjectTreeUpdateService {
             return ProjectView.error(flagged.get());
         }
 
-        return projectService.toView(root);
+        return projectService.toView(root).toBuilder().affectedEvents(affectedEvents).build();
     }
 
     /**
@@ -198,19 +211,24 @@ public class ProjectTreeUpdateService {
      */
     private Optional<ProblemDetail> applyChildren(ProjectEntity project,
             List<MilestoneCreateRequest> milestoneRequests, List<ProjectTreeNodeRequest> subProjectRequests,
-            Set<String> touchedProjectIds, Set<String> shrunkMilestoneIds) {
+            Set<String> touchedProjectIds, Set<String> shrunkMilestoneIds, List<AffectedEventView> affectedEvents) {
 
         touchedProjectIds.add(project.getId());
 
         for (MilestoneCreateRequest milestoneRequest : milestoneRequests) {
-            Optional<ProblemDetail> problem = applyMilestone(project, milestoneRequest, shrunkMilestoneIds);
+            Optional<ProblemDetail> problem = isDelete(milestoneRequest.getAction())
+                    ? deleteMilestoneNode(project, milestoneRequest, affectedEvents)
+                    : applyMilestone(project, milestoneRequest, shrunkMilestoneIds);
             if (problem.isPresent()) {
                 return problem;
             }
         }
 
         Optional<String> duplicateSubTitle = FundingValidations.firstDuplicate(
-                subProjectRequests.stream().map(ProjectTreeNodeRequest::getProjectTitle).toList());
+                subProjectRequests.stream()
+                        .filter(node -> !isDelete(node.getAction()))
+                        .map(ProjectTreeNodeRequest::getProjectTitle)
+                        .toList());
         if (duplicateSubTitle.isPresent()) {
             return Optional.of(Problems.conflict(
                     "Duplicate sub-project title under the same parent: " + duplicateSubTitle.get(),
@@ -218,7 +236,9 @@ public class ProjectTreeUpdateService {
         }
 
         for (ProjectTreeNodeRequest node : subProjectRequests) {
-            Optional<ProblemDetail> problem = applySubProjectNode(project, node, touchedProjectIds, shrunkMilestoneIds);
+            Optional<ProblemDetail> problem = isDelete(node.getAction())
+                    ? deleteSubProjectNode(project, node, affectedEvents)
+                    : applySubProjectNode(project, node, touchedProjectIds, shrunkMilestoneIds, affectedEvents);
             if (problem.isPresent()) {
                 return problem;
             }
@@ -226,8 +246,57 @@ public class ProjectTreeUpdateService {
         return Optional.empty();
     }
 
+    private static boolean isDelete(String action) {
+        return "DELETE".equalsIgnoreCase(action);
+    }
+
+    /**
+     * Deletes an existing milestone named by this node (proId, falling back to title) via
+     * {@link FundingCascadeDeleteService#deleteMilestone} — same PUBLISHED-block / non-published
+     * detach-and-flag behavior as the standalone milestone-delete endpoint (LOB-2365 follow-up: "add
+     * deletion to the tree-update PUT payload"). The whole-subtree PUBLISHED lock already checked
+     * up front in {@link #updateWithMilestones} covers this project, so no separate lock check is
+     * needed here. Events flagged as a side effect are appended to {@code affectedEvents}, so the whole
+     * tree update's response can report every event affected anywhere in the request in one place.
+     */
+    private Optional<ProblemDetail> deleteMilestoneNode(ProjectEntity project, MilestoneCreateRequest request,
+            List<AffectedEventView> affectedEvents) {
+        Optional<MilestoneEntity> existing = findExistingMilestone(project, request);
+        if (existing.isEmpty()) {
+            return Optional.of(Problems.milestoneNotFound(
+                    request.getProId() != null && !request.getProId().isBlank() ? request.getProId() : request.getMilestoneTitle()));
+        }
+        Either<ProblemDetail, List<FundingEventEntity>> result = cascadeDeleteService.deleteMilestone(existing.get());
+        if (result.isLeft()) {
+            return Optional.of(result.getLeft());
+        }
+        affectedEvents.addAll(FundingCascadeDeleteService.toAffectedEventViews(result.get()));
+        return Optional.empty();
+    }
+
+    /**
+     * Deletes an existing sub-project named by this node (proId, falling back to title) and its entire
+     * subtree via {@link FundingCascadeDeleteService#deleteProjectSubtree} — the node's own
+     * {@code milestones}/{@code subProjects} lists, if any, are ignored: deleting a node always removes
+     * everything below it, regardless of what the request additionally describes there. Events flagged
+     * as a side effect are appended to {@code affectedEvents} (see {@link #deleteMilestoneNode}).
+     */
+    private Optional<ProblemDetail> deleteSubProjectNode(ProjectEntity project, ProjectTreeNodeRequest node,
+            List<AffectedEventView> affectedEvents) {
+        Optional<ProjectEntity> existing = findExistingSubProject(project, node);
+        if (existing.isEmpty()) {
+            return Optional.of(Problems.subProjectReferenceNotFound(project.getProjectTitle(), node.getProjectTitle()));
+        }
+        Either<ProblemDetail, List<FundingEventEntity>> result = cascadeDeleteService.deleteProjectSubtree(existing.get());
+        if (result.isLeft()) {
+            return Optional.of(result.getLeft());
+        }
+        affectedEvents.addAll(FundingCascadeDeleteService.toAffectedEventViews(result.get()));
+        return Optional.empty();
+    }
+
     private Optional<ProblemDetail> applySubProjectNode(ProjectEntity project, ProjectTreeNodeRequest node,
-            Set<String> touchedProjectIds, Set<String> shrunkMilestoneIds) {
+            Set<String> touchedProjectIds, Set<String> shrunkMilestoneIds, List<AffectedEventView> affectedEvents) {
         Optional<ProblemDetail> nodeXor = FundingValidations.milestonesXorSubProjects(
                 !node.getMilestones().isEmpty(), !node.getSubProjects().isEmpty());
         if (nodeXor.isPresent()) {
@@ -239,7 +308,7 @@ public class ProjectTreeUpdateService {
             return Optional.of(subProject.getLeft());
         }
 
-        return applyChildren(subProject.get(), node.getMilestones(), node.getSubProjects(), touchedProjectIds, shrunkMilestoneIds);
+        return applyChildren(subProject.get(), node.getMilestones(), node.getSubProjects(), touchedProjectIds, shrunkMilestoneIds, affectedEvents);
     }
 
     /** Matches an existing sub-project by proId (falling back to title) and applies the node's fields to it, or creates a new one when neither matches. */
