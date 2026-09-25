@@ -36,7 +36,7 @@ public class ProjectTreeNodeRequest {
     private String fundingId;
 
     @Nullable
-    @Schema(example = "PRJ-1000-1", description = "Permanent identifier assigned when this sub-project was created "
+    @Schema(example = "PRJ-1000-S1", description = "Permanent identifier assigned when this sub-project was created "
             + "(see ProjectView#proId). When supplied on an update, matches the existing sub-project by it directly — "
             + "the reliable way to reference one that may have since been renamed. When omitted, falls back to "
             + "matching by the current projectTitle. Ignored on create (a sub-project's proId is always "

@@ -75,7 +75,7 @@ class MilestoneServiceTest {
                 .thenReturn(Optional.of(activeCurrency));
         // A milestone's proId is always system-assigned (see MilestoneEntity#getProId()) — tests that
         // create a new milestone don't care about the exact assigned value unless they say otherwise.
-        lenient().when(childSequenceService.nextChildProId(any())).thenReturn("Milestone-1");
+        lenient().when(childSequenceService.nextChildProId(any(), any())).thenReturn("Milestone-1");
     }
 
     @Test
@@ -941,6 +941,18 @@ class MilestoneServiceTest {
                 .currency("USD")
                 .milestoneDate(FUTURE_DATE)
                 .build();
+    }
+
+    @Test
+    void applyChanges_setsDescription_whenProvided_andLeavesOtherFieldsWhenNull() {
+        MilestoneEntity milestone = MilestoneEntity.builder().id("m1").milestoneTitle("Title")
+                .milestoneAmount(new BigDecimal("100")).currency("USD").build();
+
+        milestoneService.applyChanges(milestone, MilestoneUpdateRequest.builder().description("Now described").build(), false);
+
+        assertThat(milestone.getDescription()).isEqualTo("Now described");
+        assertThat(milestone.getMilestoneTitle()).isEqualTo("Title");
+        assertThat(milestone.getMilestoneAmount()).isEqualByComparingTo("100");
     }
 
 }

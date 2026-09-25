@@ -2019,4 +2019,42 @@ class FundingBulkImportServiceTest {
         verify(projectService, never()).createWithMilestones(any());
     }
 
+    @Test
+    void rootUpdateRejectedByRootFieldValidation_reportsError() {
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(
+                List.of(rootLine("Project A", "120000.00", "USD"))));
+        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
+                .thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
+        when(projectTreeUpdateService.applyRootFields(any(), any()))
+                .thenReturn(Optional.of(problem(HttpStatus.BAD_REQUEST, "PROJECT_AMOUNT_INVALID")));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getProjectsUpdated()).isZero();
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getTitle()).isEqualTo("PROJECT_AMOUNT_INVALID");
+    }
+
+    @Test
+    void groupReportsError_whenFlaggingShrunkMilestonesIsBlocked() {
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(
+                List.of(rootLine("Project A", "100000.00", "USD"))));
+        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
+                .thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
+        when(projectTreeUpdateService.flagShrunkMilestones(any()))
+                .thenReturn(Optional.of(problem(HttpStatus.CONFLICT, "EVENT_ALLOCATED_TO_OTHER_PROJECTS")));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getProjectsUpdated()).isZero();
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getTitle()).isEqualTo("EVENT_ALLOCATED_TO_OTHER_PROJECTS");
+    }
+
 }

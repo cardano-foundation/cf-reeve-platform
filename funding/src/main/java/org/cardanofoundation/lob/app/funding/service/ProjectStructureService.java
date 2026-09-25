@@ -57,7 +57,7 @@ public class ProjectStructureService {
      * is available at any depth.
      *
      * <p>{@code explicitProId}, when supplied, is used as the new sub-project's proId as-is (after a
-     * uniqueness check) instead of the usual system-assigned {@code parent.proId + "-" + n}. This is
+     * uniqueness check) instead of the usual system-assigned {@code parent.proId + "-S" + n}. This is
      * CSV-bulk-import-only: the UI/API-facing overload above always passes {@code null}, since
      * sub-projects created there are always auto-numbered — CSV creation is the one path that requires
      * the caller to supply its own value (see LOB-2384's CSV-mandatory-ID decision), specifically
@@ -129,7 +129,7 @@ public class ProjectStructureService {
             }
             proId = explicitProId;
         } else {
-            proId = childSequenceService.nextChildProId(parent);
+            proId = childSequenceService.nextChildProId(parent, ProjectChildSequenceService.ChildKind.SUB_PROJECT);
         }
 
         return Either.right(projectRepository.saveAndFlush(ProjectEntity.builder()

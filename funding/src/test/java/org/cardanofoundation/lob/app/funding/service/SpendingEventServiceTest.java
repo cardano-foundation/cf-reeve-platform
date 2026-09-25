@@ -800,8 +800,8 @@ class SpendingEventServiceTest {
         ProjectEntity root = projectEntity(); // id "p1", total 200000
         // The sub-project is created on the fly with an auto-assigned proId (see @BeforeEach's generic
         // findWithLockById stub, which always returns proId "parent") — the deterministic id is derived
-        // from that proId ("parent-1"), never from the title "Work Package 1".
-        String subProId = "parent-1";
+        // from that proId ("parent-S1"), never from the title "Work Package 1".
+        String subProId = "parent-S1";
         String subId = ProjectEntity.subId("p1", subProId);
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull("org1", "Project AB")).thenReturn(Optional.of(root));
         when(milestoneRepository.existsByProjectId("p1")).thenReturn(false);

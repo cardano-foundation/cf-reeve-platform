@@ -276,13 +276,10 @@ public class SpendingEventController {
                                     ),
                                     @ExampleObject(
                                             name = "FUNDING – fund \"Project Orion\" (see the whole-tree PUT /projects example)",
-                                            summary = "Full ERROR-lifecycle walkthrough, step 1: after creating \"Project Orion\" (PRJ-1000) via the "
-                                                    + "POST /projects example above, fund it fully — 286,728.71 to Sub 1's milestone and "
-                                                    + "418,974.15 to Sub 2's milestone, matching their current budgets exactly. Next steps: "
-                                                    + "record a SPENDING event too (next example), then shrink the project with the PUT "
-                                                    + "/projects example — both events will flip to ERROR since their allocations no longer "
-                                                    + "fit the shrunk milestones — then fix each one with the PUT /events/{eventId} examples "
-                                                    + "below to bring them back to DRAFT",
+                                            summary = "Orion walkthrough, step 2 of 6: after creating \"Project Orion\" (PRJ-1000) with the POST "
+                                                    + "/projects example, fund it fully — 286,728.71 to Sub 1's milestone and 418,974.15 to Sub 2's "
+                                                    + "milestone, matching their current budgets exactly. Next step in endpoint POST /events: the "
+                                                    + "example \"SPENDING – record spend against \"Project Orion\"\".",
                                             value = """
                                                     {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
@@ -321,11 +318,95 @@ public class SpendingEventController {
                                                     }"""
                                     ),
                                     @ExampleObject(
+                                            name = "FUNDING – fund both sub-projects of \"Project Atlas\" (see the delete/orphan PUT /projects example)",
+                                            summary = "Atlas walkthrough, step 2 of 6: after creating \"Project Atlas\" (PRJ-2000) with the POST "
+                                                    + "/projects example, fund both its sub-projects' milestones from the same event — 20,000 to "
+                                                    + "Sub A's, 15,000 to Sub B's. Next step in endpoint POST /events: the example \"SPENDING – "
+                                                    + "spend against only \"Sub B\" of \"Project Atlas\"\".",
+                                            value = """
+                                                    {
+                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                                                      "eventType": "FUNDING",
+                                                      "fundingId": "GRANT-ATLAS-0001",
+                                                      "fundingHash": "atlas-hash-0001",
+                                                      "fundingEntity": "Cardano Foundation",
+                                                      "currencyRcy": "ADA",
+                                                      "eventDate": "2026-09-15",
+                                                      "amountRcy": "35000.00",
+                                                      "allocations": [
+                                                        {
+                                                          "projectTitle": "Project Atlas",
+                                                          "subProjects": [
+                                                            {
+                                                              "projectTitle": "Sub A",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone A1" },
+                                                                  "allocatedAmount": "20000.00"
+                                                                }
+                                                              ]
+                                                            },
+                                                            {
+                                                              "projectTitle": "Sub B",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone B1" },
+                                                                  "allocatedAmount": "15000.00"
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }"""
+                                    ),
+                                    @ExampleObject(
+                                            name = "SPENDING – spend against only \"Sub B\" of \"Project Atlas\" (becomes an orphan)",
+                                            summary = "Atlas walkthrough, step 3 of 6: records 10,000 of spend against Sub B's milestone only "
+                                                    + "(unlike the FUNDING event above, which also touches Sub A). Once Sub B is deleted, this "
+                                                    + "event has no allocation left that points at an existing milestone. Next step in endpoint PUT "
+                                                    + "/projects/{projectId}: the example \"Delete a sub-project\".",
+                                            value = """
+                                                    {
+                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                                                      "eventType": "SPENDING",
+                                                      "fundingId": "GRANT-ATLAS-0002",
+                                                      "fundingHash": "atlas-hash-0002",
+                                                      "currencyRcy": "ADA",
+                                                      "eventDate": "2026-09-20",
+                                                      "category": "Personnel",
+                                                      "vendor": "Vendor Atlas",
+                                                      "amountFcy": "10000.00",
+                                                      "currencyFcy": "USD",
+                                                      "fxRate": "1.0",
+                                                      "amountRcy": "10000.00",
+                                                      "hash": "sha256:demo-atlas-0002",
+                                                      "notes": "Invoice #INV-ATLAS-0002",
+                                                      "allocations": [
+                                                        {
+                                                          "projectTitle": "Project Atlas",
+                                                          "subProjects": [
+                                                            {
+                                                              "projectTitle": "Sub B",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone B1" },
+                                                                  "allocatedAmount": "10000.00"
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }"""
+                                    ),
+                                    @ExampleObject(
                                             name = "SPENDING – record spend against \"Project Orion\"",
-                                            summary = "Full ERROR-lifecycle walkthrough, step 2: records 120,000 of actual spend against the "
-                                                    + "same two milestones just funded above (well within their current budgets) — 50,000 "
-                                                    + "against Sub 1's milestone, 70,000 against Sub 2's — so there are two DRAFT events "
-                                                    + "(this one and the FUNDING one above) in the tree when it's shrunk in the next step",
+                                            summary = "Orion walkthrough, step 3 of 6: records 120,000 of actual spend against the same two "
+                                                    + "milestones just funded (well within their current budgets) — 50,000 against Sub 1's "
+                                                    + "milestone, 70,000 against Sub 2's — so there are two DRAFT events (this one and the FUNDING "
+                                                    + "one) in the tree when it is shrunk. Next step in endpoint PUT /projects/{projectId}: the "
+                                                    + "example \"Shrink a project and both its sub-projects together\".",
                                             value = """
                                                     {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
@@ -422,12 +503,13 @@ public class SpendingEventController {
                                     ),
                                     @ExampleObject(
                                             name = "FUNDING – fix an ERROR event after the project was shrunk",
-                                            summary = "Full ERROR-lifecycle walkthrough, step 4a: after \"Project Orion\" is shrunk via the "
-                                                    + "whole-tree PUT /projects example (Sub 1's milestone down to 35,000, Sub 2's down to "
-                                                    + "55,000), the FUNDING event created above no longer fits (286,728.71/418,974.15 each "
-                                                    + "exceed the new amounts) and flips to ERROR. Call this on that event's id with smaller "
-                                                    + "allocations that fit the new budgets — the update succeeds and the event resets from "
-                                                    + "ERROR back to DRAFT automatically",
+                                            summary = "Orion walkthrough, step 5 of 6: after \"Project Orion\" is shrunk with the whole-tree PUT "
+                                                    + "/projects example (Sub 1's milestone down to 35,000, Sub 2's down to 55,000), the FUNDING "
+                                                    + "event created above no longer fits (286,728.71/418,974.15 each exceed the new amounts) and "
+                                                    + "flips to ERROR. Call this on that event's id with smaller allocations that fit the new "
+                                                    + "budgets — the update succeeds and the event resets from ERROR back to DRAFT automatically. "
+                                                    + "Next step in endpoint PUT /events/{eventId}: the example \"SPENDING – fix an ERROR event "
+                                                    + "after the project was shrunk\".",
                                             value = """
                                                     {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
@@ -467,9 +549,9 @@ public class SpendingEventController {
                                     ),
                                     @ExampleObject(
                                             name = "SPENDING – fix an ERROR event after the project was shrunk",
-                                            summary = "Full ERROR-lifecycle walkthrough, step 4b: same fix, for the SPENDING event (its "
-                                                    + "50,000/70,000 allocations also no longer fit the shrunk 35,000/55,000 milestones) — "
-                                                    + "smaller allocations that fit bring it back to DRAFT too",
+                                            summary = "Orion walkthrough, step 6 of 6 (last): same fix for the SPENDING event (its 50,000/70,000 "
+                                                    + "allocations also no longer fit the shrunk 35,000/55,000 milestones) — smaller allocations "
+                                                    + "that fit bring it back to DRAFT too. Nothing further: both events are DRAFT again.",
                                             value = """
                                                     {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
@@ -505,6 +587,45 @@ public class SpendingEventController {
                                                                 {
                                                                   "milestone": { "milestoneTitle": "Milestone 1" },
                                                                   "allocatedAmount": "25000.00"
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }"""
+                                    ),
+                                    @ExampleObject(
+                                            name = "FUNDING – fix an ERROR event after a sub-project was deleted",
+                                            summary = "Atlas walkthrough, step 5 of 6: after \"Sub B\" of \"Project Atlas\" is deleted with the PUT "
+                                                    + "/projects/{projectId} example, this FUNDING event is in ERROR: its 15,000 allocation to Sub "
+                                                    + "B's milestone is still there but dangling (milestoneDeleted = true), next to its 20,000 "
+                                                    + "allocation to Sub A's milestone. Call this on that event's id with allocations that only "
+                                                    + "reference what still exists (Sub A) and an amountRcy reduced to match — the update replaces "
+                                                    + "all allocations, drops the dangling one, and the event resets from ERROR back to DRAFT "
+                                                    + "automatically. The SPENDING event has nothing live left to fix. Next step in endpoint DELETE "
+                                                    + "/events/orphans: it deletes that one, since none of its allocations points at an existing "
+                                                    + "milestone.",
+                                            value = """
+                                                    {
+                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                                                      "eventType": "FUNDING",
+                                                      "fundingId": "GRANT-ATLAS-0001",
+                                                      "fundingHash": "atlas-hash-0001",
+                                                      "fundingEntity": "Cardano Foundation",
+                                                      "currencyRcy": "ADA",
+                                                      "eventDate": "2026-09-15",
+                                                      "amountRcy": "20000.00",
+                                                      "allocations": [
+                                                        {
+                                                          "projectTitle": "Project Atlas",
+                                                          "subProjects": [
+                                                            {
+                                                              "projectTitle": "Sub A",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone A1" },
+                                                                  "allocatedAmount": "20000.00"
                                                                 }
                                                               ]
                                                             }
@@ -563,10 +684,17 @@ public class SpendingEventController {
     }
 
     @Operation(summary = "Bulk-delete orphaned ERROR events",
-            description = "Deletes every ERROR event for this organisation that has no milestone allocation "
-                    + "left at all — every one was removed by an earlier project/milestone cascade delete "
-                    + "(LOB-2365 follow-up), so there is nothing left on them to reconcile. An ERROR event "
-                    + "that still has at least one real allocation left is never touched by this endpoint.",
+            description = "Deletes every ERROR event of this organisation none of whose allocations points at an "
+                    + "existing milestone any more — every milestone they referenced was deleted by an earlier "
+                    + "project/milestone cascade delete (LOB-2365 follow-up), which keeps the allocation rows so a "
+                    + "human decides what happens to the event. This endpoint is that human decision, taken for all "
+                    + "such events at once. An ERROR event that still has at least one allocation to an existing "
+                    + "milestone is never touched: it can still be fixed with PUT /events/{eventId}. "
+                    + "Atlas walkthrough, step 6 of 6 (last): call this with the same organisationId used "
+                    + "throughout the walkthrough, after deleting \"Sub B\" of \"Project Atlas\" (PUT "
+                    + "/projects/{projectId}) and fixing the FUNDING event by hand (PUT /events/{eventId}) — the "
+                    + "SPENDING event (GRANT-ATLAS-0002), whose only allocation was to Sub B's deleted milestone, "
+                    + "is deleted here.",
             responses = {
                     @ApiResponse(responseCode = "200", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
                             schema = @Schema(implementation = OrphanEventsCleanupView.class))}),

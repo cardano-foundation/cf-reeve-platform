@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.funding.service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -133,11 +134,11 @@ public class SpendingEventService {
     }
 
     /**
-     * Bulk-deletes every "orphan" event for this organisation — an {@code ERROR} event with no
-     * milestone allocation left at all (see {@link FundingEventRepository#findOrphanedEvents}) — so a
+     * Bulk-deletes every "orphan" event for this organisation — an {@code ERROR} event none of
+     * whose allocations points at an existing milestone (see {@link FundingEventRepository#findOrphanedEvents}) — so a
      * human can clear them out in one action instead of finding and deleting each one individually
-     * (LOB-2365 follow-up). An {@code ERROR} event that still has at least one real allocation left is
-     * never touched here; that one may still hold data worth fixing, so it stays for the normal
+     * (LOB-2365 follow-up). An {@code ERROR} event that still has at least one allocation to an existing
+     * milestone is never touched here; that one may still hold data worth fixing, so it stays for the normal
      * event edit/delete flow.
      */
     @Transactional
@@ -406,7 +407,11 @@ public class SpendingEventService {
     // -------------------------------------------------------------------------
 
     public SpendingEventView toView(FundingEventEntity event) {
-        List<EventProjectAllocationView> projViews = buildProjectAllocationViews(event.getId());
+        List<OrphanedAllocationView> orphans = buildOrphanedAllocationViews(event.getId());
+        List<EventProjectAllocationView> projViews = new ArrayList<>(buildProjectAllocationViews(event.getId()));
+        if (!orphans.isEmpty()) {
+            projViews.add(toDeletedMilestonesPlaceholder(event.getId(), orphans));
+        }
         boolean overspend = projViews.stream().anyMatch(p -> p.isOverspend()
                 || p.getMilestoneAllocations().stream().anyMatch(EventMilestoneAllocationView::isOverspend));
 
@@ -433,6 +438,7 @@ public class SpendingEventService {
                 .hash(event.getHash())
                 .notes(event.getNotes())
                 .projectAllocations(projViews)
+                .orphanedAllocations(orphans)
                 .build();
     }
 
@@ -704,6 +710,38 @@ public class SpendingEventService {
                         am -> am.milestone().getProject(),
                         LinkedHashMap::new,
                         Collectors.toList()));
+    }
+
+    /**
+     * The event's allocations whose milestone no longer exists — {@link #allocationsByProject} drops them
+     * (it can't group them under a project), but they must stay visible, since deleting a milestone never
+     * removes its allocation rows (LOB-2365 follow-up).
+     */
+    private List<OrphanedAllocationView> buildOrphanedAllocationViews(String eventId) {
+        return milestoneAllocationRepository.findById_EventId(eventId).stream()
+                .filter(alloc -> milestoneService.findById(alloc.getId().getMilestoneId()).isEmpty())
+                .map(alloc -> OrphanedAllocationView.builder()
+                        .milestoneId(alloc.getId().getMilestoneId().trim())
+                        .allocatedAmount(alloc.getAllocatedAmount())
+                        .milestoneDeleted(true)
+                        .build())
+                .toList();
+    }
+
+    /** Groups the orphaned allocations into one project-less entry so they also show up in projectAllocations. */
+    private static EventProjectAllocationView toDeletedMilestonesPlaceholder(String eventId, List<OrphanedAllocationView> orphans) {
+        return EventProjectAllocationView.builder()
+                .containsDeletedMilestones(true)
+                .spentAmount(BigDecimal.ZERO)
+                .milestoneAllocations(orphans.stream()
+                        .map(o -> EventMilestoneAllocationView.builder()
+                                .eventId(eventId)
+                                .milestoneId(o.getMilestoneId())
+                                .allocatedAmount(o.getAllocatedAmount())
+                                .milestoneDeleted(true)
+                                .build())
+                        .toList())
+                .build();
     }
 
     private List<EventProjectAllocationView> buildProjectAllocationViews(String eventId) {

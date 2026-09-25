@@ -61,7 +61,7 @@ public class ProjectEntity extends CommonEntity implements Persistable<String> {
      * (defaulting to {@link #projectTitle} when omitted) — root-level codes are typically meaningful to
      * the organisation (e.g. a grant reference) and worth letting them choose. For a sub-project created
      * through the JSON API or the event-allocation flow, it is always system-assigned as
-     * {@code parent.proId + "-" + n} (n = {@link #nextChildSequence}, atomically incremented on the
+     * {@code parent.proId + "-S" + n} for a sub-project, {@code "-M" + n} for a milestone (n = {@link #nextChildSequence}, atomically incremented on the
      * parent at creation) — never user-suppliable there, since a sub-project has no equivalent natural
      * external code. CSV bulk-import is the one exception: it requires the caller to supply the value
      * (see {@code ProjectStructureService#createSubProject}'s {@code explicitProId} overload), because

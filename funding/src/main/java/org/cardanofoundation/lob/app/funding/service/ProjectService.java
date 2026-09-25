@@ -321,9 +321,12 @@ public class ProjectService {
 
     /**
      * Builds the project view. When {@code includeEvents} is set, each project node additionally
-     * carries the events allocated to its milestones (used by get-by-id); list endpoints omit them.
+     * carries the events allocated to its milestones (used by get-by-id, and by
+     * {@code ProjectTreeUpdateService#updateWithMilestones} so a PUT's response is exactly the same
+     * shape as a GET — one place builds the view either way); list endpoints omit them to avoid an
+     * events query per row. Package-visible for that PUT reuse.
      */
-    private ProjectView toView(ProjectEntity project, boolean includeEvents) {
+    ProjectView toView(ProjectEntity project, boolean includeEvents) {
         List<MilestoneView> milestoneViews = milestoneService.findByProjectId(project.getId()).stream()
                 .map(milestoneService::toView)
                 .toList();

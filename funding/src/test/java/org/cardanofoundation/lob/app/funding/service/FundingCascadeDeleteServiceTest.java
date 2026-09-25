@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -67,40 +68,42 @@ class FundingCascadeDeleteServiceTest {
     }
 
     @Test
-    void deleteMilestone_detachesAndFlagsEvent_whenFullyInside() {
+    void deleteMilestone_flagsEvent_withoutTouchingItsAllocations() {
         MilestoneEntity milestone = milestone("m1");
         EventMilestoneAllocationEntity alloc = allocation("e1", "m1", "50000");
         FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, alloc);
         when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
-        when(allocationRepository.findById_MilestoneIdIn(any())).thenReturn(List.of(alloc));
+        when(allocationRepository.findEventIdsByMilestoneIdIn(any())).thenReturn(List.of("e1"));
         when(fundingEventRepository.findAllById(any())).thenReturn(List.of(event));
 
         Either<ProblemDetail, List<FundingEventEntity>> result = service.deleteMilestone(milestone);
 
         assertThat(result.get()).containsExactly(event);
         assertThat(event.getStatus()).isEqualTo(EventStatus.ERROR);
-        assertThat(event.getMilestoneAllocations()).isEmpty();       // its only allocation was removed
+        // the allocation row is left exactly as it was — no FK enforces milestone_id any more
+        // (V1.8_200_9), so it's fine for it to now point at a milestone that's about to be deleted
+        assertThat(event.getMilestoneAllocations()).containsExactly(alloc);
         verify(fundingEventRepository, never()).delete(any());       // event itself is never auto-deleted
         verify(fundingEventRepository).saveAll(List.of(event));
         verify(milestoneRepository).delete(milestone);
     }
 
     @Test
-    void deleteMilestone_detachesAndFlagsEvent_whenAlsoAllocatedToOtherProjects() {
+    void deleteMilestone_flagsEvent_whenAlsoAllocatedToOtherProjects() {
         MilestoneEntity milestone = milestone("m1");
         EventMilestoneAllocationEntity insideAlloc = allocation("e1", "m1", "60000");
         EventMilestoneAllocationEntity outsideAlloc = allocation("e1", "m2", "40000"); // m2 is outside the deleted scope
         FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, insideAlloc, outsideAlloc);
         when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
-        when(allocationRepository.findById_MilestoneIdIn(any())).thenReturn(List.of(insideAlloc));
+        when(allocationRepository.findEventIdsByMilestoneIdIn(any())).thenReturn(List.of("e1"));
         when(fundingEventRepository.findAllById(any())).thenReturn(List.of(event));
 
         Either<ProblemDetail, List<FundingEventEntity>> result = service.deleteMilestone(milestone);
 
         assertThat(result.get()).containsExactly(event);
         assertThat(event.getStatus()).isEqualTo(EventStatus.ERROR);
-        // only the in-scope allocation was removed; the untouched one (m2) survives
-        assertThat(event.getMilestoneAllocations()).containsExactly(outsideAlloc);
+        // both allocations survive untouched, including the in-scope one now pointing at a deleted milestone
+        assertThat(event.getMilestoneAllocations()).containsExactly(insideAlloc, outsideAlloc);
         verify(fundingEventRepository, never()).delete(any());
         verify(milestoneRepository).delete(milestone);
     }
@@ -109,7 +112,7 @@ class FundingCascadeDeleteServiceTest {
     void deleteMilestone_deletesMilestone_whenNoAllocations() {
         MilestoneEntity milestone = milestone("m1");
         when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
-        when(allocationRepository.findById_MilestoneIdIn(any())).thenReturn(List.of());
+        when(allocationRepository.findEventIdsByMilestoneIdIn(any())).thenReturn(List.of());
 
         Either<ProblemDetail, List<FundingEventEntity>> result = service.deleteMilestone(milestone);
 
@@ -142,7 +145,7 @@ class FundingCascadeDeleteServiceTest {
         when(projectRepository.findByParentProjectId("p2")).thenReturn(List.of());
         when(milestoneRepository.findByProjectIdIn(any())).thenReturn(List.of(milestone("m1")));
         when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
-        when(allocationRepository.findById_MilestoneIdIn(any())).thenReturn(List.of());
+        when(allocationRepository.findEventIdsByMilestoneIdIn(any())).thenReturn(List.of());
 
         Either<ProblemDetail, List<FundingEventEntity>> result = service.deleteProjectSubtree(root);
 
@@ -151,7 +154,7 @@ class FundingCascadeDeleteServiceTest {
     }
 
     @Test
-    void deleteProjectSubtree_detachesAndFlagsEvent_whenAlsoAllocatedOutsideSubtree() {
+    void deleteProjectSubtree_flagsEvent_whenAlsoAllocatedOutsideSubtree() {
         ProjectEntity root = project("p1");
         EventMilestoneAllocationEntity insideAlloc = allocation("e1", "m1", "60000");
         EventMilestoneAllocationEntity outsideAlloc = allocation("e1", "m-other", "40000"); // milestone of another project
@@ -159,14 +162,15 @@ class FundingCascadeDeleteServiceTest {
         when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of());
         when(milestoneRepository.findByProjectIdIn(any())).thenReturn(List.of(milestone("m1")));
         when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
-        when(allocationRepository.findById_MilestoneIdIn(any())).thenReturn(List.of(insideAlloc));
+        when(allocationRepository.findEventIdsByMilestoneIdIn(any())).thenReturn(List.of("e1"));
         when(fundingEventRepository.findAllById(any())).thenReturn(List.of(event));
 
         Either<ProblemDetail, List<FundingEventEntity>> result = service.deleteProjectSubtree(root);
 
         assertThat(result.get()).containsExactly(event);
         assertThat(event.getStatus()).isEqualTo(EventStatus.ERROR);
-        assertThat(event.getMilestoneAllocations()).containsExactly(outsideAlloc);
+        // both allocations survive untouched, including the in-scope one now pointing at a deleted milestone
+        assertThat(event.getMilestoneAllocations()).containsExactly(insideAlloc, outsideAlloc);
         verify(fundingEventRepository, never()).delete(any());
         verify(projectRepository).delete(root);
     }
@@ -254,4 +258,26 @@ class FundingCascadeDeleteServiceTest {
                 .milestoneAllocations(new ArrayList<>(List.of(allocations)))
                 .build();
     }
+
+    @Test
+    void deleteProjectSubtree_deletesWithoutQueryingEvents_whenSubtreeHasNoMilestones() {
+        ProjectEntity root = project("p1");
+        when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of());
+        when(milestoneRepository.findByProjectIdIn(any())).thenReturn(List.of());
+
+        Either<ProblemDetail, List<FundingEventEntity>> result = service.deleteProjectSubtree(root);
+
+        assertThat(result.get()).isEmpty();
+        verify(projectRepository).delete(root);
+        verifyNoInteractions(allocationRepository);
+    }
+
+    @Test
+    void markContainedEventsAsErrorOrBlock_noOp_whenGivenNoMilestones() {
+        Optional<ProblemDetail> result = service.markContainedEventsAsErrorOrBlock(Set.of());
+
+        assertThat(result).isEmpty();
+        verifyNoInteractions(allocationRepository);
+    }
+
 }

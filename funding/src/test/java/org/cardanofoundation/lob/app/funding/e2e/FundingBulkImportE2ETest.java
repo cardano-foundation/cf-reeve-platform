@@ -1136,7 +1136,15 @@ class FundingBulkImportE2ETest {
             // requested parameterization" autowiring for a scanned class whose own generic is left
             // unresolved, not for a @Bean method whose declared return type fixes the parameter.
             "org.cardanofoundation.lob.app.organisation.service.csv"
-    }, excludeFilters = @Filter(type = FilterType.ASSIGNABLE_TYPE, classes = EventPublishJob.class))
+    }, excludeFilters = {
+            @Filter(type = FilterType.ASSIGNABLE_TYPE, classes = EventPublishJob.class),
+            // org.cardanofoundation.lob.app.funding.e2e (this package) is itself under the
+            // org.cardanofoundation.lob.app.funding scan root above, so without this exclusion this
+            // scan also picks up every OTHER e2e test's own nested @Configuration TestConfig (e.g.
+            // FundingCascadeDeleteE2ETest.TestConfig) and double-registers its repository beans in
+            // this context — mirror this exclusion in any new e2e test class added under this package.
+            @Filter(type = FilterType.REGEX, pattern = "org\\.cardanofoundation\\.lob\\.app\\.funding\\.e2e\\..*")
+    })
     // EventPublishJob is unrelated to the bulk-import flow under test and needs the *concrete*
     // OrganisationPublicApi (vs. everything else here, which needs the OrganisationPublicApiIF
     // interface) — mocking both would make every interface-typed injection point ambiguous.

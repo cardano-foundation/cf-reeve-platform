@@ -135,7 +135,9 @@ public class ProjectTreeUpdateService {
             return ProjectView.error(flagged.get());
         }
 
-        return projectService.toView(root).toBuilder().affectedEvents(affectedEvents).build();
+        // includeEvents=true: the exact same view-building call GET /projects/{projectId} makes, so a
+        // PUT's response is never a thinner shape than GET's — one method controls both, not two.
+        return projectService.toView(root, true).toBuilder().affectedEvents(affectedEvents).build();
     }
 
     /**

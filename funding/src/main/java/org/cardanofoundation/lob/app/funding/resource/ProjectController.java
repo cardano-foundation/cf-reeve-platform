@@ -88,55 +88,105 @@ public class ProjectController {
                     content = @Content(
                             mediaType = APPLICATION_JSON_VALUE,
                             schema = @Schema(implementation = ProjectWithMilestonesCreateRequest.class),
-                            examples = @ExampleObject(
-                                    name = "Project with two sub-projects, each with a milestone",
-                                    summary = "Creates \"Project Orion\" (proId PRJ-1000) with two sub-projects "
-                                            + "\"Sub 1\"/\"Sub 2\" (proId PRJ-1000-1/PRJ-1000-2), each with its own "
-                                            + "milestone — the same shape used by the whole-tree PUT endpoint below, "
-                                            + "so a project created this way can later be resized the same way it "
-                                            + "was created",
-                                    value = """
-                                            {
-                                              "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
-                                              "externalProjectId": "PROJ-ORION",
-                                              "projectTitle": "Project Orion",
-                                              "proId": "PRJ-1000",
-                                              "totalAmount": "705702.86",
-                                              "currency": "ADA",
-                                              "subProjects": [
-                                                {
-                                                  "externalProjectId": "PROJ-ORION-1",
-                                                  "projectTitle": "Sub 1",
-                                                  "proId": "PRJ-1000-1",
-                                                  "totalAmount": "286728.71",
-                                                  "milestones": [
+                            examples = {
+                                    @ExampleObject(
+                                            name = "Project with two sub-projects, each with a milestone",
+                                            summary = "Orion walkthrough (shrink, then fix the ERROR events), step 1 of 6: creates \"Project Orion\" "
+                                                    + "(proId PRJ-1000) with two sub-projects \"Sub 1\"/\"Sub 2\" (proId PRJ-1000-S1/PRJ-1000-S2), each "
+                                                    + "with its own milestone (PRJ-1000-S1-M1/PRJ-1000-S2-M1) — the same shape the whole-tree PUT "
+                                                    + "endpoint uses, so a project created this way can later be resized the same way it was "
+                                                    + "created. Next step in endpoint POST /events: the example \"FUNDING – fund \"Project Orion\"\".",
+                                            value = """
                                                     {
-                                                      "proId": "PRJ-1000-1-1",
-                                                      "milestoneTitle": "Milestone 1",
-                                                      "milestoneAmount": "286728.71",
+                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                                                      "externalProjectId": "PROJ-ORION",
+                                                      "projectTitle": "Project Orion",
+                                                      "proId": "PRJ-1000",
+                                                      "totalAmount": "705702.86",
                                                       "currency": "ADA",
-                                                      "milestoneDate": "2026-10-08"
-                                                    }
-                                                  ]
-                                                },
-                                                {
-                                                  "externalProjectId": "PROJ-ORION-2",
-                                                  "projectTitle": "Sub 2",
-                                                  "proId": "PRJ-1000-2",
-                                                  "totalAmount": "418974.15",
-                                                  "milestones": [
+                                                      "subProjects": [
+                                                        {
+                                                          "externalProjectId": "PROJ-ORION-1",
+                                                          "projectTitle": "Sub 1",
+                                                          "proId": "PRJ-1000-S1",
+                                                          "totalAmount": "286728.71",
+                                                          "milestones": [
+                                                            {
+                                                              "proId": "PRJ-1000-S1-M1",
+                                                              "milestoneTitle": "Milestone 1",
+                                                              "milestoneAmount": "286728.71",
+                                                              "currency": "ADA",
+                                                              "milestoneDate": "2026-10-08"
+                                                            }
+                                                          ]
+                                                        },
+                                                        {
+                                                          "externalProjectId": "PROJ-ORION-2",
+                                                          "projectTitle": "Sub 2",
+                                                          "proId": "PRJ-1000-S2",
+                                                          "totalAmount": "418974.15",
+                                                          "milestones": [
+                                                            {
+                                                              "proId": "PRJ-1000-S2-M1",
+                                                              "milestoneTitle": "Milestone 1",
+                                                              "milestoneAmount": "418974.15",
+                                                              "currency": "ADA",
+                                                              "milestoneDate": "2026-09-24"
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }"""
+                                    ),
+                                    @ExampleObject(
+                                            name = "Project with two sub-projects, one of which gets deleted later",
+                                            summary = "Atlas walkthrough (delete a sub-project, fix or clean up the affected events), step 1 of 6: "
+                                                    + "creates \"Project Atlas\" (proId PRJ-2000) with two sub-projects \"Sub A\"/\"Sub B\" (proId "
+                                                    + "PRJ-2000-S1/PRJ-2000-S2), each with its own milestone. Next step in endpoint POST /events: "
+                                                    + "the example \"FUNDING – fund both sub-projects of \"Project Atlas\"\".",
+                                            value = """
                                                     {
-                                                      "proId": "PRJ-1000-2-1",
-                                                      "milestoneTitle": "Milestone 1",
-                                                      "milestoneAmount": "418974.15",
+                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                                                      "externalProjectId": "PROJ-ATLAS",
+                                                      "projectTitle": "Project Atlas",
+                                                      "proId": "PRJ-2000",
+                                                      "totalAmount": "80000.00",
                                                       "currency": "ADA",
-                                                      "milestoneDate": "2026-09-24"
-                                                    }
-                                                  ]
-                                                }
-                                              ]
-                                            }"""
-                            )
+                                                      "subProjects": [
+                                                        {
+                                                          "externalProjectId": "PROJ-ATLAS-A",
+                                                          "projectTitle": "Sub A",
+                                                          "proId": "PRJ-2000-S1",
+                                                          "totalAmount": "50000.00",
+                                                          "milestones": [
+                                                            {
+                                                              "proId": "PRJ-2000-S1-M1",
+                                                              "milestoneTitle": "Milestone A1",
+                                                              "milestoneAmount": "50000.00",
+                                                              "currency": "ADA",
+                                                              "milestoneDate": "2026-10-15"
+                                                            }
+                                                          ]
+                                                        },
+                                                        {
+                                                          "externalProjectId": "PROJ-ATLAS-B",
+                                                          "projectTitle": "Sub B",
+                                                          "proId": "PRJ-2000-S2",
+                                                          "totalAmount": "30000.00",
+                                                          "milestones": [
+                                                            {
+                                                              "proId": "PRJ-2000-S2-M1",
+                                                              "milestoneTitle": "Milestone B1",
+                                                              "milestoneAmount": "30000.00",
+                                                              "currency": "ADA",
+                                                              "milestoneDate": "2026-10-20"
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }"""
+                                    )
+                            }
                     )
             ),
             responses = {
@@ -173,14 +223,15 @@ public class ProjectController {
                             examples = {
                                     @ExampleObject(
                                             name = "Shrink a project and both its sub-projects together",
-                                            summary = "Full ERROR-lifecycle walkthrough, step 3: identify \"Project Orion\" by the "
-                                                    + "internal id the POST /projects example returned (in the URL path, not the body — "
-                                                    + "proId PRJ-1000 shown here only for readability) and resize it from 705,702.86 down "
-                                                    + "to 100,000, while shrinking its two sub-projects (and their milestones) to fit — "
-                                                    + "impossible to do safely one field at a time, since shrinking any one of them first "
-                                                    + "would be rejected against the others' still-old, larger totals. The FUNDING/SPENDING "
-                                                    + "events funded/spent above no longer fit these smaller milestones and flip to ERROR — "
-                                                    + "fix them with the PUT /events/{eventId} examples below",
+                                            summary = "Orion walkthrough, step 4 of 6: identify \"Project Orion\" by the internal id the POST "
+                                                    + "/projects example returned (in the URL path, not the body — proId PRJ-1000 shown here only "
+                                                    + "for readability) and resize it from 705,702.86 down to 100,000, while shrinking its two "
+                                                    + "sub-projects (and their milestones) to fit — impossible to do safely one field at a time, "
+                                                    + "since shrinking any one of them first would be rejected against the others' still-old, "
+                                                    + "larger totals. The FUNDING and SPENDING events created above no longer fit the smaller "
+                                                    + "milestones and flip to ERROR; the response lists them in affectedEvents. Next step in "
+                                                    + "endpoint PUT /events/{eventId}: the example \"FUNDING – fix an ERROR event after the project "
+                                                    + "was shrunk\" (then the SPENDING one).",
                                             value = """
                                                     {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
@@ -193,11 +244,11 @@ public class ProjectController {
                                                         {
                                                           "externalProjectId": "PROJ-ORION-1",
                                                           "projectTitle": "Sub 1",
-                                                          "proId": "PRJ-1000-1",
+                                                          "proId": "PRJ-1000-S1",
                                                           "totalAmount": "40000.00",
                                                           "milestones": [
                                                             {
-                                                              "proId": "PRJ-1000-1-1",
+                                                              "proId": "PRJ-1000-S1-M1",
                                                               "milestoneTitle": "Milestone 1",
                                                               "milestoneAmount": "35000.00",
                                                               "currency": "ADA",
@@ -208,11 +259,11 @@ public class ProjectController {
                                                         {
                                                           "externalProjectId": "PROJ-ORION-2",
                                                           "projectTitle": "Sub 2",
-                                                          "proId": "PRJ-1000-2",
+                                                          "proId": "PRJ-1000-S2",
                                                           "totalAmount": "60000.00",
                                                           "milestones": [
                                                             {
-                                                              "proId": "PRJ-1000-2-1",
+                                                              "proId": "PRJ-1000-S2-M1",
                                                               "milestoneTitle": "Milestone 1",
                                                               "milestoneAmount": "55000.00",
                                                               "currency": "ADA",
@@ -224,56 +275,47 @@ public class ProjectController {
                                                     }"""
                                     ),
                                     @ExampleObject(
-                                            name = "Create, update and delete sub-projects in the same call (standalone example)",
-                                            summary = "Not part of the ERROR-lifecycle walkthrough above — a separate demo of a project in "
-                                                    + "a different state, identified by its own internal id in the URL path (proId PRJ-1000 "
-                                                    + "shown here only for readability): \"Sub 1\" (PRJ-1000-1) is resized down — an update, "
-                                                    + "matched by proId; \"Sub 2\" (PRJ-1000-2) is removed entirely (action DELETE — subtree "
-                                                    + "and all, including its own milestone); a brand new \"Sub 3\" is added, with no "
-                                                    + "matching proId so it's created. One PUT does all three at once, with the root's own "
-                                                    + "total shrunk to match what remains (Sub 1 + Sub 3)",
+                                            name = "Delete a sub-project — one affected event still has other data, one becomes a full orphan",
+                                            summary = "Atlas walkthrough, step 4 of 6: identify \"Project Atlas\" by the internal id the POST "
+                                                    + "/projects example returned (in the URL path, not the body — proId PRJ-2000 shown here only "
+                                                    + "for readability) and delete \"Sub B\" entirely (action DELETE — subtree and all, including its "
+                                                    + "own milestone); \"Sub A\" is resent unchanged (still required — this is a full replace). The "
+                                                    + "root's own total shrinks to match what remains (Sub A only). No event allocation is deleted: "
+                                                    + "both events keep their rows and flip to ERROR, and the response lists them in affectedEvents "
+                                                    + "so the UI can link them. The FUNDING event still has its live Sub A allocation plus one "
+                                                    + "allocation to the deleted milestone; the SPENDING event has only the deleted-milestone "
+                                                    + "allocation. Reading either event (GET /events/{eventId}) shows those allocations with "
+                                                    + "milestoneDeleted = true. Next step in endpoint PUT /events/{eventId}: the example \"FUNDING – "
+                                                    + "fix an ERROR event after a sub-project was deleted\".",
                                             value = """
                                                     {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
-                                                      "externalProjectId": "PROJ-ORION",
-                                                      "projectTitle": "Project Orion",
-                                                      "proId": "PRJ-1000",
-                                                      "totalAmount": "60000.00",
+                                                      "externalProjectId": "PROJ-ATLAS",
+                                                      "projectTitle": "Project Atlas",
+                                                      "proId": "PRJ-2000",
+                                                      "totalAmount": "50000.00",
                                                       "currency": "ADA",
                                                       "subProjects": [
                                                         {
-                                                          "externalProjectId": "PROJ-ORION-1",
-                                                          "projectTitle": "Sub 1",
-                                                          "proId": "PRJ-1000-1",
-                                                          "totalAmount": "40000.00",
+                                                          "externalProjectId": "PROJ-ATLAS-A",
+                                                          "projectTitle": "Sub A",
+                                                          "proId": "PRJ-2000-S1",
+                                                          "totalAmount": "50000.00",
                                                           "milestones": [
                                                             {
-                                                              "proId": "PRJ-1000-1-1",
-                                                              "milestoneTitle": "Milestone 1",
-                                                              "milestoneAmount": "35000.00",
+                                                              "proId": "PRJ-2000-S1-M1",
+                                                              "milestoneTitle": "Milestone A1",
+                                                              "milestoneAmount": "50000.00",
                                                               "currency": "ADA",
-                                                              "milestoneDate": "2026-10-08"
+                                                              "milestoneDate": "2026-10-15"
                                                             }
                                                           ]
                                                         },
                                                         {
-                                                          "externalProjectId": "PROJ-ORION-2",
-                                                          "projectTitle": "Sub 2",
-                                                          "proId": "PRJ-1000-2",
+                                                          "externalProjectId": "PROJ-ATLAS-B",
+                                                          "projectTitle": "Sub B",
+                                                          "proId": "PRJ-2000-S2",
                                                           "action": "DELETE"
-                                                        },
-                                                        {
-                                                          "externalProjectId": "PROJ-ORION-3",
-                                                          "projectTitle": "Sub 3",
-                                                          "totalAmount": "20000.00",
-                                                          "milestones": [
-                                                            {
-                                                              "milestoneTitle": "Milestone 1",
-                                                              "milestoneAmount": "20000.00",
-                                                              "currency": "ADA",
-                                                              "milestoneDate": "2026-11-01"
-                                                            }
-                                                          ]
                                                         }
                                                       ]
                                                     }"""
@@ -288,6 +330,12 @@ public class ProjectController {
     @PutMapping(value = "/projects/{projectId}", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<ProjectView> updateProject(
+            // "Project Orion"'s own internal id: SHA3(organisationId :: proId) is deterministic, so
+            // this is always what the walkthrough's POST /projects example (org
+            // 75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94, proId PRJ-1000)
+            // actually creates — pre-filled so the PUT examples below are usable without first copying
+            // the id out of that POST's response.
+            @Parameter(example = "737a66331dfd1ab2cf0e9eff671236aad17585a3ebd2b26db45cfce24602bf65")
             @PathVariable String projectId,
             @Valid @RequestBody ProjectWithMilestonesCreateRequest request) {
         return Responses.respond(projectTreeUpdateService.updateWithMilestones(projectId, request), HttpStatus.OK);

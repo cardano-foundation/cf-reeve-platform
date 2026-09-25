@@ -485,7 +485,7 @@ public class FundingBulkImportService {
         // this input — it's the value a caller must hold onto to reliably reference this project later
         // (e.g. an update row after a rename), since matching by title alone can drift. Sub Project ID /
         // Milestone ID work differently: they stay optional on creation, auto-assigning <parent's
-        // proId>-<n> when blank (see upsertSubProject / upsertMilestoneRow) — only the root level needs
+        // proId>-<S|M><n> when blank (see upsertSubProject / upsertMilestoneRow) — only the root level needs
         // a caller-chosen value, since a sub-project's/milestone's proId is always system-assigned.
         if (isBlank(rootLine.getProjectId())) {
             return Either.left(Problems.badRequest(
@@ -528,7 +528,7 @@ public class FundingBulkImportService {
         }
         // Sub Project ID is optional on creation, same as the UI/API: a caller-supplied value is used
         // as-is (after the uniqueness check inside createSubProject), and a blank one auto-assigns
-        // <parent's proId>-<n> exactly like the JSON API/event-allocation flow — no CSV-specific
+        // <parent's proId>-<S|M><n> exactly like the JSON API/event-allocation flow — no CSV-specific
         // mandatory rule any more. Discoverability of an auto-assigned value is handled by the
         // Projects+Milestones export endpoint instead (returns the same template shape populated with
         // every row's actual proId), not by forcing the user to invent one at upload time.

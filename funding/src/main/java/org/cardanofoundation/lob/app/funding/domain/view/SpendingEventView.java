@@ -102,6 +102,13 @@ public class SpendingEventView implements ErrorAware {
     /** One entry per project this event is allocated to. */
     private List<EventProjectAllocationView> projectAllocations;
 
+    @Builder.Default
+    @Schema(description = "Allocations of this event whose milestone was deleted (LOB-2365 follow-up). The "
+            + "allocation row is kept, not removed, so the money it recorded is still visible here; the event "
+            + "is flagged ERROR until a human fixes it (PUT /events/{eventId}) or deletes it. Empty when every "
+            + "allocation still points at an existing milestone.")
+    private List<OrphanedAllocationView> orphanedAllocations = List.of();
+
     @Schema(example = "true",
             description = "True when this event pushed cumulative spend over a project's or milestone's "
                     + "budget (see projectAllocations for which). A warning condition, not a rejection — "

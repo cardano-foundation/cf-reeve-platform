@@ -26,7 +26,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public class OrphanEventsCleanupView implements ErrorAware {
 
     @Builder.Default
-    @Schema(description = "Events that were deleted by this cleanup — ERROR events with no milestone allocations left.")
+    @Schema(description = "Events that were deleted by this cleanup — ERROR events none of whose allocations points at an existing milestone.")
     private List<AffectedEventView> deletedEvents = List.of();
 
     @Builder.Default

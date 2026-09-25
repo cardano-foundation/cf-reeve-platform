@@ -197,7 +197,7 @@ public class MilestoneService {
 
     /**
      * CSV-bulk-import-only entry point: {@code explicitProId} is used as the new milestone's proId as-is
-     * (after a uniqueness check) instead of the usual system-assigned {@code project.proId + "-" + n}.
+     * (after a uniqueness check) instead of the usual system-assigned {@code project.proId + "-M" + n}.
      * See {@link ProjectStructureService}'s matching overload for why CSV is the one caller allowed to
      * supply its own value.
      */
@@ -306,7 +306,7 @@ public class MilestoneService {
             }
             entity.setProId(explicitProId);
         } else {
-            entity.setProId(childSequenceService.nextChildProId(project));
+            entity.setProId(childSequenceService.nextChildProId(project, ProjectChildSequenceService.ChildKind.MILESTONE));
         }
         // The primary key is derived from the proId (unique within the project), never from the
         // editable title — so it can only be set once the proId is known.

@@ -65,7 +65,7 @@ class ProjectTreeUpdateServiceTest {
                 projectService, projectStructureService, allocationRepository, cascadeDeleteService, keycloakSecurityHelper);
         lenient().when(keycloakSecurityHelper.canUserAccessOrg(anyString())).thenReturn(true);
         lenient().when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
-        lenient().when(projectService.toView(any())).thenReturn(ProjectView.builder().projectId("root").build());
+        lenient().when(projectService.toView(any(), eq(true))).thenReturn(ProjectView.builder().projectId("root").build());
         // applyExistingMilestone delegates the actual field mutation to milestoneService.applyChanges —
         // mocked here, so it's a no-op unless told to behave like the real implementation.
         lenient().doAnswer(invocation -> {
@@ -711,6 +711,97 @@ class ProjectTreeUpdateServiceTest {
         request.setMilestones(List.of());
         request.setSubProjects(List.of());
         return request;
+    }
+
+    @Test
+    void update_propagatesError_whenDeletingAMilestoneIsBlockedByAPublishedEvent() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        MilestoneEntity milestone = MilestoneEntity.builder().id("m1").proId("PRJ-1000-M1")
+                .milestoneTitle("Milestone 1").milestoneAmount(new BigDecimal("50000")).currency("USD").project(root).build();
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+        when(milestoneRepository.findByProjectIdAndProId("root", "PRJ-1000-M1")).thenReturn(Optional.of(milestone));
+        ProblemDetail published = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "already published");
+        published.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+        when(cascadeDeleteService.deleteMilestone(milestone)).thenReturn(Either.left(published));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setMilestones(List.of(MilestoneCreateRequest.builder().proId("PRJ-1000-M1").action("DELETE").build()));
+
+        ProjectView result = service.updateWithMilestones("root", request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+    }
+
+    @Test
+    void update_deletesMilestone_matchedByTitle_whenProIdBlank() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        MilestoneEntity milestone = MilestoneEntity.builder().id("m1").proId("PRJ-1000-M1")
+                .milestoneTitle("Milestone 1").milestoneAmount(new BigDecimal("50000")).currency("USD").project(root).build();
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+        when(milestoneRepository.findByProjectIdAndMilestoneTitle("root", "Milestone 1")).thenReturn(Optional.of(milestone));
+        when(cascadeDeleteService.deleteMilestone(milestone)).thenReturn(Either.right(List.of()));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setMilestones(List.of(MilestoneCreateRequest.builder().milestoneTitle("Milestone 1").action("delete").build()));
+
+        ProjectView result = service.updateWithMilestones("root", request);
+
+        assertThat(result.getError()).isEmpty();
+        verify(cascadeDeleteService).deleteMilestone(milestone);
+    }
+
+    @Test
+    void update_returns404_whenDeletingAMilestoneIdentifiedByNeitherProIdNorTitle() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setMilestones(List.of(MilestoneCreateRequest.builder().action("DELETE").build()));
+
+        ProjectView result = service.updateWithMilestones("root", request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_FOUND);
+        verify(cascadeDeleteService, never()).deleteMilestone(any());
+    }
+
+    @Test
+    void update_returns404_whenDeletingASubProjectIdentifiedByNeitherProIdNorTitle() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setSubProjects(List.of(ProjectTreeNodeRequest.builder().externalProjectId("x").action("DELETE").build()));
+
+        ProjectView result = service.updateWithMilestones("root", request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_REFERENCE_NOT_FOUND);
+        verify(cascadeDeleteService, never()).deleteProjectSubtree(any());
+    }
+
+    @Test
+    void update_collectsEventsAffectedByEverySubProjectDeletedInTheSameRequest() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        ProjectEntity subB = subProject(root, "subB", "PRJ-1000-S2", new BigDecimal("50000"));
+        ProjectEntity subC = subProject(root, "subC", "PRJ-1000-S3", new BigDecimal("50000"));
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+        when(projectRepository.findByParentProjectIdAndProId("root", "PRJ-1000-S2")).thenReturn(Optional.of(subB));
+        when(projectRepository.findByParentProjectIdAndProId("root", "PRJ-1000-S3")).thenReturn(Optional.of(subC));
+        FundingEventEntity e1 = FundingEventEntity.builder().id("e1").eventType(EventType.FUNDING).status(EventStatus.ERROR)
+                .organisationId("org1").fundingId("GRANT-1").currencyRcy("USD").totalAmount(BigDecimal.ZERO).milestoneAllocations(List.of()).build();
+        FundingEventEntity e2 = FundingEventEntity.builder().id("e2").eventType(EventType.SPENDING).status(EventStatus.ERROR)
+                .organisationId("org1").fundingId("GRANT-2").currencyRcy("USD").totalAmount(BigDecimal.ZERO).milestoneAllocations(List.of()).build();
+        when(cascadeDeleteService.deleteProjectSubtree(subB)).thenReturn(Either.right(List.of(e1)));
+        when(cascadeDeleteService.deleteProjectSubtree(subC)).thenReturn(Either.right(List.of(e2)));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setSubProjects(List.of(
+                ProjectTreeNodeRequest.builder().externalProjectId("x").proId("PRJ-1000-S2").action("DELETE").build(),
+                ProjectTreeNodeRequest.builder().externalProjectId("x").proId("PRJ-1000-S3").action("DELETE").build()));
+
+        ProjectView result = service.updateWithMilestones("root", request);
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getAffectedEvents()).extracting("eventId").containsExactly("e1", "e2");
     }
 
 }

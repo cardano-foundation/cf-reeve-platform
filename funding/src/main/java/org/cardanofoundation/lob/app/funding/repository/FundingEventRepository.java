@@ -53,16 +53,20 @@ public interface FundingEventRepository extends JpaRepository<FundingEventEntity
     Set<FundingEventEntity> findAllToBePublished(@Param("organisationId") String organisationId);
 
     /**
-     * ERROR events for this organisation with no milestone allocation left at all — every one was
-     * removed by an earlier project/milestone cascade delete (LOB-2365 follow-up), so there is nothing
-     * left on them to reconcile. Used by the bulk orphan-cleanup endpoint; deliberately excludes an
-     * ERROR event that still has at least one real allocation left, since that one may still hold data
-     * worth a human fixing rather than discarding.
+     * ERROR events for this organisation none of whose allocations points at an existing milestone —
+     * every milestone they referenced was removed by an earlier project/milestone cascade delete
+     * (LOB-2365 follow-up), which deliberately keeps the allocation rows (dangling), so "no allocation
+     * rows" is never the test. Used by the bulk orphan-cleanup endpoint; deliberately excludes an ERROR
+     * event that still has at least one allocation to an existing milestone, since that one can still be
+     * fixed by a human rather than discarded.
      */
     @Query("""
             SELECT e FROM funding.FundingEventEntity e
             WHERE e.organisationId = :organisationId AND e.status = :status
-            AND NOT EXISTS (SELECT a FROM funding.EventMilestoneAllocationEntity a WHERE a.event = e)
+            AND NOT EXISTS (
+                SELECT a FROM funding.EventMilestoneAllocationEntity a
+                WHERE a.event = e
+                AND EXISTS (SELECT m FROM funding.MilestoneEntity m WHERE m.id = a.id.milestoneId))
             """)
     List<FundingEventEntity> findOrphanedEvents(@Param("organisationId") String organisationId, @Param("status") EventStatus status);
 

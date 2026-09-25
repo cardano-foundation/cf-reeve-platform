@@ -446,8 +446,8 @@ class ProjectServiceTest {
         // The sub-project's deterministic id is derived from (parentId, proId) — not externalProjectId,
         // and no longer from the title (which is now freely editable). proId here comes from the shared
         // findWithLockById stub in @BeforeEach ("parent-1"), not the title "Work Package 1".
-        assertThat(result.getProId()).isEqualTo("parent-1");
-        assertThat(result.getProjectId()).isEqualTo(ProjectEntity.subId("parent1", "parent-1"));
+        assertThat(result.getProId()).isEqualTo("parent-S1");
+        assertThat(result.getProjectId()).isEqualTo(ProjectEntity.subId("parent1", "parent-S1"));
     }
 
     @Test
