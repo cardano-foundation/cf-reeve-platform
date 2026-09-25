@@ -12,7 +12,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
 import org.springframework.http.HttpStatus;
@@ -175,18 +174,19 @@ class FundingCascadeDeleteServiceTest {
         verify(projectRepository).delete(root);
     }
 
-    // --- markContainedEventsAsErrorOrBlock (LOB-2365) ---
+    // --- flagEventsAllocatedTo (shrink / currency change / delete share it) ---
 
     @Test
-    void markContainedEventsAsErrorOrBlock_flagsFullyContainedDraftEvent() {
+    void flagEventsAllocatedTo_flagsDraftEvent_withoutTouchingItsAllocations() {
         EventMilestoneAllocationEntity alloc = allocation("e1", "m1", "50000");
         FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, alloc); // status DRAFT
-        when(allocationRepository.findById_MilestoneIdIn(Set.of("m1"))).thenReturn(List.of(alloc));
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
+        when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
+        when(allocationRepository.findEventIdsByMilestoneIdIn(Set.of("m1"))).thenReturn(List.of("e1"));
+        when(fundingEventRepository.findAllById(List.of("e1"))).thenReturn(List.of(event));
 
-        Optional<ProblemDetail> result = service.markContainedEventsAsErrorOrBlock(Set.of("m1"));
+        Either<ProblemDetail, List<FundingEventEntity>> result = service.flagEventsAllocatedTo(Set.of("m1"));
 
-        assertThat(result).isEmpty();
+        assertThat(result.get()).containsExactly(event);
         assertThat(event.getStatus()).isEqualTo(EventStatus.ERROR);
         verify(fundingEventRepository).saveAll(List.of(event));
         // Never deleted, and never touches the allocation's own recorded amount — only the status changes.
@@ -195,42 +195,55 @@ class FundingCascadeDeleteServiceTest {
     }
 
     @Test
-    void markContainedEventsAsErrorOrBlock_blocks_whenAnEventAlsoAllocatesOutsideTheSubtree() {
+    void flagEventsAllocatedTo_flagsEvent_evenWhenItAlsoAllocatesOutsideTheGivenMilestones() {
         EventMilestoneAllocationEntity insideAlloc = allocation("e1", "m1", "60000");
         EventMilestoneAllocationEntity outsideAlloc = allocation("e1", "m-other", "40000");
         FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, insideAlloc, outsideAlloc);
-        when(allocationRepository.findById_MilestoneIdIn(Set.of("m1"))).thenReturn(List.of(insideAlloc));
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
+        when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
+        when(allocationRepository.findEventIdsByMilestoneIdIn(Set.of("m1"))).thenReturn(List.of("e1"));
+        when(fundingEventRepository.findAllById(List.of("e1"))).thenReturn(List.of(event));
 
-        Optional<ProblemDetail> result = service.markContainedEventsAsErrorOrBlock(Set.of("m1"));
+        Either<ProblemDetail, List<FundingEventEntity>> result = service.flagEventsAllocatedTo(Set.of("m1"));
 
-        assertThat(result.orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_ALLOCATED_TO_OTHER_PROJECTS);
-        assertThat(event.getStatus()).isEqualTo(EventStatus.DRAFT); // untouched
+        assertThat(result.get()).containsExactly(event);
+        assertThat(event.getStatus()).isEqualTo(EventStatus.ERROR);
+        assertThat(event.getMilestoneAllocations()).containsExactly(insideAlloc, outsideAlloc);
+    }
+
+    @Test
+    void flagEventsAllocatedTo_blocks_whenAnAllocatedEventIsPublished() {
+        when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(true);
+
+        Either<ProblemDetail, List<FundingEventEntity>> result = service.flagEventsAllocatedTo(Set.of("m1"));
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
         verify(fundingEventRepository, never()).saveAll(any());
     }
 
     @Test
-    void markContainedEventsAsErrorOrBlock_isIdempotent_leavesAlreadyErroredEventsAlone() {
+    void flagEventsAllocatedTo_reportsAnAlreadyErroredEvent_andLeavesItInError() {
         EventMilestoneAllocationEntity alloc = allocation("e1", "m1", "50000");
         FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, alloc);
         event.setStatus(EventStatus.ERROR);
-        when(allocationRepository.findById_MilestoneIdIn(Set.of("m1"))).thenReturn(List.of(alloc));
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
+        when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
+        when(allocationRepository.findEventIdsByMilestoneIdIn(Set.of("m1"))).thenReturn(List.of("e1"));
+        when(fundingEventRepository.findAllById(List.of("e1"))).thenReturn(List.of(event));
 
-        Optional<ProblemDetail> result = service.markContainedEventsAsErrorOrBlock(Set.of("m1"));
+        Either<ProblemDetail, List<FundingEventEntity>> result = service.flagEventsAllocatedTo(Set.of("m1"));
 
-        assertThat(result).isEmpty();
-        verify(fundingEventRepository).saveAll(List.of()); // nothing new to flag
+        assertThat(result.get()).containsExactly(event);
+        assertThat(event.getStatus()).isEqualTo(EventStatus.ERROR);
     }
 
     @Test
-    void markContainedEventsAsErrorOrBlock_noOp_whenNoEventsInSubtree() {
-        when(allocationRepository.findById_MilestoneIdIn(Set.of("m1"))).thenReturn(List.of());
+    void flagEventsAllocatedTo_returnsNothing_whenNoEventIsAllocated() {
+        when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
+        when(allocationRepository.findEventIdsByMilestoneIdIn(Set.of("m1"))).thenReturn(List.of());
 
-        Optional<ProblemDetail> result = service.markContainedEventsAsErrorOrBlock(Set.of("m1"));
+        Either<ProblemDetail, List<FundingEventEntity>> result = service.flagEventsAllocatedTo(Set.of("m1"));
 
-        assertThat(result).isEmpty();
-        verify(fundingEventRepository).saveAll(List.of()); // harmless no-op save of an empty list
+        assertThat(result.get()).isEmpty();
+        verify(fundingEventRepository, never()).saveAll(any());
     }
 
     // --- helpers ---
@@ -273,10 +286,10 @@ class FundingCascadeDeleteServiceTest {
     }
 
     @Test
-    void markContainedEventsAsErrorOrBlock_noOp_whenGivenNoMilestones() {
-        Optional<ProblemDetail> result = service.markContainedEventsAsErrorOrBlock(Set.of());
+    void flagEventsAllocatedTo_noOp_whenGivenNoMilestones() {
+        Either<ProblemDetail, List<FundingEventEntity>> result = service.flagEventsAllocatedTo(Set.of());
 
-        assertThat(result).isEmpty();
+        assertThat(result.get()).isEmpty();
         verifyNoInteractions(allocationRepository);
     }
 

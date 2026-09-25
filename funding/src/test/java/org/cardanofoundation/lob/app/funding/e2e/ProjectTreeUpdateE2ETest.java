@@ -39,17 +39,18 @@ import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateReque
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectTreeNodeRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.OrphanEventsCleanupView;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.job.EventPublishJob;
-import org.cardanofoundation.lob.app.funding.domain.view.OrphanEventsCleanupView;
 import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingEventRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
-import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
+import org.cardanofoundation.lob.app.funding.repository.MilestoneRepository;
 import org.cardanofoundation.lob.app.funding.service.ProjectService;
 import org.cardanofoundation.lob.app.funding.service.ProjectTreeUpdateService;
 import org.cardanofoundation.lob.app.funding.service.SpendingEventService;
+import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Currency;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
@@ -94,6 +95,8 @@ class ProjectTreeUpdateE2ETest {
     private EventMilestoneAllocationRepository allocationRepository;
     @Autowired
     private FundingProjectRepository projectRepository;
+    @Autowired
+    private MilestoneRepository milestoneRepository;
     @MockitoBean
     private OrganisationPublicApiIF organisationPublicApi;
     @MockitoBean
@@ -382,6 +385,88 @@ class ProjectTreeUpdateE2ETest {
         assertThat(fundingEventRepository.findById(funding.getEventId()).orElseThrow().getStatus()).isEqualTo(EventStatus.DRAFT);
         assertThat(allocationRepository.findById_EventId(funding.getEventId())).hasSize(1);
         assertThat(spendingEventService.getEvent(funding.getEventId()).getOrphanedAllocations()).isEmpty();
+    }
+
+    // ---- shrink / currency change: the event is flagged ERROR even when it also allocates to another project ----
+
+    private ProjectView createRootWithMilestone(String title, String proId) {
+        ProjectView created = projectService.createWithMilestones(ProjectWithMilestonesCreateRequest.builder()
+                .organisationId(ORG_ID).projectTitle(title).proId(proId)
+                .totalAmount(new BigDecimal("50000.00")).currency("ADA")
+                .milestones(List.of(MilestoneCreateRequest.builder().milestoneTitle(title + " Milestone")
+                        .milestoneAmount(new BigDecimal("50000.00")).currency("ADA")
+                        .milestoneDate(LocalDate.of(2027, 10, 15)).build()))
+                .build());
+        assertThat(created.getError()).isEmpty();
+        return created;
+    }
+
+    /** A FUNDING event spanning both projects: 20,000 to the first one's milestone, 10,000 to the second's. */
+    private SpendingEventView fundBoth(String titleA, String titleB, String fundingId) {
+        SpendingEventView event = spendingEventService.createEvent(SpendingEventCreateRequest.builder()
+                .organisationId(ORG_ID).eventType(EventType.FUNDING).fundingId(fundingId)
+                .fundingHash(fundingId + "-hash").fundingEntity("Cardano Foundation").currencyRcy("ADA")
+                .eventDate(LocalDate.of(2026, 9, 15)).amountRcy(new BigDecimal("30000.00"))
+                .allocations(List.of(
+                        EventProjectAllocationRequest.builder().projectTitle(titleA)
+                                .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                                        .milestone(MilestoneCreateRequest.builder().milestoneTitle(titleA + " Milestone").build())
+                                        .allocatedAmount(new BigDecimal("20000.00")).build()))
+                                .build(),
+                        EventProjectAllocationRequest.builder().projectTitle(titleB)
+                                .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                                        .milestone(MilestoneCreateRequest.builder().milestoneTitle(titleB + " Milestone").build())
+                                        .allocatedAmount(new BigDecimal("10000.00")).build()))
+                                .build()))
+                .build());
+        assertThat(event.getError()).isEmpty();
+        return event;
+    }
+
+    @Test
+    void shrinkingAMilestoneBelowItsAllocation_flagsTheEventEvenWhenItAlsoAllocatesToAnotherProject() {
+        when(keycloakSecurityHelper.canUserAccessOrg(anyString())).thenReturn(true);
+        lenient().when(organisationPublicApi.findCurrencyByCustomerCurrencyCode(anyString(), anyString()))
+                .thenReturn(Optional.of(new Currency(new Currency.Id(ORG_ID, "x"), "ISO_4217:x", true)));
+        ProjectView x = createRootWithMilestone("Project Shrink X", "PRJ-SHRINK-X");
+        createRootWithMilestone("Project Shrink Y", "PRJ-SHRINK-Y");
+        SpendingEventView event = fundBoth("Project Shrink X", "Project Shrink Y", "GRANT-SHRINK-E2E");
+
+        // X's milestone shrinks from 50,000 to 15,000, below the 20,000 this event put on it.
+        ProjectView updated = projectTreeUpdateService.updateWithMilestones(x.getProjectId(), ProjectWithMilestonesCreateRequest.builder()
+                .organisationId(ORG_ID).projectTitle("Project Shrink X").totalAmount(new BigDecimal("50000.00"))
+                .milestones(List.of(MilestoneCreateRequest.builder().proId(x.getMilestones().get(0).getProId())
+                        .milestoneAmount(new BigDecimal("15000.00")).build()))
+                .build());
+
+        assertThat(updated.getError()).isEmpty();
+        assertThat(updated.getAffectedEvents()).extracting("eventId").containsExactly(event.getEventId());
+        assertThat(fundingEventRepository.findById(event.getEventId()).orElseThrow().getStatus()).isEqualTo(EventStatus.ERROR);
+        // nothing about the event's own allocations is rewritten
+        assertThat(allocationRepository.findById_EventId(event.getEventId())).hasSize(2);
+    }
+
+    @Test
+    void changingTheCurrencyOfAProject_flagsItsEvents_evenThoughEveryAmountStillFits() {
+        when(keycloakSecurityHelper.canUserAccessOrg(anyString())).thenReturn(true);
+        lenient().when(organisationPublicApi.findCurrencyByCustomerCurrencyCode(anyString(), anyString()))
+                .thenReturn(Optional.of(new Currency(new Currency.Id(ORG_ID, "x"), "ISO_4217:x", true)));
+        ProjectView x = createRootWithMilestone("Project Currency X", "PRJ-CUR-X");
+        ProjectView y = createRootWithMilestone("Project Currency Y", "PRJ-CUR-Y");
+        SpendingEventView event = fundBoth("Project Currency X", "Project Currency Y", "GRANT-CUR-E2E");
+
+        // Only X moves to EUR; every amount is unchanged and still fits, but the event is booked in ADA.
+        ProjectView updated = projectTreeUpdateService.updateWithMilestones(x.getProjectId(), ProjectWithMilestonesCreateRequest.builder()
+                .organisationId(ORG_ID).projectTitle("Project Currency X").totalAmount(new BigDecimal("50000.00")).currency("EUR")
+                .build());
+
+        assertThat(updated.getError()).isEmpty();
+        assertThat(updated.getAffectedEvents()).extracting("eventId").containsExactly(event.getEventId());
+        assertThat(fundingEventRepository.findById(event.getEventId()).orElseThrow().getStatus()).isEqualTo(EventStatus.ERROR);
+        assertThat(allocationRepository.findById_EventId(event.getEventId())).hasSize(2);
+        assertThat(milestoneRepository.findByProjectId(x.getProjectId())).allSatisfy(m -> assertThat(m.getCurrency()).isEqualTo("EUR"));
+        // the other project is untouched
+        assertThat(milestoneRepository.findByProjectId(y.getProjectId())).allSatisfy(m -> assertThat(m.getCurrency()).isEqualTo("ADA"));
     }
 
 }

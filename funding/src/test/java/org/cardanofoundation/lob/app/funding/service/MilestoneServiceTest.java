@@ -76,6 +76,7 @@ class MilestoneServiceTest {
         // A milestone's proId is always system-assigned (see MilestoneEntity#getProId()) — tests that
         // create a new milestone don't care about the exact assigned value unless they say otherwise.
         lenient().when(childSequenceService.nextChildProId(any(), any())).thenReturn("Milestone-1");
+        lenient().when(cascadeDeleteService.flagEventsAllocatedTo(any())).thenReturn(Either.right(List.of()));
     }
 
     @Test
@@ -822,7 +823,7 @@ class MilestoneServiceTest {
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
         when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
         when(allocationRepository.sumAllocatedByMilestoneId("m1")).thenReturn(new BigDecimal("60000.00"));
-        when(cascadeDeleteService.markContainedEventsAsErrorOrBlock(Set.of("m1"))).thenReturn(Optional.empty());
+        when(cascadeDeleteService.flagEventsAllocatedTo(Set.of("m1"))).thenReturn(Either.right(List.of()));
         when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
 
         MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().milestoneAmount(new BigDecimal("50000.00")).build();
@@ -831,28 +832,70 @@ class MilestoneServiceTest {
 
         assertThat(result.isRight()).isTrue();
         assertThat(milestone.getMilestoneAmount()).isEqualByComparingTo("50000.00");
-        verify(cascadeDeleteService).markContainedEventsAsErrorOrBlock(Set.of("m1"));
+        verify(cascadeDeleteService).flagEventsAllocatedTo(Set.of("m1"));
     }
 
     @Test
-    void update_blocksShrinkBelowTotalAllocated_whenAContainedEventReachesOutsideTheMilestone() {
-        // Same cross-project safety net as the project-level case: if flagging would touch an event
-        // that also allocates to a different milestone, the whole update is rejected instead.
-        ProblemDetail crossProjectConflict = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
-                "Cannot update: an associated event also allocates to other projects");
-        crossProjectConflict.setTitle(ErrorTitleConstants.EVENT_ALLOCATED_TO_OTHER_PROJECTS);
+    void update_rejectsShrinkBelowTotalAllocated_whenFlaggingIsBlockedByAPublishedEvent() {
+        // Safety net: flagEventsAllocatedTo refuses when any allocated event is published. The callers'
+        // own lock checks normally stop the edit first; if one ever gets through, nothing is saved.
+        ProblemDetail published = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "Cannot proceed: a linked event is already published");
+        published.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
         MilestoneEntity milestone = milestoneEntity("m1");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
         when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
         when(allocationRepository.sumAllocatedByMilestoneId("m1")).thenReturn(new BigDecimal("60000.00"));
-        when(cascadeDeleteService.markContainedEventsAsErrorOrBlock(Set.of("m1"))).thenReturn(Optional.of(crossProjectConflict));
+        when(cascadeDeleteService.flagEventsAllocatedTo(Set.of("m1"))).thenReturn(Either.left(published));
 
         MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().milestoneAmount(new BigDecimal("50000.00")).build();
 
         Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1", request);
 
-        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_ALLOCATED_TO_OTHER_PROJECTS);
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
         verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void update_flagsEventsAsError_whenTheCurrencyChanges_evenThoughEveryAmountStillFits() {
+        MilestoneEntity milestone = milestoneEntity("m1"); // currency "USD", 50,000
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of());
+        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(Set.of("p1"), EventStatus.PUBLISHED)).thenReturn(false);
+        when(cascadeDeleteService.flagEventsAllocatedTo(Set.of("m1"))).thenReturn(Either.right(List.of()));
+        when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1",
+                MilestoneUpdateRequest.builder().currency("EUR").build());
+
+        assertThat(result.isRight()).isTrue();
+        assertThat(milestone.getCurrency()).isEqualTo("EUR");
+        verify(cascadeDeleteService).flagEventsAllocatedTo(Set.of("m1"));
+    }
+
+    @Test
+    void update_doesNotFlagAnyEvent_whenTheSameCurrencyIsResent() {
+        MilestoneEntity milestone = milestoneEntity("m1"); // currency "USD"
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1",
+                MilestoneUpdateRequest.builder().currency("USD").build());
+
+        assertThat(result.isRight()).isTrue();
+        verify(cascadeDeleteService, never()).flagEventsAllocatedTo(any());
+    }
+
+    @Test
+    void invalidatesEvents_isTrueForACurrencyChange_orAShrinkBelowAllocations_andFalseOtherwise() {
+        MilestoneEntity milestone = milestoneEntity("m1"); // USD, 50,000
+        when(allocationRepository.sumAllocatedByMilestoneId("m1")).thenReturn(new BigDecimal("40000.00"));
+
+        assertThat(milestoneService.invalidatesEvents(milestone, MilestoneUpdateRequest.builder().currency("EUR").build())).isTrue();
+        assertThat(milestoneService.invalidatesEvents(milestone, MilestoneUpdateRequest.builder().milestoneAmount(new BigDecimal("30000")).build())).isTrue();
+        assertThat(milestoneService.invalidatesEvents(milestone, MilestoneUpdateRequest.builder().milestoneAmount(new BigDecimal("45000")).build())).isFalse();
+        assertThat(milestoneService.invalidatesEvents(milestone, MilestoneUpdateRequest.builder().currency("USD").build())).isFalse();
+        assertThat(milestoneService.invalidatesEvents(milestone, MilestoneUpdateRequest.builder().build())).isFalse();
     }
 
     @Test

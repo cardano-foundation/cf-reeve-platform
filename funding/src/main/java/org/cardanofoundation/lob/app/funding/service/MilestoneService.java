@@ -372,9 +372,9 @@ public class MilestoneService {
             return Either.left(currencyProblem.get());
         }
 
-        Optional<ProblemDetail> shrinkProblem = handleAmountShrink(milestoneId, request);
-        if (shrinkProblem.isPresent()) {
-            return Either.left(shrinkProblem.get());
+        Optional<ProblemDetail> flagProblem = handleEventInvalidatingChange(milestone, request);
+        if (flagProblem.isPresent()) {
+            return Either.left(flagProblem.get());
         }
 
         applyChanges(milestone, request, titleChanging);
@@ -440,35 +440,40 @@ public class MilestoneService {
     }
 
     /**
-     * Shrinking below what's already allocated used to be rejected outright. That's relaxed now
-     * (LOB-2365, same mechanism as ProjectTreeUpdateService#updateWithMilestones's total-amount case one level up): the
-     * edit proceeds exactly as typed — the allocation's own recorded figure is never rewritten — and
-     * every draft event fully allocated to this milestone is marked ERROR instead, for a human to review
-     * and fix. An event that also allocates to a milestone outside this one is still a hard block, same
-     * cross-project rule as the project-level case.
+     * Shrinking below what's already allocated, or changing the currency, used to be rejected outright
+     * (currency still is once a published event exists — see {@link #checkCurrencyLock}). Otherwise the
+     * edit proceeds exactly as typed — the allocation's own recorded figure is never rewritten — and every
+     * non-published event allocated to this milestone is marked ERROR instead, for a human to review and
+     * fix: after either change the event no longer fits the milestone (its amount exceeds the milestone,
+     * or it is booked in another currency). Same rule as deleting the milestone, and as the project-level
+     * case in {@code ProjectTreeUpdateService#updateWithMilestones}; it makes no difference whether the
+     * event also allocates elsewhere.
      *
-     * <p>Only safe to flag immediately, scoped to just this one milestone, when the caller can only ever
-     * touch one milestone per call — true for this class's own {@link #update}. It is <strong>not</strong>
-     * safe for a caller that can resize several milestones in the same request (e.g.
-     * {@code ProjectTreeUpdateService}/CSV import): an event allocating to two milestones that are
-     * <em>both</em> being shrunk in that same request would wrongly hit the cross-project block here
-     * (it "reaches outside" this one milestone's singleton scope) instead of being flagged, even though
-     * every milestone it touches is in fact part of the same edit. Those callers must use
-     * {@link #needsErrorFlagging} to collect every milestone needing the flag across the whole request,
-     * then flag them all together in one {@code markContainedEventsAsErrorOrBlock} call with the full set.
+     * <p>For this class's own {@link #update}, one milestone per call. A caller that changes several
+     * milestones per request ({@code ProjectTreeUpdateService}/CSV import) uses {@link #invalidatesEvents}
+     * to collect them and flags them all in one {@link FundingCascadeDeleteService#flagEventsAllocatedTo} call.
      */
-    Optional<ProblemDetail> handleAmountShrink(String milestoneId, MilestoneUpdateRequest request) {
-        if (!needsErrorFlagging(milestoneId, request.getMilestoneAmount())) {
+    Optional<ProblemDetail> handleEventInvalidatingChange(MilestoneEntity milestone, MilestoneUpdateRequest request) {
+        if (!invalidatesEvents(milestone, request)) {
             return Optional.empty();
         }
-        return cascadeDeleteService.markContainedEventsAsErrorOrBlock(Set.of(milestoneId));
+        return cascadeDeleteService.flagEventsAllocatedTo(Set.of(milestone.getId())).fold(Optional::of, events -> Optional.empty());
+    }
+
+    /**
+     * Whether applying {@code request} to {@code milestone} would leave events allocated to it out of
+     * step: its amount shrinks below what is allocated (see {@link #needsErrorFlagging}), or its currency
+     * changes. Does not flag anything itself.
+     */
+    boolean invalidatesEvents(MilestoneEntity milestone, MilestoneUpdateRequest request) {
+        boolean currencyChanging = request.getCurrency() != null && !request.getCurrency().equals(milestone.getCurrency());
+        return currencyChanging || needsErrorFlagging(milestone.getId(), request.getMilestoneAmount());
     }
 
     /**
      * Whether shrinking {@code milestoneId} to {@code newAmount} would leave it covering less than
      * what's already allocated to it — i.e. whether it needs {@code ERROR}-flagging — without actually
-     * performing that flagging. See {@link #handleAmountShrink}'s Javadoc for why a caller that can
-     * touch several milestones in one request must use this instead of that method directly.
+     * performing that flagging. Amount only — see {@link #invalidatesEvents} for the combined check.
      */
     boolean needsErrorFlagging(String milestoneId, BigDecimal newAmount) {
         if (newAmount == null) {

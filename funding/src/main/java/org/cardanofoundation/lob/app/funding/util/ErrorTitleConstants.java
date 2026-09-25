@@ -44,7 +44,6 @@ public final class ErrorTitleConstants {
     public static final String FX_RATE_MISMATCH = "FX_RATE_MISMATCH";
     public static final String EVENT_CURRENCY_MISMATCH = "EVENT_CURRENCY_MISMATCH";
     public static final String EVENT_AMOUNT_INVALID = "EVENT_AMOUNT_INVALID";
-    public static final String EVENT_ALLOCATED_TO_OTHER_PROJECTS = "EVENT_ALLOCATED_TO_OTHER_PROJECTS";
     public static final String SPENDING_EVENT_NOT_FOUND = "SPENDING_EVENT_NOT_FOUND";
     public static final String SPENDING_EVENT_ALREADY_EXISTS = "SPENDING_EVENT_ALREADY_EXISTS";
     public static final String FUNDING_EVENT_FUNDING_ID_ALREADY_USED = "FUNDING_EVENT_FUNDING_ID_ALREADY_USED";

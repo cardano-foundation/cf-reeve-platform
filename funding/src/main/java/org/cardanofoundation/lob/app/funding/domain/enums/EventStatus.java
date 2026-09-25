@@ -11,7 +11,7 @@ public enum EventStatus {
      * — real recorded money can't be un-recorded, so blocking the edit isn't right — the edit proceeds
      * exactly as typed (no event's own allocated figure is ever rewritten), and every DRAFT event fully
      * allocated to that milestone is set to {@code ERROR} instead
-     * (see {@code FundingCascadeDeleteService#markContainedEventsAsErrorOrBlock}), so a human has to go
+     * (see {@code FundingCascadeDeleteService#flagEventsAllocatedTo}), so a human has to go
      * into the event and correct its allocations before it can ever be published — this status is
      * deliberately not auto-corrected.
      *

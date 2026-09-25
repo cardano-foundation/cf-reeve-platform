@@ -200,15 +200,21 @@ public class ProjectController {
                     + "(no parent); use GET /projects/{id} first if you only have a proId. The whole tree is "
                     + "validated as a single unit before anything is persisted; if the new totals don't add up at "
                     + "any level, nothing is saved. This is a full replacement of the project's own fields "
-                    + "(totalAmount/currency are always required, exactly like PUT /events/{eventId}), so a plain "
-                    + "rename still needs the current total resent. A sub-project/milestone present in the request "
+                    + "(totalAmount is always required, exactly like PUT /events/{eventId}, so a plain rename still "
+                    + "needs the current total resent; currency is optional and left unchanged when omitted). A sub-project/milestone present in the request "
                     + "but not matched by proId (falling back to its title) is created; one already existing but "
                     + "left out of the request is untouched. One matched by proId/title with its `action` field set "
                     + "to `DELETE` is deleted instead — for a sub-project, its entire subtree (every nested "
                     + "sub-project and milestone below it) is removed with it, regardless of what that node's own "
                     + "milestones/subProjects list additionally contains (LOB-2365 follow-up). Moving a project to "
                     + "a different parent tree is not supported here — delete and recreate it under the new parent "
-                    + "instead.",
+                    + "instead. Any non-published event that no longer fits after the update is set to ERROR, never "
+                    + "blocked and never rewritten, and listed in `affectedEvents` so the UI can link it: events "
+                    + "allocated to a deleted milestone or sub-project, to a milestone shrunk below what is "
+                    + "allocated to it, or to a milestone whose currency changed (an event books in one currency, "
+                    + "which must match every milestone it allocates to). This holds even when the event also "
+                    + "allocates to other projects. If any affected event is already published, the update is "
+                    + "rejected instead.",
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
                     content = @Content(

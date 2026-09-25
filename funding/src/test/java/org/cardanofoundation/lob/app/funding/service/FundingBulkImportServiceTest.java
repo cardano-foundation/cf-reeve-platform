@@ -94,6 +94,8 @@ class FundingBulkImportServiceTest {
         bulkImportService = new FundingBulkImportService(projectMilestoneCsvParser, eventCsvParser,
                 csvTypeDetector, projectRepository, projectService, projectTreeUpdateService, projectStructureService,
                 milestoneService, spendingEventService, organisationPublicApi, new FundingBulkImportTransactionRunner());
+        // Flagging the events of changed milestones succeeds (and finds nothing) unless a test says otherwise.
+        lenient().when(projectTreeUpdateService.flagEventsOfChangedMilestones(any())).thenReturn(Either.right(List.of()));
         lenient().when(organisationPublicApi.findByOrganisationId(ORG_ID)).thenReturn(Optional.of(new Organisation()));
     }
 
@@ -247,7 +249,7 @@ class FundingBulkImportServiceTest {
         verify(projectService, never()).createWithMilestones(any());
 
         ArgumentCaptor<ProjectWithMilestonesCreateRequest> captor = ArgumentCaptor.forClass(ProjectWithMilestonesCreateRequest.class);
-        verify(projectTreeUpdateService).applyRootFields(any(), captor.capture());
+        verify(projectTreeUpdateService).applyRootFields(any(), captor.capture(), any());
         // projectTitle is unchanged (same value re-sent) and is never forwarded on update.
         assertThat(captor.getValue().getProjectTitle()).isNull();
         assertThat(captor.getValue().getTotalAmount()).isEqualByComparingTo("120000.00");
@@ -2027,7 +2029,7 @@ class FundingBulkImportServiceTest {
                 List.of(rootLine("Project A", "120000.00", "USD"))));
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
                 .thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
-        when(projectTreeUpdateService.applyRootFields(any(), any()))
+        when(projectTreeUpdateService.applyRootFields(any(), any(), any()))
                 .thenReturn(Optional.of(problem(HttpStatus.BAD_REQUEST, "PROJECT_AMOUNT_INVALID")));
 
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
@@ -2039,22 +2041,22 @@ class FundingBulkImportServiceTest {
     }
 
     @Test
-    void groupReportsError_whenFlaggingShrunkMilestonesIsBlocked() {
+    void groupReportsError_whenFlaggingEventsOfChangedMilestonesIsBlocked() {
         MultipartFile file = file("import.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(
                 List.of(rootLine("Project A", "100000.00", "USD"))));
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
                 .thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
-        when(projectTreeUpdateService.flagShrunkMilestones(any()))
-                .thenReturn(Optional.of(problem(HttpStatus.CONFLICT, "EVENT_ALLOCATED_TO_OTHER_PROJECTS")));
+        when(projectTreeUpdateService.flagEventsOfChangedMilestones(any()))
+                .thenReturn(Either.left(problem(HttpStatus.CONFLICT, ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED)));
 
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
         assertThat(result.getProjectsUpdated()).isZero();
         assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
-        assertThat(result.getFiles().get(0).getRowErrors().get(0).getTitle()).isEqualTo("EVENT_ALLOCATED_TO_OTHER_PROJECTS");
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
     }
 
 }

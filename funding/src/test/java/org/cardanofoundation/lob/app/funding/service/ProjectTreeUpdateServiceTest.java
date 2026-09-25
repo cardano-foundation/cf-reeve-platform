@@ -171,7 +171,7 @@ class ProjectTreeUpdateServiceTest {
         assertThat(root.getTotalAmount()).isEqualByComparingTo("100000");
         assertThat(sub1.getTotalAmount()).isEqualByComparingTo("40000");
         assertThat(sub2.getTotalAmount()).isEqualByComparingTo("60000");
-        verify(cascadeDeleteService, never()).markContainedEventsAsErrorOrBlock(any());
+        verify(cascadeDeleteService, never()).flagEventsAllocatedTo(any());
     }
 
     @Test
@@ -209,8 +209,11 @@ class ProjectTreeUpdateServiceTest {
         when(milestoneRepository.findByProjectIdAndProId("root", "PRJ-1000-M1")).thenReturn(Optional.of(milestone));
         when(milestoneService.findByProjectId("root")).thenReturn(List.of(milestone));
         when(projectRepository.findById("root")).thenReturn(Optional.of(root));
-        when(milestoneService.needsErrorFlagging(eq("m1"), any())).thenReturn(true);
-        when(cascadeDeleteService.markContainedEventsAsErrorOrBlock(Set.of("m1"))).thenReturn(Optional.empty());
+        when(milestoneService.invalidatesEvents(eq(milestone), any())).thenReturn(true);
+        FundingEventEntity flaggedEvent = FundingEventEntity.builder().id("e1").eventType(EventType.FUNDING)
+                .status(EventStatus.ERROR).organisationId("org1").fundingId("GRANT-1").currencyRcy("USD")
+                .totalAmount(BigDecimal.ZERO).milestoneAllocations(List.of()).build();
+        when(cascadeDeleteService.flagEventsAllocatedTo(Set.of("m1"))).thenReturn(Either.right(List.of(flaggedEvent)));
 
         ProjectWithMilestonesCreateRequest request = request(null);
         request.setMilestones(List.of(MilestoneCreateRequest.builder()
@@ -220,11 +223,13 @@ class ProjectTreeUpdateServiceTest {
 
         assertThat(result.getError()).isEmpty();
         assertThat(milestone.getMilestoneAmount()).isEqualByComparingTo("50000");
-        verify(cascadeDeleteService).markContainedEventsAsErrorOrBlock(Set.of("m1"));
+        verify(cascadeDeleteService).flagEventsAllocatedTo(Set.of("m1"));
+        // the flagged event is reported to the caller so the UI can link it
+        assertThat(result.getAffectedEvents()).extracting("eventId", "fundingId").containsExactly(tuple("e1", "GRANT-1"));
     }
 
     @Test
-    void update_blocks_whenShrinkingMilestoneWouldRequireFlaggingAnEventReachingOutsideTheProject() {
+    void update_rejectsAndRollsBack_whenFlaggingIsBlockedByAPublishedEvent() {
         ProjectEntity root = root(new BigDecimal("200000"));
         MilestoneEntity milestone = MilestoneEntity.builder().id("m1").proId("PRJ-1000-M1")
                 .milestoneTitle("Milestone 1").milestoneAmount(new BigDecimal("150000")).currency("USD").project(root).build();
@@ -232,11 +237,10 @@ class ProjectTreeUpdateServiceTest {
         when(projectRepository.findByParentProjectId("root")).thenReturn(List.of());
         when(milestoneRepository.findByProjectIdAndProId("root", "PRJ-1000-M1")).thenReturn(Optional.of(milestone));
         when(milestoneService.findByProjectId("root")).thenReturn(List.of(milestone));
-        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
-        when(milestoneService.needsErrorFlagging(eq("m1"), any())).thenReturn(true);
-        ProblemDetail crossProjectConflict = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "reaches outside");
-        crossProjectConflict.setTitle(ErrorTitleConstants.EVENT_ALLOCATED_TO_OTHER_PROJECTS);
-        when(cascadeDeleteService.markContainedEventsAsErrorOrBlock(Set.of("m1"))).thenReturn(Optional.of(crossProjectConflict));
+        when(milestoneService.invalidatesEvents(eq(milestone), any())).thenReturn(true);
+        ProblemDetail published = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "already published");
+        published.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+        when(cascadeDeleteService.flagEventsAllocatedTo(Set.of("m1"))).thenReturn(Either.left(published));
 
         ProjectWithMilestonesCreateRequest request = request(null);
         request.setMilestones(List.of(MilestoneCreateRequest.builder()
@@ -244,7 +248,84 @@ class ProjectTreeUpdateServiceTest {
 
         ProjectView result = service.updateWithMilestones("root", request);
 
-        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.EVENT_ALLOCATED_TO_OTHER_PROJECTS);
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+    }
+
+    @Test
+    void update_flagsEventsOfEveryMilestoneWhoseCurrencyMoves_whenTheRootCurrencyChanges() {
+        ProjectEntity root = root(new BigDecimal("200000")); // currency USD
+        MilestoneEntity moving1 = MilestoneEntity.builder().id("m1").proId("PRJ-1000-M1").milestoneTitle("M1")
+                .milestoneAmount(new BigDecimal("50000")).currency("USD").project(root).build();
+        MilestoneEntity moving2 = MilestoneEntity.builder().id("m2").proId("PRJ-1000-M2").milestoneTitle("M2")
+                .milestoneAmount(new BigDecimal("50000")).currency("USD").project(root).build();
+        MilestoneEntity alreadyEur = MilestoneEntity.builder().id("m3").proId("PRJ-1000-M3").milestoneTitle("M3")
+                .milestoneAmount(new BigDecimal("50000")).currency("EUR").project(root).build();
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+        when(projectRepository.findByParentProjectId("root")).thenReturn(List.of());
+        when(milestoneService.isCurrencyRegisteredAndActive("org1", "EUR")).thenReturn(true);
+        when(milestoneRepository.findByProjectIdIn(Set.of("root"))).thenReturn(List.of(moving1, moving2, alreadyEur));
+        when(milestoneService.findByProjectId("root")).thenReturn(List.of());
+        FundingEventEntity flaggedEvent = FundingEventEntity.builder().id("e1").eventType(EventType.SPENDING)
+                .status(EventStatus.ERROR).organisationId("org1").fundingId("GRANT-1").currencyRcy("USD")
+                .totalAmount(BigDecimal.ZERO).milestoneAllocations(List.of()).build();
+        when(cascadeDeleteService.flagEventsAllocatedTo(Set.of("m1", "m2"))).thenReturn(Either.right(List.of(flaggedEvent)));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setCurrency("EUR");
+
+        ProjectView result = service.updateWithMilestones("root", request);
+
+        assertThat(result.getError()).isEmpty();
+        verify(projectService).cascadeCurrency(root, "EUR");
+        // only the milestones that actually move currency are flagged, never one already in EUR
+        verify(cascadeDeleteService).flagEventsAllocatedTo(Set.of("m1", "m2"));
+        assertThat(result.getAffectedEvents()).extracting("eventId").containsExactly("e1");
+    }
+
+    @Test
+    void update_flagsNothing_whenTheRootCurrencyIsResentUnchanged() {
+        ProjectEntity root = root(new BigDecimal("200000")); // currency USD
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+        when(projectRepository.findByParentProjectId("root")).thenReturn(List.of());
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setCurrency("USD");
+
+        ProjectView result = service.updateWithMilestones("root", request);
+
+        assertThat(result.getError()).isEmpty();
+        verify(projectService, never()).cascadeCurrency(any(), anyString());
+        verify(cascadeDeleteService, never()).flagEventsAllocatedTo(any());
+    }
+
+    @Test
+    void update_reportsAnEventOnlyOnce_whenAShrinkAndADeleteBothFlagIt() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        MilestoneEntity shrunk = MilestoneEntity.builder().id("m1").proId("PRJ-1000-M1").milestoneTitle("M1")
+                .milestoneAmount(new BigDecimal("150000")).currency("USD").project(root).build();
+        MilestoneEntity deleted = MilestoneEntity.builder().id("m2").proId("PRJ-1000-M2").milestoneTitle("M2")
+                .milestoneAmount(new BigDecimal("50000")).currency("USD").project(root).build();
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+        when(projectRepository.findByParentProjectId("root")).thenReturn(List.of());
+        when(milestoneRepository.findByProjectIdAndProId("root", "PRJ-1000-M1")).thenReturn(Optional.of(shrunk));
+        when(milestoneRepository.findByProjectIdAndProId("root", "PRJ-1000-M2")).thenReturn(Optional.of(deleted));
+        when(milestoneService.findByProjectId("root")).thenReturn(List.of(shrunk));
+        when(milestoneService.invalidatesEvents(eq(shrunk), any())).thenReturn(true);
+        FundingEventEntity shared = FundingEventEntity.builder().id("e1").eventType(EventType.FUNDING)
+                .status(EventStatus.ERROR).organisationId("org1").fundingId("GRANT-1").currencyRcy("USD")
+                .totalAmount(BigDecimal.ZERO).milestoneAllocations(List.of()).build();
+        when(cascadeDeleteService.deleteMilestone(deleted)).thenReturn(Either.right(List.of(shared)));
+        when(cascadeDeleteService.flagEventsAllocatedTo(Set.of("m1"))).thenReturn(Either.right(List.of(shared)));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setMilestones(List.of(
+                MilestoneCreateRequest.builder().proId("PRJ-1000-M1").milestoneTitle("M1").milestoneAmount(new BigDecimal("50000")).build(),
+                MilestoneCreateRequest.builder().proId("PRJ-1000-M2").action("DELETE").build()));
+
+        ProjectView result = service.updateWithMilestones("root", request);
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getAffectedEvents()).extracting("eventId").containsExactly("e1");
     }
 
     @Test
