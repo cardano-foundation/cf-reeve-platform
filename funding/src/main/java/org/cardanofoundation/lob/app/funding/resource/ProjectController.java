@@ -99,14 +99,12 @@ public class ProjectController {
                                             value = """
                                                     {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
-                                                      "externalProjectId": "PROJ-ORION",
                                                       "projectTitle": "Project Orion",
                                                       "proId": "PRJ-1000",
                                                       "totalAmount": "705702.86",
                                                       "currency": "ADA",
                                                       "subProjects": [
                                                         {
-                                                          "externalProjectId": "PROJ-ORION-1",
                                                           "projectTitle": "Sub 1",
                                                           "proId": "PRJ-1000-S1",
                                                           "totalAmount": "286728.71",
@@ -121,7 +119,6 @@ public class ProjectController {
                                                           ]
                                                         },
                                                         {
-                                                          "externalProjectId": "PROJ-ORION-2",
                                                           "projectTitle": "Sub 2",
                                                           "proId": "PRJ-1000-S2",
                                                           "totalAmount": "418974.15",
@@ -147,14 +144,12 @@ public class ProjectController {
                                             value = """
                                                     {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
-                                                      "externalProjectId": "PROJ-ATLAS",
                                                       "projectTitle": "Project Atlas",
                                                       "proId": "PRJ-2000",
                                                       "totalAmount": "80000.00",
                                                       "currency": "ADA",
                                                       "subProjects": [
                                                         {
-                                                          "externalProjectId": "PROJ-ATLAS-A",
                                                           "projectTitle": "Sub A",
                                                           "proId": "PRJ-2000-S1",
                                                           "totalAmount": "50000.00",
@@ -169,7 +164,6 @@ public class ProjectController {
                                                           ]
                                                         },
                                                         {
-                                                          "externalProjectId": "PROJ-ATLAS-B",
                                                           "projectTitle": "Sub B",
                                                           "proId": "PRJ-2000-S2",
                                                           "totalAmount": "30000.00",
@@ -235,14 +229,12 @@ public class ProjectController {
                                             value = """
                                                     {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
-                                                      "externalProjectId": "PROJ-ORION",
                                                       "projectTitle": "Project Orion",
                                                       "proId": "PRJ-1000",
                                                       "totalAmount": "100000.00",
                                                       "currency": "ADA",
                                                       "subProjects": [
                                                         {
-                                                          "externalProjectId": "PROJ-ORION-1",
                                                           "projectTitle": "Sub 1",
                                                           "proId": "PRJ-1000-S1",
                                                           "totalAmount": "40000.00",
@@ -257,7 +249,6 @@ public class ProjectController {
                                                           ]
                                                         },
                                                         {
-                                                          "externalProjectId": "PROJ-ORION-2",
                                                           "projectTitle": "Sub 2",
                                                           "proId": "PRJ-1000-S2",
                                                           "totalAmount": "60000.00",
@@ -290,14 +281,12 @@ public class ProjectController {
                                             value = """
                                                     {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
-                                                      "externalProjectId": "PROJ-ATLAS",
                                                       "projectTitle": "Project Atlas",
                                                       "proId": "PRJ-2000",
                                                       "totalAmount": "50000.00",
                                                       "currency": "ADA",
                                                       "subProjects": [
                                                         {
-                                                          "externalProjectId": "PROJ-ATLAS-A",
                                                           "projectTitle": "Sub A",
                                                           "proId": "PRJ-2000-S1",
                                                           "totalAmount": "50000.00",
@@ -312,7 +301,6 @@ public class ProjectController {
                                                           ]
                                                         },
                                                         {
-                                                          "externalProjectId": "PROJ-ATLAS-B",
                                                           "projectTitle": "Sub B",
                                                           "proId": "PRJ-2000-S2",
                                                           "action": "DELETE"

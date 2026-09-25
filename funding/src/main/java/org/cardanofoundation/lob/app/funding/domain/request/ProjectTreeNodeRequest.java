@@ -23,8 +23,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Builder
 public class ProjectTreeNodeRequest {
 
-    @NotBlank
-    @Schema(example = "WP-1", description = "User-defined id. No longer used for lookups or id generation; kept for backward compatibility only.")
+    @Nullable
+    @Schema(example = "WP-1", description = "Optional and ignored: no longer used for lookups or id generation. Still accepted, and still returned in responses, so existing clients keep working.")
     private String externalProjectId;
 
     @NotBlank

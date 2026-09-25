@@ -571,13 +571,11 @@ public class FundingBulkImportService {
         Optional<ProblemDetail> problem = existing.getParentProject() == null
                 ? projectTreeUpdateService.applyRootFields(existing, ProjectWithMilestonesCreateRequest.builder()
                         .organisationId(existing.getOrganisationId())
-                        .externalProjectId("csv-update")
                         .projectTitle(newTitle)
                         .totalAmount(newTotal)
                         .currency(newCurrency)
                         .build())
                 : projectTreeUpdateService.applySubProjectFields(existing, ProjectTreeNodeRequest.builder()
-                        .externalProjectId("csv-update")
                         .projectTitle(newTitle)
                         .totalAmount(newTotal)
                         .build());

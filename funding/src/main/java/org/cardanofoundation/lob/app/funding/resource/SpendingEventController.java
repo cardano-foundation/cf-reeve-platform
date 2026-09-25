@@ -146,7 +146,6 @@ public class SpendingEventController {
                                                           "currency": "EUR",
                                                           "subProjects": [
                                                             {
-                                                              "externalProjectId": "sub-one",
                                                               "projectTitle": "Sub One",
                                                               "totalAmount": "3000.00",
                                                               "currency": "EUR",
@@ -172,7 +171,6 @@ public class SpendingEventController {
                                                               ]
                                                             },
                                                             {
-                                                              "externalProjectId": "sub-two",
                                                               "projectTitle": "Sub Two",
                                                               "totalAmount": "3000.00",
                                                               "currency": "EUR",

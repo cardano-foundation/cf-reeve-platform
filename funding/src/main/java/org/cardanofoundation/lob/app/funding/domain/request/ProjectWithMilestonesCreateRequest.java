@@ -27,8 +27,8 @@ public class ProjectWithMilestonesCreateRequest extends BaseRequest {
     @Schema(example = "GRANT-2025-001", description = "Optional funding reference. Unique per organisation — no two projects may share it.")
     private String fundingId;
 
-    @NotBlank
-    @Schema(example = "PROJ-AB", description = "User-defined id. No longer used for lookups or id generation; kept for backward compatibility only.")
+    @Nullable
+    @Schema(example = "PROJ-AB", description = "Optional and ignored: no longer used for lookups or id generation. Still accepted, and still returned in responses, so existing clients keep working.")
     private String externalProjectId;
 
     @NotBlank
