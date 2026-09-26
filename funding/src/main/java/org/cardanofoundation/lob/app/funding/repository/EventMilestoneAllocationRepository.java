@@ -18,16 +18,33 @@ public interface EventMilestoneAllocationRepository extends JpaRepository<EventM
 
     List<EventMilestoneAllocationEntity> findById_MilestoneIdIn(Collection<String> milestoneIds);
 
+    /**
+     * Just the distinct event ids allocated to any of the given milestones — a scalar projection, so no
+     * {@code EventMilestoneAllocationEntity} is loaded into the persistence context. That matters when the
+     * caller is about to delete those milestones in the same session: an allocation entity left managed
+     * here would still reference a milestone that's about to be removed, and the next auto-flush reports
+     * that as a spurious {@code TransientObjectException} (reproduced in {@code ProjectTreeUpdateE2ETest}).
+     */
+    @Query("""
+            SELECT DISTINCT a.id.eventId FROM funding.EventMilestoneAllocationEntity a
+            WHERE a.id.milestoneId IN :milestoneIds
+            """)
+    List<String> findEventIdsByMilestoneIdIn(@Param("milestoneIds") Collection<String> milestoneIds);
+
+    /**
+     * Whether any allocation row — live or dangling — already references this exact milestone id.
+     * Milestone ids are deterministic ({@code MilestoneEntity.id}: a hash of the owning project's id and
+     * the milestone's own proId), and deleting a milestone deliberately leaves its allocation rows in
+     * place, pointing at nothing (LOB-2365 follow-up — see {@code FundingCascadeDeleteService}). If a
+     * later milestone is then created with the same proId under the same project, it would be assigned
+     * that exact same id, silently reattaching those old, unrelated allocation rows as if they were its
+     * own. Used to refuse that instead — see {@code MilestoneService#validateAndSave}.
+     */
+    boolean existsById_MilestoneId(String milestoneId);
+
     boolean existsByMilestoneIdAndEventStatus(String milestoneId, EventStatus status);
 
     boolean existsByMilestoneProjectIdAndEventStatus(String projectId, EventStatus status);
-
-    /** Whether any of the given milestones is allocated by an event in the given status. */
-    @Query("""
-            SELECT COUNT(a) > 0 FROM funding.EventMilestoneAllocationEntity a
-            WHERE a.id.milestoneId IN :milestoneIds AND a.event.status = :status
-            """)
-    boolean existsByMilestoneIdInAndEventStatus(@Param("milestoneIds") Collection<String> milestoneIds, @Param("status") EventStatus status);
 
     /**
      * Whether any milestone owned by one of the given projects is allocated by an event in the given
@@ -38,18 +55,6 @@ public interface EventMilestoneAllocationRepository extends JpaRepository<EventM
             WHERE a.milestone.project.id IN :projectIds AND a.event.status = :status
             """)
     boolean existsByMilestoneProjectIdInAndEventStatus(@Param("projectIds") Collection<String> projectIds, @Param("status") EventStatus status);
-
-    /**
-     * Whether any milestone owned by one of the given projects is allocated by any event, regardless
-     * of status (draft or published). Used to block a currency change: a currency edit changes what
-     * an already-recorded amount means, so it must be rejected once any funding/spending has been
-     * allocated — not just once an event has been published.
-     */
-    @Query("""
-            SELECT COUNT(a) > 0 FROM funding.EventMilestoneAllocationEntity a
-            WHERE a.milestone.project.id IN :projectIds
-            """)
-    boolean existsByMilestoneProjectIdIn(@Param("projectIds") Collection<String> projectIds);
 
     /** Total amount allocated to a milestone across all events (null allocations ignored, no rows → 0). */
     @Query("""

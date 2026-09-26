@@ -1,9 +1,7 @@
 package org.cardanofoundation.lob.app.funding.service;
 
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -14,10 +12,13 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import io.vavr.control.Either;
+
 import org.cardanofoundation.lob.app.funding.domain.entity.FundingEventEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
+import org.cardanofoundation.lob.app.funding.domain.view.AffectedEventView;
 import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingEventRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
@@ -26,10 +27,24 @@ import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 import org.cardanofoundation.lob.app.funding.util.Problems;
 
 /**
- * Cross-aggregate cascade deletion for the funding domain. Deleting a project or milestone must fail
- * when anything in its scope is tied to a PUBLISHED event, or to an event that also allocates to
- * projects outside the deleted scope; otherwise the object and everything it owns is removed, along
- * with the draft events that lived entirely within that scope.
+ * Cross-aggregate operations spanning projects/milestones and the events allocated to them.
+ * Deleting a project or milestone must fail when anything in its scope is tied to a PUBLISHED event;
+ * otherwise the object and everything it owns is removed. Every non-published event allocated to a
+ * milestone in the deleted scope is flagged {@code ERROR} — its own data (allocations included) is
+ * never touched, only its status (LOB-2365 follow-up: {@code funding_event_milestone_allocation.
+ * milestone_id} is no longer FK-enforced — see migration {@code V1.8_200_9} and
+ * {@code EventMilestoneAllocationEntity#milestone} — so an allocation row can simply outlive the
+ * milestone it names, standing as a dangling reference for a human to review, rather than having to be
+ * removed to let the milestone be deleted at all). Deleting the event itself, if ever warranted, is left
+ * as a separate, deliberate action a human takes afterward via the normal event-delete endpoint (which
+ * already tolerates {@code ERROR} — only {@code PUBLISHED} blocks it).
+ *
+ * <p>The same rule ({@link #flagEventsAllocatedTo}) also serves every other structural change that can
+ * leave an event out of step with its milestones: shrinking a milestone below what is allocated to it,
+ * and changing a milestone's (or its project's) currency, since an event books in one currency that must
+ * equal each milestone's. In all of them an event's own recorded data is never rewritten, only its
+ * status, and it does not matter whether the event also allocates to milestones elsewhere — the event no
+ * longer fits either way, so a human reconciles it.
  */
 @Slf4j
 @Service
@@ -43,77 +58,94 @@ public class FundingCascadeDeleteService {
 
     /**
      * Deletes a project with its descendant sub-projects and all their milestones. Fails (deleting
-     * nothing) when any milestone in the subtree is linked to a published event, or to an event that
-     * also allocates outside the subtree. Project and milestone rows are removed via JPA cascade once
-     * the fully-contained draft events are deleted.
+     * nothing) when any milestone in the subtree is linked to a published event; otherwise every
+     * non-published event allocated to a milestone in the subtree is flagged {@code ERROR} (see class
+     * Javadoc), and the project/milestone rows are removed via JPA cascade — their allocation rows are
+     * left exactly as they were, now pointing at nothing. On success, carries the (possibly empty) list
+     * of events flagged, so the caller can report them to the human who triggered the delete (see
+     * {@link #toAffectedEventViews}).
      */
     @Transactional
-    public Optional<ProblemDetail> deleteProjectSubtree(ProjectEntity project) {
+    public Either<ProblemDetail, List<FundingEventEntity>> deleteProjectSubtree(ProjectEntity project) {
         Set<String> subtreeProjectIds = ProjectTreeSupport.subtreeProjectIds(projectRepository, project.getId());
         Set<String> milestoneIds = milestoneRepository.findByProjectIdIn(subtreeProjectIds).stream()
                 .map(MilestoneEntity::getId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
-        Optional<ProblemDetail> blocked = deleteAssociatedEventsOrBlock(milestoneIds);
-        if (blocked.isPresent()) {
-            return blocked;
+        Either<ProblemDetail, List<FundingEventEntity>> result = flagEventsAllocatedTo(milestoneIds);
+        if (result.isLeft()) {
+            return result;
         }
         // ProjectEntity cascades ALL to sub-projects and milestones, so removing the root removes the
-        // whole subtree; the allocations that referenced those milestones are already gone.
+        // whole subtree; no FK on funding_event_milestone_allocation.milestone_id blocks this any more
+        // (V1.8_200_9) — any allocation row referencing a milestone in this subtree simply survives it.
         projectRepository.delete(project);
-        return Optional.empty();
+        return result;
     }
 
     /**
-     * Deletes a single milestone. Fails when it is linked to a published event, or to an event that
-     * also allocates to other milestones; otherwise removes the events fully contained by it and the
-     * milestone itself.
+     * Deletes a single milestone. Fails when it is linked to a published event; otherwise every
+     * non-published event allocated to it is flagged {@code ERROR} (see class Javadoc), and the
+     * milestone itself is removed — its allocation rows are left exactly as they were, now pointing at
+     * nothing. On success, carries the (possibly empty) list of events flagged (see
+     * {@link #toAffectedEventViews}).
      */
     @Transactional
-    public Optional<ProblemDetail> deleteMilestone(MilestoneEntity milestone) {
-        Optional<ProblemDetail> blocked = deleteAssociatedEventsOrBlock(Set.of(milestone.getId()));
-        if (blocked.isPresent()) {
-            return blocked;
+    public Either<ProblemDetail, List<FundingEventEntity>> deleteMilestone(MilestoneEntity milestone) {
+        Either<ProblemDetail, List<FundingEventEntity>> result = flagEventsAllocatedTo(Set.of(milestone.getId()));
+        if (result.isLeft()) {
+            return result;
         }
         milestoneRepository.delete(milestone);
-        return Optional.empty();
+        return result;
+    }
+
+    /** Maps the events a delete/cleanup operation touched to the shared response DTO. */
+    public static List<AffectedEventView> toAffectedEventViews(List<FundingEventEntity> events) {
+        return events.stream()
+                .map(event -> AffectedEventView.builder().eventId(event.getId()).fundingId(event.getFundingId()).build())
+                .toList();
     }
 
     /**
-     * Validates then removes the events associated with the given milestones. Fails — leaving all data
-     * untouched — when any is linked to a published event, or to an event that also allocates outside
-     * the deleted scope (i.e. to milestones not in the set). Only when every associated event is fully
-     * contained are those events deleted (cascading their items and allocations).
+     * Fails — leaving all data untouched — when any of the given milestones is linked to a published
+     * event; otherwise flags every non-published event allocated to one of them {@code ERROR}, and
+     * returns the (possibly empty) list of events touched. Callers use it for a milestone about to be
+     * deleted, shrunk below its allocations, or changed to another currency. Nothing about any event's
+     * own data, including its allocation rows, is ever rewritten here — only the status changes; the
+     * allocation rows themselves are left for the caller's own delete (of the milestone/project) to
+     * leave dangling, not removed by this method (see class Javadoc).
+     *
+     * <p>The affected events are locked ({@code findAllByIdForUpdate}, sorted for a stable lock order —
+     * see its Javadoc) before their status is even read, so the published-check and the flip to ERROR
+     * happen as one atomic step: a concurrent {@code SpendingEventService#publish} on one of the same
+     * events either completes first (and this call then correctly sees PUBLISHED and fails) or blocks
+     * until this transaction commits (and then correctly fails itself, publishing a since-ERRORed
+     * event). Without the lock, both transactions could read the pre-change status before either
+     * commits, letting a just-published event get silently flipped back to ERROR, or the reverse.
      */
-    private Optional<ProblemDetail> deleteAssociatedEventsOrBlock(Set<String> milestoneIds) {
+    @Transactional
+    public Either<ProblemDetail, List<FundingEventEntity>> flagEventsAllocatedTo(Set<String> milestoneIds) {
         if (milestoneIds.isEmpty()) {
-            return Optional.empty();
+            return Either.right(List.of());
         }
-        if (allocationRepository.existsByMilestoneIdInAndEventStatus(milestoneIds, EventStatus.PUBLISHED)) {
-            return Optional.of(Problems.conflict(
-                    "Cannot delete: a linked event is already published",
+        // Ids only, deliberately, for this first lookup — see EventMilestoneAllocationRepository
+        // #findEventIdsByMilestoneIdIn — then sorted so overlapping calls lock in the same order.
+        List<String> eventIds = allocationRepository.findEventIdsByMilestoneIdIn(milestoneIds).stream().sorted().toList();
+        if (eventIds.isEmpty()) {
+            return Either.right(List.of());
+        }
+        List<FundingEventEntity> events = fundingEventRepository.findAllByIdForUpdate(eventIds);
+        boolean anyPublished = events.stream().anyMatch(event -> event.getStatus() == EventStatus.PUBLISHED);
+        if (anyPublished) {
+            return Either.left(Problems.conflict(
+                    "Cannot proceed: a linked event is already published",
                     ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED));
         }
-
-        Set<String> eventIds = allocationRepository.findById_MilestoneIdIn(milestoneIds).stream()
-                .map(allocation -> allocation.getId().getEventId())
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-
-        // Validate every associated event up front so a failure makes no changes at all.
-        List<FundingEventEntity> events = new ArrayList<>();
-        for (String eventId : eventIds) {
-            FundingEventEntity event = fundingEventRepository.findById(eventId).orElseThrow();
-            boolean fullyInside = event.getMilestoneAllocations().stream()
-                    .allMatch(allocation -> milestoneIds.contains(allocation.getId().getMilestoneId()));
-            if (!fullyInside) {
-                return Optional.of(Problems.conflict(
-                        "Cannot delete: an associated event also allocates to other projects",
-                        ErrorTitleConstants.EVENT_ALLOCATED_TO_OTHER_PROJECTS));
-            }
-            events.add(event);
-        }
-        events.forEach(fundingEventRepository::delete);
+        events.forEach(event -> event.setStatus(EventStatus.ERROR));
+        fundingEventRepository.saveAll(events);
         fundingEventRepository.flush();
-        return Optional.empty();
+        return Either.right(events);
     }
+
 }

@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.funding.service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -132,6 +133,27 @@ public class SpendingEventService {
         return delete(eventId).fold(Optional::of, ignored -> Optional.empty());
     }
 
+    /**
+     * Bulk-deletes every "orphan" event for this organisation — an {@code ERROR} event none of
+     * whose allocations points at an existing milestone (see {@link FundingEventRepository#findOrphanedEvents}) — so a
+     * human can clear them out in one action instead of finding and deleting each one individually
+     * (LOB-2365 follow-up). An {@code ERROR} event that still has at least one allocation to an existing
+     * milestone is never touched here; that one may still hold data worth fixing, so it stays for the normal
+     * event edit/delete flow.
+     */
+    @Transactional
+    public OrphanEventsCleanupView deleteOrphanedErrorEvents(String organisationId) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return OrphanEventsCleanupView.error(Problems.unauthorized());
+        }
+        if (organisationPublicApi.findByOrganisationId(organisationId).isEmpty()) {
+            return OrphanEventsCleanupView.error(Problems.organisationNotFound(organisationId));
+        }
+        List<FundingEventEntity> orphans = fundingEventRepository.findOrphanedEvents(organisationId, EventStatus.ERROR);
+        fundingEventRepository.deleteAll(orphans);
+        return OrphanEventsCleanupView.success(FundingCascadeDeleteService.toAffectedEventViews(orphans));
+    }
+
     /** 401 when the event exists and the caller cannot access its organisation; empty otherwise. */
     private Optional<ProblemDetail> denyIfNoEventAccess(String eventId) {
         Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);
@@ -195,6 +217,17 @@ public class SpendingEventService {
 
         Optional<ProblemDetail> draftProblem = requireDraft(event, "Cannot update event with Funding ID %s: it is already published");
         if (draftProblem.isPresent()) return Either.left(draftProblem.get());
+
+        // An ERROR event (LOB-2365 — a project/milestone structural edit made its allocation no longer
+        // fit) is exactly what this update is meant to fix. Setting it back to DRAFT up front is safe
+        // even though validation hasn't run yet: every allocation is fully re-validated against the
+        // milestone's *current* amount below (see populateNode's FundingValidations.allocation call), so
+        // reaching the final saveAndFlush at all means the fix actually worked; if validation fails
+        // instead, updateEvent's rollbackAndError marks the whole transaction rollback-only, so this
+        // in-memory change (like the allocations already cleared just below) is discarded, not persisted.
+        if (event.getStatus() == EventStatus.ERROR) {
+            event.setStatus(EventStatus.DRAFT);
+        }
 
         // The event's identity — organisation and type — is fixed at creation; the update payload
         // must not silently target another organisation's projects or change the event's semantics.
@@ -334,12 +367,29 @@ public class SpendingEventService {
 
     @Transactional
     public Either<ProblemDetail, FundingEventEntity> publish(String eventId) {
-        Either<ProblemDetail, FundingEventEntity> eventOrError = findEventOrError(eventId);
-        if (eventOrError.isLeft()) return eventOrError;
+        // Locked read (see FundingEventRepository#findByIdForUpdate's Javadoc): without it, this
+        // read-status/flip-to-PUBLISHED and FundingCascadeDeleteService#flagEventsAllocatedTo's own
+        // read-status/flip-to-ERROR on the same row can race, letting one silently overwrite the other.
+        Optional<FundingEventEntity> eventM = fundingEventRepository.findByIdForUpdate(eventId);
+        if (eventM.isEmpty()) {
+            log.warn("Event not found: {}", eventId);
+            return Either.left(Problems.eventNotFound(eventId));
+        }
+        Either<ProblemDetail, FundingEventEntity> eventOrError = Either.right(eventM.get());
 
         FundingEventEntity event = eventOrError.get();
         Optional<ProblemDetail> draftProblem = requireDraft(event, "Event with Funding ID %s is already published");
         if (draftProblem.isPresent()) return Either.left(draftProblem.get());
+
+        // An ERROR event (LOB-2365) no longer fits the current project/milestone structure — publishing
+        // it as-is would push a mismatched allocation on-chain. It must be corrected via update() first
+        // (which re-validates it and clears the flag back to DRAFT) before it can ever be published.
+        if (event.getStatus() == EventStatus.ERROR) {
+            return Either.left(Problems.conflict(
+                    "Cannot publish event with Funding ID %s: it no longer fits the current project/milestone structure and must be corrected first"
+                            .formatted(event.getFundingId()),
+                    ErrorTitleConstants.SPENDING_EVENT_HAS_ERROR));
+        }
 
         event.setStatus(EventStatus.PUBLISHED);
         event.setLedgerDispatchApproved(true);
@@ -364,7 +414,11 @@ public class SpendingEventService {
     // -------------------------------------------------------------------------
 
     public SpendingEventView toView(FundingEventEntity event) {
-        List<EventProjectAllocationView> projViews = buildProjectAllocationViews(event.getId());
+        List<OrphanedAllocationView> orphans = buildOrphanedAllocationViews(event.getId());
+        List<EventProjectAllocationView> projViews = new ArrayList<>(buildProjectAllocationViews(event.getId()));
+        if (!orphans.isEmpty()) {
+            projViews.add(toDeletedMilestonesPlaceholder(event.getId(), orphans));
+        }
         boolean overspend = projViews.stream().anyMatch(p -> p.isOverspend()
                 || p.getMilestoneAllocations().stream().anyMatch(EventMilestoneAllocationView::isOverspend));
 
@@ -391,6 +445,7 @@ public class SpendingEventService {
                 .hash(event.getHash())
                 .notes(event.getNotes())
                 .projectAllocations(projViews)
+                .orphanedAllocations(orphans)
                 .build();
     }
 
@@ -592,9 +647,16 @@ public class SpendingEventService {
             return Either.left(fundingIdProblem.get());
         }
 
-        // A root project's proId is user-suppliable — same fallback-to-title rule as
-        // ProjectService#createRootProject — so it needs its own uniqueness pre-check.
-        String proId = (req.getProId() != null && !req.getProId().isBlank()) ? req.getProId() : req.getProjectTitle();
+        // A root project's proId is user-suppliable and, per the product design, mandatory to create a
+        // new one — same rule as ProjectService#createRootProject (see its comment for the reasoning).
+        // Note this check only applies here, once creation is the only remaining path: a blank proId is
+        // still perfectly fine above, where it just means "match by title instead."
+        if (req.getProId() == null || req.getProId().isBlank()) {
+            return Either.left(Problems.badRequest(
+                    "proId is required to create a new root project: " + req.getProjectTitle(), ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
+        }
+        String proId = req.getProId();
+        // Caller-chosen, so it needs its own uniqueness pre-check.
         if (projectRepository.existsByOrganisationIdAndProIdAndParentProjectIsNull(organisationId, proId)) {
             return Either.left(Problems.conflict(
                     "Project ID already exists in this organisation: " + proId,
@@ -655,6 +717,38 @@ public class SpendingEventService {
                         am -> am.milestone().getProject(),
                         LinkedHashMap::new,
                         Collectors.toList()));
+    }
+
+    /**
+     * The event's allocations whose milestone no longer exists — {@link #allocationsByProject} drops them
+     * (it can't group them under a project), but they must stay visible, since deleting a milestone never
+     * removes its allocation rows (LOB-2365 follow-up).
+     */
+    private List<OrphanedAllocationView> buildOrphanedAllocationViews(String eventId) {
+        return milestoneAllocationRepository.findById_EventId(eventId).stream()
+                .filter(alloc -> milestoneService.findById(alloc.getId().getMilestoneId()).isEmpty())
+                .map(alloc -> OrphanedAllocationView.builder()
+                        .milestoneId(alloc.getId().getMilestoneId().trim())
+                        .allocatedAmount(alloc.getAllocatedAmount())
+                        .milestoneDeleted(true)
+                        .build())
+                .toList();
+    }
+
+    /** Groups the orphaned allocations into one project-less entry so they also show up in projectAllocations. */
+    private static EventProjectAllocationView toDeletedMilestonesPlaceholder(String eventId, List<OrphanedAllocationView> orphans) {
+        return EventProjectAllocationView.builder()
+                .containsDeletedMilestones(true)
+                .spentAmount(BigDecimal.ZERO)
+                .milestoneAllocations(orphans.stream()
+                        .map(o -> EventMilestoneAllocationView.builder()
+                                .eventId(eventId)
+                                .milestoneId(o.getMilestoneId())
+                                .allocatedAmount(o.getAllocatedAmount())
+                                .milestoneDeleted(true)
+                                .build())
+                        .toList())
+                .build();
     }
 
     private List<EventProjectAllocationView> buildProjectAllocationViews(String eventId) {

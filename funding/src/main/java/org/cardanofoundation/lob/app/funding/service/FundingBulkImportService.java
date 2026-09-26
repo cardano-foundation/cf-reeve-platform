@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -38,8 +39,7 @@ import org.cardanofoundation.lob.app.funding.domain.request.EventMilestoneAlloca
 import org.cardanofoundation.lob.app.funding.domain.request.EventProjectAllocationRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.EventSubProjectAllocationRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
-import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateRequest;
-import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
+import org.cardanofoundation.lob.app.funding.domain.request.ProjectTreeNodeRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.EventMilestoneAllocationView;
@@ -117,6 +117,7 @@ public class FundingBulkImportService {
     private final FundingCsvTypeDetector csvTypeDetector;
     private final FundingProjectRepository projectRepository;
     private final ProjectService projectService;
+    private final ProjectTreeUpdateService projectTreeUpdateService;
     private final ProjectStructureService projectStructureService;
     private final MilestoneService milestoneService;
     private final SpendingEventService spendingEventService;
@@ -332,7 +333,8 @@ public class FundingBulkImportService {
                 .findFirst()
                 .orElseGet(() -> lines.get(idxs.get(0)));
 
-        Either<ProblemDetail, UpsertOutcome<ProjectEntity>> rootE = upsertRootProject(organisationId, rootLine);
+        Set<String> changedMilestoneIds = new LinkedHashSet<>();
+        Either<ProblemDetail, UpsertOutcome<ProjectEntity>> rootE = upsertRootProject(organisationId, rootLine, changedMilestoneIds);
         if (rootE.isLeft()) {
             return groupFailure(idxs, rootE.getLeft());
         }
@@ -345,17 +347,43 @@ public class FundingBulkImportService {
         int projectsUpdated = rootE.get().created() ? 0 : 1;
         int milestonesCreated = 0;
         int milestonesUpdated = 0;
+        Set<String> touchedProjectIds = new LinkedHashSet<>(Set.of(root.getId()));
 
         for (int idx : idxs) {
-            RowOutcome row = processGroupRow(root, idx, lines.get(idx), resolvedProjectIds);
+            RowOutcome row = processGroupRow(root, idx, lines.get(idx), resolvedProjectIds, changedMilestoneIds);
             if (row.error() != null) {
                 errors.add(row.error());
+            }
+            if (row.touchedSubProjectId() != null) {
+                touchedProjectIds.add(row.touchedSubProjectId());
             }
             succeeded += row.succeeded();
             projectsCreated += row.projectsCreated();
             projectsUpdated += row.projectsUpdated();
             milestonesCreated += row.milestonesCreated();
             milestonesUpdated += row.milestonesUpdated();
+        }
+
+        // Every row in the group has now been applied — validate the group's final, whole-tree
+        // structural consistency exactly once, the same way ProjectTreeUpdateService does for the JSON
+        // endpoint, since updateProjectEntity above deferred it for exactly this reason. A failure here
+        // rolls the whole group back via the existing all-or-nothing group transaction (see
+        // processGroupAtomically), same as any other row error.
+        if (errors.isEmpty()) {
+            Optional<ProblemDetail> coverage = projectTreeUpdateService.validateWholeTreeCoverage(touchedProjectIds);
+            if (coverage.isPresent()) {
+                errors.add(rowError(idxs.get(0) + 1, coverage.get()));
+            }
+        }
+
+        // Flag the events of every milestone shrunk or moved to another currency anywhere in this group
+        // together, in one call, only once the whole group has been accepted — see
+        // ProjectTreeUpdateService#flagEventsOfChangedMilestones.
+        if (errors.isEmpty()) {
+            Either<ProblemDetail, List<FundingEventEntity>> flagged = projectTreeUpdateService.flagEventsOfChangedMilestones(changedMilestoneIds);
+            if (flagged.isLeft()) {
+                errors.add(rowError(idxs.get(0) + 1, flagged.getLeft()));
+            }
         }
 
         return new ProjectMilestoneGroupOutcome(errors, succeeded, projectsCreated, projectsUpdated, milestonesCreated, milestonesUpdated);
@@ -372,24 +400,27 @@ public class FundingBulkImportService {
      * being silently dropped or (for a sub-project amount with no sub-project title) attached to
      * the wrong project.
      */
-    private RowOutcome processGroupRow(ProjectEntity root, int idx, ProjectMilestoneCsvLine line, Map<String, String> resolvedProjectIds) {
+    private RowOutcome processGroupRow(ProjectEntity root, int idx, ProjectMilestoneCsvLine line,
+            Map<String, String> resolvedProjectIds, Set<String> changedMilestoneIds) {
         ProjectEntity target = root;
         int succeeded = 0;
         int projectsCreated = 0;
         int projectsUpdated = 0;
+        String touchedSubProjectId = null;
 
         if (line.hasOrphanedSubProjectData()) {
             return new RowOutcome(rowError(idx + 1, Problems.badRequest(
                     "Sub Project Title is required when Sub Total Amount is provided",
-                    ErrorTitleConstants.PROJECT_FIELDS_REQUIRED)), 0, 0, 0, 0, 0);
+                    ErrorTitleConstants.PROJECT_FIELDS_REQUIRED)), 0, 0, 0, 0, 0, null);
         }
 
         if (line.hasSubProject()) {
             Either<ProblemDetail, UpsertOutcome<ProjectEntity>> subE = upsertSubProject(root, line);
             if (subE.isLeft()) {
-                return new RowOutcome(rowError(idx + 1, subE.getLeft()), 0, 0, 0, 0, 0);
+                return new RowOutcome(rowError(idx + 1, subE.getLeft()), 0, 0, 0, 0, 0, null);
             }
             target = subE.get().entity();
+            touchedSubProjectId = target.getId();
             resolvedProjectIds.put(line.getSubProjectTitle(), target.getId());
             succeeded++;
             if (subE.get().created()) projectsCreated++; else projectsUpdated++;
@@ -398,20 +429,20 @@ public class FundingBulkImportService {
         if (line.hasOrphanedMilestoneData()) {
             return new RowOutcome(rowError(idx + 1, Problems.badRequest(
                     "Milestone Title is required when Milestone Amount or Milestone Date is provided",
-                    ErrorTitleConstants.MILESTONE_FIELDS_REQUIRED)), succeeded, projectsCreated, projectsUpdated, 0, 0);
+                    ErrorTitleConstants.MILESTONE_FIELDS_REQUIRED)), succeeded, projectsCreated, projectsUpdated, 0, 0, touchedSubProjectId);
         }
 
         if (!line.hasMilestone()) {
-            return new RowOutcome(null, succeeded, projectsCreated, projectsUpdated, 0, 0);
+            return new RowOutcome(null, succeeded, projectsCreated, projectsUpdated, 0, 0, touchedSubProjectId);
         }
 
-        Either<ProblemDetail, Boolean> msE = upsertMilestoneRow(target, line);
+        Either<ProblemDetail, Boolean> msE = upsertMilestoneRow(target, line, changedMilestoneIds);
         if (msE.isLeft()) {
-            return new RowOutcome(rowError(idx + 1, msE.getLeft()), succeeded, projectsCreated, projectsUpdated, 0, 0);
+            return new RowOutcome(rowError(idx + 1, msE.getLeft()), succeeded, projectsCreated, projectsUpdated, 0, 0, touchedSubProjectId);
         }
         boolean milestoneCreated = msE.get();
         return new RowOutcome(null, succeeded + 1, projectsCreated, projectsUpdated,
-                milestoneCreated ? 1 : 0, milestoneCreated ? 0 : 1);
+                milestoneCreated ? 1 : 0, milestoneCreated ? 0 : 1, touchedSubProjectId);
     }
 
     private static ProjectMilestoneGroupOutcome groupFailure(List<Integer> idxs, ProblemDetail problem) {
@@ -428,7 +459,7 @@ public class FundingBulkImportService {
      * than a rejected conflict, matching how bulk-import already resolves every other same-batch field
      * change.
      */
-    private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> upsertRootProject(String organisationId, ProjectMilestoneCsvLine rootLine) {
+    private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> upsertRootProject(String organisationId, ProjectMilestoneCsvLine rootLine, Set<String> changedMilestoneIds) {
         Optional<ProjectEntity> existing = isBlank(rootLine.getProjectId())
                 ? projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(organisationId, rootLine.getProjectTitle())
                 : projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull(organisationId, rootLine.getProjectId());
@@ -439,7 +470,7 @@ public class FundingBulkImportService {
         }
 
         if (existing.isPresent()) {
-            return updateProjectEntity(existing.get(), rootLine.getProjectTitle(), rootLine.getCurrency(), totalAmountE.get());
+            return updateProjectEntity(existing.get(), rootLine.getProjectTitle(), rootLine.getCurrency(), totalAmountE.get(), changedMilestoneIds);
         }
         // CREATE — full data is required.
         if (totalAmountE.get() == null) {
@@ -450,9 +481,16 @@ public class FundingBulkImportService {
             return Either.left(Problems.badRequest(
                     "Currency is required to create project: " + rootLine.getProjectTitle(), ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
-        // Project ID is optional for a root project (defaults to title when blank — see
-        // ProjectEntity#getProId()). Sub Project ID / Milestone ID work differently: they're mandatory
-        // when a row creates one (see upsertSubProject / upsertMilestoneRow) and seed the new row's proId.
+        // Project ID is mandatory for a root project, matching the UI's own required-field treatment of
+        // this input — it's the value a caller must hold onto to reliably reference this project later
+        // (e.g. an update row after a rename), since matching by title alone can drift. Sub Project ID /
+        // Milestone ID work differently: they stay optional on creation, auto-assigning <parent's
+        // proId>-<S|M><n> when blank (see upsertSubProject / upsertMilestoneRow) — only the root level needs
+        // a caller-chosen value, since a sub-project's/milestone's proId is always system-assigned.
+        if (isBlank(rootLine.getProjectId())) {
+            return Either.left(Problems.badRequest(
+                    "Project ID is required to create project: " + rootLine.getProjectTitle(), ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
+        }
         ProjectView view = projectService.createWithMilestones(ProjectWithMilestonesCreateRequest.builder()
                 .organisationId(organisationId)
                 .projectTitle(rootLine.getProjectTitle())
@@ -480,7 +518,7 @@ public class FundingBulkImportService {
         }
 
         if (existing.isPresent()) {
-            return updateProjectEntity(existing.get(), line.getSubProjectTitle(), null, subAmountE.get());
+            return updateProjectEntity(existing.get(), line.getSubProjectTitle(), null, subAmountE.get(), Set.of());
         }
         // CREATE — full data is required. There is no "Sub Currency" column: a sub-project always
         // takes the root's currency (see ProjectStructureService.createSubProject).
@@ -490,7 +528,7 @@ public class FundingBulkImportService {
         }
         // Sub Project ID is optional on creation, same as the UI/API: a caller-supplied value is used
         // as-is (after the uniqueness check inside createSubProject), and a blank one auto-assigns
-        // <parent's proId>-<n> exactly like the JSON API/event-allocation flow — no CSV-specific
+        // <parent's proId>-<S|M><n> exactly like the JSON API/event-allocation flow — no CSV-specific
         // mandatory rule any more. Discoverability of an auto-assigned value is handled by the
         // Projects+Milestones export endpoint instead (returns the same template shape populated with
         // every row's actual proId), not by forcing the user to invent one at upload time.
@@ -510,17 +548,39 @@ public class FundingBulkImportService {
      * allocations), which would otherwise reject a value that isn't actually changing. {@code title} is
      * now sent when it differs from the row's matched (proId or title) row — title is no longer
      * immutable (see LOB-2384); {@code existing}'s own proId is never touched either way.
+     *
+     * <p>Applies the field values directly via {@link ProjectTreeUpdateService}'s package-visible
+     * apply-then-validate-whole-group-once helpers, the same path used by the JSON tree-update endpoint —
+     * deliberately not an embedded, per-row coverage check, which would read this group's other,
+     * not-yet-processed rows' stale (pre-update) totals (see {@code ProjectTreeUpdateService}'s class
+     * Javadoc). The publish lock that endpoint also carries is replicated explicitly here instead
+     * ({@link ProjectTreeUpdateService#isLockedByPublishedEvent}), since it isn't part of what's deferred.
+     * The whole group's structural coverage is validated once, after every row in it has been applied —
+     * see {@link #processProjectMilestoneGroup}.
      */
-    private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> updateProjectEntity(ProjectEntity existing, String title, String currency, BigDecimal totalAmount) {
-        ProjectUpdateRequest updateRequest = ProjectUpdateRequest.builder()
-                .projectTitle(ifChanged(blankToNull(title), existing.getProjectTitle()))
-                .totalAmount(ifChanged(totalAmount, existing.getTotalAmount()))
-                .currency(ifChanged(blankToNull(currency), existing.getCurrency()))
-                .build();
-        ProjectView view = projectService.updateProject(existing.getId(), updateRequest);
-        Optional<ProblemDetail> error = view.getError();
-        if (error.isPresent()) {
-            return Either.left(error.get());
+    private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> updateProjectEntity(ProjectEntity existing, String title, String currency, BigDecimal totalAmount, Set<String> changedMilestoneIds) {
+        String newTitle = ifChanged(blankToNull(title), existing.getProjectTitle());
+        BigDecimal newTotal = ifChanged(totalAmount, existing.getTotalAmount());
+        String newCurrency = ifChanged(blankToNull(currency), existing.getCurrency());
+        if ((newTitle != null || newTotal != null || newCurrency != null) && projectTreeUpdateService.isLockedByPublishedEvent(existing)) {
+            return Either.left(Problems.conflict(
+                    "Cannot update projectTitle, totalAmount, or currency: project %s is locked because a published event exists in its structure"
+                            .formatted(existing.getId()),
+                    ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED));
+        }
+        Optional<ProblemDetail> problem = existing.getParentProject() == null
+                ? projectTreeUpdateService.applyRootFields(existing, ProjectWithMilestonesCreateRequest.builder()
+                        .organisationId(existing.getOrganisationId())
+                        .projectTitle(newTitle)
+                        .totalAmount(newTotal)
+                        .currency(newCurrency)
+                        .build(), changedMilestoneIds)
+                : projectTreeUpdateService.applySubProjectFields(existing, ProjectTreeNodeRequest.builder()
+                        .projectTitle(newTitle)
+                        .totalAmount(newTotal)
+                        .build());
+        if (problem.isPresent()) {
+            return Either.left(problem.get());
         }
         return Either.right(new UpsertOutcome<>(existing, false));
     }
@@ -532,7 +592,7 @@ public class FundingBulkImportService {
      * entity rather than the CSV row (which may leave the row-level {@code Currency} cell blank on a
      * continuation row that doesn't re-declare the project).
      */
-    private Either<ProblemDetail, Boolean> upsertMilestoneRow(ProjectEntity project, ProjectMilestoneCsvLine line) {
+    private Either<ProblemDetail, Boolean> upsertMilestoneRow(ProjectEntity project, ProjectMilestoneCsvLine line, Set<String> changedMilestoneIds) {
         Either<ProblemDetail, BigDecimal> amountE = parseDecimal(line.getMilestoneAmount(), "Milestone Amount");
         if (amountE.isLeft()) {
             return Either.left(amountE.getLeft());
@@ -559,15 +619,21 @@ public class FundingBulkImportService {
             // legitimately grown (e.g. both a FUNDING and a SPENDING event allocated against it), and
             // resending the same amount must not spuriously trip that coverage check. milestoneTitle is
             // no longer immutable (see LOB-2384) — sent when it differs from the matched row's title.
+            //
+            // Applied via ProjectTreeUpdateService#applyExistingMilestone, not MilestoneService#update —
+            // same reason as updateProjectEntity above: update()'s embedded parent-fit check would read
+            // this group's other, not-yet-processed milestone rows' stale totals if more than one
+            // milestone under the same project is being resized in the same CSV group. The group's whole-
+            // tree coverage check (processProjectMilestoneGroup) validates the parent-fit rule once,
+            // after every row has been applied, instead.
             MilestoneEntity current = existing.get();
-            MilestoneUpdateRequest updateRequest = MilestoneUpdateRequest.builder()
+            MilestoneCreateRequest applyRequest = MilestoneCreateRequest.builder()
                     .milestoneTitle(ifChanged(blankToNull(line.getMilestoneTitle()), current.getMilestoneTitle()))
                     .milestoneAmount(ifChanged(amount, current.getMilestoneAmount()))
                     .currency(ifChanged(currency, current.getCurrency()))
                     .milestoneDate(ifChanged(date, current.getMilestoneDate()))
                     .build();
-            MilestoneView view = milestoneService.updateMilestone(project.getId(), current.getId(), updateRequest);
-            Optional<ProblemDetail> error = view.getError();
+            Optional<ProblemDetail> error = projectTreeUpdateService.applyExistingMilestone(project, current, applyRequest, changedMilestoneIds);
             if (error.isPresent()) {
                 return Either.left(error.get());
             }
@@ -1222,7 +1288,7 @@ public class FundingBulkImportService {
 
     /** Outcome of upserting a single Projects+Milestones row's sub-project and/or milestone. */
     private record RowOutcome(FundingRowError error, int succeeded, int projectsCreated, int projectsUpdated,
-            int milestonesCreated, int milestonesUpdated) {
+            int milestonesCreated, int milestonesUpdated, String touchedSubProjectId) {
     }
 
     private record EventsFileOutcome(FundingFileImportResult fileResult, int eventsCreated, int eventsUpdated,

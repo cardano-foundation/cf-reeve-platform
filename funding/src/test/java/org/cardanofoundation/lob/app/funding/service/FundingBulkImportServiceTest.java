@@ -40,8 +40,7 @@ import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.request.BulkImportRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.EventProjectAllocationRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
-import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateRequest;
-import org.cardanofoundation.lob.app.funding.domain.request.ProjectUpdateRequest;
+import org.cardanofoundation.lob.app.funding.domain.request.ProjectTreeNodeRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.EventMilestoneAllocationView;
@@ -74,6 +73,8 @@ class FundingBulkImportServiceTest {
     @Mock
     private ProjectService projectService;
     @Mock
+    private ProjectTreeUpdateService projectTreeUpdateService;
+    @Mock
     private ProjectStructureService projectStructureService;
     @Mock
     private MilestoneService milestoneService;
@@ -91,8 +92,10 @@ class FundingBulkImportServiceTest {
         // processing path (including which rows get reported/counted); the actual DB rollback
         // behavior is integration-test territory.
         bulkImportService = new FundingBulkImportService(projectMilestoneCsvParser, eventCsvParser,
-                csvTypeDetector, projectRepository, projectService, projectStructureService, milestoneService,
-                spendingEventService, organisationPublicApi, new FundingBulkImportTransactionRunner());
+                csvTypeDetector, projectRepository, projectService, projectTreeUpdateService, projectStructureService,
+                milestoneService, spendingEventService, organisationPublicApi, new FundingBulkImportTransactionRunner());
+        // Flagging the events of changed milestones succeeds (and finds nothing) unless a test says otherwise.
+        lenient().when(projectTreeUpdateService.flagEventsOfChangedMilestones(any())).thenReturn(Either.right(List.of()));
         lenient().when(organisationPublicApi.findByOrganisationId(ORG_ID)).thenReturn(Optional.of(new Organisation()));
     }
 
@@ -204,10 +207,12 @@ class FundingBulkImportServiceTest {
     void createsNewRootProject_whenItDoesNotExistYet() {
         MultipartFile file = file("import.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+        ProjectMilestoneCsvLine rootRow = rootLine("Project A", "100000.00", "USD");
+        rootRow.setProjectId("Project A");
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(
-                List.of(rootLine("Project A", "100000.00", "USD"))));
-        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
-                .thenReturn(Optional.empty());
+                List.of(rootRow)));
+        // Project ID is now set on the row, so the existence check goes through
+        // findByOrganisationIdAndProIdAndParentProjectIsNull instead (unstubbed -> empty, "not found").
         when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
         when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
 
@@ -224,7 +229,6 @@ class FundingBulkImportServiceTest {
         assertThat(captor.getValue().getProjectTitle()).isEqualTo("Project A");
         assertThat(captor.getValue().getTotalAmount()).isEqualByComparingTo("100000.00");
         assertThat(captor.getValue().getCurrency()).isEqualTo("USD");
-        verify(projectService, never()).updateProject(any(), any());
     }
 
     @Test
@@ -235,7 +239,6 @@ class FundingBulkImportServiceTest {
                 List.of(rootLine("Project A", "120000.00", "USD"))));
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
                 .thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
-        when(projectService.updateProject(eq("p1"), any())).thenReturn(successProjectView("p1"));
 
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
@@ -245,9 +248,9 @@ class FundingBulkImportServiceTest {
         assertThat(result.getFiles().get(0).getRowErrors()).isEmpty();
         verify(projectService, never()).createWithMilestones(any());
 
-        ArgumentCaptor<ProjectUpdateRequest> captor = ArgumentCaptor.forClass(ProjectUpdateRequest.class);
-        verify(projectService).updateProject(eq("p1"), captor.capture());
-        // projectTitle is immutable and is never sent on update.
+        ArgumentCaptor<ProjectWithMilestonesCreateRequest> captor = ArgumentCaptor.forClass(ProjectWithMilestonesCreateRequest.class);
+        verify(projectTreeUpdateService).applyRootFields(any(), captor.capture(), any());
+        // projectTitle is unchanged (same value re-sent) and is never forwarded on update.
         assertThat(captor.getValue().getProjectTitle()).isNull();
         assertThat(captor.getValue().getTotalAmount()).isEqualByComparingTo("120000.00");
     }
@@ -288,13 +291,34 @@ class FundingBulkImportServiceTest {
     }
 
     @Test
-    void rootCreateBusinessError_reportsError() {
+    void rootCreateMissingProjectId_reportsError() {
+        // Project ID is mandatory to create a root project (matching the UI's own required-field
+        // treatment of this input) — no more defaulting to Project Title when the column is blank.
         MultipartFile file = file("import.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(
-                List.of(rootLine("Project A", "100000.00", "USD"))));
+                List.of(rootLine("Project A", "100000.00", "USD")))); // Project ID deliberately left unset
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
                 .thenReturn(Optional.empty());
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getReason()).contains("Project ID");
+        verify(projectService, never()).createWithMilestones(any());
+    }
+
+    @Test
+    void rootCreateBusinessError_reportsError() {
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+        ProjectMilestoneCsvLine rootRow = rootLine("Project A", "100000.00", "USD");
+        rootRow.setProjectId("Project A");
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(
+                List.of(rootRow)));
+        // Project ID is now set on the row, so the existence check goes through
+        // findByOrganisationIdAndProIdAndParentProjectIsNull instead (unstubbed -> empty, "not found").
         when(projectService.createWithMilestones(any()))
                 .thenReturn(ProjectView.error(problem(HttpStatus.CONFLICT, "PROJECT_FUNDING_ID_ALREADY_USED")));
 
@@ -314,14 +338,14 @@ class FundingBulkImportServiceTest {
                 List.of(rootLine("Project A", "100000.00", "USD"))));
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
                 .thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
-        when(projectService.updateProject(eq("p1"), any()))
-                .thenReturn(ProjectView.error(problem(HttpStatus.CONFLICT, "SPENDING_EVENT_ALREADY_PUBLISHED")));
+        when(projectTreeUpdateService.isLockedByPublishedEvent(any())).thenReturn(true);
 
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
         assertThat(result.getProjectsUpdated()).isZero();
         assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
     }
 
     // -------------------------------------------------------------------------
@@ -344,11 +368,12 @@ class FundingBulkImportServiceTest {
         subRowFirst.setSubTotalAmount("40000.00");
 
         ProjectMilestoneCsvLine rootRowSecond = rootLine("Project A", "100000.00", "USD");
+        rootRowSecond.setProjectId("Project A");
 
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class))
                 .thenReturn(Either.right(List.of(subRowFirst, rootRowSecond)));
-        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
-                .thenReturn(Optional.empty());
+        // Project ID is now set on the row, so the existence check goes through
+        // findByOrganisationIdAndProIdAndParentProjectIsNull instead (unstubbed -> empty, "not found").
         when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
         ProjectEntity root = projectEntity("p1", "Project A", "USD");
         when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
@@ -379,13 +404,14 @@ class FundingBulkImportServiceTest {
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
 
         ProjectMilestoneCsvLine line = rootLine("Project A", "100000.00", "USD");
+        line.setProjectId("Project A");
         line.setSubProjectTitle("Sub One");
         line.setSubProjectId("sub-1");
         line.setSubTotalAmount("40000.00");
 
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
-        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
-                .thenReturn(Optional.empty());
+        // Project ID is now set on the row, so the existence check goes through
+        // findByOrganisationIdAndProIdAndParentProjectIsNull instead (unstubbed -> empty, "not found").
         when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
         ProjectEntity root = projectEntity("p1", "Project A", "USD");
         when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
@@ -412,13 +438,14 @@ class FundingBulkImportServiceTest {
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
 
         ProjectMilestoneCsvLine line = rootLine("Project A", "100000.00", "USD");
+        line.setProjectId("Project A");
         line.setSubProjectTitle("Sub One");
         line.setSubTotalAmount("40000.00");
         // Sub Project ID deliberately left unset.
 
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
-        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
-                .thenReturn(Optional.empty());
+        // Project ID is now set on the row, so the existence check goes through
+        // findByOrganisationIdAndProIdAndParentProjectIsNull instead (unstubbed -> empty, "not found").
         when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
         ProjectEntity root = projectEntity("p1", "Project A", "USD");
         when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
@@ -448,10 +475,8 @@ class FundingBulkImportServiceTest {
         ProjectEntity root = projectEntity("p1", "Project A", "USD");
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
                 .thenReturn(Optional.of(root));
-        when(projectService.updateProject(eq("p1"), any())).thenReturn(successProjectView("p1"));
         ProjectEntity sub = subProjectEntity("s1", "Sub One", "USD", root);
         when(projectRepository.findByParentProjectIdAndProjectTitle("p1", "Sub One")).thenReturn(Optional.of(sub));
-        when(projectService.updateProject(eq("s1"), any())).thenReturn(successProjectView("s1"));
 
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
@@ -459,8 +484,8 @@ class FundingBulkImportServiceTest {
         assertThat(result.getProjectsUpdated()).isEqualTo(2); // root + sub
         assertThat(result.getFiles().get(0).getRowErrors()).isEmpty();
         verify(projectStructureService, never()).createSubProject(any(), any(), any(), any(), any(), any());
-        ArgumentCaptor<ProjectUpdateRequest> captor = ArgumentCaptor.forClass(ProjectUpdateRequest.class);
-        verify(projectService).updateProject(eq("s1"), captor.capture());
+        ArgumentCaptor<ProjectTreeNodeRequest> captor = ArgumentCaptor.forClass(ProjectTreeNodeRequest.class);
+        verify(projectTreeUpdateService).applySubProjectFields(eq(sub), captor.capture());
         assertThat(captor.getValue().getTotalAmount()).isEqualByComparingTo("50000.00");
     }
 
@@ -469,10 +494,11 @@ class FundingBulkImportServiceTest {
         MultipartFile file = file("import.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
         ProjectMilestoneCsvLine line = rootLine("Project A", "100000.00", "USD");
+        line.setProjectId("Project A");
         line.setSubProjectTitle("Sub One");
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
-        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
-                .thenReturn(Optional.empty());
+        // Project ID is now set on the row, so the existence check goes through
+        // findByOrganisationIdAndProIdAndParentProjectIsNull instead (unstubbed -> empty, "not found").
         when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
         ProjectEntity root = projectEntity("p1", "Project A", "USD");
         when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
@@ -504,10 +530,11 @@ class FundingBulkImportServiceTest {
         MultipartFile file = file("import.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
         ProjectMilestoneCsvLine line = rootLine("Project A", "100000.00", "USD");
+        line.setProjectId("Project A");
         line.setSubProjectTitle("Sub One");
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
-        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
-                .thenReturn(Optional.empty());
+        // Project ID is now set on the row, so the existence check goes through
+        // findByOrganisationIdAndProIdAndParentProjectIsNull instead (unstubbed -> empty, "not found").
         when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
         when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
         when(projectRepository.findByParentProjectIdAndProjectTitle("p1", "Sub One")).thenReturn(Optional.empty());
@@ -532,13 +559,14 @@ class FundingBulkImportServiceTest {
         MultipartFile file = file("import.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
         ProjectMilestoneCsvLine line = rootLine("Project A", "100000.00", "USD");
+        line.setProjectId("Project A");
         line.setSubTotalAmount("40000.00"); // Sub Project Title left blank/absent
         line.setMilestoneTitle("Milestone One");
         line.setMilestoneAmount("20000.00");
         line.setMilestoneDate("2026-06-30");
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
-        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
-                .thenReturn(Optional.empty());
+        // Project ID is now set on the row, so the existence check goes through
+        // findByOrganisationIdAndProIdAndParentProjectIsNull instead (unstubbed -> empty, "not found").
         when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
         ProjectEntity root = projectEntity("p1", "Project A", "USD");
         when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
@@ -563,12 +591,13 @@ class FundingBulkImportServiceTest {
         MultipartFile file = file("import.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
         ProjectMilestoneCsvLine line = rootLine("Project A", "100000.00", "USD");
+        line.setProjectId("Project A");
         line.setSubProjectTitle("Sub One");
         line.setSubProjectId("sub-1");
         line.setSubTotalAmount("40000.00"); // no sub currency supplied
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
-        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
-                .thenReturn(Optional.empty());
+        // Project ID is now set on the row, so the existence check goes through
+        // findByOrganisationIdAndProIdAndParentProjectIsNull instead (unstubbed -> empty, "not found").
         when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
         ProjectEntity root = projectEntity("p1", "Project A", "USD");
         when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
@@ -593,6 +622,7 @@ class FundingBulkImportServiceTest {
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
 
         ProjectMilestoneCsvLine badSubRow = rootLine("Project A", "100000.00", "USD");
+        badSubRow.setProjectId("Project A");
         badSubRow.setSubProjectTitle("Sub Bad");
         badSubRow.setSubProjectId("sub-bad");
         badSubRow.setSubTotalAmount("40000.00");
@@ -604,8 +634,8 @@ class FundingBulkImportServiceTest {
 
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class))
                 .thenReturn(Either.right(List.of(badSubRow, goodSubRow)));
-        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
-                .thenReturn(Optional.empty());
+        // Project ID is now set on the row, so the existence check goes through
+        // findByOrganisationIdAndProIdAndParentProjectIsNull instead (unstubbed -> empty, "not found").
         when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
         ProjectEntity root = projectEntity("p1", "Project A", "USD");
         when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
@@ -639,19 +669,65 @@ class FundingBulkImportServiceTest {
         ProjectEntity root = projectEntity("p1", "Project A", "USD");
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
                 .thenReturn(Optional.of(root));
-        when(projectService.updateProject(eq("p1"), any())).thenReturn(successProjectView("p1"));
         ProjectEntity sub = subProjectEntity("s1", "Sub One", "USD", root);
         when(projectRepository.findByParentProjectIdAndProjectTitle("p1", "Sub One")).thenReturn(Optional.of(sub));
-        when(projectService.updateProject(eq("s1"), any()))
-                .thenReturn(ProjectView.error(problem(HttpStatus.CONFLICT, "SPENDING_EVENT_ALREADY_PUBLISHED")));
+        when(projectTreeUpdateService.isLockedByPublishedEvent(sub)).thenReturn(true);
 
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
-        // The root's own update did happen (verified via the mock above returning success), but it's
+        // The root's own update did happen (its applyRootFields call succeeded by default), but it's
         // rolled back along with the sub-project's failure — a group is all-or-nothing.
         assertThat(result.getProjectsUpdated()).isZero();
         assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+    }
+
+    @Test
+    void groupValidatesWholeTreeCoverageOnce_afterEveryRowIsApplied_forRootPlusEveryTouchedSubProject() {
+        // LOB-2365 follow-up: ProjectService#updateProject's per-row coverage check was removed from
+        // this path specifically because it can't see a group's other, not-yet-processed rows — this
+        // group-level, once-at-the-end check (ProjectTreeUpdateService#validateWholeTreeCoverage) is
+        // what replaces it. Verifies the wiring: called once, with root + every sub-project actually
+        // touched in the group, and its rejection becomes a row error that fails the group.
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+        ProjectMilestoneCsvLine line = continuationLine("Project A");
+        line.setSubProjectTitle("Sub One");
+        line.setSubTotalAmount("40000.00");
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
+        ProjectEntity root = projectEntity("p1", "Project A", "USD");
+        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
+                .thenReturn(Optional.of(root));
+        ProjectEntity sub = subProjectEntity("s1", "Sub One", "USD", root);
+        when(projectRepository.findByParentProjectIdAndProjectTitle("p1", "Sub One")).thenReturn(Optional.of(sub));
+        when(projectTreeUpdateService.validateWholeTreeCoverage(Set.of("p1", "s1")))
+                .thenReturn(Optional.of(problem(HttpStatus.BAD_REQUEST, "PROJECT_AMOUNT_BELOW_SUBPROJECTS")));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getProjectsUpdated()).isZero();
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getTitle()).isEqualTo("PROJECT_AMOUNT_BELOW_SUBPROJECTS");
+        verify(projectTreeUpdateService, times(1)).validateWholeTreeCoverage(any());
+    }
+
+    @Test
+    void groupSkipsWholeTreeCoverageCheck_whenAnEarlierRowAlreadyFailed() {
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+        ProjectMilestoneCsvLine line = continuationLine("Project A");
+        line.setSubProjectTitle("Sub One");
+        line.setSubTotalAmount("not-a-number");
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
+        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
+                .thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        verify(projectTreeUpdateService, never()).validateWholeTreeCoverage(any());
     }
 
     @Test
@@ -664,16 +740,18 @@ class FundingBulkImportServiceTest {
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
 
         ProjectMilestoneCsvLine goodRoot = rootLine("Project Good", "50000.00", "USD");
+        goodRoot.setProjectId("Project Good");
         ProjectMilestoneCsvLine badRoot = rootLine("Project Bad", "100000.00", "USD");
+        badRoot.setProjectId("Project Bad");
         badRoot.setSubProjectTitle("Sub One"); // Sub Total Amount left blank -> fails to create
 
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class))
                 .thenReturn(Either.right(List.of(goodRoot, badRoot)));
 
-        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project Good"))
-                .thenReturn(Optional.empty());
-        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project Bad"))
-                .thenReturn(Optional.empty());
+        // Project ID is now set on the row, so the existence check goes through
+        // findByOrganisationIdAndProIdAndParentProjectIsNull instead (unstubbed -> empty, "not found").
+        // Project ID is now set on the row, so the existence check goes through
+        // findByOrganisationIdAndProIdAndParentProjectIsNull instead (unstubbed -> empty, "not found").
         when(projectService.createWithMilestones(any())).thenAnswer(invocation -> {
             ProjectWithMilestonesCreateRequest req = invocation.getArgument(0);
             return successProjectView(req.getProjectTitle().equals("Project Good") ? "pGood" : "pBad");
@@ -701,6 +779,7 @@ class FundingBulkImportServiceTest {
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
 
         ProjectMilestoneCsvLine badSubRow = rootLine("Project A", "100000.00", "USD");
+        badSubRow.setProjectId("Project A");
         badSubRow.setSubProjectTitle("Sub One"); // Sub Total Amount left blank -> fails
 
         ProjectMilestoneCsvLine badMilestoneRow = continuationLine("Project A");
@@ -708,8 +787,8 @@ class FundingBulkImportServiceTest {
 
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class))
                 .thenReturn(Either.right(List.of(badSubRow, badMilestoneRow)));
-        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
-                .thenReturn(Optional.empty());
+        // Project ID is now set on the row, so the existence check goes through
+        // findByOrganisationIdAndProIdAndParentProjectIsNull instead (unstubbed -> empty, "not found").
         when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
         when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
 
@@ -732,14 +811,15 @@ class FundingBulkImportServiceTest {
         MultipartFile file = file("import.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
         ProjectMilestoneCsvLine line = rootLine("Project B", "20000.00", "USD");
+        line.setProjectId("Project B");
         line.setMilestoneTitle("Milestone One");
         line.setMilestoneId("ms-1");
         line.setMilestoneAmount("20000.00");
         line.setMilestoneDate("2026-06-30");
 
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
-        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project B"))
-                .thenReturn(Optional.empty());
+        // Project ID is now set on the row, so the existence check goes through
+        // findByOrganisationIdAndProIdAndParentProjectIsNull instead (unstubbed -> empty, "not found").
         when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
         ProjectEntity root = projectEntity("p1", "Project B", "USD");
         when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
@@ -762,14 +842,15 @@ class FundingBulkImportServiceTest {
         MultipartFile file = file("import.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
         ProjectMilestoneCsvLine line = rootLine("Project B", "20000.00", "USD");
+        line.setProjectId("Project B");
         line.setMilestoneTitle("Milestone One");
         line.setMilestoneAmount("20000.00");
         line.setMilestoneDate("2026-06-30");
         // Milestone ID deliberately left unset.
 
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
-        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project B"))
-                .thenReturn(Optional.empty());
+        // Project ID is now set on the row, so the existence check goes through
+        // findByOrganisationIdAndProIdAndParentProjectIsNull instead (unstubbed -> empty, "not found").
         when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
         ProjectEntity root = projectEntity("p1", "Project B", "USD");
         when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
@@ -788,6 +869,7 @@ class FundingBulkImportServiceTest {
         MultipartFile file = file("import.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
         ProjectMilestoneCsvLine line = rootLine("Project A", "100000.00", "USD");
+        line.setProjectId("Project A");
         line.setSubProjectTitle("Sub One");
         line.setSubProjectId("sub-1");
         line.setSubTotalAmount("40000.00");
@@ -797,8 +879,8 @@ class FundingBulkImportServiceTest {
         line.setMilestoneDate("2026-06-30");
 
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
-        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
-                .thenReturn(Optional.empty());
+        // Project ID is now set on the row, so the existence check goes through
+        // findByOrganisationIdAndProIdAndParentProjectIsNull instead (unstubbed -> empty, "not found").
         when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
         ProjectEntity root = projectEntity("p1", "Project A", "USD");
         when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
@@ -833,7 +915,6 @@ class FundingBulkImportServiceTest {
         ProjectEntity root = projectEntity("p1", "Project A", "EUR");
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
                 .thenReturn(Optional.of(root));
-        when(projectService.updateProject(eq("p1"), any())).thenReturn(successProjectView("p1"));
         when(milestoneService.createMilestone(eq("p1"), any(), any())).thenReturn(MilestoneView.builder().milestoneId("m1").build());
 
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
@@ -856,17 +937,15 @@ class FundingBulkImportServiceTest {
         ProjectEntity root = projectEntity("p1", "Project A", "USD");
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
                 .thenReturn(Optional.of(root));
-        when(projectService.updateProject(eq("p1"), any())).thenReturn(successProjectView("p1"));
         MilestoneEntity existing = MilestoneEntity.builder().id("m1").milestoneTitle("Milestone One").build();
         when(milestoneService.findByProjectIdAndMilestoneTitle("p1", "Milestone One")).thenReturn(Optional.of(existing));
-        when(milestoneService.updateMilestone(eq("p1"), eq("m1"), any())).thenReturn(MilestoneView.builder().milestoneId("m1").build());
 
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
         assertThat(result.getMilestonesUpdated()).isEqualTo(1);
-        ArgumentCaptor<MilestoneUpdateRequest> captor = ArgumentCaptor.forClass(MilestoneUpdateRequest.class);
-        verify(milestoneService).updateMilestone(eq("p1"), eq("m1"), captor.capture());
+        ArgumentCaptor<MilestoneCreateRequest> captor = ArgumentCaptor.forClass(MilestoneCreateRequest.class);
+        verify(projectTreeUpdateService).applyExistingMilestone(eq(root), eq(existing), captor.capture(), any());
         assertThat(captor.getValue().getMilestoneTitle()).isNull();
         assertThat(captor.getValue().getCurrency()).isEqualTo("USD");
         assertThat(captor.getValue().getMilestoneAmount()).isEqualByComparingTo("25000.00");
@@ -885,7 +964,6 @@ class FundingBulkImportServiceTest {
         ProjectEntity rootWithoutCurrency = projectEntity("p1", "Project A", null);
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
                 .thenReturn(Optional.of(rootWithoutCurrency));
-        when(projectService.updateProject(eq("p1"), any())).thenReturn(successProjectView("p1"));
         when(milestoneService.findByProjectIdAndMilestoneTitle("p1", "Milestone One")).thenReturn(Optional.empty());
 
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
@@ -914,7 +992,6 @@ class FundingBulkImportServiceTest {
         ProjectEntity root = projectEntity("p1", "Project A", "USD");
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
                 .thenReturn(Optional.of(root));
-        when(projectService.updateProject(eq("p1"), any())).thenReturn(successProjectView("p1"));
         when(milestoneService.findByProjectIdAndMilestoneTitle("p1", "Milestone One")).thenReturn(Optional.empty());
 
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
@@ -935,14 +1012,15 @@ class FundingBulkImportServiceTest {
         MultipartFile file = file("import.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
         ProjectMilestoneCsvLine line = rootLine("Project A", "100000.00", "USD");
+        line.setProjectId("Project A");
         line.setSubProjectTitle("Sub One");
         line.setSubProjectId("sub-1");
         line.setSubTotalAmount("40000.00");
         line.setMilestoneAmount("20000.00"); // Milestone Title left blank/absent
         line.setMilestoneDate("2026-06-30");
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
-        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
-                .thenReturn(Optional.empty());
+        // Project ID is now set on the row, so the existence check goes through
+        // findByOrganisationIdAndProIdAndParentProjectIsNull instead (unstubbed -> empty, "not found").
         when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
         ProjectEntity root = projectEntity("p1", "Project A", "USD");
         when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
@@ -972,7 +1050,6 @@ class FundingBulkImportServiceTest {
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
                 .thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
-        when(projectService.updateProject(eq("p1"), any())).thenReturn(successProjectView("p1"));
 
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
@@ -993,7 +1070,6 @@ class FundingBulkImportServiceTest {
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
                 .thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
-        when(projectService.updateProject(eq("p1"), any())).thenReturn(successProjectView("p1"));
 
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
@@ -1011,13 +1087,13 @@ class FundingBulkImportServiceTest {
         line.setMilestoneAmount("25000.00");
 
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
+        ProjectEntity root = projectEntity("p1", "Project A", "USD");
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
-                .thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
-        when(projectService.updateProject(eq("p1"), any())).thenReturn(successProjectView("p1"));
+                .thenReturn(Optional.of(root));
         MilestoneEntity existing = MilestoneEntity.builder().id("m1").milestoneTitle("Milestone One").build();
         when(milestoneService.findByProjectIdAndMilestoneTitle("p1", "Milestone One")).thenReturn(Optional.of(existing));
-        when(milestoneService.updateMilestone(eq("p1"), eq("m1"), any()))
-                .thenReturn(MilestoneView.error(problem(HttpStatus.CONFLICT, "SPENDING_EVENT_ALREADY_PUBLISHED")));
+        when(projectTreeUpdateService.applyExistingMilestone(eq(root), eq(existing), any(), any()))
+                .thenReturn(Optional.of(problem(HttpStatus.CONFLICT, "SPENDING_EVENT_ALREADY_PUBLISHED")));
 
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
@@ -1039,7 +1115,6 @@ class FundingBulkImportServiceTest {
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
                 .thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
-        when(projectService.updateProject(eq("p1"), any())).thenReturn(successProjectView("p1"));
         when(milestoneService.createMilestone(eq("p1"), any(), any()))
                 .thenReturn(MilestoneView.error(problem(HttpStatus.CONFLICT, "MILESTONE_TITLE_ALREADY_EXISTS")));
 
@@ -1056,6 +1131,7 @@ class FundingBulkImportServiceTest {
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
 
         ProjectMilestoneCsvLine badMilestoneRow = rootLine("Project A", "100000.00", "USD");
+        badMilestoneRow.setProjectId("Project A");
         badMilestoneRow.setMilestoneTitle("Milestone Bad");
         badMilestoneRow.setMilestoneAmount("not-a-number");
 
@@ -1067,8 +1143,8 @@ class FundingBulkImportServiceTest {
 
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class))
                 .thenReturn(Either.right(List.of(badMilestoneRow, goodMilestoneRow)));
-        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
-                .thenReturn(Optional.empty());
+        // Project ID is now set on the row, so the existence check goes through
+        // findByOrganisationIdAndProIdAndParentProjectIsNull instead (unstubbed -> empty, "not found").
         when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
         when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
         when(milestoneService.createMilestone(eq("p1"), any(), any())).thenReturn(MilestoneView.builder().milestoneId("m1").build());
@@ -1098,6 +1174,7 @@ class FundingBulkImportServiceTest {
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
 
         ProjectMilestoneCsvLine subOneRow = rootLine("Project A", "100000.00", "USD");
+        subOneRow.setProjectId("Project A");
         subOneRow.setSubProjectTitle("Sub One");
         subOneRow.setSubProjectId("sub-1");
         subOneRow.setSubTotalAmount("40000.00");
@@ -1117,8 +1194,8 @@ class FundingBulkImportServiceTest {
 
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class))
                 .thenReturn(Either.right(List.of(subOneRow, subTwoRow)));
-        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
-                .thenReturn(Optional.empty());
+        // Project ID is now set on the row, so the existence check goes through
+        // findByOrganisationIdAndProIdAndParentProjectIsNull instead (unstubbed -> empty, "not found").
         when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
         ProjectEntity root = projectEntity("p1", "Project A", "USD");
         when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
@@ -1146,6 +1223,7 @@ class FundingBulkImportServiceTest {
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
 
         ProjectMilestoneCsvLine row1 = rootLine("Project A", "100000.00", "USD");
+        row1.setProjectId("Project A");
         row1.setSubProjectTitle("Sub One");
         row1.setSubProjectId("sub-1");
         row1.setSubTotalAmount("40000.00");
@@ -1162,8 +1240,8 @@ class FundingBulkImportServiceTest {
         row2.setMilestoneDate("2026-07-15");
 
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(row1, row2)));
-        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
-                .thenReturn(Optional.empty());
+        // Project ID is now set on the row, so the existence check goes through
+        // findByOrganisationIdAndProIdAndParentProjectIsNull instead (unstubbed -> empty, "not found").
         when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
         ProjectEntity root = projectEntity("p1", "Project A", "USD");
         when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
@@ -1174,7 +1252,6 @@ class FundingBulkImportServiceTest {
         // title — by which point the sub-project already exists (created by row 1 in the same group).
         when(projectRepository.findByParentProjectIdAndProjectTitle("p1", "Sub One")).thenReturn(Optional.of(sub));
         when(projectStructureService.createSubProject(eq(root), eq("Sub One"), any(), any(), any(), any())).thenReturn(Either.right(sub));
-        when(projectService.updateProject(eq("s1"), any())).thenReturn(successProjectView("s1"));
         when(milestoneService.createMilestone(eq("s1"), any(), any())).thenReturn(MilestoneView.builder().milestoneId("m1").build());
 
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
@@ -1183,7 +1260,7 @@ class FundingBulkImportServiceTest {
         assertThat(result.getFiles().get(0).getRowErrors()).isEmpty();
         assertThat(result.getMilestonesCreated()).isEqualTo(2);
         verify(projectStructureService, times(1)).createSubProject(eq(root), eq("Sub One"), any(), any(), any(), any());
-        verify(projectService, times(1)).updateProject(eq("s1"), any());
+        verify(projectTreeUpdateService, times(1)).applySubProjectFields(eq(sub), any());
         verify(milestoneService, times(2)).createMilestone(eq("s1"), any(), any());
     }
 
@@ -1906,10 +1983,12 @@ class FundingBulkImportServiceTest {
     void dryRun_flowsThroughSameProcessingPath() {
         MultipartFile file = file("import.csv");
         when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+        ProjectMilestoneCsvLine rootRow = rootLine("Project A", "100000.00", "USD");
+        rootRow.setProjectId("Project A");
         when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(
-                List.of(rootLine("Project A", "100000.00", "USD"))));
-        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
-                .thenReturn(Optional.empty());
+                List.of(rootRow)));
+        // Project ID is now set on the row, so the existence check goes through
+        // findByOrganisationIdAndProIdAndParentProjectIsNull instead (unstubbed -> empty, "not found").
         when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
         when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
 
@@ -1940,6 +2019,44 @@ class FundingBulkImportServiceTest {
         assertThat(fileResult.getRowsSucceeded()).isZero();
         assertThat(fileResult.getRowErrors()).hasSize(1);
         verify(projectService, never()).createWithMilestones(any());
+    }
+
+    @Test
+    void rootUpdateRejectedByRootFieldValidation_reportsError() {
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(
+                List.of(rootLine("Project A", "120000.00", "USD"))));
+        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
+                .thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
+        when(projectTreeUpdateService.applyRootFields(any(), any(), any()))
+                .thenReturn(Optional.of(problem(HttpStatus.BAD_REQUEST, "PROJECT_AMOUNT_INVALID")));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getProjectsUpdated()).isZero();
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getTitle()).isEqualTo("PROJECT_AMOUNT_INVALID");
+    }
+
+    @Test
+    void groupReportsError_whenFlaggingEventsOfChangedMilestonesIsBlocked() {
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(
+                List.of(rootLine("Project A", "100000.00", "USD"))));
+        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
+                .thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
+        when(projectTreeUpdateService.flagEventsOfChangedMilestones(any()))
+                .thenReturn(Either.left(problem(HttpStatus.CONFLICT, ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED)));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getProjectsUpdated()).isZero();
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
     }
 
 }

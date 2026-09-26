@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.funding.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -31,6 +32,7 @@ import org.cardanofoundation.lob.app.funding.domain.entity.*;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.*;
+import org.cardanofoundation.lob.app.funding.domain.view.OrphanEventsCleanupView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventPublishView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
@@ -221,7 +223,7 @@ class SpendingEventServiceTest {
         when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         SpendingEventCreateRequest request = fundingRequest(EventProjectAllocationRequest.builder()
-                .externalProjectId("PROJ-NEW").projectTitle("New Project").fundingId("GRANT-2025-001")
+                .externalProjectId("PROJ-NEW").projectTitle("New Project").proId("New Project").fundingId("GRANT-2025-001")
                 .totalAmount(new BigDecimal("100000.00")).currency("USD")
                 .milestones(List.of(EventMilestoneAllocationRequest.builder()
                         .milestone(MilestoneCreateRequest.builder().milestoneTitle("New MS")
@@ -233,6 +235,24 @@ class SpendingEventServiceTest {
 
         assertThat(result.isRight()).isTrue();
         verify(milestoneRepository).saveAndFlush(any());
+    }
+
+    @Test
+    void create_rejectsNewRootProject_whenProIdMissing() {
+        SpendingEventCreateRequest request = fundingRequest(EventProjectAllocationRequest.builder()
+                .externalProjectId("PROJ-NEW").projectTitle("New Project Without ProId").fundingId("GRANT-2025-001")
+                .totalAmount(new BigDecimal("100000.00")).currency("USD")
+                .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                        .milestone(MilestoneCreateRequest.builder().milestoneTitle("New MS")
+                                .milestoneAmount(new BigDecimal("60000.00")).currency("USD").milestoneDate(FUTURE_DATE).build())
+                        .allocatedAmount(ALLOCATED).build()))
+                .build());
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_FIELDS_REQUIRED);
+        verify(projectRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -780,8 +800,8 @@ class SpendingEventServiceTest {
         ProjectEntity root = projectEntity(); // id "p1", total 200000
         // The sub-project is created on the fly with an auto-assigned proId (see @BeforeEach's generic
         // findWithLockById stub, which always returns proId "parent") — the deterministic id is derived
-        // from that proId ("parent-1"), never from the title "Work Package 1".
-        String subProId = "parent-1";
+        // from that proId ("parent-S1"), never from the title "Work Package 1".
+        String subProId = "parent-S1";
         String subId = ProjectEntity.subId("p1", subProId);
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull("org1", "Project AB")).thenReturn(Optional.of(root));
         when(milestoneRepository.existsByProjectId("p1")).thenReturn(false);
@@ -994,6 +1014,43 @@ class SpendingEventServiceTest {
     }
 
     @Test
+    void update_clearsErrorStatusBackToDraft_onSuccess() {
+        // LOB-2365: an ERROR event (structural edit made its allocation no longer fit) is exactly what a
+        // successful update fixes — every allocation is re-validated against the milestone's *current*
+        // amount, so reaching a successful save means the event fits again and the flag can come off.
+        FundingEventEntity existing = eventEntity(EventType.FUNDING, EventStatus.ERROR);
+        stubExistingProjectAndMilestone("MS-1");
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(existing));
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.update("e1",
+                fundingRequest(fundingMilestone("MS-1", ALLOCATED)));
+
+        assertThat(result.isRight()).isTrue();
+        assertThat(result.get().getStatus()).isEqualTo(EventStatus.DRAFT);
+    }
+
+    @Test
+    void update_leavesErrorEventUnpersisted_whenTheAttemptedFixStillDoesNotValidate() {
+        // The ERROR -> DRAFT reset happens up front, before the allocation is re-validated — this
+        // confirms a still-broken fix attempt never reaches saveAndFlush at all (the in-memory status
+        // flip is discarded along with everything else via updateEvent's rollbackAndError in the real,
+        // transactional call path; at the unit level, not calling saveAndFlush is what we can assert).
+        FundingEventEntity existing = eventEntity(EventType.FUNDING, EventStatus.ERROR);
+        stubExistingProjectAndMilestone("MS-1"); // milestone amount 50000
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(existing));
+
+        SpendingEventCreateRequest request = fundingRequest(fundingMilestone("MS-1", new BigDecimal("60000.00")));
+        request.setAmountRcy(new BigDecimal("60000.00"));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.update("e1", request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_OVERFUNDED);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void update_returnsLeft_whenOrganisationMismatch() {
         // The body claims a different organisation than the event's — must not re-target its projects.
         when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.FUNDING, EventStatus.DRAFT)));
@@ -1035,7 +1092,7 @@ class SpendingEventServiceTest {
     @Test
     void publish_setsStatusAndDispatchApproved() {
         FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
+        when(fundingEventRepository.findByIdForUpdate("e1")).thenReturn(Optional.of(event));
         when(fundingEventRepository.saveAndFlush(event)).thenReturn(event);
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.publish("e1");
@@ -1047,9 +1104,48 @@ class SpendingEventServiceTest {
 
     @Test
     void publish_returnsLeft_whenAlreadyPublished() {
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.PUBLISHED)));
+        when(fundingEventRepository.findByIdForUpdate("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.PUBLISHED)));
 
         assertThat(spendingEventService.publish("e1").getLeft().getTitle()).isEqualTo("SPENDING_EVENT_ALREADY_PUBLISHED");
+    }
+
+    @Test
+    void publish_returnsLeft_whenInErrorState() {
+        // LOB-2365: an ERROR event no longer fits the current project/milestone structure — publishing
+        // it as-is would push a mismatched allocation on-chain, so it must be corrected via update()
+        // first (which clears it back to DRAFT) before it can ever be published.
+        FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.ERROR);
+        when(fundingEventRepository.findByIdForUpdate("e1")).thenReturn(Optional.of(event));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.publish("e1");
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_HAS_ERROR);
+        assertThat(event.getStatus()).isEqualTo(EventStatus.ERROR); // untouched
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void publish_returnsLeft_whenEventNotFound() {
+        when(fundingEventRepository.findByIdForUpdate("missing")).thenReturn(Optional.empty());
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.publish("missing");
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
+    }
+
+    @Test
+    void publish_usesALockedRead_soAConcurrentFlagToErrorCannotRaceIt() {
+        // See FundingEventRepository#findByIdForUpdate's Javadoc: publish() and
+        // FundingCascadeDeleteService#flagEventsAllocatedTo must lock the same row so one can never read
+        // a status the other is about to overwrite.
+        FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        when(fundingEventRepository.findByIdForUpdate("e1")).thenReturn(Optional.of(event));
+        when(fundingEventRepository.saveAndFlush(event)).thenReturn(event);
+
+        spendingEventService.publish("e1");
+
+        verify(fundingEventRepository).findByIdForUpdate("e1");
+        verify(fundingEventRepository, never()).findById("e1");
     }
 
     @Test
@@ -1373,6 +1469,57 @@ class SpendingEventServiceTest {
 
         assertThat(spendingEventService.deleteEvent("e1")).isEmpty();
         verify(fundingEventRepository).delete(event);
+    }
+
+    // --- deleteOrphanedErrorEvents (LOB-2365 follow-up) ---
+
+    @Test
+    void deleteOrphanedErrorEvents_returns401_whenUserCannotAccessOrg() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        OrphanEventsCleanupView result = spendingEventService.deleteOrphanedErrorEvents("org1");
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(fundingEventRepository, never()).deleteAll(any());
+    }
+
+    @Test
+    void deleteOrphanedErrorEvents_returns400_whenOrganisationNotFound() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.empty());
+
+        OrphanEventsCleanupView result = spendingEventService.deleteOrphanedErrorEvents("org1");
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.ORGANISATION_NOT_FOUND);
+        verify(fundingEventRepository, never()).deleteAll(any());
+    }
+
+    @Test
+    void deleteOrphanedErrorEvents_deletesOnlyFullyUnallocatedErrorEvents() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
+        FundingEventEntity orphan = eventEntity(EventType.FUNDING, EventStatus.ERROR);
+        when(fundingEventRepository.findOrphanedEvents("org1", EventStatus.ERROR)).thenReturn(List.of(orphan));
+
+        OrphanEventsCleanupView result = spendingEventService.deleteOrphanedErrorEvents("org1");
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getDeletedEvents()).extracting("eventId", "fundingId")
+                .containsExactly(tuple("e1", "GRANT-2025-001"));
+        verify(fundingEventRepository).deleteAll(List.of(orphan));
+    }
+
+    @Test
+    void deleteOrphanedErrorEvents_noOp_whenNoneMatch() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
+        when(fundingEventRepository.findOrphanedEvents("org1", EventStatus.ERROR)).thenReturn(List.of());
+
+        OrphanEventsCleanupView result = spendingEventService.deleteOrphanedErrorEvents("org1");
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getDeletedEvents()).isEmpty();
+        verify(fundingEventRepository).deleteAll(List.of());
     }
 
     // --- helpers ---

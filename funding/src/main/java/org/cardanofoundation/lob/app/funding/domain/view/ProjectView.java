@@ -14,8 +14,10 @@ import org.springframework.http.ProblemDetail;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import org.cardanofoundation.lob.app.funding.domain.enums.ProjectLockStatus;
+
 @Getter
-@Builder
+@Builder(toBuilder = true)
 @AllArgsConstructor
 public class ProjectView implements ErrorAware {
 
@@ -36,7 +38,7 @@ public class ProjectView implements ErrorAware {
     private String projectTitle;
 
     @Schema(example = "Project AB", description = "Permanent identifier assigned at creation — never changes afterward, even when projectTitle is later renamed. "
-            + "Root project: the value supplied at creation, or the title as first typed when none was. Sub-project: '<parent proId>-<n>' "
+            + "Root project: the value supplied at creation, or the title as first typed when none was. Sub-project: '<parent proId>-S<n>' "
             + "when created via the API or an event allocation, or the value supplied when created via CSV (sub-projects that predate "
             + "this field keep their original title). Reference this, not projectTitle, when the project "
             + "needs to be found reliably later (e.g. a subsequent event allocation or CSV re-upload).")
@@ -69,9 +71,24 @@ public class ProjectView implements ErrorAware {
     /** Sub-projects; empty for leaf nodes. */
     private List<ProjectView> subProjects;
 
+    /**
+     * Calculated (not stored): aggregate structural lock status for this project's own subtree (its
+     * milestones and, recursively, its sub-projects) — see {@link ProjectLockStatus}. LOB-2365.
+     */
+    @Schema(description = "EDITABLE (no published events anywhere in this project's structure), "
+            + "PARTLY_LOCKED (at least one published event exists somewhere, but at least one milestone/sub-project remains unallocated), "
+            + "or LOCKED (every milestone/structural component is tied to a published event).")
+    private ProjectLockStatus lockStatus;
+
     /** Events (FUNDING/SPENDING/REFUND) allocated to this project. Populated on get-by-id only. */
     @Nullable
     private List<SpendingEventView> events;
+
+    @Builder.Default
+    @Schema(description = "Non-published events that had an allocation removed by a DELETE node in this same "
+            + "update and were flagged ERROR as a result (LOB-2365 follow-up) — see CascadeDeletionView. "
+            + "Empty when this update deleted nothing, or deleted nothing that affected an event.")
+    private List<AffectedEventView> affectedEvents = List.of();
 
     @Builder.Default
     @Schema(description = "Problem detail describing the failure; absent on success")

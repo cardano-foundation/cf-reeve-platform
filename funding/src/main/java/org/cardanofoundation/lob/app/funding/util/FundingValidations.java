@@ -29,6 +29,16 @@ public final class FundingValidations {
     }
 
     /**
+     * LOB-2365: shared message text for every "a budgeted amount exceeds its parent's total" case —
+     * a milestone's own amount or the project's cumulative milestone total exceeding the project's
+     * total, and a sub-project's own total or the parent's cumulative sub-project total exceeding the
+     * parent's total. These four cases used to have four different message templates naming the
+     * specific title/amount involved; standardized to one consistent string (matching the FE's own
+     * copy) — the four {@code ErrorTitleConstants} stay distinct for callers that key off the code.
+     */
+    static final String ENTERED_AMOUNTS_EXCEED_PROJECT_TOTAL = "Entered amounts cannot exceed the total project amount";
+
+    /**
      * Returns the first value that occurs more than once (case-sensitive), ignoring nulls. Used to
      * reject duplicate sibling titles inside a single create request up front — before any entity is
      * persisted — so same-request duplicates can't slip past a per-row database check.
@@ -44,6 +54,21 @@ public final class FundingValidations {
     }
 
     /**
+     * A milestone's amount must be positive when supplied — split out from {@link #milestone} so
+     * callers that defer the parent-fit half of that check (e.g. {@code ProjectTreeUpdateService},
+     * which validates fit once for the whole tree at the end instead of per-node) can still run this
+     * independent half immediately, exactly like every other caller.
+     */
+    public static Optional<ProblemDetail> milestoneAmountPositive(BigDecimal amount) {
+        if (amount != null && amount.signum() <= 0) {
+            return Optional.of(Problems.badRequest(
+                    "Milestone amount must be greater than zero",
+                    ErrorTitleConstants.MILESTONE_AMOUNT_INVALID));
+        }
+        return Optional.empty();
+    }
+
+    /**
      * Validates a milestone's amount against its project. {@code amount} is the effective value
      * (a null value is left unchecked, so this also serves partial updates).
      * {@code otherMilestonesTotal} is the summed amount of the project's <em>other</em> milestones
@@ -52,23 +77,23 @@ public final class FundingValidations {
      */
     public static Optional<ProblemDetail> milestone(BigDecimal amount,
             ProjectEntity project, BigDecimal otherMilestonesTotal) {
-        if (amount != null && amount.signum() <= 0) {
-            return Optional.of(Problems.badRequest(
-                    "Milestone amount must be greater than zero",
-                    ErrorTitleConstants.MILESTONE_AMOUNT_INVALID));
+        Optional<ProblemDetail> positive = milestoneAmountPositive(amount);
+        if (positive.isPresent()) {
+            return positive;
         }
         if (project.getTotalAmount() != null && amount != null) {
+            // LOB-2365: message text standardized to match the sub-project path below (and the FE's
+            // own copy) — the two error titles stay distinct (single milestone vs. cumulative total)
+            // for callers that key off the code, only the human-readable message is now shared.
             if (amount.compareTo(project.getTotalAmount()) > 0) {
                 return Optional.of(Problems.badRequest(
-                        "Milestone amount %s exceeds the project total %s".formatted(
-                                formatAmount(amount), formatAmount(project.getTotalAmount())),
+                        ENTERED_AMOUNTS_EXCEED_PROJECT_TOTAL,
                         ErrorTitleConstants.MILESTONE_AMOUNT_EXCEEDS_PROJECT));
             }
             BigDecimal cumulative = otherMilestonesTotal.add(amount);
             if (cumulative.compareTo(project.getTotalAmount()) > 0) {
                 return Optional.of(Problems.badRequest(
-                        "Milestones total %s exceeds the project total %s".formatted(
-                                formatAmount(cumulative), formatAmount(project.getTotalAmount())),
+                        ENTERED_AMOUNTS_EXCEED_PROJECT_TOTAL,
                         ErrorTitleConstants.MILESTONE_TOTAL_EXCEEDS_PROJECT));
             }
         }
@@ -296,17 +321,16 @@ public final class FundingValidations {
         if (parent.getTotalAmount() == null || childTotal == null) {
             return Optional.empty();
         }
+        // LOB-2365: message text standardized to match the milestone path above — see its comment.
         if (childTotal.compareTo(parent.getTotalAmount()) > 0) {
             return Optional.of(Problems.badRequest(
-                    "Sub-project '%s' total %s exceeds project '%s' total %s".formatted(
-                            childTitle, formatAmount(childTotal), parent.getProjectTitle(), formatAmount(parent.getTotalAmount())),
+                    ENTERED_AMOUNTS_EXCEED_PROJECT_TOTAL,
                     ErrorTitleConstants.SUBPROJECT_AMOUNT_EXCEEDS_PARENT));
         }
         BigDecimal cumulative = otherSubProjectsTotal.add(childTotal);
         if (cumulative.compareTo(parent.getTotalAmount()) > 0) {
             return Optional.of(Problems.badRequest(
-                    "Sub-projects total %s (including sub-project '%s') exceeds project '%s' total %s".formatted(
-                            formatAmount(cumulative), childTitle, parent.getProjectTitle(), formatAmount(parent.getTotalAmount())),
+                    ENTERED_AMOUNTS_EXCEED_PROJECT_TOTAL,
                     ErrorTitleConstants.SUBPROJECT_TOTAL_EXCEEDS_PARENT));
         }
         return Optional.empty();
@@ -361,9 +385,11 @@ public final class FundingValidations {
     }
 
     /**
-     * When a project's total budget is changed, it must still cover what has already been planned
-     * under it: the summed amounts of its milestones and the summed totals of its sub-projects.
-     * Skipped when no new total is supplied.
+     * A project's new total budget must still cover what has already been declared under it: the
+     * summed amounts of its milestones and the summed totals of its sub-projects. Unlike an event's own
+     * allocated figure (see {@link #isOverspend}/{@code EventStatus.ERROR}), this compares two budget
+     * declarations against each other, not a budget against real recorded money — so it's a hard reject
+     * at update time, exactly like at creation, not a flag. Skipped when no new total is supplied.
      */
     public static Optional<ProblemDetail> projectTotalCoversChildren(BigDecimal newTotal,
             BigDecimal milestonesTotal, BigDecimal subProjectsTotal) {

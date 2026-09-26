@@ -84,10 +84,10 @@ class ProjectStructureServiceTest {
         Either<ProblemDetail, ProjectEntity> result = projectStructureService.createSubProject(
                 parent, "Sub One", null, new BigDecimal("40000.00"), null);
 
-        // The auto-assigned proId ("Root-1"), not the title ("Sub One"), is what the id is derived
+        // The auto-assigned proId ("Root-S1"), not the title ("Sub One"), is what the id is derived
         // from — a later title rename must not leave the id stale.
-        assertThat(result.get().getProId()).isEqualTo("Root-1");
-        assertThat(result.get().getId()).isEqualTo(ProjectEntity.subId(parent.getId(), "Root-1"));
+        assertThat(result.get().getProId()).isEqualTo("Root-S1");
+        assertThat(result.get().getId()).isEqualTo(ProjectEntity.subId(parent.getId(), "Root-S1"));
         assertThat(result.get().getParentProject()).isEqualTo(parent);
     }
 
@@ -114,7 +114,7 @@ class ProjectStructureServiceTest {
         Either<ProblemDetail, ProjectEntity> second = projectStructureService.createSubProject(
                 parent, "Sub Two", null, new BigDecimal("30000.00"), null);
 
-        assertThat(first.get().getProId()).isEqualTo("Root-1");
-        assertThat(second.get().getProId()).isEqualTo("Root-2");
+        assertThat(first.get().getProId()).isEqualTo("Root-S1");
+        assertThat(second.get().getProId()).isEqualTo("Root-S2");
     }
 }

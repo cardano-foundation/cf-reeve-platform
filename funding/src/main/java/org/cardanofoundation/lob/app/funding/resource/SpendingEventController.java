@@ -30,6 +30,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.OrphanEventsCleanupView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.service.SpendingEventService;
@@ -145,7 +146,6 @@ public class SpendingEventController {
                                                           "currency": "EUR",
                                                           "subProjects": [
                                                             {
-                                                              "externalProjectId": "sub-one",
                                                               "projectTitle": "Sub One",
                                                               "totalAmount": "3000.00",
                                                               "currency": "EUR",
@@ -171,7 +171,6 @@ public class SpendingEventController {
                                                               ]
                                                             },
                                                             {
-                                                              "externalProjectId": "sub-two",
                                                               "projectTitle": "Sub Two",
                                                               "totalAmount": "3000.00",
                                                               "currency": "EUR",
@@ -272,6 +271,182 @@ public class SpendingEventController {
                                                         }
                                                       ]
                                                     }"""
+                                    ),
+                                    @ExampleObject(
+                                            name = "FUNDING – fund \"Project Orion\" (see the whole-tree PUT /projects example)",
+                                            summary = "Orion walkthrough, step 2 of 6: after creating \"Project Orion\" (PRJ-1000) with the POST "
+                                                    + "/projects example, fund it fully — 286,728.71 to Sub 1's milestone and 418,974.15 to Sub 2's "
+                                                    + "milestone, matching their current budgets exactly. Next step in endpoint POST /events: the "
+                                                    + "example \"SPENDING – record spend against \"Project Orion\"\".",
+                                            value = """
+                                                    {
+                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                                                      "eventType": "FUNDING",
+                                                      "fundingId": "GRANT-2025-F0001",
+                                                      "fundingHash": "30c82819cf06cd9264e2ffd3ba858ebf0a3b0b71ada17b5a11fd6da66f120ce7",
+                                                      "fundingEntity": "Cardano Foundation",
+                                                      "currencyRcy": "ADA",
+                                                      "eventDate": "2026-09-01",
+                                                      "amountRcy": "705702.86",
+                                                      "allocations": [
+                                                        {
+                                                          "projectTitle": "Project Orion",
+                                                          "subProjects": [
+                                                            {
+                                                              "projectTitle": "Sub 1",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone 1" },
+                                                                  "allocatedAmount": "286728.71"
+                                                                }
+                                                              ]
+                                                            },
+                                                            {
+                                                              "projectTitle": "Sub 2",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone 1" },
+                                                                  "allocatedAmount": "418974.15"
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }"""
+                                    ),
+                                    @ExampleObject(
+                                            name = "FUNDING – fund both sub-projects of \"Project Atlas\" (see the delete/orphan PUT /projects example)",
+                                            summary = "Atlas walkthrough, step 2 of 6: after creating \"Project Atlas\" (PRJ-2000) with the POST "
+                                                    + "/projects example, fund both its sub-projects' milestones from the same event — 20,000 to "
+                                                    + "Sub A's, 15,000 to Sub B's. Next step in endpoint POST /events: the example \"SPENDING – "
+                                                    + "spend against only \"Sub B\" of \"Project Atlas\"\".",
+                                            value = """
+                                                    {
+                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                                                      "eventType": "FUNDING",
+                                                      "fundingId": "GRANT-ATLAS-0001",
+                                                      "fundingHash": "atlas-hash-0001",
+                                                      "fundingEntity": "Cardano Foundation",
+                                                      "currencyRcy": "ADA",
+                                                      "eventDate": "2026-09-15",
+                                                      "amountRcy": "35000.00",
+                                                      "allocations": [
+                                                        {
+                                                          "projectTitle": "Project Atlas",
+                                                          "subProjects": [
+                                                            {
+                                                              "projectTitle": "Sub A",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone A1" },
+                                                                  "allocatedAmount": "20000.00"
+                                                                }
+                                                              ]
+                                                            },
+                                                            {
+                                                              "projectTitle": "Sub B",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone B1" },
+                                                                  "allocatedAmount": "15000.00"
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }"""
+                                    ),
+                                    @ExampleObject(
+                                            name = "SPENDING – spend against only \"Sub B\" of \"Project Atlas\" (becomes an orphan)",
+                                            summary = "Atlas walkthrough, step 3 of 6: records 10,000 of spend against Sub B's milestone only "
+                                                    + "(unlike the FUNDING event above, which also touches Sub A). Once Sub B is deleted, this "
+                                                    + "event has no allocation left that points at an existing milestone. Next step in endpoint PUT "
+                                                    + "/projects/{projectId}: the example \"Delete a sub-project\".",
+                                            value = """
+                                                    {
+                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                                                      "eventType": "SPENDING",
+                                                      "fundingId": "GRANT-ATLAS-0002",
+                                                      "fundingHash": "atlas-hash-0002",
+                                                      "currencyRcy": "ADA",
+                                                      "eventDate": "2026-09-20",
+                                                      "category": "Personnel",
+                                                      "vendor": "Vendor Atlas",
+                                                      "amountFcy": "10000.00",
+                                                      "currencyFcy": "USD",
+                                                      "fxRate": "1.0",
+                                                      "amountRcy": "10000.00",
+                                                      "hash": "sha256:demo-atlas-0002",
+                                                      "notes": "Invoice #INV-ATLAS-0002",
+                                                      "allocations": [
+                                                        {
+                                                          "projectTitle": "Project Atlas",
+                                                          "subProjects": [
+                                                            {
+                                                              "projectTitle": "Sub B",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone B1" },
+                                                                  "allocatedAmount": "10000.00"
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }"""
+                                    ),
+                                    @ExampleObject(
+                                            name = "SPENDING – record spend against \"Project Orion\"",
+                                            summary = "Orion walkthrough, step 3 of 6: records 120,000 of actual spend against the same two "
+                                                    + "milestones just funded (well within their current budgets) — 50,000 against Sub 1's "
+                                                    + "milestone, 70,000 against Sub 2's — so there are two DRAFT events (this one and the FUNDING "
+                                                    + "one) in the tree when it is shrunk. Next step in endpoint PUT /projects/{projectId}: the "
+                                                    + "example \"Shrink a project and both its sub-projects together\".",
+                                            value = """
+                                                    {
+                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                                                      "eventType": "SPENDING",
+                                                      "fundingId": "GRANT-2025-1000",
+                                                      "fundingHash": "de68ed7879484aa88442b7932641e72d44013e5719c197ebba90770949877056",
+                                                      "currencyRcy": "ADA",
+                                                      "eventDate": "2026-09-10",
+                                                      "category": "Personnel",
+                                                      "vendor": "Vendor AB",
+                                                      "amountFcy": "120000.00",
+                                                      "currencyFcy": "USD",
+                                                      "fxRate": "1.0",
+                                                      "amountRcy": "120000.00",
+                                                      "hash": "sha256:demo-spend-0001",
+                                                      "notes": "Invoice #INV-2026-0001",
+                                                      "allocations": [
+                                                        {
+                                                          "projectTitle": "Project Orion",
+                                                          "subProjects": [
+                                                            {
+                                                              "projectTitle": "Sub 1",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone 1" },
+                                                                  "allocatedAmount": "50000.00"
+                                                                }
+                                                              ]
+                                                            },
+                                                            {
+                                                              "projectTitle": "Sub 2",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone 1" },
+                                                                  "allocatedAmount": "70000.00"
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }"""
                                     )
                             }
                     )
@@ -318,6 +493,139 @@ public class SpendingEventController {
                                                             {
                                                               "milestone": { "milestoneTitle": "Milestone AB-1" },
                                                               "allocatedAmount": "150000.00"
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }"""
+                                    ),
+                                    @ExampleObject(
+                                            name = "FUNDING – fix an ERROR event after the project was shrunk",
+                                            summary = "Orion walkthrough, step 5 of 6: after \"Project Orion\" is shrunk with the whole-tree PUT "
+                                                    + "/projects example (Sub 1's milestone down to 35,000, Sub 2's down to 55,000), the FUNDING "
+                                                    + "event created above no longer fits (286,728.71/418,974.15 each exceed the new amounts) and "
+                                                    + "flips to ERROR. Call this on that event's id with smaller allocations that fit the new "
+                                                    + "budgets — the update succeeds and the event resets from ERROR back to DRAFT automatically. "
+                                                    + "Next step in endpoint PUT /events/{eventId}: the example \"SPENDING – fix an ERROR event "
+                                                    + "after the project was shrunk\".",
+                                            value = """
+                                                    {
+                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                                                      "eventType": "FUNDING",
+                                                      "fundingId": "GRANT-2025-F0001",
+                                                      "fundingHash": "30c82819cf06cd9264e2ffd3ba858ebf0a3b0b71ada17b5a11fd6da66f120ce7",
+                                                      "fundingEntity": "Cardano Foundation",
+                                                      "currencyRcy": "ADA",
+                                                      "eventDate": "2026-09-01",
+                                                      "amountRcy": "50000.00",
+                                                      "allocations": [
+                                                        {
+                                                          "projectTitle": "Project Orion",
+                                                          "subProjects": [
+                                                            {
+                                                              "projectTitle": "Sub 1",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone 1" },
+                                                                  "allocatedAmount": "20000.00"
+                                                                }
+                                                              ]
+                                                            },
+                                                            {
+                                                              "projectTitle": "Sub 2",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone 1" },
+                                                                  "allocatedAmount": "30000.00"
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }"""
+                                    ),
+                                    @ExampleObject(
+                                            name = "SPENDING – fix an ERROR event after the project was shrunk",
+                                            summary = "Orion walkthrough, step 6 of 6 (last): same fix for the SPENDING event (its 50,000/70,000 "
+                                                    + "allocations also no longer fit the shrunk 35,000/55,000 milestones) — smaller allocations "
+                                                    + "that fit bring it back to DRAFT too. Nothing further: both events are DRAFT again.",
+                                            value = """
+                                                    {
+                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                                                      "eventType": "SPENDING",
+                                                      "fundingId": "GRANT-2025-1000",
+                                                      "fundingHash": "de68ed7879484aa88442b7932641e72d44013e5719c197ebba90770949877056",
+                                                      "currencyRcy": "ADA",
+                                                      "eventDate": "2026-09-10",
+                                                      "category": "Personnel",
+                                                      "vendor": "Vendor AB",
+                                                      "amountFcy": "40000.00",
+                                                      "currencyFcy": "USD",
+                                                      "fxRate": "1.0",
+                                                      "amountRcy": "40000.00",
+                                                      "hash": "sha256:demo-spend-0001",
+                                                      "notes": "Invoice #INV-2026-0001 (revised)",
+                                                      "allocations": [
+                                                        {
+                                                          "projectTitle": "Project Orion",
+                                                          "subProjects": [
+                                                            {
+                                                              "projectTitle": "Sub 1",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone 1" },
+                                                                  "allocatedAmount": "15000.00"
+                                                                }
+                                                              ]
+                                                            },
+                                                            {
+                                                              "projectTitle": "Sub 2",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone 1" },
+                                                                  "allocatedAmount": "25000.00"
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }"""
+                                    ),
+                                    @ExampleObject(
+                                            name = "FUNDING – fix an ERROR event after a sub-project was deleted",
+                                            summary = "Atlas walkthrough, step 5 of 6: after \"Sub B\" of \"Project Atlas\" is deleted with the PUT "
+                                                    + "/projects/{projectId} example, this FUNDING event is in ERROR: its 15,000 allocation to Sub "
+                                                    + "B's milestone is still there but dangling (milestoneDeleted = true), next to its 20,000 "
+                                                    + "allocation to Sub A's milestone. Call this on that event's id with allocations that only "
+                                                    + "reference what still exists (Sub A) and an amountRcy reduced to match — the update replaces "
+                                                    + "all allocations, drops the dangling one, and the event resets from ERROR back to DRAFT "
+                                                    + "automatically. The SPENDING event has nothing live left to fix. Next step in endpoint DELETE "
+                                                    + "/events/orphans: it deletes that one, since none of its allocations points at an existing "
+                                                    + "milestone.",
+                                            value = """
+                                                    {
+                                                      "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                                                      "eventType": "FUNDING",
+                                                      "fundingId": "GRANT-ATLAS-0001",
+                                                      "fundingHash": "atlas-hash-0001",
+                                                      "fundingEntity": "Cardano Foundation",
+                                                      "currencyRcy": "ADA",
+                                                      "eventDate": "2026-09-15",
+                                                      "amountRcy": "20000.00",
+                                                      "allocations": [
+                                                        {
+                                                          "projectTitle": "Project Atlas",
+                                                          "subProjects": [
+                                                            {
+                                                              "projectTitle": "Sub A",
+                                                              "milestones": [
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone A1" },
+                                                                  "allocatedAmount": "20000.00"
+                                                                }
+                                                              ]
                                                             }
                                                           ]
                                                         }
@@ -371,6 +679,31 @@ public class SpendingEventController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<ProblemDetail> deleteEvent(@PathVariable String eventId) {
         return Responses.respondDelete(spendingEventService.deleteEvent(eventId));
+    }
+
+    @Operation(summary = "Bulk-delete orphaned ERROR events",
+            description = "Deletes every ERROR event of this organisation none of whose allocations points at an "
+                    + "existing milestone any more — every milestone they referenced was deleted by an earlier "
+                    + "project/milestone cascade delete (LOB-2365 follow-up), which keeps the allocation rows so a "
+                    + "human decides what happens to the event. This endpoint is that human decision, taken for all "
+                    + "such events at once. An ERROR event that still has at least one allocation to an existing "
+                    + "milestone is never touched: it can still be fixed with PUT /events/{eventId}. "
+                    + "Atlas walkthrough, step 6 of 6 (last): call this with the same organisationId used "
+                    + "throughout the walkthrough, after deleting \"Sub B\" of \"Project Atlas\" (PUT "
+                    + "/projects/{projectId}) and fixing the FUNDING event by hand (PUT /events/{eventId}) — the "
+                    + "SPENDING event (GRANT-ATLAS-0002), whose only allocation was to Sub B's deleted milestone, "
+                    + "is deleted here.",
+            responses = {
+                    @ApiResponse(responseCode = "200", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = OrphanEventsCleanupView.class))}),
+                    @ApiResponse(responseCode = "400", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ProblemDetail.class))})
+            }
+    )
+    @DeleteMapping(value = "/events/orphans", produces = APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<OrphanEventsCleanupView> deleteOrphanedErrorEvents(@RequestParam String organisationId) {
+        return Responses.respond(spendingEventService.deleteOrphanedErrorEvents(organisationId), HttpStatus.OK);
     }
 
 }
