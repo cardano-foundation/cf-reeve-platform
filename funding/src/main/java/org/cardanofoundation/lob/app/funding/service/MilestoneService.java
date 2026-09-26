@@ -310,7 +310,22 @@ public class MilestoneService {
         }
         // The primary key is derived from the proId (unique within the project), never from the
         // editable title — so it can only be set once the proId is known.
-        entity.setId(MilestoneEntity.id(project.getId(), entity.getProId()));
+        String candidateId = MilestoneEntity.id(project.getId(), entity.getProId());
+        // The uniqueness check above only rules out a *live* milestone already holding this proId — it
+        // says nothing about one that held it before being deleted. Deleting a milestone deliberately
+        // leaves its event allocations dangling, pointing at its old id (LOB-2365 follow-up); assigning
+        // that same id to this new, unrelated milestone would silently reattach them as if they were its
+        // own. The auto-assigned branch above can't normally produce a collision (its counter never
+        // repeats a value for a project's lifetime), so this only ever actually fires for the explicit
+        // (CSV) branch — checked here for both, rather than only there, so it stays correct even if that
+        // assumption ever stops holding.
+        if (allocationRepository.existsById_MilestoneId(candidateId)) {
+            return Either.left(Problems.conflict(
+                    "Milestone ID %s was used by a milestone deleted from this project, which still has event allocations attached to it — choose a different id"
+                            .formatted(entity.getProId()),
+                    ErrorTitleConstants.MILESTONE_PROID_PREVIOUSLY_USED));
+        }
+        entity.setId(candidateId);
         return Either.right(milestoneRepository.saveAndFlush(entity));
     }
 

@@ -438,7 +438,7 @@ class ProjectTreeUpdateServiceTest {
         when(projectRepository.findById("root")).thenReturn(Optional.of(root));
         ProblemDetail milestoneProblem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "bad milestone");
         milestoneProblem.setTitle(ErrorTitleConstants.MILESTONE_FIELDS_REQUIRED);
-        when(milestoneService.create(eq("root"), any(), isNull())).thenReturn(Either.left(milestoneProblem));
+        when(milestoneService.create(eq("root"), any())).thenReturn(Either.left(milestoneProblem));
 
         ProjectWithMilestonesCreateRequest request = request(null);
         request.setMilestones(List.of(MilestoneCreateRequest.builder().milestoneTitle("New Milestone").build()));
@@ -457,7 +457,7 @@ class ProjectTreeUpdateServiceTest {
         MilestoneEntity created = MilestoneEntity.builder().id("m-new").proId("PRJ-1000-N1")
                 .milestoneTitle("New Milestone").milestoneAmount(new BigDecimal("1000")).project(root).build();
         when(projectRepository.findById("root")).thenReturn(Optional.of(root));
-        when(milestoneService.create(eq("root"), any(), isNull())).thenReturn(Either.right(created));
+        when(milestoneService.create(eq("root"), any())).thenReturn(Either.right(created));
         when(projectRepository.findByParentProjectId("root")).thenReturn(List.of());
         when(milestoneService.findByProjectId("root")).thenReturn(List.of(created));
         when(projectRepository.findById("root")).thenReturn(Optional.of(root));
@@ -465,6 +465,95 @@ class ProjectTreeUpdateServiceTest {
         ProjectWithMilestonesCreateRequest request = request(null);
         request.setMilestones(List.of(MilestoneCreateRequest.builder()
                 .milestoneTitle("New Milestone").milestoneAmount(new BigDecimal("1000")).build()));
+
+        ProjectView result = service.updateWithMilestones("root", request);
+
+        assertThat(result.getError()).isEmpty();
+    }
+
+    @Test
+    void update_ignoresAClientSuppliedProId_whenCreatingANewMilestone() {
+        // Unlike a sub-project node (see ProjectTreeNodeRequest#proId's Javadoc — used as-is there),
+        // MilestoneCreateRequest#proId's own Javadoc says a milestone's proId "is always system-assigned
+        // on creation and cannot be chosen, so this is ignored if no existing milestone matches and a
+        // new one is created instead" — verified here by asserting the 2-arg (always-auto-assigning)
+        // overload is used, and the 3-arg (explicit-proId, CSV-only) one never is, regardless of what
+        // the request's own proId field carries.
+        ProjectEntity root = root(new BigDecimal("200000"));
+        MilestoneEntity created = MilestoneEntity.builder().id("m-new").proId("PRJ-1000-M1")
+                .milestoneTitle("New Milestone").milestoneAmount(new BigDecimal("1000")).project(root).build();
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+        when(milestoneService.create(eq("root"), any())).thenReturn(Either.right(created));
+        when(projectRepository.findByParentProjectId("root")).thenReturn(List.of());
+        when(milestoneService.findByProjectId("root")).thenReturn(List.of(created));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setMilestones(List.of(MilestoneCreateRequest.builder()
+                .proId("client-chosen-id").milestoneTitle("New Milestone").milestoneAmount(new BigDecimal("1000")).build()));
+
+        ProjectView result = service.updateWithMilestones("root", request);
+
+        assertThat(result.getError()).isEmpty();
+        verify(milestoneService).create(eq("root"), any());
+        verify(milestoneService, never()).create(any(), any(), any());
+    }
+
+    @Test
+    void update_returns409_whenTwoNewMilestonesInTheSameRequestShareTheSameTitle() {
+        // Regression: without this guard, the second node would match the milestone the first node just
+        // created (findExistingMilestone falls back to title) and silently overwrite it instead of being
+        // rejected — the same pattern already guarded against for sub-projects.
+        ProjectEntity root = root(new BigDecimal("200000"));
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setMilestones(List.of(
+                MilestoneCreateRequest.builder().milestoneTitle("New Milestone").milestoneAmount(new BigDecimal("1000")).build(),
+                MilestoneCreateRequest.builder().milestoneTitle("New Milestone").milestoneAmount(new BigDecimal("2000")).build()));
+
+        ProjectView result = service.updateWithMilestones("root", request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_TITLE_ALREADY_EXISTS);
+        verify(milestoneService, never()).create(any(), any());
+    }
+
+    @Test
+    void update_returns409_whenTheSameMilestoneProIdIsUpdatedAndDeletedInTheSameRequest() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setMilestones(List.of(
+                MilestoneCreateRequest.builder().proId("PRJ-1000-M1").milestoneTitle("M1").milestoneAmount(new BigDecimal("1000")).build(),
+                MilestoneCreateRequest.builder().proId("PRJ-1000-M1").action("DELETE").build()));
+
+        ProjectView result = service.updateWithMilestones("root", request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_PROID_ALREADY_EXISTS);
+        verify(cascadeDeleteService, never()).deleteMilestone(any());
+    }
+
+    @Test
+    void update_allowsDeletingAMilestone_andCreatingAnUnrelatedNewOneWithTheSameTitle() {
+        // Mirrors the equivalent sub-project test: a brand-new milestone node never carries a proId, so
+        // deleting "M1" and creating a different, new milestone also titled "M1" in the same request is
+        // fine — the title guard above deliberately excludes delete nodes for this reason.
+        ProjectEntity root = root(new BigDecimal("200000"));
+        MilestoneEntity existing = MilestoneEntity.builder().id("m1").proId("PRJ-1000-M1")
+                .milestoneTitle("M1").milestoneAmount(new BigDecimal("1000")).currency("USD").project(root).build();
+        MilestoneEntity created = MilestoneEntity.builder().id("m-new").proId("PRJ-1000-M2")
+                .milestoneTitle("M1").milestoneAmount(new BigDecimal("2000")).project(root).build();
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+        when(milestoneRepository.findByProjectIdAndProId("root", "PRJ-1000-M1")).thenReturn(Optional.of(existing));
+        when(cascadeDeleteService.deleteMilestone(existing)).thenReturn(Either.right(List.of()));
+        when(milestoneService.create(eq("root"), any())).thenReturn(Either.right(created));
+        when(projectRepository.findByParentProjectId("root")).thenReturn(List.of());
+        when(milestoneService.findByProjectId("root")).thenReturn(List.of(created));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setMilestones(List.of(
+                MilestoneCreateRequest.builder().proId("PRJ-1000-M1").action("DELETE").build(),
+                MilestoneCreateRequest.builder().milestoneTitle("M1").milestoneAmount(new BigDecimal("2000")).build()));
 
         ProjectView result = service.updateWithMilestones("root", request);
 
@@ -501,6 +590,81 @@ class ProjectTreeUpdateServiceTest {
         ProjectView result = service.updateWithMilestones("root", request);
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS);
+    }
+
+    @Test
+    void update_returns409_whenTheSameSubProjectProIdIsUpdatedAndDeletedInTheSameRequest() {
+        // Regression: an update node and a delete node sharing the same proId used to both be applied —
+        // the update touched the project, then the delete removed it — leaving validateWholeTreeCoverage
+        // to crash looking up an id that no longer existed. Refused up front instead.
+        ProjectEntity root = root(new BigDecimal("200000"));
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setSubProjects(List.of(
+                ProjectTreeNodeRequest.builder().externalProjectId("x").proId("PRJ-1000-1").projectTitle("Renamed").totalAmount(new BigDecimal("10000")).build(),
+                ProjectTreeNodeRequest.builder().externalProjectId("x").proId("PRJ-1000-1").projectTitle("Sub").action("DELETE").build()));
+
+        ProjectView result = service.updateWithMilestones("root", request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_PROID_ALREADY_EXISTS);
+        verify(projectRepository, never()).findByParentProjectIdAndProId(any(), any());
+        verify(cascadeDeleteService, never()).deleteProjectSubtree(any());
+    }
+
+    @Test
+    void update_returns409_whenTheSameSubProjectProIdAppearsOnTwoDeleteNodes() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setSubProjects(List.of(
+                ProjectTreeNodeRequest.builder().externalProjectId("x").proId("PRJ-1000-1").projectTitle("Sub").action("DELETE").build(),
+                ProjectTreeNodeRequest.builder().externalProjectId("x").proId("PRJ-1000-1").projectTitle("Sub").action("delete").build()));
+
+        ProjectView result = service.updateWithMilestones("root", request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_PROID_ALREADY_EXISTS);
+    }
+
+    @Test
+    void update_allowsDeletingASubProject_andCreatingAnUnrelatedNewOneWithTheSameTitle() {
+        // The proId guard above must not block this legitimate case: a brand-new node never carries a
+        // proId, so deleting "Sub" and creating a different, new "Sub" in the same request is fine — the
+        // existing title-based duplicate check already deliberately excludes delete nodes for this.
+        ProjectEntity root = root(new BigDecimal("200000"));
+        ProjectEntity newSub = subProject(root, "sub-new", "PRJ-1000-9", new BigDecimal("50000"));
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+        when(projectRepository.findById("sub-new")).thenReturn(Optional.of(newSub));
+        when(projectRepository.findByParentProjectId("root")).thenReturn(List.of());
+        when(projectRepository.findByParentProjectId("sub-new")).thenReturn(List.of());
+        when(projectRepository.findByParentProjectIdAndProId("root", "PRJ-1000-1")).thenReturn(Optional.of(
+                subProject(root, "sub-old", "PRJ-1000-1", new BigDecimal("50000"))));
+        when(cascadeDeleteService.deleteProjectSubtree(any())).thenReturn(Either.right(List.of()));
+        when(projectStructureService.createSubProject(root, "Sub", null, null, new BigDecimal("50000"), null))
+                .thenReturn(Either.right(newSub));
+        when(milestoneService.findByProjectId("root")).thenReturn(List.of());
+        when(milestoneService.findByProjectId("sub-new")).thenReturn(List.of());
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setSubProjects(List.of(
+                ProjectTreeNodeRequest.builder().externalProjectId("x").proId("PRJ-1000-1").projectTitle("Sub Old").action("DELETE").build(),
+                ProjectTreeNodeRequest.builder().externalProjectId("x").projectTitle("Sub").totalAmount(new BigDecimal("50000")).build()));
+
+        ProjectView result = service.updateWithMilestones("root", request);
+
+        assertThat(result.getError()).isEmpty();
+    }
+
+    @Test
+    void validateWholeTreeCoverage_skipsATouchedProjectThatNoLongerExists_ratherThanThrowing() {
+        // Defensive backstop for the same scenario the duplicate-proId guard above prevents up front —
+        // covered directly here so it stays correct even if that guard is ever bypassed.
+        when(projectRepository.findById("deleted-mid-request")).thenReturn(Optional.empty());
+
+        Optional<ProblemDetail> result = service.validateWholeTreeCoverage(Set.of("deleted-mid-request"));
+
+        assertThat(result).isEmpty();
     }
 
     @Test

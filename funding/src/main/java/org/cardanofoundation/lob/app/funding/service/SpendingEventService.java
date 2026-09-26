@@ -367,8 +367,15 @@ public class SpendingEventService {
 
     @Transactional
     public Either<ProblemDetail, FundingEventEntity> publish(String eventId) {
-        Either<ProblemDetail, FundingEventEntity> eventOrError = findEventOrError(eventId);
-        if (eventOrError.isLeft()) return eventOrError;
+        // Locked read (see FundingEventRepository#findByIdForUpdate's Javadoc): without it, this
+        // read-status/flip-to-PUBLISHED and FundingCascadeDeleteService#flagEventsAllocatedTo's own
+        // read-status/flip-to-ERROR on the same row can race, letting one silently overwrite the other.
+        Optional<FundingEventEntity> eventM = fundingEventRepository.findByIdForUpdate(eventId);
+        if (eventM.isEmpty()) {
+            log.warn("Event not found: {}", eventId);
+            return Either.left(Problems.eventNotFound(eventId));
+        }
+        Either<ProblemDetail, FundingEventEntity> eventOrError = Either.right(eventM.get());
 
         FundingEventEntity event = eventOrError.get();
         Optional<ProblemDetail> draftProblem = requireDraft(event, "Event with Funding ID %s is already published");

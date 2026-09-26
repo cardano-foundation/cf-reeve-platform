@@ -27,6 +27,8 @@ public final class ErrorTitleConstants {
     public static final String MILESTONE_TITLE_ALREADY_EXISTS = "MILESTONE_TITLE_ALREADY_EXISTS";
     /** A CSV-supplied Milestone ID collides with an existing one in the same project — see LOB-2384. */
     public static final String MILESTONE_PROID_ALREADY_EXISTS = "MILESTONE_PROID_ALREADY_EXISTS";
+    /** A Milestone ID matches one already deleted from this project that still has dangling event allocations — see LOB-2365. */
+    public static final String MILESTONE_PROID_PREVIOUSLY_USED = "MILESTONE_PROID_PREVIOUSLY_USED";
     public static final String MILESTONE_FIELDS_REQUIRED = "MILESTONE_FIELDS_REQUIRED";
     public static final String MILESTONE_AMOUNT_INVALID = "MILESTONE_AMOUNT_INVALID";
     public static final String MILESTONE_AMOUNT_EXCEEDS_PROJECT = "MILESTONE_AMOUNT_EXCEEDS_PROJECT";

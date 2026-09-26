@@ -1092,7 +1092,7 @@ class SpendingEventServiceTest {
     @Test
     void publish_setsStatusAndDispatchApproved() {
         FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
+        when(fundingEventRepository.findByIdForUpdate("e1")).thenReturn(Optional.of(event));
         when(fundingEventRepository.saveAndFlush(event)).thenReturn(event);
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.publish("e1");
@@ -1104,7 +1104,7 @@ class SpendingEventServiceTest {
 
     @Test
     void publish_returnsLeft_whenAlreadyPublished() {
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.PUBLISHED)));
+        when(fundingEventRepository.findByIdForUpdate("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.PUBLISHED)));
 
         assertThat(spendingEventService.publish("e1").getLeft().getTitle()).isEqualTo("SPENDING_EVENT_ALREADY_PUBLISHED");
     }
@@ -1115,13 +1115,37 @@ class SpendingEventServiceTest {
         // it as-is would push a mismatched allocation on-chain, so it must be corrected via update()
         // first (which clears it back to DRAFT) before it can ever be published.
         FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.ERROR);
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
+        when(fundingEventRepository.findByIdForUpdate("e1")).thenReturn(Optional.of(event));
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.publish("e1");
 
         assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_HAS_ERROR);
         assertThat(event.getStatus()).isEqualTo(EventStatus.ERROR); // untouched
         verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void publish_returnsLeft_whenEventNotFound() {
+        when(fundingEventRepository.findByIdForUpdate("missing")).thenReturn(Optional.empty());
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.publish("missing");
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
+    }
+
+    @Test
+    void publish_usesALockedRead_soAConcurrentFlagToErrorCannotRaceIt() {
+        // See FundingEventRepository#findByIdForUpdate's Javadoc: publish() and
+        // FundingCascadeDeleteService#flagEventsAllocatedTo must lock the same row so one can never read
+        // a status the other is about to overwrite.
+        FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        when(fundingEventRepository.findByIdForUpdate("e1")).thenReturn(Optional.of(event));
+        when(fundingEventRepository.saveAndFlush(event)).thenReturn(event);
+
+        spendingEventService.publish("e1");
+
+        verify(fundingEventRepository).findByIdForUpdate("e1");
+        verify(fundingEventRepository, never()).findById("e1");
     }
 
     @Test

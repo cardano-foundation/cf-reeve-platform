@@ -228,6 +228,32 @@ public class ProjectTreeUpdateService {
 
         touchedProjectIds.add(project.getId());
 
+        // Same pair of guards as for sub-projects below (see that pair's Javadoc for the reasoning behind
+        // each): a duplicate title among create/update nodes would otherwise have the second node
+        // silently match-and-overwrite the milestone the first node just created or updated instead of
+        // being rejected or creating a genuinely separate one; a duplicate proId on any mix of nodes
+        // (e.g. one update node and one DELETE node both naming the same milestone) is always ambiguous.
+        Optional<String> duplicateMilestoneTitle = FundingValidations.firstDuplicate(
+                milestoneRequests.stream()
+                        .filter(request -> !isDelete(request.getAction()))
+                        .map(MilestoneCreateRequest::getMilestoneTitle)
+                        .toList());
+        if (duplicateMilestoneTitle.isPresent()) {
+            return Optional.of(Problems.conflict(
+                    "Duplicate milestone title under the same project: " + duplicateMilestoneTitle.get(),
+                    ErrorTitleConstants.MILESTONE_TITLE_ALREADY_EXISTS));
+        }
+        Optional<String> duplicateMilestoneProId = FundingValidations.firstDuplicate(
+                milestoneRequests.stream()
+                        .map(MilestoneCreateRequest::getProId)
+                        .filter(proId -> proId != null && !proId.isBlank())
+                        .toList());
+        if (duplicateMilestoneProId.isPresent()) {
+            return Optional.of(Problems.conflict(
+                    "Milestone id referenced more than once in the same request: " + duplicateMilestoneProId.get(),
+                    ErrorTitleConstants.MILESTONE_PROID_ALREADY_EXISTS));
+        }
+
         for (MilestoneCreateRequest milestoneRequest : milestoneRequests) {
             Optional<ProblemDetail> problem = isDelete(milestoneRequest.getAction())
                     ? deleteMilestoneNode(project, milestoneRequest, affectedEvents)
@@ -246,6 +272,23 @@ public class ProjectTreeUpdateService {
             return Optional.of(Problems.conflict(
                     "Duplicate sub-project title under the same parent: " + duplicateSubTitle.get(),
                     ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS));
+        }
+
+        // Unlike the title check above, this one is not scoped to non-delete nodes: a proId names one
+        // specific existing sub-project, so it can never legitimately appear on two nodes in the same
+        // request regardless of what those nodes each do (update, delete, or a mix) — that combination
+        // is always an ambiguous request, not a valid rename-and-recreate pattern (which the title check
+        // above exists to allow: deleting a sub-project and creating an unrelated new one with the same
+        // title is fine, since a brand-new node never carries a proId).
+        Optional<String> duplicateSubProId = FundingValidations.firstDuplicate(
+                subProjectRequests.stream()
+                        .map(ProjectTreeNodeRequest::getProId)
+                        .filter(proId -> proId != null && !proId.isBlank())
+                        .toList());
+        if (duplicateSubProId.isPresent()) {
+            return Optional.of(Problems.conflict(
+                    "Sub-project id referenced more than once in the same request: " + duplicateSubProId.get(),
+                    ErrorTitleConstants.PROJECT_PROID_ALREADY_EXISTS));
         }
 
         for (ProjectTreeNodeRequest node : subProjectRequests) {
@@ -349,7 +392,17 @@ public class ProjectTreeUpdateService {
     private Optional<ProblemDetail> applyMilestone(ProjectEntity project, MilestoneCreateRequest request, Set<String> changedMilestoneIds) {
         Optional<MilestoneEntity> existing = findExistingMilestone(project, request);
         if (existing.isEmpty()) {
-            Either<ProblemDetail, MilestoneEntity> created = milestoneService.create(project.getId(), request, request.getProId());
+            // Unlike a sub-project node's proId (see ProjectTreeNodeRequest#proId's Javadoc — used as-is
+            // on create there, by design), a milestone's is documented as always system-assigned on
+            // creation through this JSON API and "ignored if no existing milestone matches" (see
+            // MilestoneCreateRequest#proId's Javadoc) — so null is passed here regardless of what
+            // request.getProId() carries, via the same 2-arg overload the narrow POST /milestones
+            // endpoint uses. Passing it through, as this used to, both contradicted that documented
+            // contract and, worse, let a client-chosen value collide with a milestone deleted earlier
+            // from this same project, silently reattaching its dangling allocations (see
+            // MilestoneService#validateAndSave's existsById_MilestoneId check, which only reliably
+            // protects the explicit-proId (CSV) path if this path never supplies one either).
+            Either<ProblemDetail, MilestoneEntity> created = milestoneService.create(project.getId(), request);
             return created.isLeft() ? Optional.of(created.getLeft()) : Optional.empty();
         }
         return applyExistingMilestone(project, existing.get(), request, changedMilestoneIds);
@@ -458,7 +511,16 @@ public class ProjectTreeUpdateService {
      */
     Optional<ProblemDetail> validateWholeTreeCoverage(Set<String> touchedProjectIds) {
         for (String projectId : touchedProjectIds) {
-            ProjectEntity project = projectRepository.findById(projectId).orElseThrow();
+            // A project can be touched (added here) by one node in the request and then deleted by a
+            // different node later in the same request — normally prevented up front by
+            // #applyChildren's duplicate-proId guard, but skipped here defensively rather than crashing
+            // (orElseThrow) if that guard is ever bypassed: a project that no longer exists trivially
+            // has nothing left to cover.
+            Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
+            if (projectM.isEmpty()) {
+                continue;
+            }
+            ProjectEntity project = projectM.get();
             Optional<ProblemDetail> coverage = FundingValidations.projectTotalCoversChildren(
                     project.getTotalAmount(),
                     FundingValidations.sumMilestoneAmounts(milestoneService.findByProjectId(projectId), null),

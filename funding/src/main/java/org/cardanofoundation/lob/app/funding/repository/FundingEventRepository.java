@@ -1,11 +1,16 @@
 package org.cardanofoundation.lob.app.funding.repository;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+
+import jakarta.persistence.LockModeType;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -16,6 +21,30 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 public interface FundingEventRepository extends JpaRepository<FundingEventEntity, String> {
 
     Page<FundingEventEntity> findByOrganisationId(String organisationId, Pageable pageable);
+
+    /**
+     * Row-locked single-event read, used only by {@code SpendingEventService#publish} — without this
+     * lock, publish's read-status/flip-to-PUBLISHED and {@code FundingCascadeDeleteService
+     * #flagEventsAllocatedTo}'s read-status/flip-to-ERROR race on the same row: two concurrent
+     * transactions can each read the pre-change status before either commits, so one write silently
+     * overwrites the other regardless of which "should" win. Locking here makes publish() wait for any
+     * concurrent flag-to-ERROR transaction (and vice versa — see {@code findAllByIdForUpdate}) to finish
+     * first, so it always sees that transaction's committed result.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT e FROM funding.FundingEventEntity e WHERE e.id = :id")
+    Optional<FundingEventEntity> findByIdForUpdate(@Param("id") String id);
+
+    /**
+     * Row-locked multi-event read, used only by {@code FundingCascadeDeleteService
+     * #flagEventsAllocatedTo} — see {@link #findByIdForUpdate}'s Javadoc for why the lock exists. Pass
+     * ids sorted into a stable order so two calls that lock overlapping sets of events (e.g. two
+     * structural edits touching the same event from different milestones) always acquire their locks in
+     * the same order and can never deadlock on each other.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT e FROM funding.FundingEventEntity e WHERE e.id IN :ids")
+    List<FundingEventEntity> findAllByIdForUpdate(@Param("ids") Collection<String> ids);
 
     @Query("""
             SELECT e FROM funding.FundingEventEntity e

@@ -202,6 +202,57 @@ class MilestoneServiceTest {
         verify(milestoneRepository, never()).saveAndFlush(any());
     }
 
+    // -------------------------------------------------------------------------
+    // create(projectId, request, explicitProId) — the CSV-bulk-import-only overload
+    // -------------------------------------------------------------------------
+
+    @Test
+    void create_withExplicitProId_savesWithThatExactProIdAndDerivedId() {
+        ProjectEntity project = projectEntity("p1");
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProjectId("p1")).thenReturn(List.of());
+        when(milestoneRepository.existsByProjectIdAndProId("p1", "PRJ-1-M1")).thenReturn(false);
+        when(milestoneRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", createRequest(), "PRJ-1-M1");
+
+        assertThat(result.isRight()).isTrue();
+        assertThat(result.get().getProId()).isEqualTo("PRJ-1-M1");
+        assertThat(result.get().getId()).isEqualTo(MilestoneEntity.id("p1", "PRJ-1-M1"));
+        verify(childSequenceService, never()).nextChildProId(any(), any());
+    }
+
+    @Test
+    void create_withExplicitProId_returnsConflict_whenALiveMilestoneAlreadyHasIt() {
+        ProjectEntity project = projectEntity("p1");
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProjectId("p1")).thenReturn(List.of());
+        when(milestoneRepository.existsByProjectIdAndProId("p1", "PRJ-1-M1")).thenReturn(true);
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", createRequest(), "PRJ-1-M1");
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_PROID_ALREADY_EXISTS);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void create_withExplicitProId_returnsConflict_whenThatIdWasPreviouslyUsedByADeletedMilestoneWithDanglingAllocations() {
+        // LOB-2365 follow-up: deleting a milestone leaves its event allocations dangling, still
+        // pointing at its old (deterministic) id. Reusing the same proId under the same project would
+        // hand a brand-new, unrelated milestone that exact same id, silently reattaching those old
+        // allocations as if they were its own — refused instead.
+        ProjectEntity project = projectEntity("p1");
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(milestoneRepository.findByProjectId("p1")).thenReturn(List.of());
+        when(milestoneRepository.existsByProjectIdAndProId("p1", "PRJ-1-M1")).thenReturn(false); // no live row
+        when(allocationRepository.existsById_MilestoneId(MilestoneEntity.id("p1", "PRJ-1-M1"))).thenReturn(true);
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", createRequest(), "PRJ-1-M1");
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_PROID_PREVIOUSLY_USED);
+        verify(milestoneRepository, never()).saveAndFlush(any());
+    }
+
     @Test
     void create_derivesIdFromProjectAndTitle_notFromAnyExternalId() {
         ProjectEntity project = projectEntity("p1");

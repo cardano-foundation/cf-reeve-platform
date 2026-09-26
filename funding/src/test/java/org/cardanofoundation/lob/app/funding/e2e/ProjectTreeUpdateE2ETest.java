@@ -47,6 +47,7 @@ import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocation
 import org.cardanofoundation.lob.app.funding.repository.FundingEventRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 import org.cardanofoundation.lob.app.funding.repository.MilestoneRepository;
+import org.cardanofoundation.lob.app.funding.service.MilestoneService;
 import org.cardanofoundation.lob.app.funding.service.ProjectService;
 import org.cardanofoundation.lob.app.funding.service.ProjectTreeUpdateService;
 import org.cardanofoundation.lob.app.funding.service.SpendingEventService;
@@ -97,6 +98,8 @@ class ProjectTreeUpdateE2ETest {
     private FundingProjectRepository projectRepository;
     @Autowired
     private MilestoneRepository milestoneRepository;
+    @Autowired
+    private MilestoneService milestoneService;
     @MockitoBean
     private OrganisationPublicApiIF organisationPublicApi;
     @MockitoBean
@@ -467,6 +470,109 @@ class ProjectTreeUpdateE2ETest {
         assertThat(milestoneRepository.findByProjectId(x.getProjectId())).allSatisfy(m -> assertThat(m.getCurrency()).isEqualTo("EUR"));
         // the other project is untouched
         assertThat(milestoneRepository.findByProjectId(y.getProjectId())).allSatisfy(m -> assertThat(m.getCurrency()).isEqualTo("ADA"));
+    }
+
+    // ---- deleted milestone's proId/id must not be silently reusable while dangling allocations reference it ----
+
+    @Test
+    void deletingAMilestone_thenCreatingANewOneWithTheSameProId_isRejected_insteadOfSilentlyReattachingTheOldAllocation() {
+        when(keycloakSecurityHelper.canUserAccessOrg(anyString())).thenReturn(true);
+        lenient().when(organisationPublicApi.findCurrencyByCustomerCurrencyCode(anyString(), anyString()))
+                .thenReturn(Optional.of(new Currency(new Currency.Id(ORG_ID, "x"), "ISO_4217:x", true)));
+        ProjectView project = createRootWithMilestone("Project Reuse", "PRJ-REUSE");
+        String proId = project.getMilestones().get(0).getProId();
+        SpendingEventView event = spendingEventService.createEvent(SpendingEventCreateRequest.builder()
+                .organisationId(ORG_ID).eventType(EventType.FUNDING).fundingId("GRANT-REUSE-E2E")
+                .fundingHash("reuse-hash").fundingEntity("Cardano Foundation").currencyRcy("ADA")
+                .eventDate(LocalDate.of(2026, 9, 15)).amountRcy(new BigDecimal("50000.00"))
+                .allocations(List.of(EventProjectAllocationRequest.builder().projectTitle("Project Reuse")
+                        .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                                .milestone(MilestoneCreateRequest.builder().milestoneTitle("Project Reuse Milestone").build())
+                                .allocatedAmount(new BigDecimal("50000.00")).build()))
+                        .build()))
+                .build());
+        assertThat(event.getError()).isEmpty();
+
+        // Delete the milestone: the allocation row survives, dangling, still pointing at its old id.
+        ProjectView deleted = projectTreeUpdateService.updateWithMilestones(project.getProjectId(), ProjectWithMilestonesCreateRequest.builder()
+                .organisationId(ORG_ID).projectTitle("Project Reuse").totalAmount(new BigDecimal("50000.00"))
+                .milestones(List.of(MilestoneCreateRequest.builder().proId(proId).action("DELETE").build()))
+                .build());
+        assertThat(deleted.getError()).isEmpty();
+        assertThat(milestoneRepository.findById(project.getMilestones().get(0).getMilestoneId())).isEmpty();
+        assertThat(allocationRepository.findById_EventId(event.getEventId())).hasSize(1); // still dangling
+
+        // A second PUT re-creates a milestone under the same project — the tree-update PUT always
+        // auto-assigns a new milestone's proId (never a client-supplied one, even when the request
+        // carries one — a separate fix, LOB-2365 follow-up), so this succeeds with a fresh, different id
+        // rather than colliding with the deleted one's.
+        ProjectView recreatedViaApi = projectTreeUpdateService.updateWithMilestones(project.getProjectId(), ProjectWithMilestonesCreateRequest.builder()
+                .organisationId(ORG_ID).projectTitle("Project Reuse").totalAmount(new BigDecimal("50000.00"))
+                .milestones(List.of(MilestoneCreateRequest.builder().proId(proId).milestoneTitle("Unrelated New Milestone")
+                        .milestoneAmount(new BigDecimal("50000.00")).currency("ADA").milestoneDate(LocalDate.of(2027, 1, 1)).build()))
+                .build());
+        assertThat(recreatedViaApi.getError()).isEmpty();
+        String autoAssignedProId = recreatedViaApi.getMilestones().get(0).getProId();
+        assertThat(autoAssignedProId).isNotEqualTo(proId);
+
+        // Clean up before testing the CSV-style explicit-proId path, so it can reuse the same title/proId.
+        ProjectView removedAgain = projectTreeUpdateService.updateWithMilestones(project.getProjectId(), ProjectWithMilestonesCreateRequest.builder()
+                .organisationId(ORG_ID).projectTitle("Project Reuse").totalAmount(new BigDecimal("50000.00"))
+                .milestones(List.of(MilestoneCreateRequest.builder().proId(autoAssignedProId).action("DELETE").build()))
+                .build());
+        assertThat(removedAgain.getError()).isEmpty();
+        assertThat(allocationRepository.findById_EventId(event.getEventId())).hasSize(1); // still just the one, original dangling allocation
+
+        // The CSV-bulk-import entry point, unlike the JSON API above, does let the caller choose the new
+        // milestone's proId as-is (LOB-2384: CSV is the one surface that needs to know the value again
+        // later) — this is the path that must still be refused when that chosen value was previously used
+        // by a deleted milestone with dangling allocations still attached to it.
+        var csvStyleResult = milestoneService.create(project.getProjectId(),
+                MilestoneCreateRequest.builder().milestoneTitle("CSV-Imported Milestone")
+                        .milestoneAmount(new BigDecimal("50000.00")).currency("ADA").milestoneDate(LocalDate.of(2027, 1, 1)).build(),
+                proId);
+
+        assertThat(csvStyleResult.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_PROID_PREVIOUSLY_USED);
+        assertThat(milestoneRepository.findByProjectIdAndMilestoneTitle(project.getProjectId(), "CSV-Imported Milestone")).isEmpty();
+        // the dangling allocation is untouched by the rejected attempt
+        assertThat(allocationRepository.findById_EventId(event.getEventId())).hasSize(1);
+    }
+
+    // ---- a proId referenced by two nodes in the same request (e.g. update + delete) must not crash ----
+
+    @Test
+    void updatingAndDeletingTheSameSubProjectInOneRequest_isRejectedCleanly_insteadOfCrashing() {
+        when(keycloakSecurityHelper.canUserAccessOrg(anyString())).thenReturn(true);
+        lenient().when(organisationPublicApi.findCurrencyByCustomerCurrencyCode(anyString(), anyString()))
+                .thenReturn(Optional.of(new Currency(new Currency.Id(ORG_ID, "x"), "ISO_4217:x", true)));
+        ProjectView created = projectService.createWithMilestones(ProjectWithMilestonesCreateRequest.builder()
+                .organisationId(ORG_ID).projectTitle("Project Ambiguous").proId("PRJ-AMBIGUOUS-E2E")
+                .totalAmount(new BigDecimal("50000.00")).currency("ADA")
+                .subProjects(List.of(ProjectTreeNodeRequest.builder().projectTitle("Sub").totalAmount(new BigDecimal("50000.00"))
+                        .milestones(List.of(MilestoneCreateRequest.builder().milestoneTitle("Sub Milestone")
+                                .milestoneAmount(new BigDecimal("50000.00")).currency("ADA")
+                                .milestoneDate(LocalDate.of(2027, 1, 1)).build()))
+                        .build()))
+                .build());
+        assertThat(created.getError()).isEmpty();
+        String subProId = created.getSubProjects().get(0).getProId();
+
+        // One node updates the sub-project by its proId, another node deletes that exact same proId —
+        // an ambiguous request that used to be applied top-to-bottom (update, then delete), leaving
+        // validateWholeTreeCoverage to crash on the now-deleted project id.
+        ProjectView result = projectTreeUpdateService.updateWithMilestones(created.getProjectId(), ProjectWithMilestonesCreateRequest.builder()
+                .organisationId(ORG_ID).projectTitle("Project Ambiguous").totalAmount(new BigDecimal("50000.00"))
+                .subProjects(List.of(
+                        ProjectTreeNodeRequest.builder().proId(subProId).projectTitle("Sub").totalAmount(new BigDecimal("20000.00")).build(),
+                        ProjectTreeNodeRequest.builder().proId(subProId).projectTitle("Sub").action("DELETE").build()))
+                .build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_PROID_ALREADY_EXISTS);
+        // nothing was touched — the sub-project and its milestone are exactly as created
+        assertThat(projectRepository.findByParentProjectIdAndProId(created.getProjectId(), subProId)).isPresent();
+        assertThat(milestoneRepository.findByProjectIdAndMilestoneTitle(
+                projectRepository.findByParentProjectIdAndProId(created.getProjectId(), subProId).orElseThrow().getId(),
+                "Sub Milestone")).isPresent();
     }
 
 }

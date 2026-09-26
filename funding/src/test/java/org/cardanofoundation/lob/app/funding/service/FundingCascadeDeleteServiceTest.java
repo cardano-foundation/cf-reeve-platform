@@ -2,7 +2,6 @@ package org.cardanofoundation.lob.app.funding.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -56,14 +55,20 @@ class FundingCascadeDeleteServiceTest {
 
     @Test
     void deleteMilestone_blocks_whenLinkedToPublishedEvent() {
-        when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(true);
+        EventMilestoneAllocationEntity alloc = allocation("e1", "m1", "50000");
+        FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, alloc);
+        event.setStatus(EventStatus.PUBLISHED);
+        when(allocationRepository.findEventIdsByMilestoneIdIn(any())).thenReturn(List.of("e1"));
+        when(fundingEventRepository.findAllByIdForUpdate(List.of("e1"))).thenReturn(List.of(event));
 
         Either<ProblemDetail, List<FundingEventEntity>> result = service.deleteMilestone(milestone("m1"));
 
         assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
         assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.CONFLICT.value());
+        assertThat(event.getStatus()).isEqualTo(EventStatus.PUBLISHED); // untouched
         verify(milestoneRepository, never()).delete(any());
         verify(fundingEventRepository, never()).delete(any());
+        verify(fundingEventRepository, never()).saveAll(any());
     }
 
     @Test
@@ -71,9 +76,8 @@ class FundingCascadeDeleteServiceTest {
         MilestoneEntity milestone = milestone("m1");
         EventMilestoneAllocationEntity alloc = allocation("e1", "m1", "50000");
         FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, alloc);
-        when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(allocationRepository.findEventIdsByMilestoneIdIn(any())).thenReturn(List.of("e1"));
-        when(fundingEventRepository.findAllById(any())).thenReturn(List.of(event));
+        when(fundingEventRepository.findAllByIdForUpdate(List.of("e1"))).thenReturn(List.of(event));
 
         Either<ProblemDetail, List<FundingEventEntity>> result = service.deleteMilestone(milestone);
 
@@ -93,9 +97,8 @@ class FundingCascadeDeleteServiceTest {
         EventMilestoneAllocationEntity insideAlloc = allocation("e1", "m1", "60000");
         EventMilestoneAllocationEntity outsideAlloc = allocation("e1", "m2", "40000"); // m2 is outside the deleted scope
         FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, insideAlloc, outsideAlloc);
-        when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(allocationRepository.findEventIdsByMilestoneIdIn(any())).thenReturn(List.of("e1"));
-        when(fundingEventRepository.findAllById(any())).thenReturn(List.of(event));
+        when(fundingEventRepository.findAllByIdForUpdate(List.of("e1"))).thenReturn(List.of(event));
 
         Either<ProblemDetail, List<FundingEventEntity>> result = service.deleteMilestone(milestone);
 
@@ -110,7 +113,6 @@ class FundingCascadeDeleteServiceTest {
     @Test
     void deleteMilestone_deletesMilestone_whenNoAllocations() {
         MilestoneEntity milestone = milestone("m1");
-        when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(allocationRepository.findEventIdsByMilestoneIdIn(any())).thenReturn(List.of());
 
         Either<ProblemDetail, List<FundingEventEntity>> result = service.deleteMilestone(milestone);
@@ -119,6 +121,7 @@ class FundingCascadeDeleteServiceTest {
         verify(milestoneRepository).delete(milestone);
         verify(fundingEventRepository, never()).delete(any());
         verify(fundingEventRepository, never()).saveAll(any());
+        verify(fundingEventRepository, never()).findAllByIdForUpdate(any());
     }
 
     // --- deleteProjectSubtree ---
@@ -126,9 +129,13 @@ class FundingCascadeDeleteServiceTest {
     @Test
     void deleteProjectSubtree_blocks_whenPublishedAnywhereInSubtree() {
         ProjectEntity root = project("p1");
+        EventMilestoneAllocationEntity alloc = allocation("e1", "m1", "50000");
+        FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, alloc);
+        event.setStatus(EventStatus.PUBLISHED);
         when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of());
         when(milestoneRepository.findByProjectIdIn(any())).thenReturn(List.of(milestone("m1")));
-        when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(true);
+        when(allocationRepository.findEventIdsByMilestoneIdIn(any())).thenReturn(List.of("e1"));
+        when(fundingEventRepository.findAllByIdForUpdate(List.of("e1"))).thenReturn(List.of(event));
 
         Either<ProblemDetail, List<FundingEventEntity>> result = service.deleteProjectSubtree(root);
 
@@ -143,7 +150,6 @@ class FundingCascadeDeleteServiceTest {
         when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of(child)); // walks into sub-project
         when(projectRepository.findByParentProjectId("p2")).thenReturn(List.of());
         when(milestoneRepository.findByProjectIdIn(any())).thenReturn(List.of(milestone("m1")));
-        when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(allocationRepository.findEventIdsByMilestoneIdIn(any())).thenReturn(List.of());
 
         Either<ProblemDetail, List<FundingEventEntity>> result = service.deleteProjectSubtree(root);
@@ -160,9 +166,8 @@ class FundingCascadeDeleteServiceTest {
         FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, insideAlloc, outsideAlloc);
         when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of());
         when(milestoneRepository.findByProjectIdIn(any())).thenReturn(List.of(milestone("m1")));
-        when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(allocationRepository.findEventIdsByMilestoneIdIn(any())).thenReturn(List.of("e1"));
-        when(fundingEventRepository.findAllById(any())).thenReturn(List.of(event));
+        when(fundingEventRepository.findAllByIdForUpdate(List.of("e1"))).thenReturn(List.of(event));
 
         Either<ProblemDetail, List<FundingEventEntity>> result = service.deleteProjectSubtree(root);
 
@@ -180,9 +185,8 @@ class FundingCascadeDeleteServiceTest {
     void flagEventsAllocatedTo_flagsDraftEvent_withoutTouchingItsAllocations() {
         EventMilestoneAllocationEntity alloc = allocation("e1", "m1", "50000");
         FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, alloc); // status DRAFT
-        when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(allocationRepository.findEventIdsByMilestoneIdIn(Set.of("m1"))).thenReturn(List.of("e1"));
-        when(fundingEventRepository.findAllById(List.of("e1"))).thenReturn(List.of(event));
+        when(fundingEventRepository.findAllByIdForUpdate(List.of("e1"))).thenReturn(List.of(event));
 
         Either<ProblemDetail, List<FundingEventEntity>> result = service.flagEventsAllocatedTo(Set.of("m1"));
 
@@ -199,9 +203,8 @@ class FundingCascadeDeleteServiceTest {
         EventMilestoneAllocationEntity insideAlloc = allocation("e1", "m1", "60000");
         EventMilestoneAllocationEntity outsideAlloc = allocation("e1", "m-other", "40000");
         FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, insideAlloc, outsideAlloc);
-        when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(allocationRepository.findEventIdsByMilestoneIdIn(Set.of("m1"))).thenReturn(List.of("e1"));
-        when(fundingEventRepository.findAllById(List.of("e1"))).thenReturn(List.of(event));
+        when(fundingEventRepository.findAllByIdForUpdate(List.of("e1"))).thenReturn(List.of(event));
 
         Either<ProblemDetail, List<FundingEventEntity>> result = service.flagEventsAllocatedTo(Set.of("m1"));
 
@@ -212,12 +215,50 @@ class FundingCascadeDeleteServiceTest {
 
     @Test
     void flagEventsAllocatedTo_blocks_whenAnAllocatedEventIsPublished() {
-        when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(true);
+        // The published check happens on the same locked read used to flip the status — see the
+        // method's Javadoc for why this must be one atomic step, not two separate queries.
+        EventMilestoneAllocationEntity alloc = allocation("e1", "m1", "50000");
+        FundingEventEntity published = fundingEvent("e1", EventType.FUNDING, alloc);
+        published.setStatus(EventStatus.PUBLISHED);
+        when(allocationRepository.findEventIdsByMilestoneIdIn(Set.of("m1"))).thenReturn(List.of("e1"));
+        when(fundingEventRepository.findAllByIdForUpdate(List.of("e1"))).thenReturn(List.of(published));
 
         Either<ProblemDetail, List<FundingEventEntity>> result = service.flagEventsAllocatedTo(Set.of("m1"));
 
         assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+        assertThat(published.getStatus()).isEqualTo(EventStatus.PUBLISHED); // untouched
         verify(fundingEventRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void flagEventsAllocatedTo_blocks_whenOnlyOneOfSeveralAllocatedEventsIsPublished() {
+        // None of the events is flagged when the batch contains even one published one — an all-or-
+        // nothing check, same as the old two-query version, just done off the locked read instead.
+        EventMilestoneAllocationEntity alloc1 = allocation("e1", "m1", "50000");
+        FundingEventEntity draftEvent = fundingEvent("e1", EventType.FUNDING, alloc1);
+        EventMilestoneAllocationEntity alloc2 = allocation("e2", "m1", "20000");
+        FundingEventEntity publishedEvent = fundingEvent("e2", EventType.FUNDING, alloc2);
+        publishedEvent.setStatus(EventStatus.PUBLISHED);
+        when(allocationRepository.findEventIdsByMilestoneIdIn(Set.of("m1"))).thenReturn(List.of("e1", "e2"));
+        when(fundingEventRepository.findAllByIdForUpdate(List.of("e1", "e2"))).thenReturn(List.of(draftEvent, publishedEvent));
+
+        Either<ProblemDetail, List<FundingEventEntity>> result = service.flagEventsAllocatedTo(Set.of("m1"));
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+        assertThat(draftEvent.getStatus()).isEqualTo(EventStatus.DRAFT); // untouched, even though it's not the published one
+        verify(fundingEventRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void flagEventsAllocatedTo_locksEventIds_sortedForAStableOrder() {
+        // Two overlapping flag calls must always lock shared events in the same order, or they can
+        // deadlock on each other — see findAllByIdForUpdate's Javadoc.
+        when(allocationRepository.findEventIdsByMilestoneIdIn(Set.of("m1"))).thenReturn(List.of("e2", "e1"));
+        when(fundingEventRepository.findAllByIdForUpdate(List.of("e1", "e2"))).thenReturn(List.of());
+
+        service.flagEventsAllocatedTo(Set.of("m1"));
+
+        verify(fundingEventRepository).findAllByIdForUpdate(List.of("e1", "e2"));
     }
 
     @Test
@@ -225,9 +266,8 @@ class FundingCascadeDeleteServiceTest {
         EventMilestoneAllocationEntity alloc = allocation("e1", "m1", "50000");
         FundingEventEntity event = fundingEvent("e1", EventType.FUNDING, alloc);
         event.setStatus(EventStatus.ERROR);
-        when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(allocationRepository.findEventIdsByMilestoneIdIn(Set.of("m1"))).thenReturn(List.of("e1"));
-        when(fundingEventRepository.findAllById(List.of("e1"))).thenReturn(List.of(event));
+        when(fundingEventRepository.findAllByIdForUpdate(List.of("e1"))).thenReturn(List.of(event));
 
         Either<ProblemDetail, List<FundingEventEntity>> result = service.flagEventsAllocatedTo(Set.of("m1"));
 
@@ -237,12 +277,12 @@ class FundingCascadeDeleteServiceTest {
 
     @Test
     void flagEventsAllocatedTo_returnsNothing_whenNoEventIsAllocated() {
-        when(allocationRepository.existsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         when(allocationRepository.findEventIdsByMilestoneIdIn(Set.of("m1"))).thenReturn(List.of());
 
         Either<ProblemDetail, List<FundingEventEntity>> result = service.flagEventsAllocatedTo(Set.of("m1"));
 
         assertThat(result.get()).isEmpty();
+        verify(fundingEventRepository, never()).findAllByIdForUpdate(any());
         verify(fundingEventRepository, never()).saveAll(any());
     }
 

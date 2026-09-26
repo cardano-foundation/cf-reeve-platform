@@ -109,41 +109,43 @@ public class FundingCascadeDeleteService {
 
     /**
      * Fails — leaving all data untouched — when any of the given milestones is linked to a published
-     * event; otherwise flags every non-published event allocated to one of them {@code ERROR} (see
-     * {@link #flagEvents}) and returns the (possibly empty) list of events touched. Callers use it for
-     * a milestone about to be deleted, shrunk below its allocations, or changed to another currency.
+     * event; otherwise flags every non-published event allocated to one of them {@code ERROR}, and
+     * returns the (possibly empty) list of events touched. Callers use it for a milestone about to be
+     * deleted, shrunk below its allocations, or changed to another currency. Nothing about any event's
+     * own data, including its allocation rows, is ever rewritten here — only the status changes; the
+     * allocation rows themselves are left for the caller's own delete (of the milestone/project) to
+     * leave dangling, not removed by this method (see class Javadoc).
+     *
+     * <p>The affected events are locked ({@code findAllByIdForUpdate}, sorted for a stable lock order —
+     * see its Javadoc) before their status is even read, so the published-check and the flip to ERROR
+     * happen as one atomic step: a concurrent {@code SpendingEventService#publish} on one of the same
+     * events either completes first (and this call then correctly sees PUBLISHED and fails) or blocks
+     * until this transaction commits (and then correctly fails itself, publishing a since-ERRORed
+     * event). Without the lock, both transactions could read the pre-change status before either
+     * commits, letting a just-published event get silently flipped back to ERROR, or the reverse.
      */
     @Transactional
     public Either<ProblemDetail, List<FundingEventEntity>> flagEventsAllocatedTo(Set<String> milestoneIds) {
         if (milestoneIds.isEmpty()) {
             return Either.right(List.of());
         }
-        if (allocationRepository.existsByMilestoneIdInAndEventStatus(milestoneIds, EventStatus.PUBLISHED)) {
+        // Ids only, deliberately, for this first lookup — see EventMilestoneAllocationRepository
+        // #findEventIdsByMilestoneIdIn — then sorted so overlapping calls lock in the same order.
+        List<String> eventIds = allocationRepository.findEventIdsByMilestoneIdIn(milestoneIds).stream().sorted().toList();
+        if (eventIds.isEmpty()) {
+            return Either.right(List.of());
+        }
+        List<FundingEventEntity> events = fundingEventRepository.findAllByIdForUpdate(eventIds);
+        boolean anyPublished = events.stream().anyMatch(event -> event.getStatus() == EventStatus.PUBLISHED);
+        if (anyPublished) {
             return Either.left(Problems.conflict(
                     "Cannot proceed: a linked event is already published",
                     ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED));
         }
-        return Either.right(flagEvents(milestoneIds));
-    }
-
-    /**
-     * Flags {@code ERROR} every event allocated to at least one milestone in {@code milestoneIds} —
-     * regardless of whether it also allocates elsewhere outside the set — and returns the events
-     * touched. Nothing about any event's own data, including its allocation rows, is ever rewritten here
-     * — only the status changes; the allocation rows themselves are left for the caller's own delete
-     * (of the milestone/project) to leave dangling, not removed by this method (see class Javadoc).
-     */
-    private List<FundingEventEntity> flagEvents(Set<String> milestoneIds) {
-        // Ids only, deliberately — see EventMilestoneAllocationRepository#findEventIdsByMilestoneIdIn.
-        List<String> eventIds = allocationRepository.findEventIdsByMilestoneIdIn(milestoneIds);
-        if (eventIds.isEmpty()) {
-            return List.of();
-        }
-        List<FundingEventEntity> events = fundingEventRepository.findAllById(eventIds);
         events.forEach(event -> event.setStatus(EventStatus.ERROR));
         fundingEventRepository.saveAll(events);
         fundingEventRepository.flush();
-        return events;
+        return Either.right(events);
     }
 
 }

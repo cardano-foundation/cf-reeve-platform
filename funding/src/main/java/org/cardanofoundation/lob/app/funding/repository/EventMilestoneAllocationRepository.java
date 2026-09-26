@@ -31,16 +31,20 @@ public interface EventMilestoneAllocationRepository extends JpaRepository<EventM
             """)
     List<String> findEventIdsByMilestoneIdIn(@Param("milestoneIds") Collection<String> milestoneIds);
 
+    /**
+     * Whether any allocation row — live or dangling — already references this exact milestone id.
+     * Milestone ids are deterministic ({@code MilestoneEntity.id}: a hash of the owning project's id and
+     * the milestone's own proId), and deleting a milestone deliberately leaves its allocation rows in
+     * place, pointing at nothing (LOB-2365 follow-up — see {@code FundingCascadeDeleteService}). If a
+     * later milestone is then created with the same proId under the same project, it would be assigned
+     * that exact same id, silently reattaching those old, unrelated allocation rows as if they were its
+     * own. Used to refuse that instead — see {@code MilestoneService#validateAndSave}.
+     */
+    boolean existsById_MilestoneId(String milestoneId);
+
     boolean existsByMilestoneIdAndEventStatus(String milestoneId, EventStatus status);
 
     boolean existsByMilestoneProjectIdAndEventStatus(String projectId, EventStatus status);
-
-    /** Whether any of the given milestones is allocated by an event in the given status. */
-    @Query("""
-            SELECT COUNT(a) > 0 FROM funding.EventMilestoneAllocationEntity a
-            WHERE a.id.milestoneId IN :milestoneIds AND a.event.status = :status
-            """)
-    boolean existsByMilestoneIdInAndEventStatus(@Param("milestoneIds") Collection<String> milestoneIds, @Param("status") EventStatus status);
 
     /**
      * Whether any milestone owned by one of the given projects is allocated by an event in the given
