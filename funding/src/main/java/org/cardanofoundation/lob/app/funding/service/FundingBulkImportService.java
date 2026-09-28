@@ -997,12 +997,12 @@ public class FundingBulkImportService {
             if (isBlank(line.getSubProjectTitle()) && projectRepository.existsByParentProjectId(project.getId())) {
                 errors.add(rowError(il.rowNumber(), Problems.badRequest(
                         "%s organises milestones under sub-projects; set Sub Project Title to name the sub-project that owns milestone '%s'"
-                                .formatted(capitalize(FundingValidations.projectPath(project)), line.getMilestoneTitle()),
+                                .formatted(capitalize(projectPath(project)), line.getMilestoneTitle()),
                         ErrorTitleConstants.SUBPROJECT_TITLE_REQUIRED)));
                 return Optional.empty();
             }
             errors.add(rowError(il.rowNumber(), Problems.notFound(
-                    "Milestone '%s' not found under %s".formatted(line.getMilestoneTitle(), FundingValidations.projectPath(project)),
+                    "Milestone '%s' not found under %s".formatted(line.getMilestoneTitle(), projectPath(project)),
                     ErrorTitleConstants.MILESTONE_NOT_FOUND)));
             return Optional.empty();
         }
@@ -1037,6 +1037,25 @@ public class FundingBulkImportService {
                         .build())
                 .allocatedAmount(allocatedAmount)
                 .build());
+    }
+
+    /**
+     * Same label as {@link FundingValidations#projectPath}, but safe on a detached entity: this class is
+     * deliberately not {@code @Transactional} (see the class Javadoc), so {@code project}'s lazy
+     * {@code parentProject} proxy can't be initialised here — reading its title threw
+     * {@code LazyInitializationException} and turned a plain "milestone not found" row error into a 500.
+     * Same fix as {@link #attachAllocation}: only the parent's id (already loaded via the FK) is read,
+     * and the parent itself is re-fetched for its title.
+     */
+    private String projectPath(ProjectEntity project) {
+        ProjectEntity parentProject = project.getParentProject();
+        if (parentProject == null) {
+            return "project '%s'".formatted(project.getProjectTitle());
+        }
+        String parentTitle = projectRepository.findById(parentProject.getId())
+                .map(ProjectEntity::getProjectTitle)
+                .orElse(parentProject.getId());
+        return "sub-project '%s' of project '%s'".formatted(project.getProjectTitle(), parentTitle);
     }
 
     /** Records {@code project}'s allocation as a root-level entry, or nests it under its root's sub-projects. */

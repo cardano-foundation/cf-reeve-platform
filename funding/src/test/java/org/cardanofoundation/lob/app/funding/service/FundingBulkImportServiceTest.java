@@ -21,6 +21,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
+import org.hibernate.LazyInitializationException;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -2006,6 +2007,42 @@ class FundingBulkImportServiceTest {
         FundingRowError error = result.getFiles().get(0).getRowErrors().get(0);
         assertThat(error.getTitle()).isEqualTo(ErrorTitleConstants.SUBPROJECT_TITLE_REQUIRED);
         assertThat(error.getReason()).contains("Vaccines").contains("Sub Project Title");
+        verify(spendingEventService, never()).createEvent(any());
+    }
+
+    @Test
+    void eventsFile_deletedMilestoneUnderSubProjectWithDetachedLazyParent_reportsMilestoneNotFound_insteadOfThrowing() {
+        // Regression: importFiles isn't @Transactional, so a resolved sub-project's parentProject is an
+        // uninitialised Hibernate proxy by the time the "milestone not found" message is built. Reading
+        // the parent's title from it threw LazyInitializationException (a 500) when an events CSV was
+        // re-imported after one of its milestones had been deleted. Only the proxy's id is safe to read.
+        MultipartFile file = file("events.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.EVENTS));
+        EventCsvLine row = eventLine("FUNDING", "GRANT-1", "GBP", "Project Meridian", "Project Meridian - Sub 2", "Milestone 4", "1000");
+        row.setProjectId("PRJ-1002");
+        row.setMilestoneId("PRJ-1002-2-4");
+        when(eventCsvParser.parseCsv(file, EventCsvLine.class)).thenReturn(Either.right(List.of(row)));
+
+        ProjectEntity root = projectEntity("root", "Project Meridian", "GBP");
+        ProjectEntity detachedParentProxy = mock(ProjectEntity.class);
+        lenient().when(detachedParentProxy.getId()).thenReturn("root");
+        lenient().when(detachedParentProxy.getProjectTitle())
+                .thenThrow(new LazyInitializationException("Could not initialize proxy [ProjectEntity#root] - no session"));
+        ProjectEntity sub = subProjectEntity("sub2", "Project Meridian - Sub 2", "GBP", detachedParentProxy);
+
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull(ORG_ID, "PRJ-1002")).thenReturn(Optional.of(root));
+        when(projectRepository.findByParentProjectIdAndProjectTitle("root", "Project Meridian - Sub 2")).thenReturn(Optional.of(sub));
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+        when(milestoneService.findByProjectIdAndProId("sub2", "PRJ-1002-2-4")).thenReturn(Optional.empty());
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        FundingRowError error = result.getFiles().get(0).getRowErrors().get(0);
+        assertThat(error.getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_FOUND);
+        assertThat(error.getReason())
+                .isEqualTo("Milestone 'Milestone 4' not found under sub-project 'Project Meridian - Sub 2' of project 'Project Meridian'");
         verify(spendingEventService, never()).createEvent(any());
     }
 
