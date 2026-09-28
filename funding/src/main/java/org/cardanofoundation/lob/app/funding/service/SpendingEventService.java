@@ -176,9 +176,11 @@ public class SpendingEventService {
             // Named by the natural key that actually determines the id (see FundingEventEntity#id) —
             // the id itself is an opaque hash, meaningless to a user reading the error.
             String fundingHash = event.getFundingHash() == null ? "(none)" : event.getFundingHash();
+            String fundingEntity = event.getFundingEntity() == null ? "(none)" : event.getFundingEntity();
             return Either.left(Problems.conflict(
-                    "An event with Funding ID %s, Type %s, Hash %s and Currency %s already exists".formatted(
-                            event.getFundingId(), event.getEventType(), fundingHash, event.getCurrencyRcy()),
+                    "An event with Funding ID %s, Type %s, Hash %s, Entity %s, Currency %s and Event Date %s already exists".formatted(
+                            event.getFundingId(), event.getEventType(), fundingHash, fundingEntity,
+                            event.getCurrencyRcy(), event.getEventDate()),
                     ErrorTitleConstants.SPENDING_EVENT_ALREADY_EXISTS));
         }
         return validateAndPersist(event, request);
@@ -251,39 +253,43 @@ public class SpendingEventService {
         try {
             return Either.right(fundingEventRepository.saveAndFlush(event));
         } catch (DataIntegrityViolationException e) {
-            // Last-resort safety net behind fundingEventIdAvailable's app-level check above (see the
-            // uq_funding_event_org_funding_id_funding_type partial unique index) — catches a duplicate
-            // Funding ID that slips past it via a race between two concurrent submissions. Any other
-            // constraint violation is a genuine bug, not a handleable client error, so it is rethrown.
-            if (event.getEventType() == EventType.FUNDING && isUniqueFundingIdViolation(e)) {
+            // Last-resort safety net behind fundingEventIdAvailable's app-level check above — the
+            // event's id (see FundingEventEntity#id) is the table's primary key, so a race between two
+            // concurrent submissions that resolve to the exact same natural key surfaces as a
+            // pk_funding_event violation. Any other constraint violation is a genuine bug, not a
+            // handleable client error, so it is rethrown.
+            if (event.getEventType() == EventType.FUNDING && isDuplicateEventIdViolation(e)) {
                 return Either.left(Problems.fundingEventIdAlreadyUsed(event.getFundingId()));
             }
             throw e;
         }
     }
 
-    private static boolean isUniqueFundingIdViolation(DataIntegrityViolationException e) {
+    private static boolean isDuplicateEventIdViolation(DataIntegrityViolationException e) {
         String message = String.valueOf(e.getMostSpecificCause().getMessage());
-        return message.contains("uq_funding_event_org_funding_id_funding_type");
+        return message.contains("pk_funding_event");
     }
 
     /**
-     * A Funding ID must identify a single FUNDING (allocation) event per organisation — enforced at
-     * the DB level by the {@code uq_funding_event_org_funding_id_funding_type} partial unique index
-     * (scoped to {@code event_type = 'FUNDING'} only: a SPENDING/REFUND event is expected to reuse
-     * the Funding ID of the FUNDING event it spends against or refunds, which is not a duplicate).
-     * Validated here too so callers get a clean 409 instead of a data-integrity 500 in the common
-     * case; {@link #isUniqueFundingIdViolation} is the fallback for a race that slips past this.
-     * {@code event.getId()} is used to exclude the event's own row, so re-saving an existing FUNDING
-     * event with its own (unchanged) Funding ID never flags itself — this is a no-op exclusion on
-     * create, since that id does not exist yet.
+     * A FUNDING event's identity is its full natural key — organisation, Funding ID, Funding Hash,
+     * Funding Entity, Currency and Event Date (see {@link FundingEventEntity#id}); if any one of
+     * those differs from every other FUNDING event, it is a distinct event, not a duplicate. Create
+     * already rejects an exact-key collision up front (see {@link #create}); this exists for {@link
+     * #update}, where the event's row keeps its original id while its natural-key fields can
+     * change, so a change that happens to land on another FUNDING event's exact key must still be
+     * caught — otherwise two different rows would describe the same real-world grant. Recomputing
+     * the candidate id from the event's (possibly just-changed) fields and checking for a
+     * <em>different</em> existing row with that id catches exactly that case; on create the
+     * candidate always equals the event's own not-yet-persisted id, so this is a no-op there.
      */
     private Optional<ProblemDetail> fundingEventIdAvailable(FundingEventEntity event) {
         if (event.getEventType() != EventType.FUNDING) {
             return Optional.empty();
         }
-        boolean exists = fundingEventRepository.existsByOrganisationIdAndEventTypeAndFundingIdAndIdNot(
-                event.getOrganisationId(), EventType.FUNDING, event.getFundingId(), event.getId());
+        String candidateId = FundingEventEntity.id(event.getOrganisationId(), event.getEventType(),
+                event.getFundingId(), event.getFundingHash(), event.getFundingEntity(), event.getCurrencyRcy(),
+                null, null, null, null, null, null, event.getEventDate());
+        boolean exists = !candidateId.equals(event.getId()) && fundingEventRepository.existsById(candidateId);
         if (exists) {
             return Optional.of(Problems.fundingEventIdAlreadyUsed(event.getFundingId()));
         }
@@ -731,7 +737,15 @@ public class SpendingEventService {
                         request.getEventType(),
                         request.getFundingId(),
                         request.getFundingHash(),
-                        request.getCurrencyRcy()))
+                        request.getFundingEntity(),
+                        request.getCurrencyRcy(),
+                        request.getCategory(),
+                        request.getVendor(),
+                        request.getHash(),
+                        request.getAmountFcy(),
+                        request.getCurrencyFcy(),
+                        request.getAmountRcy(),
+                        request.getEventDate()))
                 .eventType(request.getEventType())
                 .status(EventStatus.DRAFT)
                 .organisationId(request.getOrganisationId())

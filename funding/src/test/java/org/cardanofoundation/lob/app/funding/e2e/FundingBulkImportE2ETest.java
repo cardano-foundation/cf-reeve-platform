@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -364,12 +365,13 @@ class FundingBulkImportE2ETest {
     // --- Funding ID uniqueness (FUNDING events only) ---
 
     @Test
-    void secondFundingEventReusingTheSameFundingId_isRejectedAsARowError_earlierGroupsStillImport() {
-        // A Funding ID must identify a single FUNDING event per organisation — two FUNDING groups in
-        // the same file sharing one (distinguished only by Funding Hash, so they're genuinely different
-        // event groups, not the same event re-sent) must not both succeed. A SPENDING event reusing that
-        // same Funding ID, however, is the normal, expected pattern (it spends against that grant) and
-        // must import cleanly regardless.
+    void twoFundingGroupsReusingTheSameFundingId_importAsSeparateEvents_whenHashDiffers() {
+        // A Funding ID alone no longer determines a FUNDING event's identity — Funding Hash, Funding
+        // Entity, Currency and Event Date are part of the key too (see FundingEventEntity#id). Two
+        // FUNDING groups in the same file sharing a Funding ID but differing in Funding Hash are
+        // distinct real-world grants (e.g. reusing an external reference under a different funder),
+        // and must both import cleanly. A SPENDING event reusing that same Funding ID is, as always,
+        // the normal, expected pattern (it spends against that grant).
         String orgId = "org-dup-funding-id";
         when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
         seedProjectAndMilestone(orgId, "Dup Project", "Dup Milestone");
@@ -385,44 +387,42 @@ class FundingBulkImportE2ETest {
         FundingBulkImportResult result = bulkImportService.importFiles(
                 BulkImportRequest.builder().organisationId(orgId).files(List.of(file)).build());
 
-        List<FundingRowError> rowErrors = result.getFiles().get(0).getRowErrors();
-        assertThat(rowErrors).hasSize(1);
-        assertThat(rowErrors.get(0).getTitle()).isEqualTo("FUNDING_EVENT_FUNDING_ID_ALREADY_USED");
-        assertThat(rowErrors.get(0).getReason()).contains("GRANT-DUP").contains("already used");
-        // The first FUNDING group and the SPENDING group both succeeded — only the second FUNDING group failed.
-        assertThat(result.getEventsCreated()).isEqualTo(2);
+        assertThat(reasons(result)).isEmpty();
+        // Two FUNDING groups (different Hash) plus one SPENDING group reusing GRANT-DUP: three events.
+        assertThat(result.getEventsCreated()).isEqualTo(3);
     }
 
     @Test
-    void uniqueFundingIdConstraint_rejectsADuplicateInsertAtTheDbLevel_bypassingAppLevelChecks() {
-        // The final safety net: even skipping SpendingEventService entirely (as a race between two
-        // concurrent app-level-validated requests would), the raw partial unique index
-        // (uq_funding_event_org_funding_id_funding_type) still rejects a second FUNDING event sharing
-        // an organisation + Funding ID — proving the DB constraint from
-        // V1.7_100_2__unique_funding_id_per_funding_event.sql is actually in effect.
+    void distinctFundingEventKey_noLongerBlockedAtTheDbLevel_butAnExactDuplicateKeyStillIs() {
+        // V1.7_100_4 dropped the Funding-ID-alone partial unique index: two FUNDING events sharing an
+        // organisation + Funding ID but differing in Funding Hash (or Entity, Currency, Event Date)
+        // are legitimately distinct events now, and save without conflict. An exact duplicate of the
+        // full natural key still collides, though — it resolves to the identical primary key (see
+        // FundingEventEntity#id), so the primary key itself is the final safety net for a race
+        // between two concurrent app-level-validated requests, exactly as it already was for
+        // SPENDING/REFUND events.
         String orgId = "org-dup-funding-id-db";
         FundingEventEntity first = FundingEventEntity.builder()
-                .id(FundingEventEntity.id(orgId, EventType.FUNDING, "GRANT-DB-DUP", "hash-a", "USD"))
+                .id(FundingEventEntity.id(orgId, EventType.FUNDING, "GRANT-DB-DUP", "hash-a", "Cardano Foundation", "USD", null, null, null, null, null, null, null))
                 .eventType(EventType.FUNDING).status(EventStatus.DRAFT).organisationId(orgId)
-                .fundingId("GRANT-DB-DUP").fundingEntity("Cardano Foundation").currencyRcy("USD").build();
+                .fundingId("GRANT-DB-DUP").fundingHash("hash-a").fundingEntity("Cardano Foundation").currencyRcy("USD").build();
         fundingEventRepository.saveAndFlush(first);
 
-        FundingEventEntity second = FundingEventEntity.builder()
-                .id(FundingEventEntity.id(orgId, EventType.FUNDING, "GRANT-DB-DUP", "hash-b", "USD"))
+        // Different Funding Hash, everything else the same: a distinct event now, no conflict.
+        FundingEventEntity secondHash = FundingEventEntity.builder()
+                .id(FundingEventEntity.id(orgId, EventType.FUNDING, "GRANT-DB-DUP", "hash-b", "Cardano Foundation", "USD", null, null, null, null, null, null, null))
                 .eventType(EventType.FUNDING).status(EventStatus.DRAFT).organisationId(orgId)
-                .fundingId("GRANT-DB-DUP").fundingEntity("Cardano Foundation").currencyRcy("USD").build();
+                .fundingId("GRANT-DB-DUP").fundingHash("hash-b").fundingEntity("Cardano Foundation").currencyRcy("USD").build();
+        assertThat(fundingEventRepository.saveAndFlush(secondHash)).isNotNull();
 
-        assertThatThrownBy(() -> fundingEventRepository.saveAndFlush(second))
+        // Exact same key as `first` (including Hash and Entity): collides on the primary key itself.
+        FundingEventEntity exactDuplicate = FundingEventEntity.builder()
+                .id(FundingEventEntity.id(orgId, EventType.FUNDING, "GRANT-DB-DUP", "hash-a", "Cardano Foundation", "USD", null, null, null, null, null, null, null))
+                .eventType(EventType.FUNDING).status(EventStatus.DRAFT).organisationId(orgId)
+                .fundingId("GRANT-DB-DUP").fundingHash("hash-a").fundingEntity("Cardano Foundation").currencyRcy("USD").build();
+        assertThatThrownBy(() -> fundingEventRepository.saveAndFlush(exactDuplicate))
                 .isInstanceOf(DataIntegrityViolationException.class)
-                .hasMessageContaining("uq_funding_event_org_funding_id_funding_type");
-
-        // SPENDING events reusing the same Funding ID are unaffected by the constraint (it's scoped to
-        // event_type = 'FUNDING' only) — proving the partial index, not a blanket one, is what's in effect.
-        FundingEventEntity spending = FundingEventEntity.builder()
-                .id(FundingEventEntity.id(orgId, EventType.SPENDING, "GRANT-DB-DUP", "hash-a", "USD"))
-                .eventType(EventType.SPENDING).status(EventStatus.DRAFT).organisationId(orgId)
-                .fundingId("GRANT-DB-DUP").currencyRcy("USD").build();
-        assertThat(fundingEventRepository.saveAndFlush(spending)).isNotNull();
+                .hasMessageContaining("pk_funding_event");
     }
 
     @Test
@@ -812,7 +812,8 @@ class FundingBulkImportE2ETest {
         FundingBulkImportResult publishedSeedResult = bulkImportService.importFiles(BulkImportRequest.builder()
                 .organisationId(orgId).files(List.of(publishedSeedFile)).build());
         assertThat(reasons(publishedSeedResult)).as("seed published event").isEmpty();
-        String publishedEventId = FundingEventEntity.id(orgId, EventType.FUNDING, "TICKET-PUBLISHED", null, "EUR");
+        String publishedEventId = FundingEventEntity.id(orgId, EventType.FUNDING, "TICKET-PUBLISHED", null,
+                "Cardano Foundation", "EUR", null, null, null, null, null, null, LocalDate.of(2026, 6, 1));
         assertThat(spendingEventService.publish(publishedEventId).isRight()).as("publish seed event").isTrue();
 
         MultipartFile file = new MockMultipartFile("file", "ticket-five-errors.csv", "text/csv", TICKET_FIVE_ERRORS_CSV.getBytes());
