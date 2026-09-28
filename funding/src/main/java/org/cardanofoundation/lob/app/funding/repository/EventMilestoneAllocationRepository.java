@@ -52,14 +52,6 @@ public interface EventMilestoneAllocationRepository extends JpaRepository<EventM
             """)
     boolean existsByMilestoneProjectIdInAndEventStatus(@Param("projectIds") Collection<String> projectIds, @Param("status") EventStatus status);
 
-    /** Total amount allocated to a milestone across all events (null allocations ignored, no rows → 0). */
-    @Query("""
-            SELECT COALESCE(SUM(a.allocatedAmount), 0)
-            FROM funding.EventMilestoneAllocationEntity a
-            WHERE a.id.milestoneId = :milestoneId
-            """)
-    BigDecimal sumAllocatedByMilestoneId(@Param("milestoneId") String milestoneId);
-
     /** Spent amount for a milestone: sum of SPENDING allocations only (FUNDING and REFUND excluded). */
     @Query("""
             SELECT COALESCE(SUM(a.allocatedAmount), 0)

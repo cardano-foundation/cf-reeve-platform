@@ -472,15 +472,20 @@ public class MilestoneService {
 
     /**
      * Whether shrinking {@code milestoneId} to {@code newAmount} would leave it covering less than
-     * what's already allocated to it — i.e. whether it needs {@code ERROR}-flagging — without actually
-     * performing that flagging. Amount only — see {@link #invalidatesEvents} for the combined check.
+     * the FUNDING already allocated to it — i.e. whether it needs {@code ERROR}-flagging — without
+     * actually performing that flagging. Amount only — see {@link #invalidatesEvents} for the combined check.
+     *
+     * <p>FUNDING only, the same budget rule {@link FundingValidations#overfunding} applies when an event
+     * is saved: SPENDING may overspend (flagged, never rejected) and REFUND is unrestricted, so neither
+     * counts here. Summing every event type made a milestone both fully funded and fully spent look
+     * over-allocated, flagging its events ERROR on an unchanged re-save.
      */
     boolean needsErrorFlagging(String milestoneId, BigDecimal newAmount) {
         if (newAmount == null) {
             return false;
         }
         return FundingValidations.milestoneCoversAllocations(
-                newAmount, allocationRepository.sumAllocatedByMilestoneId(milestoneId)).isPresent();
+                newAmount, allocationRepository.spentAmountByMilestoneId(milestoneId, EventType.FUNDING)).isPresent();
     }
 
     /** Package-visible for reuse by {@code ProjectTreeUpdateService} — see {@link #checkFieldLock}'s Javadoc. */

@@ -822,7 +822,7 @@ class MilestoneServiceTest {
         MilestoneEntity milestone = milestoneEntity("m1");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
         when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
-        when(allocationRepository.sumAllocatedByMilestoneId("m1")).thenReturn(new BigDecimal("60000.00"));
+        when(allocationRepository.spentAmountByMilestoneId("m1", EventType.FUNDING)).thenReturn(new BigDecimal("60000.00"));
         when(cascadeDeleteService.flagEventsAllocatedTo(Set.of("m1"))).thenReturn(Either.right(List.of()));
         when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
 
@@ -845,7 +845,7 @@ class MilestoneServiceTest {
         MilestoneEntity milestone = milestoneEntity("m1");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
         when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
-        when(allocationRepository.sumAllocatedByMilestoneId("m1")).thenReturn(new BigDecimal("60000.00"));
+        when(allocationRepository.spentAmountByMilestoneId("m1", EventType.FUNDING)).thenReturn(new BigDecimal("60000.00"));
         when(cascadeDeleteService.flagEventsAllocatedTo(Set.of("m1"))).thenReturn(Either.left(published));
 
         MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().milestoneAmount(new BigDecimal("50000.00")).build();
@@ -889,7 +889,7 @@ class MilestoneServiceTest {
     @Test
     void invalidatesEvents_isTrueForACurrencyChange_orAShrinkBelowAllocations_andFalseOtherwise() {
         MilestoneEntity milestone = milestoneEntity("m1"); // USD, 50,000
-        when(allocationRepository.sumAllocatedByMilestoneId("m1")).thenReturn(new BigDecimal("40000.00"));
+        when(allocationRepository.spentAmountByMilestoneId("m1", EventType.FUNDING)).thenReturn(new BigDecimal("40000.00"));
 
         assertThat(milestoneService.invalidatesEvents(milestone, MilestoneUpdateRequest.builder().currency("EUR").build())).isTrue();
         assertThat(milestoneService.invalidatesEvents(milestone, MilestoneUpdateRequest.builder().milestoneAmount(new BigDecimal("30000")).build())).isTrue();
@@ -899,11 +899,25 @@ class MilestoneServiceTest {
     }
 
     @Test
+    void invalidatesEvents_countsOnlyFundingAllocations_soAFullyFundedAndFullySpentMilestoneResentUnchangedIsNotFlagged() {
+        // Regression: the shrink check used to sum FUNDING + SPENDING + REFUND allocations, so a milestone
+        // funded and spent up to its budget looked over-allocated (2× its amount) and an unchanged re-save
+        // flagged all its events ERROR — which a plain event re-save then cleared, since event save only
+        // caps FUNDING. Only FUNDING allocations are counted now.
+        MilestoneEntity milestone = milestoneEntity("m1"); // USD, 50,000
+        when(allocationRepository.spentAmountByMilestoneId("m1", EventType.FUNDING)).thenReturn(new BigDecimal("50000.00"));
+
+        assertThat(milestoneService.invalidatesEvents(milestone, MilestoneUpdateRequest.builder()
+                .milestoneAmount(new BigDecimal("50000.00")).currency("USD").build())).isFalse();
+        verify(allocationRepository, never()).spentAmountByMilestoneId("m1", EventType.SPENDING);
+    }
+
+    @Test
     void update_succeeds_whenNewAmountEqualsTotalAllocated() {
         MilestoneEntity milestone = milestoneEntity("m1");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
         when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
-        when(allocationRepository.sumAllocatedByMilestoneId("m1")).thenReturn(new BigDecimal("60000.00"));
+        when(allocationRepository.spentAmountByMilestoneId("m1", EventType.FUNDING)).thenReturn(new BigDecimal("60000.00"));
         when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
 
         MilestoneUpdateRequest request = MilestoneUpdateRequest.builder().milestoneAmount(new BigDecimal("60000.00")).build();
