@@ -1302,6 +1302,76 @@ class FundingBulkImportServiceTest {
     }
 
     @Test
+    void eventsFile_rootWithSubProjectInterleavedWithAnotherRoot_resolvesEachRowAgainstItsOwnProject() {
+        // Reproduces a report where one event allocates to two different root projects (one of them
+        // via a sub-project), and a sub-project row's milestone gets validated against the OTHER root
+        // project instead of its own resolved sub-project — this only surfaces when a same-titled
+        // milestone row for the wrong root is interleaved with the sub-project's own rows in the file.
+        MultipartFile file = file("events.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.EVENTS));
+
+        ProjectEntity juno = projectEntity("juno", "Project Juno", "EUR");
+        ProjectEntity ember = projectEntity("ember", "Project Ember", "EUR");
+        ProjectEntity sub2 = subProjectEntity("sub2", "Project Ember - Sub 2", "EUR", ember);
+        ProjectEntity sub3 = subProjectEntity("sub3", "Project Ember - Sub 3", "EUR", ember);
+        ProjectEntity sub5 = subProjectEntity("sub5", "Project Ember - Sub 5", "EUR", ember);
+        ProjectEntity sub6 = subProjectEntity("sub6", "Project Ember - Sub 6", "EUR", ember);
+
+        EventCsvLine rowJunoM4 = eventLine("FUNDING", "GRANT-1", "EUR", "Project Juno", "Milestone 4", "1.00");
+        rowJunoM4.setProjectId("PRJ-1000");
+        EventCsvLine rowSub6M2 = eventLine("FUNDING", "GRANT-1", "EUR", "Project Ember", "Project Ember - Sub 6", "Milestone 2", "2.00");
+        rowSub6M2.setProjectId("PRJ-1002");
+        EventCsvLine rowSub2M2 = eventLine("FUNDING", "GRANT-1", "EUR", "Project Ember", "Project Ember - Sub 2", "Milestone 2", "3.00");
+        rowSub2M2.setProjectId("PRJ-1002");
+        EventCsvLine rowSub3M1 = eventLine("FUNDING", "GRANT-1", "EUR", "Project Ember", "Project Ember - Sub 3", "Milestone 1", "4.00");
+        rowSub3M1.setProjectId("PRJ-1002");
+        EventCsvLine rowSub2M1 = eventLine("FUNDING", "GRANT-1", "EUR", "Project Ember", "Project Ember - Sub 2", "Milestone 1", "5.00");
+        rowSub2M1.setProjectId("PRJ-1002");
+        EventCsvLine rowJunoM1 = eventLine("FUNDING", "GRANT-1", "EUR", "Project Juno", "Milestone 1", "6.00");
+        rowJunoM1.setProjectId("PRJ-1000");
+        EventCsvLine rowSub5M2 = eventLine("FUNDING", "GRANT-1", "EUR", "Project Ember", "Project Ember - Sub 5", "Milestone 2", "7.00");
+        rowSub5M2.setProjectId("PRJ-1002");
+        EventCsvLine rowSub6M1 = eventLine("FUNDING", "GRANT-1", "EUR", "Project Ember", "Project Ember - Sub 6", "Milestone 1", "8.00");
+        rowSub6M1.setProjectId("PRJ-1002");
+
+        when(eventCsvParser.parseCsv(file, EventCsvLine.class))
+                .thenReturn(Either.right(List.of(rowJunoM4, rowSub6M2, rowSub2M2, rowSub3M1, rowSub2M1, rowJunoM1, rowSub5M2, rowSub6M1)));
+
+        when(projectRepository.findByOrganisationIdAndProId(ORG_ID, "PRJ-1000")).thenReturn(List.of(juno));
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull(ORG_ID, "PRJ-1002")).thenReturn(Optional.of(ember));
+        when(projectRepository.findByParentProjectIdAndProjectTitle("ember", "Project Ember - Sub 2")).thenReturn(Optional.of(sub2));
+        when(projectRepository.findByParentProjectIdAndProjectTitle("ember", "Project Ember - Sub 3")).thenReturn(Optional.of(sub3));
+        when(projectRepository.findByParentProjectIdAndProjectTitle("ember", "Project Ember - Sub 5")).thenReturn(Optional.of(sub5));
+        when(projectRepository.findByParentProjectIdAndProjectTitle("ember", "Project Ember - Sub 6")).thenReturn(Optional.of(sub6));
+        when(projectRepository.findById("ember")).thenReturn(Optional.of(ember));
+
+        when(milestoneService.findByProjectIdAndMilestoneTitle("juno", "Milestone 4"))
+                .thenReturn(Optional.of(MilestoneEntity.builder().id("juno-m4").build()));
+        when(milestoneService.findByProjectIdAndMilestoneTitle("juno", "Milestone 1"))
+                .thenReturn(Optional.of(MilestoneEntity.builder().id("juno-m1").build()));
+        when(milestoneService.findByProjectIdAndMilestoneTitle("sub2", "Milestone 2"))
+                .thenReturn(Optional.of(MilestoneEntity.builder().id("sub2-m2").build()));
+        when(milestoneService.findByProjectIdAndMilestoneTitle("sub2", "Milestone 1"))
+                .thenReturn(Optional.of(MilestoneEntity.builder().id("sub2-m1").build()));
+        when(milestoneService.findByProjectIdAndMilestoneTitle("sub3", "Milestone 1"))
+                .thenReturn(Optional.of(MilestoneEntity.builder().id("sub3-m1").build()));
+        when(milestoneService.findByProjectIdAndMilestoneTitle("sub5", "Milestone 2"))
+                .thenReturn(Optional.of(MilestoneEntity.builder().id("sub5-m2").build()));
+        when(milestoneService.findByProjectIdAndMilestoneTitle("sub6", "Milestone 2"))
+                .thenReturn(Optional.of(MilestoneEntity.builder().id("sub6-m2").build()));
+        when(milestoneService.findByProjectIdAndMilestoneTitle("sub6", "Milestone 1"))
+                .thenReturn(Optional.of(MilestoneEntity.builder().id("sub6-m1").build()));
+        when(spendingEventService.createEvent(any())).thenReturn(SpendingEventView.builder().eventId("e1").build());
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getFiles().get(0).getRowErrors()).isEmpty();
+        assertThat(result.getEventsCreated()).isEqualTo(1);
+        assertThat(result.getAllocationsCreated()).isEqualTo(8);
+    }
+
+    @Test
     void eventsFile_rowsSharingFundingIdAndHash_butDifferentCategoryVendorOrDate_areSeparateEvents() {
         // Two rows share Funding ID/Hash/Currency (what used to be the whole grouping key), but are
         // otherwise different real-world transactions — different category, vendor and date, exactly

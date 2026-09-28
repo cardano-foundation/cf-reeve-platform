@@ -577,6 +577,59 @@ class FundingBulkImportE2ETest {
         assertThat(disambiguatedResult.getEventsCreated()).isEqualTo(1);
     }
 
+    @Test
+    void eventsCsv_oneEventAllocatingToTwoRootsOneOfThemViaSubProjects_resolvesEveryRowAgainstItsOwnProject() {
+        // Reproduces a user-reported bug: one event's allocation rows span two different root
+        // projects, one of them (with several sub-projects, each carrying its own milestones) directly,
+        // and the other via sub-projects. A sub-project row's milestone lookup was seen to resolve
+        // against the OTHER root project instead of the row's own resolved sub-project — every row must
+        // be validated only against the project it actually names.
+        String orgId = "org-events-two-roots-subprojects";
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+
+        String seedJuno = """
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Project Juno,Project Juno,100000.00,EUR,,,,Milestone 4,ms-juno-4,10000.00,2026-06-30
+                Project Juno,,,,,,,Milestone 1,ms-juno-1,10000.00,2026-06-30
+                """;
+        String seedEmber = """
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Project Ember,Project Ember,100000.00,EUR,Sub 2,Sub 2,10000.00,Milestone 2,ms-sub2-2,3000.00,2026-06-30
+                Project Ember,,,,Sub 2,,,Milestone 1,ms-sub2-1,3000.00,2026-06-30
+                Project Ember,,,,Sub 3,Sub 3,10000.00,Milestone 1,ms-sub3-1,3000.00,2026-06-30
+                Project Ember,,,,Sub 5,Sub 5,10000.00,Milestone 2,ms-sub5-2,3000.00,2026-06-30
+                Project Ember,,,,Sub 6,Sub 6,10000.00,Milestone 2,ms-sub6-2,3000.00,2026-06-30
+                Project Ember,,,,Sub 6,,,Milestone 1,ms-sub6-1,3000.00,2026-06-30
+                """;
+        FundingBulkImportResult seedJunoResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(new MockMultipartFile("file", "juno.csv", "text/csv", seedJuno.getBytes()))).build());
+        assertThat(reasons(seedJunoResult)).isEmpty();
+        FundingBulkImportResult seedEmberResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(new MockMultipartFile("file", "ember.csv", "text/csv", seedEmber.getBytes()))).build());
+        assertThat(reasons(seedEmberResult)).isEmpty();
+
+        // Row order mirrors the reported file: a Juno row, several Ember sub-project rows, another
+        // Juno row, more Ember sub-project rows — all one event (same Funding ID/hash/entity/date).
+        String eventsCsv = """
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+                FUNDING,GRANT-TWO-ROOTS,,Cardano Foundation,EUR,2026-07-01,,,,,,36.00,,,Project Juno,Project Juno,,,Milestone 4,,1.00
+                FUNDING,GRANT-TWO-ROOTS,,Cardano Foundation,EUR,2026-07-01,,,,,,36.00,,,Project Ember,Project Ember,Sub 6,,Milestone 2,,2.00
+                FUNDING,GRANT-TWO-ROOTS,,Cardano Foundation,EUR,2026-07-01,,,,,,36.00,,,Project Ember,Project Ember,Sub 2,,Milestone 2,,3.00
+                FUNDING,GRANT-TWO-ROOTS,,Cardano Foundation,EUR,2026-07-01,,,,,,36.00,,,Project Ember,Project Ember,Sub 3,,Milestone 1,,4.00
+                FUNDING,GRANT-TWO-ROOTS,,Cardano Foundation,EUR,2026-07-01,,,,,,36.00,,,Project Ember,Project Ember,Sub 2,,Milestone 1,,5.00
+                FUNDING,GRANT-TWO-ROOTS,,Cardano Foundation,EUR,2026-07-01,,,,,,36.00,,,Project Juno,Project Juno,,,Milestone 1,,6.00
+                FUNDING,GRANT-TWO-ROOTS,,Cardano Foundation,EUR,2026-07-01,,,,,,36.00,,,Project Ember,Project Ember,Sub 5,,Milestone 2,,7.00
+                FUNDING,GRANT-TWO-ROOTS,,Cardano Foundation,EUR,2026-07-01,,,,,,36.00,,,Project Ember,Project Ember,Sub 6,,Milestone 1,,8.00
+                """;
+        MultipartFile eventsFile = new MockMultipartFile("file", "events-two-roots.csv", "text/csv", eventsCsv.getBytes());
+        FundingBulkImportResult result = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(eventsFile)).build());
+
+        assertThat(reasons(result)).isEmpty();
+        assertThat(result.getEventsCreated()).isEqualTo(1);
+        assertThat(result.getAllocationsCreated()).isEqualTo(8);
+    }
+
     /** Seeds Project A/Sub One + Milestone One/Two exactly as the downloadable template does. */
     private void seedProjectsAndMilestonesTemplate(String orgId) {
         MultipartFile file = new MockMultipartFile("file", "funding_projects_milestones_template.csv", "text/csv",
