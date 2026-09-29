@@ -10,9 +10,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
+import id.veridian.signify.generated.keria.model.OOBI;
+
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.config.SignifyClientConfig.IdentifierRecord;
-import org.cardanofoundation.signify.generated.keria.model.OOBI;
 
 /**
  * Exposes the platform's own KERI agent identity to the rest of the module. The

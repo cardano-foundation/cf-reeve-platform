@@ -11,10 +11,9 @@ import com.bloxbean.cardano.client.common.cbor.CborSerializationUtil;
 import com.bloxbean.cardano.client.metadata.MetadataBuilder;
 import com.bloxbean.cardano.client.metadata.MetadataList;
 import com.bloxbean.cardano.client.metadata.MetadataMap;
-
-import org.cardanofoundation.signify.cesr.Diger;
-import org.cardanofoundation.signify.cesr.args.RawArgs;
-import org.cardanofoundation.signify.cesr.util.CoreUtil;
+import id.veridian.signify.cesr.Diger;
+import id.veridian.signify.cesr.args.RawArgs;
+import id.veridian.signify.cesr.util.CoreUtil;
 
 /**
  * Builds the CIP-170 label-170 {@code ATTEST} and {@code AUTH_BEGIN} metadata maps, matching the

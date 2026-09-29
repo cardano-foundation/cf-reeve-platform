@@ -10,10 +10,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
+import id.veridian.signify.app.coring.Operations;
+import id.veridian.signify.exception.SignifyInterruptedException;
+
 import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchemaRegistry;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
-import org.cardanofoundation.signify.app.coring.Operations;
-import org.cardanofoundation.signify.exception.SignifyInterruptedException;
 
 /**
  * Resolves the issuer OOBIs configured on the credential-schema registry, so our agent knows the
@@ -66,10 +67,10 @@ public class SchemaOobiResolver {
     private void resolveOne(String oobi) {
         try {
             var raw = client.client().oobis().resolve(oobi, null);
-            client.client().operations().wait(raw, boundedWait());
-            // Reaching here means the wait completed without raising: the client now throws
-            // OperationFailedException/OperationTimeoutException instead of handing back a
-            // done-with-error operation, and those are caught below and left retryable.
+            KeriOperations.requireNotFailed(client.client().operations().wait(raw, boundedWait()), "issuer OOBI resolve");
+            // Reaching here means the resolve neither raised nor came back as a FailedOperation (wait
+            // RETURNS that rather than throwing — see KeriOperations); every failure is caught below and
+            // left retryable.
             resolved.add(oobi);
             log.info("Resolved configured issuer OOBI {}", oobi);
         } catch (SignifyInterruptedException e) {

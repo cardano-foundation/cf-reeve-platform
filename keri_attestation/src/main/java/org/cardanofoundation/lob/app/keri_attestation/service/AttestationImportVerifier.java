@@ -10,10 +10,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 
+import id.veridian.signify.exception.SignifyInterruptedException;
 import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.keri_attestation.service.KelAnchorVerifier.AnchorCandidate;
-import org.cardanofoundation.signify.exception.SignifyInterruptedException;
 
 /**
  * Synchronous, no-ceremony verification of a Veridian-attested card at import time.

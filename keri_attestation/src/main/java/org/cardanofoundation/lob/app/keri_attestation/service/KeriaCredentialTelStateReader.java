@@ -8,9 +8,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
+import id.veridian.signify.exception.SignifyInterruptedException;
+import id.veridian.signify.generated.keria.model.CredentialState;
+
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
-import org.cardanofoundation.signify.exception.SignifyInterruptedException;
-import org.cardanofoundation.signify.generated.keria.model.CredentialState;
 
 /**
  * Asks our KERI agent for a credential's current registry state.

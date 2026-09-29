@@ -21,6 +21,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import id.veridian.signify.app.Exchanging;
+import id.veridian.signify.app.Notifying;
+import id.veridian.signify.app.clienting.SignifyClient;
+import id.veridian.signify.generated.keria.model.ExchangeResource;
+import id.veridian.signify.generated.keria.model.Exn;
+import id.veridian.signify.generated.keria.model.Notification;
+import id.veridian.signify.generated.keria.model.NotificationData;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -32,13 +39,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
-import org.cardanofoundation.signify.app.Exchanging;
-import org.cardanofoundation.signify.app.Notifying;
-import org.cardanofoundation.signify.app.clienting.SignifyClient;
-import org.cardanofoundation.signify.generated.keria.model.ExchangeResource;
-import org.cardanofoundation.signify.generated.keria.model.Exn;
-import org.cardanofoundation.signify.generated.keria.model.Notification;
-import org.cardanofoundation.signify.generated.keria.model.NotificationData;
 
 @ExtendWith(MockitoExtension.class)
 class KeriNotificationCorrelatorTest {

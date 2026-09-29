@@ -27,6 +27,22 @@ import java.util.function.Consumer;
 
 import org.springframework.http.ProblemDetail;
 
+import id.veridian.signify.app.Contacting;
+import id.veridian.signify.app.Exchanging;
+import id.veridian.signify.app.Exchanging.ExchangeMessageResult;
+import id.veridian.signify.app.Notifying;
+import id.veridian.signify.app.aiding.IdentifierController;
+import id.veridian.signify.app.clienting.SignifyClient;
+import id.veridian.signify.app.coring.Oobis;
+import id.veridian.signify.app.coring.Operations;
+import id.veridian.signify.app.credentialing.ipex.Ipex;
+import id.veridian.signify.cesr.Serder;
+import id.veridian.signify.exception.SignifyInterruptedException;
+import id.veridian.signify.exception.SignifyTransportException;
+import id.veridian.signify.generated.keria.model.HabState;
+import id.veridian.signify.generated.keria.model.Operation;
+import id.veridian.signify.generated.keria.model.PendingExchangeOperation;
+import id.veridian.signify.generated.keria.model.PendingOOBIOperation;
 import io.vavr.control.Either;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
@@ -50,22 +66,6 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.view.RequiredSteps;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
 import org.cardanofoundation.lob.app.keri_attestation.service.CredentialChainValidator.ValidatedCredential;
 import org.cardanofoundation.lob.app.keri_attestation.service.KeriNotificationCorrelator.CorrelatedNotification;
-import org.cardanofoundation.signify.app.Contacting;
-import org.cardanofoundation.signify.app.Exchanging;
-import org.cardanofoundation.signify.app.Exchanging.ExchangeMessageResult;
-import org.cardanofoundation.signify.app.Notifying;
-import org.cardanofoundation.signify.app.aiding.IdentifierController;
-import org.cardanofoundation.signify.app.clienting.SignifyClient;
-import org.cardanofoundation.signify.app.coring.Oobis;
-import org.cardanofoundation.signify.app.coring.Operations;
-import org.cardanofoundation.signify.app.credentialing.ipex.Ipex;
-import org.cardanofoundation.signify.cesr.Serder;
-import org.cardanofoundation.signify.exception.SignifyInterruptedException;
-import org.cardanofoundation.signify.exception.SignifyTransportException;
-import org.cardanofoundation.signify.generated.keria.model.HabState;
-import org.cardanofoundation.signify.generated.keria.model.Operation;
-import org.cardanofoundation.signify.generated.keria.model.PendingExchangeOperation;
-import org.cardanofoundation.signify.generated.keria.model.PendingOOBIOperation;
 
 /**
  * Tests {@link KeriCredentialService#presentCredential}, the single synchronous entry point that
@@ -242,7 +242,7 @@ class KeriCredentialServiceTest {
 
     @SuppressWarnings("unchecked")
     private static Map<String, Object> grantExn(String senderAid, String credentialSaid) {
-        return Map.of("i", senderAid, "e", Map.of("acdc", Map.of("d", credentialSaid)));
+        return Map.of("i", senderAid, "e", Map.of("acdc", Map.of("d", credentialSaid, "s", SCHEMA_SAID)));
     }
 
     /** Same shape as {@link #grantExn}, but also carries its own {@code r} on the grant route — the
@@ -252,7 +252,8 @@ class KeriCredentialServiceTest {
      *  from an offer. */
     @SuppressWarnings("unchecked")
     private static Map<String, Object> directGrantExn(String senderAid, String credentialSaid) {
-        return Map.of("i", senderAid, "r", "/exn/ipex/grant", "e", Map.of("acdc", Map.of("d", credentialSaid)));
+        return Map.of("i", senderAid, "r", "/exn/ipex/grant", "e", Map.of("acdc",
+                Map.of("d", credentialSaid, "s", SCHEMA_SAID)));
     }
 
     private static CeremonyView ceremonyView(CeremonyState state) {

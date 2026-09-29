@@ -22,6 +22,17 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 
+import id.veridian.signify.app.Contacting;
+import id.veridian.signify.app.clienting.SignifyClient;
+import id.veridian.signify.app.coring.Oobis;
+import id.veridian.signify.app.coring.Operations;
+import id.veridian.signify.exception.OperationTimeoutException;
+import id.veridian.signify.exception.SignifyAgentException;
+import id.veridian.signify.exception.SignifyInterruptedException;
+import id.veridian.signify.exception.SignifyTransportException;
+import id.veridian.signify.generated.keria.model.Contact;
+import id.veridian.signify.generated.keria.model.Operation;
+import id.veridian.signify.generated.keria.model.PendingOOBIOperation;
 import io.vavr.control.Either;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
@@ -38,17 +49,6 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestat
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentityLinkEntity;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestationCeremonyRepository;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
-import org.cardanofoundation.signify.app.Contacting;
-import org.cardanofoundation.signify.app.clienting.SignifyClient;
-import org.cardanofoundation.signify.app.coring.Oobis;
-import org.cardanofoundation.signify.app.coring.Operations;
-import org.cardanofoundation.signify.exception.OperationTimeoutException;
-import org.cardanofoundation.signify.exception.SignifyAgentException;
-import org.cardanofoundation.signify.exception.SignifyInterruptedException;
-import org.cardanofoundation.signify.exception.SignifyTransportException;
-import org.cardanofoundation.signify.generated.keria.model.Contact;
-import org.cardanofoundation.signify.generated.keria.model.Operation;
-import org.cardanofoundation.signify.generated.keria.model.PendingOOBIOperation;
 
 @ExtendWith(MockitoExtension.class)
 class KeriOobiServiceTest {

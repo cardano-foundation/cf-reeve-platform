@@ -13,6 +13,10 @@ import java.util.Map;
 
 import org.springframework.http.ProblemDetail;
 
+import id.veridian.signify.app.clienting.SignifyClient;
+import id.veridian.signify.app.coring.Coring;
+import id.veridian.signify.generated.keria.model.KeyEvent;
+import id.veridian.signify.generated.keria.model.KeyEventRecord;
 import io.vavr.control.Either;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -23,10 +27,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchema.TrustModel;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
-import org.cardanofoundation.signify.app.clienting.SignifyClient;
-import org.cardanofoundation.signify.app.coring.Coring;
-import org.cardanofoundation.signify.generated.keria.model.KeyEvent;
-import org.cardanofoundation.signify.generated.keria.model.KeyEventRecord;
 
 /**
  * The card-import contract with the issuing indexer.

@@ -13,10 +13,10 @@ import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import id.veridian.signify.generated.keria.model.KeyEvent;
+import id.veridian.signify.generated.keria.model.KeyEventRecord;
 
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
-import org.cardanofoundation.signify.generated.keria.model.KeyEvent;
-import org.cardanofoundation.signify.generated.keria.model.KeyEventRecord;
 
 /**
  * Reads an AID's KEL and decides whether one of its interaction events anchors a given payload SAID.

@@ -20,6 +20,7 @@ import java.util.Optional;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.ProblemDetail;
 
+import id.veridian.signify.app.clienting.SignifyClient;
 import io.vavr.control.Either;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -39,7 +40,6 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentity
 import org.cardanofoundation.lob.app.keri_attestation.domain.view.CeremonyView;
 import org.cardanofoundation.lob.app.keri_attestation.domain.view.RequiredSteps;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
-import org.cardanofoundation.signify.app.clienting.SignifyClient;
 
 /**
  * Tests {@link KeriAuthBeginService#submitAuthBegin}. This module owns no Cardano wallet: the

@@ -6,8 +6,10 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +18,11 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 
+import id.veridian.signify.app.Exchanging.ExchangeMessageResult;
+import id.veridian.signify.app.coring.Operations;
+import id.veridian.signify.exception.SignifyInterruptedException;
+import id.veridian.signify.generated.keria.model.HabState;
+import id.veridian.signify.generated.keria.model.KeyStateRecord;
 import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
@@ -28,11 +35,6 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.view.CeremonyView;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
 import org.cardanofoundation.lob.app.keri_attestation.service.KelAnchorVerifier.AnchorCandidate;
 import org.cardanofoundation.lob.app.keri_attestation.service.KeriNotificationCorrelator.CorrelatedNotification;
-import org.cardanofoundation.signify.app.Exchanging.ExchangeMessageResult;
-import org.cardanofoundation.signify.app.coring.Operations;
-import org.cardanofoundation.signify.exception.SignifyInterruptedException;
-import org.cardanofoundation.signify.generated.keria.model.HabState;
-import org.cardanofoundation.signify.generated.keria.model.KeyStateRecord;
 
 /**
  * Drives the ATTEST step SYNCHRONOUSLY, in the request thread — the same treatment as
@@ -54,6 +56,8 @@ public class KeriAttestService {
             List.of("/remotesign/ixn/ref", "/exn/remotesign/ixn/ref");
     private static final String REMOTESIGN_TOPIC = "remotesign";
     private static final String REMOTESIGN_REQUEST_ROUTE = "/remotesign/ixn/req";
+    /** The ref's own route as it appears on the exn ({@code r}); the notification may carry it prefixed. */
+    private static final String REMOTESIGN_REF_ROUTE = "/remotesign/ixn/ref";
 
     /** Short wait before re-sending, to catch a late-arriving matching notification. Deliberately
      *  much shorter than {@link KeriAttestationProperties#remotesignTimeout()}, since it only catches
@@ -111,17 +115,17 @@ public class KeriAttestService {
         String walletOobiUrl = linkOpt.get().getOobiUrl();
 
         // Retry pre-check: before re-sending, look for a late-arriving ref for whatever was
-        // sent on a previous attempt. This wait is route-only (see KeriNotificationCorrelator#awaitByRoute)
-        // and — unlike the main wait below — cannot be given an exclude snapshot, because the late ref it
-        // is looking for is itself pre-existing. So a claimed ref here may be STALE DEBRIS rather than a
-        // genuine late reply; it is therefore resumed ONLY IF it actually anchors THIS ceremony's payload.
+        // sent on a previous attempt. Only a ref answering THAT persisted request is claimed (see
+        // answersRemotesignRequest), but — unlike the main wait below — it cannot be given an exclude
+        // snapshot, because the late ref it is looking for is itself pre-existing. So it is still resumed
+        // ONLY IF it actually anchors THIS ceremony's payload.
         // A non-anchoring ref must not fail the ceremony: that would loop forever on the same undeleted
         // debris (a failed resolve never marks/deletes it), so it falls through to re-sending below. A
         // fresh (non-retry) call, or a retry whose previous attempt never sent anything, has no
         // requestExnSaid yet and skips straight to rebuilding + sending below.
         if (retry && ceremony.getRequestExnSaid() != null) {
             Optional<CorrelatedNotification> lateRef = correlator.awaitByRoute(REMOTESIGN_REF_ROUTES,
-                    RETRY_PRECHECK_TIMEOUT);
+                    RETRY_PRECHECK_TIMEOUT, Set.of(), answersRemotesignRequest(ceremony.getRequestExnSaid(), walletAid));
             if (lateRef.isPresent()) {
                 if (ceremony.getKelFloorSequence() == null) {
                     // F4: a pre-upgrade ceremony with no floor must hard-fail, never resume or re-send.
@@ -218,6 +222,7 @@ public class KeriAttestService {
         Set<String> preexistingRefs = correlator.outstandingNoteIds(REMOTESIGN_REF_ROUTES);
 
         String payloadSaid;
+        String requestExnSaid;
         try {
             Optional<HabState> senderOpt = client.client().identifiers().get(agentService.agentName());
             if (senderOpt.isEmpty()) {
@@ -235,10 +240,11 @@ public class KeriAttestService {
 
             // Persist BEFORE the send completes: the SAID is deterministic from
             // the built (not-yet-sent) exn, matching KeriCredentialService#sendApply's idiom.
-            String requestExnSaid = (String) built.exn().getKed().get("d");
+            requestExnSaid = (String) built.exn().getKed().get("d");
+            String persistedRequestExnSaid = requestExnSaid;
             boolean exnPersisted = ceremonyService.updateWaitingStepData(ceremonyId, generation,
                     CeremonyState.ATTEST_REQUESTED, c -> {
-                        c.setRequestExnSaid(requestExnSaid);
+                        c.setRequestExnSaid(persistedRequestExnSaid);
                         c.setPayloadSaid(payloadSaid);
                     });
             if (!exnPersisted) {
@@ -260,7 +266,7 @@ public class KeriAttestService {
 
         log.info("waiting for remotesign ref (routes {})", REMOTESIGN_REF_ROUTES);
         Optional<CorrelatedNotification> ref = correlator.awaitByRoute(REMOTESIGN_REF_ROUTES,
-                properties.remotesignTimeout(), preexistingRefs);
+                properties.remotesignTimeout(), preexistingRefs, answersRemotesignRequest(requestExnSaid, walletAid));
         if (ref.isEmpty()) {
             return failAttest(ceremonyId, generation, KeriAttestationProblems.KERI_WALLET_TIMEOUT,
                     "Timed out waiting for the wallet's remotesign ref." + walletDeliveryHint());
@@ -269,6 +275,21 @@ public class KeriAttestService {
 
         return resolveAndComplete(ceremonyId, userId, generation, walletAid, walletOobiUrl, payloadSaid,
                 floorSequence.get(), ref.get());
+    }
+
+    /**
+     * Whether a fetched remotesign ref answers the request {@code requestExnSaid}. The wallet builds its
+     * ref with {@code createExchangeMessage(hab, "/remotesign/ixn/ref", {sn}, [], recipient, _, requestSaid)},
+     * so the exn itself carries {@code p} = our request's SAID, {@code i} = the wallet and {@code rp} = our
+     * agent. Mirrors cip113's {@code matchesRemoteSignRef}; the correlator additionally checks that the
+     * exn is the one its notification announced ({@code exn.d == note.a.d}).
+     */
+    private Predicate<Map<String, Object>> answersRemotesignRequest(String requestExnSaid, String walletAid) {
+        String agentAid = agentService.agentPrefix();
+        return exn -> REMOTESIGN_REF_ROUTE.equals(exn.get("r"))
+                && requestExnSaid != null && requestExnSaid.equals(exn.get("p"))
+                && Objects.equals(walletAid, exn.get("i"))
+                && agentAid != null && agentAid.equals(exn.get("rp"));
     }
 
     // --- from a correlated ref, locate + verify the anchoring KEL event, then complete ---
@@ -424,8 +445,8 @@ public class KeriAttestService {
             try {
                 // The query is a NETWORK call and must stay one: keyStates().get() answers from the
                 // agent's local store and can never observe an event the wallet has only just signed.
-                client.client().operations().wait(
-                        client.client().keyStates().query(aid, null), boundedKeyStateWait());
+                KeriOperations.requireNotFailed(client.client().operations().wait(
+                        client.client().keyStates().query(aid, null), boundedKeyStateWait()), "key-state query");
                 Optional<KeyStateRecord> state = client.client().keyStates().get(aid);
                 if (state.isPresent() && state.get().getS() != null) {
                     return Optional.of(state.get().getS());

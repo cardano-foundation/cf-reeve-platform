@@ -1,6 +1,6 @@
 package org.cardanofoundation.lob.app.keri_attestation.config;
 
-import org.cardanofoundation.signify.app.clienting.SignifyClient;
+import id.veridian.signify.app.clienting.SignifyClient;
 
 /**
  * Holder for this module's own KERIA {@link SignifyClient}.

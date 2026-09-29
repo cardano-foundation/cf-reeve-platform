@@ -25,11 +25,26 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 import org.springframework.http.ProblemDetail;
 
+import id.veridian.signify.app.Exchanging;
+import id.veridian.signify.app.Exchanging.ExchangeMessageResult;
+import id.veridian.signify.app.aiding.IdentifierController;
+import id.veridian.signify.app.clienting.SignifyClient;
+import id.veridian.signify.app.coring.Coring;
+import id.veridian.signify.app.coring.KeyStates;
+import id.veridian.signify.app.coring.Operations;
+import id.veridian.signify.cesr.Serder;
+import id.veridian.signify.generated.keria.model.Exn;
+import id.veridian.signify.generated.keria.model.HabState;
+import id.veridian.signify.generated.keria.model.KeyEvent;
+import id.veridian.signify.generated.keria.model.KeyEventRecord;
+import id.veridian.signify.generated.keria.model.KeyStateRecord;
 import io.vavr.control.Either;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -48,19 +63,6 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.view.CeremonyView;
 import org.cardanofoundation.lob.app.keri_attestation.domain.view.RequiredSteps;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
 import org.cardanofoundation.lob.app.keri_attestation.service.KeriNotificationCorrelator.CorrelatedNotification;
-import org.cardanofoundation.signify.app.Exchanging;
-import org.cardanofoundation.signify.app.Exchanging.ExchangeMessageResult;
-import org.cardanofoundation.signify.app.aiding.IdentifierController;
-import org.cardanofoundation.signify.app.clienting.SignifyClient;
-import org.cardanofoundation.signify.app.coring.Coring;
-import org.cardanofoundation.signify.app.coring.KeyStates;
-import org.cardanofoundation.signify.app.coring.Operations;
-import org.cardanofoundation.signify.cesr.Serder;
-import org.cardanofoundation.signify.generated.keria.model.Exn;
-import org.cardanofoundation.signify.generated.keria.model.HabState;
-import org.cardanofoundation.signify.generated.keria.model.KeyEvent;
-import org.cardanofoundation.signify.generated.keria.model.KeyEventRecord;
-import org.cardanofoundation.signify.generated.keria.model.KeyStateRecord;
 
 /**
  * Tests {@link KeriAttestService#attest}, the single synchronous entry point that replaced the old
@@ -190,12 +192,30 @@ class KeriAttestServiceTest {
         return serder;
     }
 
+    /** A ref answering the request the main wait just sent ({@link #NEW_REQUEST_EXN_SAID}). */
     @SuppressWarnings("unchecked")
     private static Map<String, Object> refExn(String senderAid, String sequence, String said) {
+        return refExnAnswering(NEW_REQUEST_EXN_SAID, REF_EXN_SAID, senderAid, sequence, said);
+    }
+
+    /** A remotesign ref as Veridian builds it: {@code createExchangeMessage(hab, "/remotesign/ixn/ref", {sn},
+     *  [], recipient, _, requestSaid)} — so the exn carries its own {@code d}, the route {@code r}, {@code p}
+     *  = the request it answers, {@code i} = the wallet and {@code rp} = our agent. */
+    private static Map<String, Object> refExnAnswering(String requestSaid, String exnSaid, String senderAid,
+            String sequence, String said) {
         Map<String, Object> payload = sequence == null && said == null
                 ? Map.of()
                 : sequenceSaidPayload(sequence, said);
-        return Map.of("i", senderAid, "a", payload);
+        return Map.of("d", exnSaid, "r", "/remotesign/ixn/ref", "p", requestSaid, "i", senderAid,
+                "rp", AGENT_PREFIX, "a", payload);
+    }
+
+    /** Matches the correlator predicate KeriAttestService passes for a wait on {@code requestSaid}: it must
+     *  accept that request's ref. Distinguishes the retry pre-check (the persisted request) from the main
+     *  wait (the request just sent). */
+    private static ArgumentMatcher<Predicate<Map<String, Object>>> answering(String requestSaid) {
+        return predicate -> predicate != null
+                && predicate.test(refExnAnswering(requestSaid, REF_EXN_SAID, WALLET_AID, SEQUENCE, EVENT_SAID));
     }
 
     private static Map<String, Object> sequenceSaidPayload(String sequence, String said) {
@@ -289,7 +309,7 @@ class KeriAttestServiceTest {
         stubGuardedUpdateSuccess(ceremony);
 
         Map<String, Object> refExn = refExn(WALLET_AID, SEQUENCE, EVENT_SAID);
-        lenient().when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any()))
+        lenient().when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any(), argThat(answering(NEW_REQUEST_EXN_SAID))))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
         Object seal = List.of(Map.of("d", PAYLOAD_SAID));
         lenient().when(keyEvents.get(WALLET_AID)).thenReturn(List.of(kelEvent("ixn", SEQUENCE, EVENT_SAID, seal)));
@@ -335,7 +355,7 @@ class KeriAttestServiceTest {
 
         InOrder inOrder = inOrder(exchanges, correlator, ceremonyService);
         inOrder.verify(exchanges).sendFromEvents(any(), any(), any(), any(), any(), any());
-        inOrder.verify(correlator).awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any());
+        inOrder.verify(correlator).awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any(), argThat(answering(NEW_REQUEST_EXN_SAID)));
         inOrder.verify(ceremonyService).completeStep(any(), anyInt(), any(), any(), any());
         inOrder.verify(correlator).markAndDelete(NOTIF_ID);
     }
@@ -357,7 +377,8 @@ class KeriAttestServiceTest {
         InOrder inOrder = inOrder(correlator, exchanges);
         inOrder.verify(correlator).outstandingNoteIds(REMOTESIGN_REF_ROUTES);
         inOrder.verify(exchanges).sendFromEvents(any(), any(), any(), any(), any(), any());
-        inOrder.verify(correlator).awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), eq(Set.of(staleNoteId)));
+        inOrder.verify(correlator).awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), eq(Set.of(staleNoteId)),
+                argThat(answering(NEW_REQUEST_EXN_SAID)));
     }
 
     /**
@@ -552,8 +573,8 @@ class KeriAttestServiceTest {
                 CeremonyState.ATTEST_REQUESTED, true)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
 
-        Map<String, Object> refExn = refExn(WALLET_AID, SEQUENCE, EVENT_SAID);
-        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
+        Map<String, Object> refExn = refExnAnswering(OLD_REQUEST_EXN_SAID, REF_EXN_SAID, WALLET_AID, SEQUENCE, EVENT_SAID);
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any(), argThat(answering(OLD_REQUEST_EXN_SAID))))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
         Object seal = List.of(Map.of("d", PAYLOAD_SAID));
         when(keyEvents.get(WALLET_AID))
@@ -585,9 +606,10 @@ class KeriAttestServiceTest {
         stubHappyPath(ceremony);
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, true)).thenReturn(Either.right(ceremony));
-        // The retry pre-check (2-arg) finds no late ref, so the flow re-sends and the main wait (3-arg,
-        // stubbed by stubHappyPath) returns the fresh ref.
-        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any())).thenReturn(Optional.empty());
+        // The retry pre-check (answering the persisted request) finds no late ref, so the flow re-sends and
+        // the main wait (answering the new request, stubbed by stubHappyPath) returns the fresh ref.
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any(), argThat(answering(OLD_REQUEST_EXN_SAID))))
+                .thenReturn(Optional.empty());
 
         Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, true);
 
@@ -608,12 +630,14 @@ class KeriAttestServiceTest {
         stubHappyPath(ceremony);
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, true)).thenReturn(Either.right(ceremony));
-        // Pre-check (2-arg) claims a STALE ref whose explicit candidate names an event not in the KEL, so
-        // locateAnchoringEvent returns empty for it (the KEL, stubbed by stubHappyPath, holds only the
-        // genuine event). The main wait (3-arg, stubHappyPath) then returns the real anchoring ref.
+        // Pre-check (answering the persisted request) claims a STALE ref whose explicit candidate names an
+        // event not in the KEL, so locateAnchoringEvent returns empty for it (the KEL, stubbed by
+        // stubHappyPath, holds only the genuine event). The main wait (answering the new request,
+        // stubHappyPath) then returns the real anchoring ref.
         String staleNoteId = "0ASTALEPRECHECK000000000000000";
-        Map<String, Object> staleRef = refExn(WALLET_AID, "99", "ENOTINKEL000000000000000000000000000");
-        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
+        Map<String, Object> staleRef = refExnAnswering(OLD_REQUEST_EXN_SAID,
+                "ESTALEEXN000000000000000000000", WALLET_AID, "99", "ENOTINKEL000000000000000000000000000");
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any(), argThat(answering(OLD_REQUEST_EXN_SAID))))
                 .thenReturn(Optional.of(new CorrelatedNotification(staleNoteId, "ESTALEEXN000000000000000000000", staleRef)));
 
         Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, true);
@@ -644,7 +668,7 @@ class KeriAttestServiceTest {
         stubHappySend();
         stubKeyStateSequence(FLOOR_SEQUENCE);
         stubGuardedUpdateSuccess(ceremony);
-        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any())).thenReturn(Optional.empty());
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any(), argThat(answering(NEW_REQUEST_EXN_SAID)))).thenReturn(Optional.empty());
 
         Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
 
@@ -699,7 +723,7 @@ class KeriAttestServiceTest {
         when(keyStates.get(WALLET_AID)).thenReturn(Optional.of(floorState)).thenReturn(Optional.of(currentState));
 
         Map<String, Object> refExn = refExn(WALLET_AID, null, null);
-        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any()))
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any(), argThat(answering(NEW_REQUEST_EXN_SAID))))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
         Object seal = List.of(Map.of("d", PAYLOAD_SAID));
         when(keyEvents.get(WALLET_AID)).thenReturn(List.of(kelEvent("ixn", SEQUENCE, EVENT_SAID, seal)));
@@ -739,7 +763,7 @@ class KeriAttestServiceTest {
 
         // No explicit candidate on the ref exn — goes through the bounded-scan fallback.
         Map<String, Object> refExn = refExn(WALLET_AID, null, null);
-        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any()))
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any(), argThat(answering(NEW_REQUEST_EXN_SAID))))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
 
         Object seal = List.of(Map.of("d", PAYLOAD_SAID));
@@ -772,7 +796,7 @@ class KeriAttestServiceTest {
 
         // Explicit candidate naming a SAID/sequence that doesn't exist in the KEL at all.
         Map<String, Object> refExn = refExn(WALLET_AID, "9", "ENONEXISTENTEVENT000000000000000000000");
-        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any()))
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any(), argThat(answering(NEW_REQUEST_EXN_SAID))))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
 
         // A different event that WOULD satisfy digest+floor if a scan ever considered it.
@@ -806,8 +830,8 @@ class KeriAttestServiceTest {
         when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, true)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
-        Map<String, Object> refExn = refExn(WALLET_AID, null, null);
-        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
+        Map<String, Object> refExn = refExnAnswering(OLD_REQUEST_EXN_SAID, REF_EXN_SAID, WALLET_AID, null, null);
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any(), argThat(answering(OLD_REQUEST_EXN_SAID))))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
 
         Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, true);
@@ -828,8 +852,8 @@ class KeriAttestServiceTest {
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         // A well-formed explicit candidate that WOULD resolve to a real, digest-matching KEL event if
         // ever looked up -- proving the rejection is unconditional on the floor alone.
-        Map<String, Object> refExn = refExn(WALLET_AID, SEQUENCE, EVENT_SAID);
-        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any()))
+        Map<String, Object> refExn = refExnAnswering(OLD_REQUEST_EXN_SAID, REF_EXN_SAID, WALLET_AID, SEQUENCE, EVENT_SAID);
+        when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any(), argThat(answering(OLD_REQUEST_EXN_SAID))))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
 
         Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, true);

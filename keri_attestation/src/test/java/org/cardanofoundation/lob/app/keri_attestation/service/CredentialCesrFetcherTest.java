@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import java.net.http.HttpResponse;
 import java.util.Optional;
 
+import id.veridian.signify.app.clienting.SignifyClient;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -19,7 +20,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
-import org.cardanofoundation.signify.app.clienting.SignifyClient;
 
 /**
  * Pins the one distinction this fetcher exists to make: "the agent says it does not have it" (404,

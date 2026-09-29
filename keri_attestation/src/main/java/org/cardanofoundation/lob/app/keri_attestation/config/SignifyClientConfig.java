@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.keri_attestation.config;
 
+import static org.cardanofoundation.lob.app.keri_attestation.service.KeriOperations.requireNotFailed;
+
 import java.net.URI;
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
@@ -16,15 +18,14 @@ import org.springframework.context.annotation.Configuration;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
-import org.cardanofoundation.signify.app.aiding.CreateIdentifierArgs;
-import org.cardanofoundation.signify.app.aiding.EventResult;
-import org.cardanofoundation.signify.app.clienting.SignifyClient;
-import org.cardanofoundation.signify.app.coring.Coring;
-import org.cardanofoundation.signify.generated.keria.model.AgentConfig;
-import org.cardanofoundation.signify.generated.keria.model.HabState;
-import org.cardanofoundation.signify.generated.keria.model.KeyStateRecord;
-import org.cardanofoundation.signify.generated.keria.model.Tier;
+import id.veridian.signify.app.aiding.CreateIdentifierArgs;
+import id.veridian.signify.app.aiding.EventResult;
+import id.veridian.signify.app.clienting.SignifyClient;
+import id.veridian.signify.app.coring.Coring;
+import id.veridian.signify.generated.keria.model.AgentConfig;
+import id.veridian.signify.generated.keria.model.HabState;
+import id.veridian.signify.generated.keria.model.KeyStateRecord;
+import id.veridian.signify.generated.keria.model.Tier;
 
 /**
  * Wires this module's own KERIA {@link SignifyClient} and ensures the platform's KERI agent AID
@@ -188,7 +189,7 @@ public class SignifyClientConfig {
             id = optionalIdentifier.get().getPrefix();
         } else {
             EventResult result = client.identifiers().create(name, kArgs);
-            var op = client.operations().wait(result.op());
+            var op = requireNotFailed(client.operations().wait(result.op()), "agent identifier create");
             // Read the prefix back off the identifier rather than out of the operation: operations are
             // marker interfaces now and carry no response body.
             id = client.identifiers().get(name)
@@ -203,7 +204,7 @@ public class SignifyClientConfig {
             }
             if (!hasEndRole(client, name, "agent", eid)) {
                 EventResult roleResult = client.identifiers().addEndRole(name, "agent", eid, null);
-                client.operations().wait(roleResult.op());
+                requireNotFailed(client.operations().wait(roleResult.op()), "agent end-role add");
             }
 
             // Diagnostic: log the freshly-created AID's actual witness set / toad so a live run can

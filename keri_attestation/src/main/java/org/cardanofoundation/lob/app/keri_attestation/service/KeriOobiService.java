@@ -19,6 +19,15 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import id.veridian.signify.app.clienting.SignifyClient;
+import id.veridian.signify.app.coring.Operations;
+import id.veridian.signify.exception.OperationAbortedException;
+import id.veridian.signify.exception.OperationFailedException;
+import id.veridian.signify.exception.OperationTimeoutException;
+import id.veridian.signify.exception.SignifyAgentException;
+import id.veridian.signify.exception.SignifyInterruptedException;
+import id.veridian.signify.exception.SignifyServerException;
+import id.veridian.signify.exception.SignifyTransportException;
 import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
@@ -27,15 +36,6 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestat
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentityLinkEntity;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriAttestationCeremonyRepository;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
-import org.cardanofoundation.signify.app.clienting.SignifyClient;
-import org.cardanofoundation.signify.app.coring.Operations;
-import org.cardanofoundation.signify.exception.OperationAbortedException;
-import org.cardanofoundation.signify.exception.OperationFailedException;
-import org.cardanofoundation.signify.exception.OperationTimeoutException;
-import org.cardanofoundation.signify.exception.SignifyAgentException;
-import org.cardanofoundation.signify.exception.SignifyInterruptedException;
-import org.cardanofoundation.signify.exception.SignifyServerException;
-import org.cardanofoundation.signify.exception.SignifyTransportException;
 
 /**
  * Resolves a user's wallet OOBI into an AID and creates/updates their {@link KeriIdentityLinkEntity}
@@ -142,7 +142,10 @@ public class KeriOobiService {
             Operations.WaitOptions waitOptions = Operations.WaitOptions.builder()
                     .abortSignal(Operations.AbortSignal.builder().timeout(RESOLVE_TIMEOUT_MILLIS).build())
                     .build();
-            client.client().operations().wait(resolveResult, waitOptions);
+            // A FailedOperation throws here and is reported below as an unresolvable OOBI (422): the agent
+            // answered, the OOBI did not check out.
+            KeriOperations.requireNotFailed(client.client().operations().wait(resolveResult, waitOptions),
+                    "wallet OOBI resolve");
 
             var contact = client.client().contacts().get(aid);
             if (contact.isEmpty()) {

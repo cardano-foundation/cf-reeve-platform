@@ -16,13 +16,13 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 
+import id.veridian.signify.cesr.Saider;
 import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.keri_attestation.cesr.CESRStreamUtil;
 import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchema;
 import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchema.TrustModel;
 import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchemaRegistry;
-import org.cardanofoundation.signify.cesr.Saider;
 
 /**
  * Decides whether a presented CESR credential chain is one this deployment accepts.

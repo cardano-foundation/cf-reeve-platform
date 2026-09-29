@@ -12,6 +12,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 
+import id.veridian.signify.exception.SignifyInterruptedException;
 import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.events.AuthBeginPublishCommand;
@@ -21,7 +22,6 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestat
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentityLinkEntity;
 import org.cardanofoundation.lob.app.keri_attestation.domain.view.CeremonyView;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
-import org.cardanofoundation.signify.exception.SignifyInterruptedException;
 
 /**
  * Drives the AUTH_BEGIN step. This module never touches the chain: it validates the linked credential

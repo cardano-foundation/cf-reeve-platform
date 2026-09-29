@@ -9,14 +9,13 @@ import java.util.Map;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import id.veridian.signify.app.coring.Coring;
+import id.veridian.signify.app.coring.KeyStates;
+import id.veridian.signify.generated.keria.model.AgentConfig;
+import id.veridian.signify.generated.keria.model.Exn;
+import id.veridian.signify.generated.keria.model.KeyEvent;
 
 import org.junit.jupiter.api.Test;
-
-import org.cardanofoundation.signify.app.coring.Coring;
-import org.cardanofoundation.signify.app.coring.KeyStates;
-import org.cardanofoundation.signify.generated.keria.model.AgentConfig;
-import org.cardanofoundation.signify.generated.keria.model.Exn;
-import org.cardanofoundation.signify.generated.keria.model.KeyEvent;
 
 /**
  * Pins the boundary where signify's typed models are projected back into the generic maps this module
@@ -111,11 +110,11 @@ class SignifyModelProjectionTest {
      */
     @Test
     void aKeyStateIsReadBackTypedFromTheLocalGetNotFromTheQueryOperation() throws Exception {
-        assertEquals("java.util.Optional<org.cardanofoundation.signify.generated.keria.model.KeyStateRecord>",
+        assertEquals("java.util.Optional<id.veridian.signify.generated.keria.model.KeyStateRecord>",
                 KeyStates.class.getMethod("get", String.class).getGenericReturnType().getTypeName());
 
         // query() answers with an operation to wait on, never with the state itself.
-        assertEquals("org.cardanofoundation.signify.generated.keria.model.QueryOperation",
+        assertEquals("id.veridian.signify.generated.keria.model.QueryOperation",
                 KeyStates.class.getMethod("query", String.class, String.class).getReturnType().getName());
     }
 }

@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.config;
 
+import static org.cardanofoundation.lob.app.keri_attestation.service.KeriOperations.requireNotFailed;
+
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -16,14 +18,14 @@ import org.springframework.context.annotation.Configuration;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import id.veridian.signify.app.aiding.CreateIdentifierArgs;
+import id.veridian.signify.app.clienting.SignifyClient;
+import id.veridian.signify.app.coring.Coring;
+import id.veridian.signify.generated.keria.model.AgentConfig;
+import id.veridian.signify.generated.keria.model.HabState;
+import id.veridian.signify.generated.keria.model.Tier;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.IdentifierConfig;
-import org.cardanofoundation.signify.app.aiding.CreateIdentifierArgs;
-import org.cardanofoundation.signify.app.clienting.SignifyClient;
-import org.cardanofoundation.signify.app.coring.Coring;
-import org.cardanofoundation.signify.generated.keria.model.AgentConfig;
-import org.cardanofoundation.signify.generated.keria.model.HabState;
-import org.cardanofoundation.signify.generated.keria.model.Tier;
 
 @Configuration
 @ConditionalOnProperty(name = "lob.blockchain-publisher.keri.enabled", havingValue = "true", matchIfMissing = false)
@@ -84,7 +86,8 @@ public class KeriConfig {
         if (optionalIdentifier.isPresent()) {
             id = optionalIdentifier.get().getPrefix();
         } else {
-            client.operations().wait(client.identifiers().create(name, kArgs).op());
+            requireNotFailed(client.operations().wait(client.identifiers().create(name, kArgs).op()),
+                    "publisher identifier create");
             // Read the prefix back off the identifier rather than out of the operation: operations are
             // marker interfaces now and carry no response body.
             id = client.identifiers().get(name)
@@ -97,7 +100,8 @@ public class KeriConfig {
                 throw new IllegalStateException("Agent or pre is null");
             }
             if (!hasEndRole(client, name, "agent", eid)) {
-                client.operations().wait(client.identifiers().addEndRole(name, "agent", eid, null).op());
+                requireNotFailed(client.operations().wait(client.identifiers().addEndRole(name, "agent", eid, null).op()),
+                        "publisher end-role add");
             }
         }
 

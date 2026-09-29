@@ -18,6 +18,13 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 
+import id.veridian.signify.app.Exchanging.ExchangeMessageResult;
+import id.veridian.signify.app.coring.Operations;
+import id.veridian.signify.app.credentialing.ipex.IpexAdmitArgs;
+import id.veridian.signify.app.credentialing.ipex.IpexAgreeArgs;
+import id.veridian.signify.exception.SignifyInterruptedException;
+import id.veridian.signify.generated.keria.model.HabState;
+import id.veridian.signify.generated.keria.model.KeyStateRecord;
 import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchemaRegistry;
@@ -30,13 +37,6 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.view.CeremonyView;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
 import org.cardanofoundation.lob.app.keri_attestation.service.CredentialChainValidator.ValidatedCredential;
 import org.cardanofoundation.lob.app.keri_attestation.service.KeriNotificationCorrelator.CorrelatedNotification;
-import org.cardanofoundation.signify.app.Exchanging.ExchangeMessageResult;
-import org.cardanofoundation.signify.app.coring.Operations;
-import org.cardanofoundation.signify.app.credentialing.ipex.IpexAdmitArgs;
-import org.cardanofoundation.signify.app.credentialing.ipex.IpexAgreeArgs;
-import org.cardanofoundation.signify.exception.SignifyInterruptedException;
-import org.cardanofoundation.signify.generated.keria.model.HabState;
-import org.cardanofoundation.signify.generated.keria.model.KeyStateRecord;
 
 /**
  * Drives IPEX credential presentation SYNCHRONOUSLY, in the request thread: the
@@ -253,6 +253,11 @@ public class KeriCredentialService {
                 return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
                         "IPEX grant exchange did not embed an ACDC (e.acdc.d missing).");
             }
+            Optional<Either<ProblemDetail, CeremonyView>> foreignSchema =
+                    rejectUnacceptedSchema(ceremonyId, generation, claimedNotification);
+            if (foreignSchema.isPresent()) {
+                return foreignSchema.get();
+            }
 
             try {
                 ExchangeMessageResult admitResult = client.client().ipex().admit(IpexAdmitArgs.builder()
@@ -263,7 +268,7 @@ public class KeriCredentialService {
                 logAdmitExn(admitResult, claimedNotification.exnSaid(), linkedAid, "admit-own");
                 var admitOp = client.client().ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(),
                         admitResult.atc(), List.of(linkedAid));
-                client.client().operations().wait(admitOp);
+                KeriOperations.requireNotFailed(client.client().operations().wait(admitOp), "IPEX admit");
                 log.info("admit operation completed");
             } catch (Exception e) {
                 interruptIfNeeded(e);
@@ -286,7 +291,7 @@ public class KeriCredentialService {
                         .offerSaid(claimedNotification.exnSaid()).datetime(nowKeriTimestamp()).build());
                 var agreeOp = client.client().ipex().submitAgree(agentName, agreeResult.exn(), agreeResult.sigs(),
                         List.of(linkedAid));
-                client.client().operations().wait(agreeOp);
+                KeriOperations.requireNotFailed(client.client().operations().wait(agreeOp), "IPEX agree");
             } catch (Exception e) {
                 interruptIfNeeded(e);
                 return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
@@ -310,6 +315,11 @@ public class KeriCredentialService {
                 return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
                         "IPEX grant exchange did not embed an ACDC (e.acdc.d missing).");
             }
+            Optional<Either<ProblemDetail, CeremonyView>> foreignSchema =
+                    rejectUnacceptedSchema(ceremonyId, generation, grantNotification);
+            if (foreignSchema.isPresent()) {
+                return foreignSchema.get();
+            }
 
             try {
                 ExchangeMessageResult admitResult = client.client().ipex().admit(IpexAdmitArgs.builder()
@@ -320,7 +330,7 @@ public class KeriCredentialService {
                 logAdmitExn(admitResult, grantNotification.exnSaid(), linkedAid, "agree");
                 var admitOp = client.client().ipex().submitAdmit(agentName, admitResult.exn(), admitResult.sigs(),
                         agreeResult.atc(), List.of(linkedAid));
-                client.client().operations().wait(admitOp);
+                KeriOperations.requireNotFailed(client.client().operations().wait(admitOp), "IPEX admit");
                 log.info("admit operation completed");
             } catch (Exception e) {
                 interruptIfNeeded(e);
@@ -449,7 +459,8 @@ public class KeriCredentialService {
                 Operations.WaitOptions waitOptions = Operations.WaitOptions.builder()
                         .abortSignal(Operations.AbortSignal.builder().timeout(SCHEMA_RESOLVE_TIMEOUT_MILLIS).build())
                         .build();
-                client.client().operations().wait(resolveResult, waitOptions);
+                KeriOperations.requireNotFailed(client.client().operations().wait(resolveResult, waitOptions),
+                        "schema OOBI resolve");
                 resolvedSchemaSaids.add(said);
             } catch (Exception e) {
                 interruptIfNeeded(e);
@@ -516,7 +527,7 @@ public class KeriCredentialService {
             // Every IPEX submit is followed by operations().wait, not just fire-and-forget.
             var applyOp = client.client().ipex().submitApply(agentName, applyResult.exn(), applyResult.sigs(),
                     List.of(linkedAid));
-            client.client().operations().wait(applyOp);
+            KeriOperations.requireNotFailed(client.client().operations().wait(applyOp), "IPEX apply");
             log.info("IPEX apply sent to {}", linkedAid);
             return Either.right(null);
         } catch (SignifyInterruptedException e) {
@@ -659,6 +670,50 @@ public class KeriCredentialService {
                 ? s
                 : notification.claimedRoute();
         return route != null && GRANT_ROUTES.contains(route);
+    }
+
+    /**
+     * Refuses, BEFORE admit, a grant whose embedded ACDC schema ({@code e.acdc.s}) is not one this
+     * deployment accepts. The check is against every configured schema — the same set
+     * {@link CredentialChainValidator} accepts — not only the one the apply asked for, because Veridian
+     * presents spontaneously and may grant a different accepted credential. Admitting first and letting
+     * the validator reject afterwards would already have stored an unwanted credential on our agent.
+     *
+     * <p>On rejection the step is failed, and only AFTER that has committed is the grant notification
+     * marked and deleted: left unread, it would sit on the agent's shared queue and the next presentation
+     * (for any ceremony) would re-claim the very same grant off the route-only wait and fail the same
+     * way. The cleanup is best-effort — the ceremony is already FAILED and must not be re-failed.
+     *
+     * @return the problem to return, or empty when the schema is accepted
+     */
+    private Optional<Either<ProblemDetail, CeremonyView>> rejectUnacceptedSchema(String ceremonyId, int generation,
+            CorrelatedNotification grant) {
+        String schemaSaid = extractCredentialSchemaSaid(grant.exn());
+        List<String> accepted = registry.schemaSaids();
+        if (schemaSaid != null && accepted.contains(schemaSaid)) {
+            return Optional.empty();
+        }
+        String detail = "Presented credential has schema %s, which is not an accepted schema %s."
+                .formatted(schemaSaid, accepted);
+        log.warn("rejecting IPEX grant {} before admit: {}", grant.exnSaid(), detail);
+        Either<ProblemDetail, CeremonyView> failed = failCredentialRequest(ceremonyId, generation,
+                KeriAttestationProblems.CREDENTIAL_REJECTED, detail);
+        try {
+            correlator.markAndDelete(grant.notificationId());
+        } catch (RuntimeException e) {
+            log.warn("Failed to mark/delete rejected grant notification {} for ceremony {} (best-effort, the "
+                    + "ceremony is FAILED regardless): {}", grant.notificationId(), ceremonyId, e.getMessage());
+        }
+        return Optional.of(failed);
+    }
+
+    /** The grant's embedded ACDC schema SAID ({@code e.acdc.s}), or {@code null} if absent. */
+    private static String extractCredentialSchemaSaid(Map<String, Object> grantExn) {
+        if (grantExn == null || !(grantExn.get("e") instanceof Map<?, ?> em)
+                || !(em.get("acdc") instanceof Map<?, ?> am)) {
+            return null;
+        }
+        return am.get("s") instanceof String s ? s : null;
     }
 
     private static String extractCredentialSaid(Map<String, Object> grantExn) {

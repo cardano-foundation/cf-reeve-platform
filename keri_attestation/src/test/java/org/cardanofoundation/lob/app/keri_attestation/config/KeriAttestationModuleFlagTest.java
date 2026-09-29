@@ -6,10 +6,11 @@ import java.time.Duration;
 
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
+import id.veridian.signify.app.clienting.SignifyClient;
+
 import org.junit.jupiter.api.Test;
 
 import org.cardanofoundation.lob.app.config.KeriAttestationModuleConfig;
-import org.cardanofoundation.signify.app.clienting.SignifyClient;
 
 class KeriAttestationModuleFlagTest {
 

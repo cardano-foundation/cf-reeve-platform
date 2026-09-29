@@ -15,14 +15,13 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import id.veridian.signify.app.aiding.IdentifierController;
+import id.veridian.signify.app.clienting.SignifyClient;
+import id.veridian.signify.generated.keria.model.HabState;
+import id.veridian.signify.generated.keria.model.KeyStateRecord;
 import org.slf4j.LoggerFactory;
 
 import org.junit.jupiter.api.Test;
-
-import org.cardanofoundation.signify.app.aiding.IdentifierController;
-import org.cardanofoundation.signify.app.clienting.SignifyClient;
-import org.cardanofoundation.signify.generated.keria.model.HabState;
-import org.cardanofoundation.signify.generated.keria.model.KeyStateRecord;
 
 /**
  * Unit tests for {@link SignifyClientConfig#resolveBran}: a configured passcode must be honored

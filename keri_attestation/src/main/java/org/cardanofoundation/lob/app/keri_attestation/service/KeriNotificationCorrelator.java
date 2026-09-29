@@ -7,9 +7,11 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
@@ -19,13 +21,13 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import id.veridian.signify.app.Notifying;
+import id.veridian.signify.exception.SignifyInterruptedException;
+import id.veridian.signify.generated.keria.model.ExchangeResource;
+import id.veridian.signify.generated.keria.model.Notification;
 
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
-import org.cardanofoundation.signify.app.Notifying;
-import org.cardanofoundation.signify.exception.SignifyInterruptedException;
-import org.cardanofoundation.signify.generated.keria.model.ExchangeResource;
-import org.cardanofoundation.signify.generated.keria.model.Notification;
 
 /**
  * Claims KERI agent notifications for an outstanding ceremony request, by route.
@@ -37,6 +39,11 @@ import org.cardanofoundation.signify.generated.keria.model.Notification;
  * correlation fields, so requiring them unconditionally would silently discard a legitimate reply. A
  * single agent only ever has one ceremony outstanding on a given route at a time, so the route match
  * alone is enough to identify which reply belongs to which wait.
+ *
+ * <p>The exception is a caller that CAN prove causality from the fetched exchange: the remotesign ref
+ * carries {@code p} (our request's SAID), {@code i} (the wallet) and {@code rp} (our agent) on the exn
+ * itself — Veridian sets them when it builds the ref — so that caller passes a predicate
+ * ({@link #awaitByRoute(List, Duration, Set, Predicate)}) and only a ref answering its own request counts.
  */
 @Service
 @RequiredArgsConstructor
@@ -55,6 +62,9 @@ public class KeriNotificationCorrelator {
      *  under a route we don't match (a wire-shape problem here). Final-with-initializer, so Lombok's
      *  {@code @RequiredArgsConstructor} excludes it. */
     private final AtomicReference<String> lastByRouteNotificationSummary = new AtomicReference<>("");
+
+    /** Last notification id reported as skipped by a caller's match, so a waiting poll loop logs it once. */
+    private final AtomicReference<String> lastSkippedNotificationId = new AtomicReference<>("");
 
     private final KeriAttestationClient client;
     private final KeriAttestationProperties properties;
@@ -110,12 +120,31 @@ public class KeriNotificationCorrelator {
      */
     public Optional<CorrelatedNotification> awaitByRoute(List<String> routes, Duration timeout,
             Set<String> excludeNoteIds) {
+        return awaitMatching(routes, timeout, excludeNoteIds, null);
+    }
+
+    /**
+     * As {@link #awaitByRoute(List, Duration, Set)}, but a route match is claimed only if its FETCHED
+     * exchange also satisfies {@code exnMatches} AND is the exchange the notification announced
+     * ({@code exn.d == note.a.d}, enforced here because only the correlator holds the notification).
+     * Used where the reply carries enough to prove causality — a remotesign ref's {@code p} is our
+     * request's SAID — so debris answering some other request cannot be claimed. A notification that
+     * fails either check is skipped, never marked or deleted: it may still be another wait's reply.
+     */
+    public Optional<CorrelatedNotification> awaitByRoute(List<String> routes, Duration timeout,
+            Set<String> excludeNoteIds, Predicate<Map<String, Object>> exnMatches) {
+        return awaitMatching(routes, timeout, excludeNoteIds, Objects.requireNonNull(exnMatches, "exnMatches"));
+    }
+
+    /** {@code exnMatches == null} is the route-only wait: no exn check at all, not even {@code d}. */
+    private Optional<CorrelatedNotification> awaitMatching(List<String> routes, Duration timeout,
+            Set<String> excludeNoteIds, Predicate<Map<String, Object>> exnMatches) {
         Instant deadline = Instant.now().plus(timeout);
         Instant start = Instant.now();
         int poll = 0;
         while (true) {
             try {
-                Optional<CorrelatedNotification> claimed = pollOnceByRoute(routes, excludeNoteIds);
+                Optional<CorrelatedNotification> claimed = pollOnceByRoute(routes, excludeNoteIds, exnMatches);
                 if (claimed.isPresent()) {
                     return claimed;
                 }
@@ -223,8 +252,8 @@ public class KeriNotificationCorrelator {
         return all;
     }
 
-    private Optional<CorrelatedNotification> pollOnceByRoute(List<String> routes, Set<String> excludeNoteIds)
-            throws InterruptedException {
+    private Optional<CorrelatedNotification> pollOnceByRoute(List<String> routes, Set<String> excludeNoteIds,
+            Predicate<Map<String, Object>> exnMatches) throws InterruptedException {
         List<Notification> notes = listNotifications();
 
         logNotificationState(notes, routes);
@@ -261,6 +290,16 @@ public class KeriNotificationCorrelator {
                 continue;
             }
             if (exn == null) {
+                continue;
+            }
+            if (exnMatches != null && (!noteExnSaid.equals(exn.get("d")) || !exnMatches.test(exn))) {
+                // Route matches but the exchange does not answer the caller's request (or is not the one
+                // the notification announced). Leave it untouched and keep waiting.
+                if (!String.valueOf(note.getI()).equals(lastSkippedNotificationId.getAndSet(String.valueOf(note.getI())))) {
+                    log.info("Skipping KERI notification {} on route {} (exn {}): does not answer the awaited request "
+                            + "(exn d={} r={} p={} i={} rp={})", note.getI(), note.getA().getR(), noteExnSaid,
+                            exn.get("d"), exn.get("r"), exn.get("p"), exn.get("i"), exn.get("rp"));
+                }
                 continue;
             }
             log.info("Claimed KERI notification on route {} (exn {})", note.getA().getR(), noteExnSaid);

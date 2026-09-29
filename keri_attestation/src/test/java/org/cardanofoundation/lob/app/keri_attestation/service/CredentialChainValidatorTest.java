@@ -14,6 +14,7 @@ import java.util.Map;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.ProblemDetail;
 
+import id.veridian.signify.cesr.Saider;
 import io.vavr.control.Either;
 
 import org.junit.jupiter.api.Test;
@@ -23,7 +24,6 @@ import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchema;
 import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchema.TrustModel;
 import org.cardanofoundation.lob.app.keri_attestation.config.CredentialSchemaRegistry;
 import org.cardanofoundation.lob.app.keri_attestation.service.CredentialChainValidator.ValidatedCredential;
-import org.cardanofoundation.signify.cesr.Saider;
 
 /**
  * {@code fixtures/vlei-chain-valid.cesr} is a real, genuine 3-level vLEI credential chain (see
