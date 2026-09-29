@@ -586,7 +586,11 @@ class KeriCredentialServiceTest {
         verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
         verify(identityLinkRepository, never()).save(any());
         verify(correlator).markAndDelete(OFFER_NOTIF_ID);
-        verify(correlator, never()).markAndDelete(GRANT_NOTIF_ID);
+        // Released once the failure is committed, so the next presentation cannot re-claim it.
+        InOrder released = inOrder(ceremonyService, correlator);
+        released.verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.CREDENTIAL_REQUESTED,
+                KeriAttestationProblems.CREDENTIAL_REJECTED, "issuee mismatch");
+        released.verify(correlator).markAndDelete(GRANT_NOTIF_ID);
     }
 
     @Test
@@ -815,10 +819,12 @@ class KeriCredentialServiceTest {
                 KeriAttestationProblems.CREDENTIAL_REJECTED, "issuee mismatch");
         verify(ceremonyService, never()).completeStep(any(), anyInt(), any(), any(), any());
         verify(identityLinkRepository, never()).save(any());
-        // Same durability contract as the negotiated path (see
-        // presentCredentialValidatorRejectionFailsWithCredentialRejectedAndDoesNotMarkTheGrantNotification):
-        // the grant is never deleted unless the credential was actually persisted.
-        verify(correlator, never()).markAndDelete(any());
+        // Same as the negotiated path: the rejected grant is released once the failure is committed, so the
+        // next presentation cannot re-claim it ahead of the wallet's fresh reply.
+        InOrder released = inOrder(ceremonyService, correlator);
+        released.verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.CREDENTIAL_REQUESTED,
+                KeriAttestationProblems.CREDENTIAL_REJECTED, "issuee mismatch");
+        released.verify(correlator).markAndDelete(GRANT_NOTIF_ID);
     }
 
     @Test
@@ -913,7 +919,11 @@ class KeriCredentialServiceTest {
                 KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
                 "IPEX grant exchange did not embed an ACDC (e.acdc.d missing).");
         verify(ipex, never()).admit(any());
-        verify(correlator, never()).markAndDelete(any());
+        InOrder released = inOrder(ceremonyService, correlator);
+        released.verify(ceremonyService).failStep(CEREMONY_ID, GENERATION, CeremonyState.CREDENTIAL_REQUESTED,
+                KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
+                "IPEX grant exchange did not embed an ACDC (e.acdc.d missing).");
+        released.verify(correlator).markAndDelete(GRANT_NOTIF_ID);
     }
 
     // ==================== schema OOBI resolution (Fix 3, live-testing) ====================

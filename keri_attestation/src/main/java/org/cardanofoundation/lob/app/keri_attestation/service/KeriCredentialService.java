@@ -250,8 +250,8 @@ public class KeriCredentialService {
             logGrantWireData(claimedNotification.exn());
             String directCredentialSaid = extractCredentialSaid(claimedNotification.exn());
             if (directCredentialSaid == null) {
-                return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
-                        "IPEX grant exchange did not embed an ACDC (e.acdc.d missing).");
+                return failAndReleaseGrant(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
+                        "IPEX grant exchange did not embed an ACDC (e.acdc.d missing).", claimedNotification.notificationId());
             }
             Optional<Either<ProblemDetail, CeremonyView>> foreignSchema =
                     rejectUnacceptedSchema(ceremonyId, generation, claimedNotification);
@@ -272,8 +272,8 @@ public class KeriCredentialService {
                 log.info("admit operation completed");
             } catch (Exception e) {
                 interruptIfNeeded(e);
-                return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
-                        "Failed to admit IPEX grant: " + e.getMessage());
+                return failAndReleaseGrant(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
+                        "Failed to admit IPEX grant: " + e.getMessage(), claimedNotification.notificationId());
             }
             log.info("admit sent");
             credentialSaid = directCredentialSaid;
@@ -312,8 +312,8 @@ public class KeriCredentialService {
 
             String negotiatedCredentialSaid = extractCredentialSaid(grantNotification.exn());
             if (negotiatedCredentialSaid == null) {
-                return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
-                        "IPEX grant exchange did not embed an ACDC (e.acdc.d missing).");
+                return failAndReleaseGrant(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
+                        "IPEX grant exchange did not embed an ACDC (e.acdc.d missing).", grantNotification.notificationId());
             }
             Optional<Either<ProblemDetail, CeremonyView>> foreignSchema =
                     rejectUnacceptedSchema(ceremonyId, generation, grantNotification);
@@ -334,8 +334,8 @@ public class KeriCredentialService {
                 log.info("admit operation completed");
             } catch (Exception e) {
                 interruptIfNeeded(e);
-                return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
-                        "Failed to admit IPEX grant: " + e.getMessage());
+                return failAndReleaseGrant(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
+                        "Failed to admit IPEX grant: " + e.getMessage(), grantNotification.notificationId());
             }
             log.info("admit sent");
             credentialSaid = negotiatedCredentialSaid;
@@ -348,15 +348,17 @@ public class KeriCredentialService {
             Optional<String> cesrOpt = cesrFetcher.fetch(credentialSaid);
             if (cesrOpt.isEmpty()) {
                 log.warn("credential {} not retrievable from agent after admit", credentialSaid);
-                return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
-                        "Credential %s was not found in the store after admit.".formatted(credentialSaid));
+                return failAndReleaseGrant(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
+                        "Credential %s was not found in the store after admit.".formatted(credentialSaid),
+                        deferredGrantNotificationId);
             }
             fullCesr = cesrOpt.get();
             log.info("credential CESR chain fetched ({} chars)", fullCesr.length());
         } catch (Exception e) {
             interruptIfNeeded(e);
-            return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
-                    "Failed to fetch credential %s: %s".formatted(credentialSaid, e.getMessage()));
+            return failAndReleaseGrant(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED,
+                    "Failed to fetch credential %s: %s".formatted(credentialSaid, e.getMessage()),
+                    deferredGrantNotificationId);
         }
 
         // This is the only external-boundary call in this method not backed by a checked-exception
@@ -372,13 +374,13 @@ public class KeriCredentialService {
         } catch (Exception e) {
             interruptIfNeeded(e);
             log.warn("credential chain validation threw: {}", e.getMessage(), e);
-            return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REJECTED,
-                    "Chain validation error: " + e.getMessage());
+            return failAndReleaseGrant(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REJECTED,
+                    "Chain validation error: " + e.getMessage(), deferredGrantNotificationId);
         }
         if (validated.isLeft()) {
             log.warn("credential chain validation rejected: {}", validated.getLeft().getDetail());
-            return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REJECTED,
-                    validated.getLeft().getDetail());
+            return failAndReleaseGrant(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REJECTED,
+                    validated.getLeft().getDetail(), deferredGrantNotificationId);
         }
         ValidatedCredential vc = validated.get();
 
@@ -389,9 +391,9 @@ public class KeriCredentialService {
         if (!credentialSaid.equals(vc.credentialSaid())) {
             log.warn("validated leaf credential {} does not match the fetched credential {}", vc.credentialSaid(),
                     credentialSaid);
-            return failCredentialRequest(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REJECTED,
+            return failAndReleaseGrant(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REJECTED,
                     "Validated leaf credential %s does not match the fetched credential %s."
-                            .formatted(vc.credentialSaid(), credentialSaid));
+                            .formatted(vc.credentialSaid(), credentialSaid), deferredGrantNotificationId);
         }
         log.info("credential validated {}", vc.credentialSaid());
 
@@ -608,6 +610,23 @@ public class KeriCredentialService {
         return Either.left(KeriAttestationProblems.unprocessable(title, detail));
     }
 
+    /**
+     * {@link #failCredentialRequest} for a failure AFTER a grant was claimed: once the failure is committed,
+     * the grant is marked and deleted (best-effort). Left unread it would be re-claimed first by every later
+     * presentation, ahead of the wallet's fresh reply, so the ceremony could never succeed again.
+     */
+    private Either<ProblemDetail, CeremonyView> failAndReleaseGrant(String ceremonyId, int generation, String title,
+            String detail, String grantNotificationId) {
+        Either<ProblemDetail, CeremonyView> failed = failCredentialRequest(ceremonyId, generation, title, detail);
+        try {
+            correlator.markAndDelete(grantNotificationId);
+        } catch (RuntimeException e) {
+            log.warn("Failed to mark/delete grant notification {} for ceremony {} (best-effort, the ceremony is "
+                    + "FAILED regardless): {}", grantNotificationId, ceremonyId, e.getMessage());
+        }
+        return failed;
+    }
+
     private void failCredentialStep(String ceremonyId, int expectedGeneration, String title, String detail) {
         ceremonyService.failStep(ceremonyId, expectedGeneration, CeremonyState.CREDENTIAL_REQUESTED, title, detail);
     }
@@ -696,15 +715,8 @@ public class KeriCredentialService {
         String detail = "Presented credential has schema %s, which is not an accepted schema %s."
                 .formatted(schemaSaid, accepted);
         log.warn("rejecting IPEX grant {} before admit: {}", grant.exnSaid(), detail);
-        Either<ProblemDetail, CeremonyView> failed = failCredentialRequest(ceremonyId, generation,
-                KeriAttestationProblems.CREDENTIAL_REJECTED, detail);
-        try {
-            correlator.markAndDelete(grant.notificationId());
-        } catch (RuntimeException e) {
-            log.warn("Failed to mark/delete rejected grant notification {} for ceremony {} (best-effort, the "
-                    + "ceremony is FAILED regardless): {}", grant.notificationId(), ceremonyId, e.getMessage());
-        }
-        return Optional.of(failed);
+        return Optional.of(failAndReleaseGrant(ceremonyId, generation, KeriAttestationProblems.CREDENTIAL_REJECTED,
+                detail, grant.notificationId()));
     }
 
     /** The grant's embedded ACDC schema SAID ({@code e.acdc.s}), or {@code null} if absent. */
