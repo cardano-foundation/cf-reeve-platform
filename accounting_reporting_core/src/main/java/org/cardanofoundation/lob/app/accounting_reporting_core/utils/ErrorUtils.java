@@ -18,6 +18,12 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Det
 
 public class ErrorUtils {
 
+    public static final String BAG_ERROR = "error";
+    public static final String BAG_CODE = "code";
+    public static final String BAG_MESSAGE = "message";
+    public static final String BAG_DETAIL = "detail";
+    public static final String BAG_TECHNICAL_ERROR_MESSAGE = "technicalErrorMessage";
+
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private ErrorUtils() {
@@ -32,32 +38,32 @@ public class ErrorUtils {
 
             Map<String, Object> error = new HashMap<>();
             if (code != null && !code.isEmpty()) {
-                error.put("code", code);
+                error.put(BAG_CODE, code);
             }
             if (problem.getDetail() != null && !problem.getDetail().isEmpty()) {
-                error.put("message", problem.getDetail());
+                error.put(BAG_MESSAGE, problem.getDetail());
             }
 
             // Only add error map if it's not empty
             Map<String, Object> bag = new HashMap<>();
             if (problem.getDetail() != null && !problem.getDetail().isEmpty()) {
-                bag.put("detail", problem.getDetail());
+                bag.put(BAG_DETAIL, problem.getDetail());
             }
             if (problem.getTitle() != null && !problem.getTitle().isEmpty()) {
-                bag.put("message", problem.getTitle());
+                bag.put(BAG_MESSAGE, problem.getTitle());
             }
             if (!error.isEmpty()) {
-                bag.put("error", error);
+                bag.put(BAG_ERROR, error);
             }
 
             // Only include technicalErrorMessage if bag is not empty
             if (!bag.isEmpty() && problem.getDetail() != null && !problem.getDetail().isEmpty()) {
-                bag.put("technicalErrorMessage", problem.getDetail());
+                bag.put(BAG_TECHNICAL_ERROR_MESSAGE, problem.getDetail());
             }
 
             return bag;
         } catch (Exception e) {
-            return Map.of("error", "An error occurred while processing the problem details");
+            return Map.of(BAG_ERROR, "An error occurred while processing the problem details");
         }
     }
 
@@ -73,15 +79,15 @@ public class ErrorUtils {
         Optional<String> message = readableMessage(details);
 
         Map<String, Object> error = new LinkedHashMap<>();
-        code.ifPresent(value -> error.put("code", value));
-        message.ifPresent(value -> error.put("message", value));
+        code.ifPresent(value -> error.put(BAG_CODE, value));
+        message.ifPresent(value -> error.put(BAG_MESSAGE, value));
 
         Map<String, Object> normalised = new LinkedHashMap<>();
-        normalised.put("error", error);
-        firstText(bag.get("message")).or(() -> message).ifPresent(value -> normalised.put("message", value));
-        firstText(bag.get("detail")).or(() -> message).ifPresent(value -> normalised.put("detail", value));
-        firstText(bag.get("technicalErrorMessage"), bag.get("detail")).or(() -> message)
-                .ifPresent(value -> normalised.put("technicalErrorMessage", value));
+        normalised.put(BAG_ERROR, error);
+        firstText(bag.get(BAG_MESSAGE)).or(() -> message).ifPresent(value -> normalised.put(BAG_MESSAGE, value));
+        firstText(bag.get(BAG_DETAIL)).or(() -> message).ifPresent(value -> normalised.put(BAG_DETAIL, value));
+        firstText(bag.get(BAG_TECHNICAL_ERROR_MESSAGE), bag.get(BAG_DETAIL)).or(() -> message)
+                .ifPresent(value -> normalised.put(BAG_TECHNICAL_ERROR_MESSAGE, value));
 
         return normalised;
     }
@@ -95,13 +101,13 @@ public class ErrorUtils {
             return Optional.empty();
         }
         Map<String, Object> bag = Optional.ofNullable(details.getBag()).orElse(Map.of());
-        Object error = bag.get("error");
+        Object error = bag.get(BAG_ERROR);
 
         return firstText(
-                error instanceof Map<?, ?> errorMap ? errorMap.get("message") : error,
-                bag.get("detail"),
-                bag.get("technicalErrorMessage"),
-                bag.get("message"),
+                error instanceof Map<?, ?> errorMap ? errorMap.get(BAG_MESSAGE) : error,
+                bag.get(BAG_DETAIL),
+                bag.get(BAG_TECHNICAL_ERROR_MESSAGE),
+                bag.get(BAG_MESSAGE),
                 details.getSubCode(),
                 details.getCode());
     }
@@ -142,14 +148,14 @@ public class ErrorUtils {
         }
 
         List<String> messages = new ArrayList<>();
-        JsonNode error = root.path("error");
+        JsonNode error = root.path(BAG_ERROR);
         if (error.isObject()) {
-            messages.add(codeAndMessage(error.path("code").asText(""), error.path("message").asText("")));
+            messages.add(codeAndMessage(error.path(BAG_CODE).asText(""), error.path(BAG_MESSAGE).asText("")));
         } else if (error.isTextual()) {
             messages.add(error.asText());
         }
         root.path("o:errorDetails").forEach(detail ->
-                messages.add(codeAndMessage(detail.path("o:errorCode").asText(""), detail.path("detail").asText(""))));
+                messages.add(codeAndMessage(detail.path("o:errorCode").asText(""), detail.path(BAG_DETAIL).asText(""))));
         messages.removeIf(String::isBlank);
         if (messages.isEmpty() && !root.path("title").asText("").isBlank()) {
             messages.add(root.path("title").asText());

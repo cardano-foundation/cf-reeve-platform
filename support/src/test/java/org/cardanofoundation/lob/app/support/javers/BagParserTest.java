@@ -16,7 +16,7 @@ class BagParserTest {
 
         Map<String, Object> parsed = BagParser.parse(bag);
 
-        assertThat(parsed.get("technicalErrorMessage")).isEqualTo(Map.of("code", "X", "message", "Failed:"));
+        assertThat(parsed).containsEntry("technicalErrorMessage", Map.of("code", "X", "message", "Failed:"));
     }
 
     @Test
@@ -28,6 +28,6 @@ class BagParserTest {
         BagParser.parse(bag);
 
         assertThat(error).containsEntry("message", message);
-        assertThat(bag.get("issues")).isEqualTo(List.of(Map.of("detail", message)));
+        assertThat(bag).containsEntry("issues", List.of(Map.of("detail", message)));
     }
 }

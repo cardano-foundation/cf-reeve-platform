@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import javax.annotation.Nullable;
+
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -259,7 +261,7 @@ public class NetSuiteClient {
      * {"error":{"code","message"}} or {"title", "o:errorDetails":[{"detail","o:errorCode"}]} - and
      * must not end up verbatim in the batch failure details, which are shown to the user.
      */
-    String describeErrorResponse(int statusCode, String body) {
+    String describeErrorResponse(int statusCode, @Nullable String body) {
         String prefix = "NetSuite API error (HTTP %d)".formatted(statusCode);
         if (body == null || body.isBlank()) {
             return prefix + ": empty response";
