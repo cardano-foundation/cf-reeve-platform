@@ -120,14 +120,13 @@ public class TransactionConverter {
                 log.error("Both debit and credit amounts are non-zero for transaction: {}", txId);
 
 
+                String message = "Both debit and credit amounts are non-zero for transaction: " + txLine.transactionNumber();
                 Map<String, Object> bag = Map.of(
-                        Constants.NETSUITE_BAG_TECHNICAL_ERROR_MESSAGE, Map.of(
-                                "error", Map.of(
-                                        "code", "NETSUITE_BAG_TECHNICAL_ERROR_MESSAGE",
-                                        "Message", "Both amounts are non-zero"
-                                )
+                        "error", Map.of(
+                                "code", "TRANSACTIONS_VALIDATION_ERROR",
+                                "message", message
                         ),
-                        "mesasage", "Both debit and credit amounts are non-zero for transaction: {}",
+                        Constants.NETSUITE_BAG_TECHNICAL_ERROR_MESSAGE, message,
                         Constants.NETSUITE_BAG_ORGANISATION_ID, organisationId
                 );
 
@@ -314,7 +313,12 @@ public class TransactionConverter {
         Optional<String> organisationIdM = codesMappingService.getCodeMapping(netsuiteInstanceId, txLine.subsidiary(), ORGANISATION);
 
         if (organisationIdM.isEmpty()) {
-            Map<String, Object> bag = Map.<String, Object>of("netsuiteInstanceId", netsuiteInstanceId, "subsidiary", txLine.subsidiary());
+            String message = "Organisation not imported: no organisation mapping for NetSuite subsidiary " + txLine.subsidiary();
+            Map<String, Object> bag = Map.<String, Object>of(
+                    "error", Map.of("code", "ORGANISATION_NOT_IMPORTED", "message", message),
+                    Constants.NETSUITE_BAG_TECHNICAL_ERROR_MESSAGE, message,
+                    "netsuiteInstanceId", netsuiteInstanceId,
+                    "subsidiary", txLine.subsidiary());
 
             return Either.left(new FatalError(ADAPTER_ERROR, "ORGANISATION_NOT_IMPORTED", bag));
         }
