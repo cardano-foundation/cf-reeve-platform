@@ -36,6 +36,10 @@ public class SpendingEventMetadataSerialiser {
 
     public static final String VERSION = "1.0";
 
+    /** Metadata key for the permanent, human-readable identifier (LOB-2384) — shared across the
+     * project, sub-project, and milestone levels, each of which emits it under this same key. */
+    private static final String PRO_ID_KEY = "pro_id";
+
     private final Clock clock;
 
     public MetadataMap serialiseToMetadataMap(Set<SpendingEventEntity> events,
@@ -131,6 +135,9 @@ public class SpendingEventMetadataSerialiser {
         if (allocation.getProjectTitle() != null) {
             metadataMap.put("project_title", allocation.getProjectTitle());
         }
+        if (allocation.getProId() != null) {
+            metadataMap.put(PRO_ID_KEY, allocation.getProId());
+        }
 
         val milestoneList = MetadataBuilder.createList();
         for (val milestone : allocation.getMilestones()) {
@@ -142,6 +149,9 @@ public class SpendingEventMetadataSerialiser {
             subProjectMap.put("sub_project_id", allocation.getSubProjectId());
             if (allocation.getSubProjectTitle() != null) {
                 subProjectMap.put("sub_project_title", allocation.getSubProjectTitle());
+            }
+            if (allocation.getSubProjectProId() != null) {
+                subProjectMap.put(PRO_ID_KEY, allocation.getSubProjectProId());
             }
             subProjectMap.put("milestones", milestoneList);
             metadataMap.put("sub_project", subProjectMap);
@@ -158,6 +168,9 @@ public class SpendingEventMetadataSerialiser {
         metadataMap.put("milestone_id", milestone.getMilestoneId());
         if (milestone.getMilestoneTitle() != null) {
             metadataMap.put("milestone_title", milestone.getMilestoneTitle());
+        }
+        if (milestone.getProId() != null) {
+            metadataMap.put(PRO_ID_KEY, milestone.getProId());
         }
         if (milestone.getAllocatedAmount() != null) {
             metadataMap.put("allocated_amount", BigDecimals.normaliseString(milestone.getAllocatedAmount()));

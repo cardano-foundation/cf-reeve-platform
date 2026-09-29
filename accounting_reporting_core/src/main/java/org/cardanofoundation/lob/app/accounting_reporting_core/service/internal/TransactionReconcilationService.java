@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.*;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OperationType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.Reconcilation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationCode;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.reconcilation.ReconcilationStatus;
@@ -182,21 +183,7 @@ public class TransactionReconcilationService {
                 .filter(tx -> !attachedTxIds.contains(tx.getId()))
                 .collect(Collectors.toSet());
 
-        for (TransactionEntity tx : transactionsNotInAttached) {
-            log.warn("Transaction not found in LOB DB yet, needs import, transactionId: {} ({})", tx.getInternalTransactionNumber(), tx.getId());
-
-            reconcilationEntity.addViolation(ReconcilationViolation.builder()
-                    .transactionId(tx.getId())
-                    .rejectionCode(ReconcilationRejectionCode.TX_NOT_IN_LOB)
-                    .transactionInternalNumber(tx.getInternalTransactionNumber())
-                    .transactionEntryDate(tx.getEntryDate())
-                    .transactionType(tx.getTransactionType())
-                    .amountLcySum(tx.getItems().stream()
-                            .map(TransactionItemEntity::getAmountLcy)
-                            .reduce(BigDecimal.ZERO, BigDecimal::add)
-                    )
-                    .build());
-        }
+        addMissingFromLobViolations(reconcilationEntity, transactionsNotInAttached);
 
         Either<ProblemDetail, Map<String, Boolean>> isOnChainE = blockchainReaderPublicApi.isOnChain(attachedTxEntities.stream()
                 .map(TransactionEntity::getId)
@@ -217,68 +204,9 @@ public class TransactionReconcilationService {
         Map<String, Boolean> isOnChainMap = isOnChainE.get();
 
         for (TransactionEntity attachedTx : attachedTxEntities) {
-            attachedTx.setLastReconcilation(Optional.empty()); // To avoid cyclical references when a new version exist in the ERP
-            TransactionEntity detachedTx = detachedChunkTxsMap.get(attachedTx.getId()); // detachedTx can never be null since we are using detached tx ids as a way to find our attached txs
-            detachedTx.setLastReconcilation(Optional.empty()); // Also clear on detached to prevent Javers null ID issues with Hibernate proxies
-
-            if (attachedTx.getRollbackSuffix() != null) {
-                // Derive the original tx number from the attached (DB) tx, which already has the rollback suffix.
-                // We cannot use detachedTx.getInternalTransactionNumber() because it may already have the
-                // rollback suffix applied (CSV path) or not (NetSuite path). Using attachedTx is always correct.
-                String rollbackSuffix = attachedTx.getRollbackSuffix();
-                String attachedTxNumber = attachedTx.getInternalTransactionNumber(); // e.g. "TXNUM-C"
-                String originalTxNumber = attachedTxNumber.substring(0, attachedTxNumber.length() - rollbackSuffix.length() - 1);
-                detachedTx.setInternalTransactionNumber(originalTxNumber + "-" + rollbackSuffix);
-                detachedTx.setRollbackSuffix(rollbackSuffix);
-
-            }
-            String attachedTxHash = ERPSourceTransactionVersionCalculator.compute(attachedTx);
-            String detachedTxHash = ERPSourceTransactionVersionCalculator.compute(detachedTx);
-            log.info("Reconciling transaction, tx id:{}, txInternalNumber:{}, attachedTxHash:{}, detachedTxHash:{}",
-                    attachedTx.getId(), attachedTx.getInternalTransactionNumber(), attachedTxHash, detachedTxHash);
-
-            ReconcilationCode sourceReconcilationStatus = attachedTxHash.equals(detachedTxHash) ? ReconcilationCode.OK : ReconcilationCode.NOK;
-
-            if (sourceReconcilationStatus == ReconcilationCode.NOK) {
-                String jsonDiff = erpDiffCalculator.computeDiff(attachedTx, detachedTx);
-
-                log.warn("Tx source version issue, tx id:{}, txInternalNumber:{}, diff:{}", detachedTx.getId(), detachedTx.getInternalTransactionNumber(), jsonDiff);
-                if (attachedTx.getLedgerDispatchApproved().equals(true)) {
-                    reconcilationEntity.addViolation(ReconcilationViolation.builder()
-                            .transactionId(attachedTx.getId())
-                            .rejectionCode(SOURCE_RECONCILATION_MISMATCH)
-                            .sourceDiff(jsonDiff)
-                            .transactionInternalNumber(attachedTx.getInternalTransactionNumber())
-                            .transactionEntryDate(attachedTx.getEntryDate())
-                            .transactionType(attachedTx.getTransactionType())
-                            .amountLcySum(computeAmountLcySum(attachedTx)
-                            )
-
-                            .build());
-                } else {
-                    reconcilationEntity.addViolation(ReconcilationViolation.builder()
-                            .transactionId(attachedTx.getId())
-                            .rejectionCode(SOURCE_RECONCILATION_FAIL)
-                            .sourceDiff(jsonDiff)
-                            .transactionInternalNumber(attachedTx.getInternalTransactionNumber())
-                            .transactionEntryDate(attachedTx.getEntryDate())
-                            .transactionType(attachedTx.getTransactionType())
-                            .amountLcySum(computeAmountLcySum(attachedTx)
-                            )
-
-                            .build());
-                }
-            }
-
-            ReconcilationCode isSync = getSinkReconcilationStatus(attachedTx, isOnChainMap);
-            // we check only existence of LOB transaction on chain, we do not actually check the content and hashes, etc
-            attachedTx.setReconcilation(Optional.of(Reconcilation.builder()
-                    .source(sourceReconcilationStatus)
-                    .sink(isSync)
-                    .build())
-            );
-
-            attachedTx.setLastReconcilation(Optional.of(reconcilationEntity));
+            // detachedTx can never be null since we are using detached tx ids as a way to find our attached txs
+            TransactionEntity detachedTx = detachedChunkTxsMap.get(attachedTx.getId());
+            reconcileTransactionPair(attachedTx, detachedTx, reconcilationEntity, isOnChainMap);
         }
 
         // we can only store back the attached transactions, detatched transactions may not be in db
@@ -294,10 +222,130 @@ public class TransactionReconcilationService {
         log.info("Finished reconciling transactions chunk.");
     }
 
+    private void addMissingFromLobViolations(ReconcilationEntity reconcilationEntity, Set<TransactionEntity> transactionsNotInAttached) {
+        for (TransactionEntity tx : transactionsNotInAttached) {
+            log.warn("Transaction not found in LOB DB yet, needs import, transactionId: {} ({})", tx.getInternalTransactionNumber(), tx.getId());
+
+            reconcilationEntity.addViolation(ReconcilationViolation.builder()
+                    .transactionId(tx.getId())
+                    .rejectionCode(ReconcilationRejectionCode.TX_NOT_IN_LOB)
+                    .transactionInternalNumber(tx.getInternalTransactionNumber())
+                    .transactionEntryDate(tx.getEntryDate())
+                    .transactionType(tx.getTransactionType())
+                    .amountLcySum(computeAmountLcySum(tx))
+                    .build());
+        }
+    }
+
+    private void reconcileTransactionPair(TransactionEntity attachedTx,
+                                           TransactionEntity detachedTx,
+                                           ReconcilationEntity reconcilationEntity,
+                                           Map<String, Boolean> isOnChainMap) {
+        attachedTx.setLastReconcilation(Optional.empty()); // To avoid cyclical references when a new version exist in the ERP
+        detachedTx.setLastReconcilation(Optional.empty()); // Also clear on detached to prevent Javers null ID issues with Hibernate proxies
+
+        applyRollbackSuffixIfNeeded(attachedTx, detachedTx);
+
+        ReconcilationCode sourceReconcilationStatus = computeSourceReconcilationStatus(attachedTx, detachedTx);
+        addSourceMismatchViolationIfNeeded(reconcilationEntity, attachedTx, detachedTx, sourceReconcilationStatus);
+
+        ReconcilationCode isSync = getSinkReconcilationStatus(attachedTx, isOnChainMap);
+        // we check only existence of LOB transaction on chain, we do not actually check the content and hashes, etc
+        attachedTx.setReconcilation(Optional.of(Reconcilation.builder()
+                .source(sourceReconcilationStatus)
+                .sink(isSync)
+                .build())
+        );
+
+        attachedTx.setLastReconcilation(Optional.of(reconcilationEntity));
+    }
+
+    private static void applyRollbackSuffixIfNeeded(TransactionEntity attachedTx, TransactionEntity detachedTx) {
+        if (attachedTx.getRollbackSuffix() == null) {
+            return;
+        }
+
+        // Derive the original tx number from the attached (DB) tx, which already has the rollback suffix.
+        // We cannot use detachedTx.getInternalTransactionNumber() because it may already have the
+        // rollback suffix applied (CSV path) or not (NetSuite path). Using attachedTx is always correct.
+        String rollbackSuffix = attachedTx.getRollbackSuffix();
+        String attachedTxNumber = attachedTx.getInternalTransactionNumber(); // e.g. "TXNUM-C"
+        String originalTxNumber = attachedTxNumber.substring(0, attachedTxNumber.length() - rollbackSuffix.length() - 1);
+        detachedTx.setInternalTransactionNumber(originalTxNumber + "-" + rollbackSuffix);
+        detachedTx.setRollbackSuffix(rollbackSuffix);
+    }
+
+    private static ReconcilationCode computeSourceReconcilationStatus(TransactionEntity attachedTx, TransactionEntity detachedTx) {
+        String attachedTxHash = ERPSourceTransactionVersionCalculator.compute(attachedTx);
+        String detachedTxHash = ERPSourceTransactionVersionCalculator.compute(detachedTx);
+        log.info("Reconciling transaction, tx id:{}, txInternalNumber:{}, attachedTxHash:{}, detachedTxHash:{}",
+                attachedTx.getId(), attachedTx.getInternalTransactionNumber(), attachedTxHash, detachedTxHash);
+
+        if (attachedTxHash.equals(detachedTxHash)) {
+            return ReconcilationCode.OK;
+        }
+
+        // Validation with financials amounts when the objects are not identical.
+        return areTransactionsFinanciallyEqual(attachedTx, detachedTx) ? ReconcilationCode.OK : ReconcilationCode.NOK;
+    }
+
+    private void addSourceMismatchViolationIfNeeded(ReconcilationEntity reconcilationEntity,
+                                                     TransactionEntity attachedTx,
+                                                     TransactionEntity detachedTx,
+                                                     ReconcilationCode sourceReconcilationStatus) {
+        if (sourceReconcilationStatus != ReconcilationCode.NOK) {
+            return;
+        }
+
+        String jsonDiff = erpDiffCalculator.computeDiff(attachedTx, detachedTx);
+        log.warn("Tx source version issue, tx id:{}, txInternalNumber:{}, diff:{}", detachedTx.getId(), detachedTx.getInternalTransactionNumber(), jsonDiff);
+
+        ReconcilationRejectionCode rejectionCode = attachedTx.getLedgerDispatchApproved().equals(true)
+                ? SOURCE_RECONCILATION_MISMATCH
+                : SOURCE_RECONCILATION_FAIL;
+
+        reconcilationEntity.addViolation(ReconcilationViolation.builder()
+                .transactionId(attachedTx.getId())
+                .rejectionCode(rejectionCode)
+                .sourceDiff(jsonDiff)
+                .transactionInternalNumber(attachedTx.getInternalTransactionNumber())
+                .transactionEntryDate(attachedTx.getEntryDate())
+                .transactionType(attachedTx.getTransactionType())
+                .amountLcySum(computeAmountLcySum(attachedTx))
+                .build());
+    }
+
     private static BigDecimal computeAmountLcySum(TransactionEntity attachedTx) {
         return attachedTx.getItems().stream()
                 .map(TransactionItemEntity::getAmountLcy)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private static boolean areTransactionsFinanciallyEqual(TransactionEntity attachedTx, TransactionEntity detachedTx) {
+        BigDecimal attachedCreditSum = attachedTx.getItems().stream()
+                .filter(item -> item.getOperationType() == OperationType.CREDIT)
+                .map(TransactionItemEntity::getAmountLcy)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal attachedDebitSum = attachedTx.getItems().stream()
+                .filter(item -> item.getOperationType() == OperationType.DEBIT)
+                .map(TransactionItemEntity::getAmountLcy)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal detachedCreditSum = detachedTx.getItems().stream()
+                .filter(item -> item.getOperationType() == OperationType.CREDIT)
+                .map(TransactionItemEntity::getAmountLcy)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal detachedDebitSum = detachedTx.getItems().stream()
+                .filter(item -> item.getOperationType() == OperationType.DEBIT)
+                .map(TransactionItemEntity::getAmountLcy)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        boolean creditsEqual = attachedCreditSum.compareTo(detachedCreditSum) == 0;
+        boolean debitsEqual = attachedDebitSum.compareTo(detachedDebitSum) == 0;
+
+        return creditsEqual && debitsEqual;
     }
 
     private static ReconcilationCode getSinkReconcilationStatus(TransactionEntity attachedTx, Map<String, Boolean> isOnChainMap) {

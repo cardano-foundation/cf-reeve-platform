@@ -42,7 +42,6 @@ class KeycloakSecurityHelperTest {
 
     @Test
     void canUserAccessOrgIsFalseWhenOrganisationsClaimMissing() {
-        org.springframework.test.util.ReflectionTestUtils.setField(helper, "keycloakEnabled", true);
         authenticateWith(Map.of("sub", "user-uuid-1", "name", "Alice")); // no "organisations" claim
         org.junit.jupiter.api.Assertions.assertFalse(helper.canUserAccessOrg("org1"));
     }

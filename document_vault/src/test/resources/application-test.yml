@@ -10,5 +10,9 @@ keycloak:
   token-url: ""
   authorization-url: ""
 lob:
+  # Test-only key. release/1.8.0's SecretCipher (support) fails fast without one.
+  security:
+    config-encryption:
+      key: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
   document_vault:
     enabled: true

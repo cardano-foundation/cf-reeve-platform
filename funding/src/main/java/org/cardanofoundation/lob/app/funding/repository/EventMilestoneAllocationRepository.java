@@ -39,6 +39,18 @@ public interface EventMilestoneAllocationRepository extends JpaRepository<EventM
             """)
     boolean existsByMilestoneProjectIdInAndEventStatus(@Param("projectIds") Collection<String> projectIds, @Param("status") EventStatus status);
 
+    /**
+     * Whether any milestone owned by one of the given projects is allocated by any event, regardless
+     * of status (draft or published). Used to block a currency change: a currency edit changes what
+     * an already-recorded amount means, so it must be rejected once any funding/spending has been
+     * allocated — not just once an event has been published.
+     */
+    @Query("""
+            SELECT COUNT(a) > 0 FROM funding.EventMilestoneAllocationEntity a
+            WHERE a.milestone.project.id IN :projectIds
+            """)
+    boolean existsByMilestoneProjectIdIn(@Param("projectIds") Collection<String> projectIds);
+
     /** Total amount allocated to a milestone across all events (null allocations ignored, no rows → 0). */
     @Query("""
             SELECT COALESCE(SUM(a.allocatedAmount), 0)
@@ -47,19 +59,26 @@ public interface EventMilestoneAllocationRepository extends JpaRepository<EventM
             """)
     BigDecimal sumAllocatedByMilestoneId(@Param("milestoneId") String milestoneId);
 
-    /** Spent amount for a milestone: SPENDING allocations minus REFUND allocations (FUNDING ignored). */
+    /** Spent amount for a milestone: sum of SPENDING allocations only (FUNDING and REFUND excluded). */
     @Query("""
-            SELECT COALESCE(SUM(
-                CASE
-                    WHEN a.event.eventType = :spending THEN a.allocatedAmount
-                    WHEN a.event.eventType = :refund THEN -a.allocatedAmount
-                    ELSE 0
-                END), 0)
+            SELECT COALESCE(SUM(a.allocatedAmount), 0)
             FROM funding.EventMilestoneAllocationEntity a
-            WHERE a.id.milestoneId = :milestoneId
+            WHERE a.id.milestoneId = :milestoneId AND a.event.eventType = :spending
             """)
     BigDecimal spentAmountByMilestoneId(@Param("milestoneId") String milestoneId,
-                                        @Param("spending") EventType spending,
-                                        @Param("refund") EventType refund);
+                                        @Param("spending") EventType spending);
+
+    /**
+     * Spent amount directly against a project's own milestones (sub-projects are not rolled up here —
+     * a project holds either milestones or sub-projects, never both, so this is exact for a leaf
+     * project): sum of SPENDING allocations only.
+     */
+    @Query("""
+            SELECT COALESCE(SUM(a.allocatedAmount), 0)
+            FROM funding.EventMilestoneAllocationEntity a
+            WHERE a.milestone.project.id = :projectId AND a.event.eventType = :spending
+            """)
+    BigDecimal spentAmountByProjectId(@Param("projectId") String projectId,
+                                       @Param("spending") EventType spending);
 
 }

@@ -292,6 +292,10 @@ public class TransactionEntity extends CommonEntity implements Persistable<Strin
                 return BigDecimal.ZERO;
             }
             items = this.getItems().stream().filter(txItems -> txItems.getOperationType().equals(OperationType.DEBIT)).collect(Collectors.toSet());
+
+            if (items.isEmpty()) {
+                items = this.getItems().stream().filter(txItems -> txItems.getOperationType().equals(OperationType.CREDIT)).collect(Collectors.toSet());
+            }
         }
 
         if (this.getTransactionType().equals(TransactionType.FxRevaluation)) {

@@ -18,15 +18,21 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 class FundingValidationsTest {
 
     private ProjectEntity project(BigDecimal total) {
-        return ProjectEntity.builder().id("p1").organisationId("org1").totalAmount(total).currency("USD").build();
+        return ProjectEntity.builder().id("p1").organisationId("org1").projectTitle("Parent Project").totalAmount(total).currency("USD").build();
     }
 
     private MilestoneEntity milestone(BigDecimal amount) {
-        return MilestoneEntity.builder().id("m1").milestoneAmount(amount).currency("USD").build();
+        return MilestoneEntity.builder().id("m1").milestoneAmount(amount).currency("USD")
+                .project(ProjectEntity.builder().id("p2").projectTitle("Test Project").currency("USD").build())
+                .build();
     }
 
     private String title(Optional<ProblemDetail> p) {
         return p.orElseThrow().getTitle();
+    }
+
+    private String detail(Optional<ProblemDetail> p) {
+        return p.orElseThrow().getDetail();
     }
 
     // --- milestone(amount, project, otherTotal) ---
@@ -125,9 +131,10 @@ class FundingValidationsTest {
     }
 
     @Test
-    void allocation_exceedingMilestone_isRejected() {
-        assertThat(title(FundingValidations.allocation(new BigDecimal("60000"), milestone(new BigDecimal("50000")), EventType.FUNDING)))
-                .isEqualTo(ErrorTitleConstants.ALLOCATION_EXCEEDS_MILESTONE);
+    void allocation_exceedingMilestone_isAllowed() {
+        // The hard cap against the milestone's budget was removed — an allocation may now push
+        // cumulative spend past it; that overspend is surfaced (see isOverspend), not rejected.
+        assertThat(FundingValidations.allocation(new BigDecimal("60000"), milestone(new BigDecimal("50000")), EventType.FUNDING)).isEmpty();
     }
 
     @Test
@@ -167,6 +174,43 @@ class FundingValidationsTest {
                 .isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_INVALID);
     }
 
+    // --- eventCurrencyMatchesMilestone(eventCurrencyRcy, milestone) ---
+
+    @Test
+    void eventCurrencyMatchesMilestone_matching_isAllowed() {
+        assertThat(FundingValidations.eventCurrencyMatchesMilestone("USD", milestone(new BigDecimal("50000"))))
+                .isEmpty();
+    }
+
+    @Test
+    void eventCurrencyMatchesMilestone_mismatched_isRejected() {
+        Optional<ProblemDetail> problem = FundingValidations.eventCurrencyMatchesMilestone("EUR", milestone(new BigDecimal("50000")));
+        assertThat(title(problem)).isEqualTo(ErrorTitleConstants.EVENT_CURRENCY_MISMATCH);
+        // The message must name which project's currency it is, not just the milestone — a milestone's
+        // currency is always inherited from its project, and titles aren't globally unique, so the
+        // project name is what actually lets the user act on it.
+        assertThat(detail(problem)).contains("Test Project").contains("EUR").contains("USD");
+    }
+
+    @Test
+    void eventCurrencyMatchesMilestone_caseSensitive_isRejected() {
+        assertThat(title(FundingValidations.eventCurrencyMatchesMilestone("usd", milestone(new BigDecimal("50000")))))
+                .isEqualTo(ErrorTitleConstants.EVENT_CURRENCY_MISMATCH);
+    }
+
+    @Test
+    void eventCurrencyMatchesMilestone_nullEventCurrency_isAllowed() {
+        assertThat(FundingValidations.eventCurrencyMatchesMilestone(null, milestone(new BigDecimal("50000"))))
+                .isEmpty();
+    }
+
+    @Test
+    void eventCurrencyMatchesMilestone_nullMilestoneCurrency_isAllowed() {
+        MilestoneEntity milestoneWithoutCurrency = MilestoneEntity.builder().id("m1").milestoneAmount(new BigDecimal("50000")).build();
+        assertThat(FundingValidations.eventCurrencyMatchesMilestone("USD", milestoneWithoutCurrency))
+                .isEmpty();
+    }
+
     // --- spendDetail(eventType, category, vendor, amountFcy, currencyFcy, fxRate, amountRcy, currencyRcy, hash, notes) ---
 
     @Test
@@ -177,9 +221,22 @@ class FundingValidationsTest {
     }
 
     @Test
-    void spendDetail_allowed_whenNonSpendingEventHasNoSpendFields() {
+    void spendDetail_allowed_whenNonSpendingEventHasAmountRcyButNoSpendOnlyFields() {
         assertThat(FundingValidations.spendDetail(EventType.FUNDING,
-                null, null, null, null, null, null, null, null, null)).isEmpty();
+                null, null, null, null, null, new BigDecimal("100000"), null, null, null)).isEmpty();
+    }
+
+    @Test
+    void spendDetail_required_whenAmountRcyMissingOnNonSpendingEvent() {
+        assertThat(title(FundingValidations.spendDetail(EventType.FUNDING,
+                null, null, null, null, null, null, null, null, null)))
+                .isEqualTo(ErrorTitleConstants.SPEND_FIELDS_REQUIRED);
+    }
+
+    @Test
+    void spendDetail_allowed_whenRefundEventHasAmountRcyButNoSpendOnlyFields() {
+        assertThat(FundingValidations.spendDetail(EventType.REFUND,
+                null, null, null, null, null, new BigDecimal("50000"), null, null, null)).isEmpty();
     }
 
     @Test
@@ -204,6 +261,22 @@ class FundingValidationsTest {
                 "Personnel", "Vendor", new BigDecimal("100000"), null, new BigDecimal("2"),
                 new BigDecimal("50000"), "USD", null, null)))
                 .isEqualTo(ErrorTitleConstants.SPEND_FIELDS_REQUIRED);
+    }
+
+    @Test
+    void spendDetail_message_namesOnlyTheActuallyMissingField() {
+        // Only currencyFcy is absent — the message must not claim the other four are missing too.
+        assertThat(detail(FundingValidations.spendDetail(EventType.SPENDING,
+                "Personnel", "Vendor", new BigDecimal("100000"), null, new BigDecimal("2"),
+                new BigDecimal("50000"), "USD", null, null)))
+                .isEqualTo("Missing required field(s) for a SPENDING event: currencyFcy");
+    }
+
+    @Test
+    void spendDetail_message_listsEveryMissingField_whenSeveralAreAbsent() {
+        assertThat(detail(FundingValidations.spendDetail(EventType.SPENDING,
+                "Personnel", "Vendor", null, null, null, null, "USD", null, null)))
+                .isEqualTo("Missing required field(s) for a SPENDING event: amountFcy, amountRcy, currencyFcy, fxRate");
     }
 
     @Test
@@ -244,56 +317,44 @@ class FundingValidationsTest {
     }
 
     @Test
-    void spendFullyAllocated_ignoredForNonSpending() {
+    void spendFullyAllocated_ignoredWhenAmountRcyAbsent() {
         assertThat(FundingValidations.spendFullyAllocated(
                 EventType.FUNDING, new BigDecimal("999999"), null)).isEmpty();
     }
 
-    // --- eventAmountWithinBudget(eventType, amountRcy, summedMilestoneBudget, summedProjectBudget) ---
-
     @Test
-    void eventAmountWithinBudget_rejected_whenAmountExceedsMilestoneBudget() {
-        assertThat(title(FundingValidations.eventAmountWithinBudget(
-                EventType.SPENDING, new BigDecimal("60000"), new BigDecimal("50000"), new BigDecimal("200000"))))
-                .isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_EXCEEDS_MILESTONES);
+    void spendFullyAllocated_appliesToFunding_rejectedWhenAllocatedTotalBelowAmountRcy() {
+        assertThat(title(FundingValidations.spendFullyAllocated(
+                EventType.FUNDING, new BigDecimal("40000"), new BigDecimal("50000"))))
+                .isEqualTo(ErrorTitleConstants.SPEND_NOT_FULLY_ALLOCATED);
     }
 
     @Test
-    void eventAmountWithinBudget_rejected_whenAmountExceedsProjectBudget() {
-        // milestone budget unknown (null) -> only the project bound applies
-        assertThat(title(FundingValidations.eventAmountWithinBudget(
-                EventType.SPENDING, new BigDecimal("250000"), null, new BigDecimal("200000"))))
-                .isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_EXCEEDS_PROJECT);
+    void spendFullyAllocated_appliesToRefund_allowedWhenAllocatedTotalMatches() {
+        assertThat(FundingValidations.spendFullyAllocated(
+                EventType.REFUND, new BigDecimal("50000"), new BigDecimal("50000.00"))).isEmpty();
+    }
+
+    // --- isOverspend(cumulativeSpend, budget) ---
+
+    @Test
+    void isOverspend_true_whenCumulativeExceedsBudget() {
+        assertThat(FundingValidations.isOverspend(new BigDecimal("60000"), new BigDecimal("50000"))).isTrue();
     }
 
     @Test
-    void eventAmountWithinBudget_allowed_whenWithinBothBudgets() {
-        assertThat(FundingValidations.eventAmountWithinBudget(
-                EventType.SPENDING, new BigDecimal("50000"), new BigDecimal("50000"), new BigDecimal("200000"))).isEmpty();
+    void isOverspend_false_whenCumulativeEqualsBudget() {
+        assertThat(FundingValidations.isOverspend(new BigDecimal("50000"), new BigDecimal("50000"))).isFalse();
     }
 
     @Test
-    void eventAmountWithinBudget_ignoredForNonSpending() {
-        assertThat(FundingValidations.eventAmountWithinBudget(
-                EventType.FUNDING, new BigDecimal("999999"), new BigDecimal("1"), new BigDecimal("1"))).isEmpty();
-    }
-
-    // --- allocationTotal(sum, project) ---
-
-    @Test
-    void allocationTotal_exceedingProject_isRejected() {
-        assertThat(title(FundingValidations.allocationTotal(new BigDecimal("250000"), project(new BigDecimal("200000")))))
-                .isEqualTo(ErrorTitleConstants.ALLOCATION_TOTAL_EXCEEDS_PROJECT);
+    void isOverspend_false_whenCumulativeWithinBudget() {
+        assertThat(FundingValidations.isOverspend(new BigDecimal("40000"), new BigDecimal("50000"))).isFalse();
     }
 
     @Test
-    void allocationTotal_withinProject_isAllowed() {
-        assertThat(FundingValidations.allocationTotal(new BigDecimal("150000"), project(new BigDecimal("200000")))).isEmpty();
-    }
-
-    @Test
-    void allocationTotal_skipped_whenProjectHasNoBudget() {
-        assertThat(FundingValidations.allocationTotal(new BigDecimal("999999"), project(null))).isEmpty();
+    void isOverspend_false_whenBudgetUnknown() {
+        assertThat(FundingValidations.isOverspend(new BigDecimal("999999"), null)).isFalse();
     }
 
     // --- milestones XOR sub-projects ---
@@ -338,35 +399,81 @@ class FundingValidationsTest {
         assertThat(FundingValidations.projectAmount(null)).isEmpty();
     }
 
-    // --- subProjectAmount(childTotal, parent, otherSubProjectsTotal) ---
+    // --- subProjectAmount(childTotal, childTitle, parent, otherSubProjectsTotal) ---
 
     @Test
     void subProjectAmount_valid_returnsEmpty() {
-        assertThat(FundingValidations.subProjectAmount(new BigDecimal("200000"), project(new BigDecimal("500000")), BigDecimal.ZERO))
+        assertThat(FundingValidations.subProjectAmount(new BigDecimal("200000"), "Child Project", project(new BigDecimal("500000")), BigDecimal.ZERO))
                 .isEmpty();
     }
 
     @Test
     void subProjectAmount_childExceedsParent_isRejected() {
-        assertThat(title(FundingValidations.subProjectAmount(new BigDecimal("600000"), project(new BigDecimal("500000")), BigDecimal.ZERO)))
-                .isEqualTo(ErrorTitleConstants.SUBPROJECT_AMOUNT_EXCEEDS_PARENT);
+        Optional<ProblemDetail> problem = FundingValidations.subProjectAmount(
+                new BigDecimal("600000"), "Child Project", project(new BigDecimal("500000")), BigDecimal.ZERO);
+        assertThat(title(problem)).isEqualTo(ErrorTitleConstants.SUBPROJECT_AMOUNT_EXCEEDS_PARENT);
+        // The message must name both projects involved, not just the amounts — that's what lets the
+        // user act on it without guessing which sub-project/parent pair is at fault.
+        assertThat(detail(problem)).contains("Child Project").contains("Parent Project");
+    }
+
+    @Test
+    void subProjectAmount_highPrecisionTotals_areFormattedForDisplay() {
+        // A budget round-tripped through a high-precision DB column carries a long trail of zeros
+        // (e.g. 50000000.0000000000) that must not leak into a user-facing message verbatim.
+        Optional<ProblemDetail> problem = FundingValidations.subProjectAmount(
+                new BigDecimal("600000.0000000000"), "Child Project", project(new BigDecimal("500000.0000000000")), BigDecimal.ZERO);
+        assertThat(detail(problem)).contains("600000.00").contains("500000.00").doesNotContain("0000000000");
     }
 
     @Test
     void subProjectAmount_cumulativeExceedsParent_isRejected() {
         // child (300000) fits, but together with existing sub-projects (300000) it exceeds the parent (500000)
-        assertThat(title(FundingValidations.subProjectAmount(new BigDecimal("300000"), project(new BigDecimal("500000")), new BigDecimal("300000"))))
-                .isEqualTo(ErrorTitleConstants.SUBPROJECT_TOTAL_EXCEEDS_PARENT);
+        Optional<ProblemDetail> problem = FundingValidations.subProjectAmount(
+                new BigDecimal("300000"), "Child Project", project(new BigDecimal("500000")), new BigDecimal("300000"));
+        assertThat(title(problem)).isEqualTo(ErrorTitleConstants.SUBPROJECT_TOTAL_EXCEEDS_PARENT);
+        assertThat(detail(problem)).contains("Child Project").contains("Parent Project");
     }
 
     @Test
     void subProjectAmount_skipped_whenParentHasNoBudget() {
-        assertThat(FundingValidations.subProjectAmount(new BigDecimal("999999"), project(null), new BigDecimal("999999"))).isEmpty();
+        assertThat(FundingValidations.subProjectAmount(new BigDecimal("999999"), "Child Project", project(null), new BigDecimal("999999")))
+                .isEmpty();
     }
 
     @Test
     void subProjectAmount_skipped_whenChildHasNoBudget() {
-        assertThat(FundingValidations.subProjectAmount(null, project(new BigDecimal("500000")), BigDecimal.ZERO)).isEmpty();
+        assertThat(FundingValidations.subProjectAmount(null, "Child Project", project(new BigDecimal("500000")), BigDecimal.ZERO))
+                .isEmpty();
+    }
+
+    // --- projectTotalCoversChildren(newTotal, milestonesTotal, subProjectsTotal) ---
+
+    @Test
+    void projectTotalCoversChildren_valid_returnsEmpty() {
+        assertThat(FundingValidations.projectTotalCoversChildren(new BigDecimal("500000"), new BigDecimal("200000"), null))
+                .isEmpty();
+    }
+
+    @Test
+    void projectTotalCoversChildren_belowMilestones_isRejected() {
+        assertThat(title(FundingValidations.projectTotalCoversChildren(new BigDecimal("100000"), new BigDecimal("200000"), null)))
+                .isEqualTo(ErrorTitleConstants.PROJECT_AMOUNT_BELOW_MILESTONES);
+    }
+
+    @Test
+    void projectTotalCoversChildren_belowSubProjects_isRejected() {
+        assertThat(title(FundingValidations.projectTotalCoversChildren(new BigDecimal("100000"), null, new BigDecimal("200000"))))
+                .isEqualTo(ErrorTitleConstants.PROJECT_AMOUNT_BELOW_SUBPROJECTS);
+    }
+
+    @Test
+    void projectTotalCoversChildren_highPrecisionSubProjectsTotal_isFormattedForDisplay() {
+        // Reproduces the reported bug: a sub-projects total accumulated from a high-precision DB column
+        // (e.g. 50000000.0000000000) must be rounded for display, not shown with its full scale intact.
+        Optional<ProblemDetail> problem = FundingValidations.projectTotalCoversChildren(
+                new BigDecimal("25000"), null, new BigDecimal("50000000.0000000000"));
+        assertThat(detail(problem)).contains("50000000.00").doesNotContain("0000000000");
     }
 
     @Test
@@ -422,5 +529,95 @@ class FundingValidationsTest {
     void eventDateNotInFuture_futureDate_isRejected() {
         assertThat(title(FundingValidations.eventDateNotInFuture(LocalDate.now().plusDays(1))))
                 .isEqualTo(ErrorTitleConstants.EVENT_DATE_IN_FUTURE);
+    }
+
+    // --- eventDateRequired(eventDate) ---
+
+    @Test
+    void eventDateRequired_present_isAllowed() {
+        assertThat(FundingValidations.eventDateRequired(LocalDate.now())).isEmpty();
+    }
+
+    @Test
+    void eventDateRequired_null_isRejected() {
+        assertThat(title(FundingValidations.eventDateRequired(null)))
+                .isEqualTo(ErrorTitleConstants.EVENT_DATE_REQUIRED);
+    }
+
+    // --- spendAmountsPositive(eventType, amountFcy, fxRate) ---
+
+    @Test
+    void spendAmountsPositive_positiveValues_isAllowed() {
+        assertThat(FundingValidations.spendAmountsPositive(EventType.SPENDING, new BigDecimal("100"), new BigDecimal("1.1")))
+                .isEmpty();
+    }
+
+    @Test
+    void spendAmountsPositive_zeroAmountFcy_isRejected() {
+        assertThat(title(FundingValidations.spendAmountsPositive(EventType.SPENDING, BigDecimal.ZERO, new BigDecimal("1.1"))))
+                .isEqualTo(ErrorTitleConstants.AMOUNT_FCY_INVALID);
+    }
+
+    @Test
+    void spendAmountsPositive_negativeAmountFcy_isRejected() {
+        assertThat(title(FundingValidations.spendAmountsPositive(EventType.SPENDING, new BigDecimal("-1"), new BigDecimal("1.1"))))
+                .isEqualTo(ErrorTitleConstants.AMOUNT_FCY_INVALID);
+    }
+
+    @Test
+    void spendAmountsPositive_zeroFxRate_isRejected() {
+        assertThat(title(FundingValidations.spendAmountsPositive(EventType.SPENDING, new BigDecimal("100"), BigDecimal.ZERO)))
+                .isEqualTo(ErrorTitleConstants.FX_RATE_INVALID);
+    }
+
+    @Test
+    void spendAmountsPositive_negativeFxRate_isRejected() {
+        assertThat(title(FundingValidations.spendAmountsPositive(EventType.SPENDING, new BigDecimal("100"), new BigDecimal("-1.1"))))
+                .isEqualTo(ErrorTitleConstants.FX_RATE_INVALID);
+    }
+
+    @Test
+    void spendAmountsPositive_nullValues_areAllowed() {
+        // Presence is enforced separately by spendDetail(); this only guards against a supplied
+        // zero/negative value.
+        assertThat(FundingValidations.spendAmountsPositive(EventType.SPENDING, null, null)).isEmpty();
+    }
+
+    @Test
+    void spendAmountsPositive_ignoredForNonSpendingEvents() {
+        assertThat(FundingValidations.spendAmountsPositive(EventType.FUNDING, BigDecimal.ZERO, BigDecimal.ZERO)).isEmpty();
+        assertThat(FundingValidations.spendAmountsPositive(EventType.REFUND, new BigDecimal("-1"), new BigDecimal("-1"))).isEmpty();
+    }
+
+    // --- currencyCode(currency, registeredAndActive) ---
+
+    @Test
+    void currencyCode_registeredAndActive_isAllowed() {
+        // The org's currency table is the source of truth — it also covers non-ISO-4217 codes such
+        // as ADA (registered under ISO 24165), not just fiat ISO 4217 codes.
+        assertThat(FundingValidations.currencyCode("USD", true)).isEmpty();
+        assertThat(FundingValidations.currencyCode("ADA", true)).isEmpty();
+    }
+
+    @Test
+    void currencyCode_notRegisteredOrInactive_isRejected() {
+        assertThat(title(FundingValidations.currencyCode("ABC", false)))
+                .isEqualTo(ErrorTitleConstants.CURRENCY_INVALID);
+    }
+
+    @Test
+    void currencyCode_nullOrBlank_isAllowed() {
+        // Presence is enforced separately by callers that require a currency; the flag is irrelevant
+        // when there's no currency to check.
+        assertThat(FundingValidations.currencyCode(null, false)).isEmpty();
+        assertThat(FundingValidations.currencyCode("", false)).isEmpty();
+        assertThat(FundingValidations.currencyCode("  ", false)).isEmpty();
+    }
+
+    @Test
+    void currencyCode_qualifiedIsoForm_isAllowed() {
+        // Already-qualified ISO_xxx:... codes (see SpendingEventService#toCurrency) are left unchecked
+        // regardless of the flag.
+        assertThat(FundingValidations.currencyCode("ISO_24165:ADA", false)).isEmpty();
     }
 }

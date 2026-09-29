@@ -18,12 +18,20 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public class MilestoneCreateRequest {
 
     @Nullable
-    @Schema(example = "MS-1", description = "User-defined milestone ID. Used to reference an existing milestone by (projectId, externalMilestoneId) or to name a new milestone.")
+    @Schema(example = "MS-1", description = "User-defined milestone ID. No longer used to match an existing milestone — matched by milestoneTitle instead. Accepted and stored for backward compatibility only.")
     private String externalMilestoneId;
 
     @Nullable
-    @Schema(example = "Milestone AB")
+    @Schema(example = "Milestone AB", description = "Matches an existing milestone by (projectId, milestoneTitle), or names a new one.")
     private String milestoneTitle;
+
+    @Nullable
+    @Schema(example = "Q3-2-1", description = "Permanent identifier assigned when the milestone was created (see MilestoneView#proId). "
+            + "When supplied, matches the existing milestone by it directly — the reliable way to reference one that may have since been "
+            + "renamed. When omitted, falls back to matching by the current milestoneTitle. Only meaningful for matching an existing "
+            + "milestone — a milestone's proId is always system-assigned on creation and cannot be chosen, so this is ignored if no "
+            + "existing milestone matches and a new one is created instead.")
+    private String proId;
 
     @Nullable
     @Schema(example = "50000.00")

@@ -53,7 +53,7 @@ class SpendingEventConverterTest {
     private SpendingEventPublishView.ProjectAllocation allocation(String projectId, String projectTitle,
                                                                   List<SpendingEventPublishView.Milestone> milestones) {
         return SpendingEventPublishView.ProjectAllocation.builder()
-                .externalProjectId(projectId).projectTitle(projectTitle)
+                .projectId(projectId).projectTitle(projectTitle)
                 .milestones(milestones).build();
     }
 
@@ -62,7 +62,7 @@ class SpendingEventConverterTest {
                                                                             String subProjectId, String subProjectTitle,
                                                                             List<SpendingEventPublishView.Milestone> milestones) {
         return SpendingEventPublishView.ProjectAllocation.builder()
-                .externalProjectId(projectId).projectTitle(projectTitle)
+                .projectId(projectId).projectTitle(projectTitle)
                 .subProject(SpendingEventPublishView.SubProject.builder()
                         .subProjectId(subProjectId).subProjectTitle(subProjectTitle)
                         .milestones(milestones).build())

@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
+import jakarta.annotation.Nullable;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -29,6 +31,8 @@ import org.cardanofoundation.lob.app.funding.repository.MilestoneRepository;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 import org.cardanofoundation.lob.app.funding.util.FundingValidations;
 import org.cardanofoundation.lob.app.funding.util.Problems;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Currency;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @Slf4j
@@ -42,6 +46,8 @@ public class MilestoneService {
     private final EventMilestoneAllocationRepository allocationRepository;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
     private final FundingCascadeDeleteService cascadeDeleteService;
+    private final OrganisationPublicApiIF organisationPublicApi;
+    private final ProjectChildSequenceService childSequenceService;
 
     // -------------------------------------------------------------------------
     // View-returning API (used by the controller — carries the ProblemDetail).
@@ -69,11 +75,27 @@ public class MilestoneService {
 
     @Transactional
     public MilestoneView createMilestone(String projectId, MilestoneCreateRequest request) {
+        return createMilestoneInternal(projectId, request, null);
+    }
+
+    /** CSV-bulk-import-only: see {@link #create(String, MilestoneCreateRequest, String)}'s Javadoc. */
+    @Transactional
+    public MilestoneView createMilestone(String projectId, MilestoneCreateRequest request, @Nullable String explicitProId) {
+        return createMilestoneInternal(projectId, request, explicitProId);
+    }
+
+    /**
+     * Shared body for both {@code createMilestone} overloads above — calling {@link #createInternal}
+     * directly (not the public, {@code @Transactional} {@link #create} methods) so neither overload
+     * invokes another {@code @Transactional} method via {@code this}, which would silently bypass
+     * Spring's proxy-based transaction management.
+     */
+    private MilestoneView createMilestoneInternal(String projectId, MilestoneCreateRequest request, @Nullable String explicitProId) {
         Optional<ProblemDetail> denied = authorizeProject(projectId);
         if (denied.isPresent()) {
             return MilestoneView.error(denied.get());
         }
-        return create(projectId, request).fold(MilestoneView::error, this::toView);
+        return createInternal(projectId, request, explicitProId).fold(MilestoneView::error, this::toView);
     }
 
     @Transactional
@@ -123,6 +145,21 @@ public class MilestoneService {
         return milestoneRepository.findByIdAndProjectId(milestoneId, projectId);
     }
 
+    /** Looks up a milestone by its user-defined external id within a project — used by the bulk CSV importer's upsert logic. */
+    public Optional<MilestoneEntity> findByProjectIdAndExternalMilestoneId(String projectId, String externalMilestoneId) {
+        return milestoneRepository.findByProjectIdAndExternalMilestoneId(projectId, externalMilestoneId);
+    }
+
+    /** Looks up a milestone by its title within a project — used by the bulk CSV importer's upsert logic. */
+    public Optional<MilestoneEntity> findByProjectIdAndMilestoneTitle(String projectId, String milestoneTitle) {
+        return milestoneRepository.findByProjectIdAndMilestoneTitle(projectId, milestoneTitle);
+    }
+
+    /** Looks up a milestone by its permanent proId within a project — preferred over title once a rename may have happened. See {@link MilestoneEntity#proId}. */
+    public Optional<MilestoneEntity> findByProjectIdAndProId(String projectId, String proId) {
+        return milestoneRepository.findByProjectIdAndProId(projectId, proId);
+    }
+
     public List<MilestoneEntity> findByProjectId(String projectId) {
         return milestoneRepository.findByProjectId(projectId);
     }
@@ -136,8 +173,43 @@ public class MilestoneService {
         return milestoneRepository.findByProjectId(projectId, pageable);
     }
 
+    /**
+     * Sets every milestone of {@code projectId} to {@code currency} — a milestone's currency always
+     * mirrors its owning project's, so this keeps them in sync when the project's currency changes
+     * (see {@link ProjectService#cascadeCurrency}).
+     */
+    @Transactional
+    void updateCurrencyForProject(String projectId, String currency) {
+        List<MilestoneEntity> milestones = milestoneRepository.findByProjectId(projectId);
+        milestones.forEach(m -> m.setCurrency(currency));
+        milestoneRepository.saveAll(milestones);
+    }
+
+    /** Creates a milestone with an auto-assigned proId — the UI-facing JSON API entry point, which never supplies one. */
     @Transactional
     public Either<ProblemDetail, MilestoneEntity> create(String projectId, MilestoneCreateRequest request) {
+        return createInternal(projectId, request, null);
+    }
+
+    /**
+     * CSV-bulk-import-only entry point: {@code explicitProId} is used as the new milestone's proId as-is
+     * (after a uniqueness check) instead of the usual system-assigned {@code project.proId + "-" + n}.
+     * See {@link ProjectStructureService}'s matching overload for why CSV is the one caller allowed to
+     * supply its own value.
+     */
+    @Transactional
+    public Either<ProblemDetail, MilestoneEntity> create(String projectId, MilestoneCreateRequest request, @Nullable String explicitProId) {
+        return createInternal(projectId, request, explicitProId);
+    }
+
+    /**
+     * Shared body for both {@code create} overloads above (and for {@link #createMilestoneInternal}) —
+     * a plain, non-{@code @Transactional} private method, so nothing here is ever reached via a
+     * self-invoked {@code this.create(...)} call that would silently bypass Spring's proxy-based
+     * transaction management; each public overload above carries its own {@code @Transactional}
+     * instead, since each is independently called from outside this class.
+     */
+    private Either<ProblemDetail, MilestoneEntity> createInternal(String projectId, MilestoneCreateRequest request, @Nullable String explicitProId) {
         if (missingCreationFields(request)) {
             log.warn("Missing required fields for milestone creation in project: {}", projectId);
             return Either.left(milestoneFieldsRequired());
@@ -150,14 +222,7 @@ public class MilestoneService {
         }
         ProjectEntity project = projectM.orElseThrow();
 
-        MilestoneEntity entity = toEntity(request, project);
-        if (milestoneRepository.findById(entity.getId()).isPresent()) {
-            log.warn("Milestone already exists for id: {}", entity.getId());
-            return Either.left(Problems.conflict(
-                    "Milestone already exists for id: %s".formatted(entity.getId()),
-                    ErrorTitleConstants.MILESTONE_ALREADY_EXISTS));
-        }
-        return validateAndSave(project, entity, request);
+        return validateAndSave(project, toEntity(request, project), request, explicitProId);
     }
 
     /**
@@ -168,34 +233,39 @@ public class MilestoneService {
      */
     @Transactional
     public Either<ProblemDetail, MilestoneEntity> resolveOrCreate(ProjectEntity project, MilestoneCreateRequest request) {
-        if (request.getExternalMilestoneId() != null) {
-            Optional<MilestoneEntity> existing = milestoneRepository
-                    .findByProjectIdAndExternalMilestoneId(project.getId(), request.getExternalMilestoneId());
-            if (existing.isPresent()) {
-                return Either.right(existing.get());
-            }
-            if (missingCreationFields(request)) {
-                // Id supplied but no milestone exists and creation fields are incomplete → referencing a
-                // milestone that does not exist.
-                log.warn("Milestone not found: {} in project: {}", request.getExternalMilestoneId(), project.getId());
-                return Either.left(Problems.milestoneNotFound(request.getExternalMilestoneId()));
-            }
-        } else if (missingCreationFields(request)) {
+        if (request.getMilestoneTitle() == null) {
             return Either.left(milestoneFieldsRequired());
         }
 
-        MilestoneEntity entity = toEntity(request, project);
-        // An anonymous milestone resolves by its content id — an identical one already present is reused.
-        Optional<MilestoneEntity> existing = milestoneRepository.findById(entity.getId());
+        // proId is permanent (see MilestoneEntity#proId) — when the caller supplies it, it's the
+        // reliable way to find a milestone that may have since been renamed. Falling back to the
+        // current title only resolves a milestone whose title still matches; recomputing the id hash
+        // from the request's title (the old strategy) is deliberately not done here any more — see the
+        // matching comment in SpendingEventService#resolveOrCreateRootProject for why.
+        // A blank proId means "not supplied" — same as null — and falls back to title matching.
+        Optional<MilestoneEntity> existing = (request.getProId() != null && !request.getProId().isBlank())
+                ? milestoneRepository.findByProjectIdAndProId(project.getId(), request.getProId())
+                : milestoneRepository.findByProjectIdAndMilestoneTitle(project.getId(), request.getMilestoneTitle());
         if (existing.isPresent()) {
             return Either.right(existing.get());
         }
-        return validateAndSave(project, entity, request);
+
+        if (missingCreationFields(request)) {
+            // Title supplied but no milestone exists and creation fields are incomplete → referencing a
+            // milestone that does not exist.
+            log.warn("Milestone not found: {} in project: {}", request.getMilestoneTitle(), project.getId());
+            return Either.left(Problems.milestoneNotFound(request.getMilestoneTitle()));
+        }
+
+        // resolveOrCreate is the event-allocation flow — always auto-assigns proId on creation, same
+        // as the plain create() JSON entry point; only the CSV-only overload of create() ever supplies
+        // an explicit value.
+        return validateAndSave(project, toEntity(request, project), request, null);
     }
 
     /** Shared creation core: structure rule, budget validations, persist. */
     private Either<ProblemDetail, MilestoneEntity> validateAndSave(ProjectEntity project,
-            MilestoneEntity entity, MilestoneCreateRequest request) {
+            MilestoneEntity entity, MilestoneCreateRequest request, @Nullable String explicitProId) {
         Optional<ProblemDetail> structure = FundingValidations.milestoneAllowed(
                 projectRepository.existsByParentProjectId(project.getId()));
         if (structure.isPresent()) {
@@ -206,6 +276,11 @@ public class MilestoneService {
                     "Milestone title already exists in this project: " + entity.getMilestoneTitle(),
                     ErrorTitleConstants.MILESTONE_TITLE_ALREADY_EXISTS));
         }
+        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(
+                request.getCurrency(), isCurrencyRegisteredAndActive(project.getOrganisationId(), request.getCurrency()));
+        if (currencyProblem.isPresent()) {
+            return Either.left(currencyProblem.get());
+        }
         BigDecimal otherMilestonesTotal = FundingValidations.sumMilestoneAmounts(
                 milestoneRepository.findByProjectId(project.getId()), null);
         Optional<ProblemDetail> validation = FundingValidations.milestone(
@@ -213,7 +288,38 @@ public class MilestoneService {
         if (validation.isPresent()) {
             return Either.left(validation.get());
         }
+        // Assigned last, only once every other validation has passed — computing it earlier would burn
+        // a sequence number (or reject a valid explicit value) on a request that ultimately fails
+        // validation for an unrelated reason.
+        if (explicitProId != null && !explicitProId.isBlank()) {
+            // CSV path only — see the create() overload's Javadoc. Needs its own uniqueness pre-check
+            // since, unlike the auto-assigned case, a caller-chosen value isn't guaranteed unique by
+            // construction.
+            if (milestoneRepository.existsByProjectIdAndProId(project.getId(), explicitProId)) {
+                return Either.left(Problems.conflict(
+                        "Milestone ID already exists in this project: " + explicitProId,
+                        ErrorTitleConstants.MILESTONE_PROID_ALREADY_EXISTS));
+            }
+            entity.setProId(explicitProId);
+        } else {
+            entity.setProId(childSequenceService.nextChildProId(project));
+        }
+        // The primary key is derived from the proId (unique within the project), never from the
+        // editable title — so it can only be set once the proId is known.
+        entity.setId(MilestoneEntity.id(project.getId(), entity.getProId()));
         return Either.right(milestoneRepository.saveAndFlush(entity));
+    }
+
+    /**
+     * Whether {@code currency} is registered and active in the organisation's currency table. Shared
+     * by every funding service that validates a currency code (see {@link FundingValidations#currencyCode}),
+     * since the org's table — not {@code java.util.Currency} — is the source of truth: it also covers
+     * non-ISO-4217 codes such as crypto assets (e.g. {@code ADA}, registered under ISO 24165).
+     */
+    boolean isCurrencyRegisteredAndActive(String organisationId, String currency) {
+        return organisationPublicApi.findCurrencyByCustomerCurrencyCode(organisationId, currency)
+                .map(Currency::isActive)
+                .orElse(false);
     }
 
     private static boolean missingCreationFields(MilestoneCreateRequest request) {
@@ -249,9 +355,12 @@ public class MilestoneService {
         // excludes this milestone's current amount so an unchanged amount can't trip the check.
         ProjectEntity project = milestone.getProject();
 
-        if (request.getMilestoneTitle() != null && milestoneRepository
-                .existsByProjectIdAndMilestoneTitleAndIdNot(project.getId(), request.getMilestoneTitle(), milestoneId)) {
-            log.warn("Milestone title already exists in project {}: {}", project.getId(), request.getMilestoneTitle());
+        // milestoneTitle is now a freely editable display attribute (see MilestoneEntity#proId, which
+        // stays fixed and is what everything needing a stable reference uses instead) — still subject
+        // to the same per-project uniqueness title always had.
+        boolean titleChanging = request.getMilestoneTitle() != null && !request.getMilestoneTitle().equals(milestone.getMilestoneTitle());
+        if (titleChanging && milestoneRepository.existsByProjectIdAndMilestoneTitleAndIdNot(
+                project.getId(), request.getMilestoneTitle(), milestoneId)) {
             return Either.left(Problems.conflict(
                     "Milestone title already exists in this project: " + request.getMilestoneTitle(),
                     ErrorTitleConstants.MILESTONE_TITLE_ALREADY_EXISTS));
@@ -263,6 +372,11 @@ public class MilestoneService {
         if (validation.isPresent()) {
             return Either.left(validation.get());
         }
+        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(
+                request.getCurrency(), isCurrencyRegisteredAndActive(project.getOrganisationId(), request.getCurrency()));
+        if (currencyProblem.isPresent()) {
+            return Either.left(currencyProblem.get());
+        }
 
         if (request.getMilestoneAmount() != null) {
             Optional<ProblemDetail> coverage = FundingValidations.milestoneCoversAllocations(
@@ -272,7 +386,7 @@ public class MilestoneService {
             }
         }
 
-        if (request.getMilestoneTitle() != null) {
+        if (titleChanging) {
             milestone.setMilestoneTitle(request.getMilestoneTitle());
         }
         if (request.getMilestoneAmount() != null) {
@@ -298,22 +412,18 @@ public class MilestoneService {
                 .externalMilestoneId(milestone.getExternalMilestoneId())
                 .projectId(milestone.getProject().getId())
                 .milestoneTitle(milestone.getMilestoneTitle())
+                .proId(milestone.getProId())
                 .milestoneAmount(milestone.getMilestoneAmount())
                 .currency(milestone.getCurrency())
                 .milestoneDate(milestone.getMilestoneDate())
                 .spentAmount(allocationRepository.spentAmountByMilestoneId(
-                        milestone.getId(), EventType.SPENDING, EventType.REFUND))
+                        milestone.getId(), EventType.SPENDING))
                 .build();
     }
 
+    /** proId and id are deliberately not set here — see where they're assigned in {@link #validateAndSave}. */
     private MilestoneEntity toEntity(MilestoneCreateRequest request, ProjectEntity project) {
-        String id = request.getExternalMilestoneId() != null
-                ? MilestoneEntity.id(project.getId(), request.getExternalMilestoneId())
-                : MilestoneEntity.contentId(project.getId(), request.getMilestoneTitle(),
-                        request.getMilestoneAmount(), request.getCurrency(), request.getMilestoneDate());
         return MilestoneEntity.builder()
-                .id(id)
-                .externalMilestoneId(request.getExternalMilestoneId())
                 .milestoneTitle(request.getMilestoneTitle())
                 .milestoneAmount(request.getMilestoneAmount())
                 .currency(request.getCurrency())

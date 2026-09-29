@@ -104,7 +104,7 @@ public class ProjectService {
         // parent — through the same shared creation path the event-allocation flow uses.
         Either<ProblemDetail, ProjectEntity> created = request.getParentProjectId() != null
                 ? resolveParent(request).flatMap(parent -> projectStructureService.createSubProject(
-                        parent, request.getExternalProjectId(), request.getProjectTitle(),
+                        parent, request.getProjectTitle(),
                         request.getFundingId(), request.getTotalAmount(), request.getCurrency()))
                 : createRootProject(request);
         if (created.isLeft()) {
@@ -125,15 +125,22 @@ public class ProjectService {
     }
 
     private Either<ProblemDetail, ProjectEntity> createRootProject(ProjectWithMilestonesCreateRequest request) {
+        // Unlike a sub-project (which defaults to its parent's currency — see
+        // ProjectStructureService.createSubProject), a root project has no parent to inherit from, so
+        // its currency must be given explicitly. The DTO itself no longer enforces this via @NotBlank
+        // since the same field is also used for sub-project creation, where it's optional.
+        if (request.getCurrency() == null || request.getCurrency().isBlank()) {
+            return Either.left(Problems.badRequest(
+                    "Currency is required to create a root project: " + request.getProjectTitle(), ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
+        }
+        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(request.getCurrency(),
+                milestoneService.isCurrencyRegisteredAndActive(request.getOrganisationId(), request.getCurrency()));
+        if (currencyProblem.isPresent()) {
+            return Either.left(currencyProblem.get());
+        }
         Optional<ProblemDetail> amountProblem = FundingValidations.projectAmount(request.getTotalAmount());
         if (amountProblem.isPresent()) {
             return Either.left(amountProblem.get());
-        }
-        if (projectRepository.existsByOrganisationIdAndExternalProjectId(
-                request.getOrganisationId(), request.getExternalProjectId())) {
-            return Either.left(Problems.conflict(
-                    "Project already exists for externalProjectId: " + request.getExternalProjectId(),
-                    ErrorTitleConstants.PROJECT_ALREADY_EXISTS));
         }
         if (projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNull(
                 request.getOrganisationId(), request.getProjectTitle())) {
@@ -146,8 +153,21 @@ public class ProjectService {
         if (fundingIdProblem.isPresent()) {
             return Either.left(fundingIdProblem.get());
         }
-        String projectId = ProjectEntity.id(request.getOrganisationId(), request.getExternalProjectId());
-        return Either.right(projectRepository.saveAndFlush(toEntity(request, projectId)));
+        // A root project's proId is user-suppliable (unlike a sub-project's or milestone's, which are
+        // always system-assigned — see ProjectEntity#getProId()); when omitted it defaults to the
+        // title, same as before this field existed. Since it's caller-chosen, it needs its own
+        // uniqueness pre-check — the title check above can't catch a colliding proId on its own.
+        String proId = (request.getProId() != null && !request.getProId().isBlank())
+                ? request.getProId() : request.getProjectTitle();
+        if (projectRepository.existsByOrganisationIdAndProIdAndParentProjectIsNull(request.getOrganisationId(), proId)) {
+            return Either.left(Problems.conflict(
+                    "Project ID already exists in this organisation: " + proId,
+                    ErrorTitleConstants.PROJECT_PROID_ALREADY_EXISTS));
+        }
+        // The primary key is derived from the proId (unique in this scope, checked above) — never from
+        // the title, which is a freely editable field.
+        String projectId = ProjectEntity.id(request.getOrganisationId(), proId);
+        return Either.right(projectRepository.saveAndFlush(toEntity(request, projectId, proId)));
     }
 
     /** The parent for a project created as a sub-project: must exist and belong to the same organisation. */
@@ -197,7 +217,7 @@ public class ProjectService {
                 return nodeXor;
             }
             Either<ProblemDetail, ProjectEntity> subProject = projectStructureService.createSubProject(
-                    project, node.getExternalProjectId(), node.getProjectTitle(),
+                    project, node.getProjectTitle(),
                     node.getFundingId(), node.getTotalAmount(), node.getCurrency());
             if (subProject.isLeft()) {
                 return Optional.of(subProject.getLeft());
@@ -233,6 +253,24 @@ public class ProjectService {
         if (amountProblem.isPresent()) {
             return ProjectView.error(amountProblem.get());
         }
+        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(request.getCurrency(),
+                milestoneService.isCurrencyRegisteredAndActive(project.getOrganisationId(), request.getCurrency()));
+        if (currencyProblem.isPresent()) {
+            return ProjectView.error(currencyProblem.get());
+        }
+
+        // A currency change cascades to every descendant sub-project and milestone (see
+        // cascadeCurrency), which would silently redenominate any funding/spending already recorded
+        // against them — so it's rejected outright once any allocation exists anywhere in the
+        // subtree, draft or published (published is also covered by the lock above, but a draft
+        // allocation isn't).
+        boolean currencyChanging = request.getCurrency() != null && !request.getCurrency().equals(project.getCurrency());
+        if (currencyChanging && allocationRepository.existsByMilestoneProjectIdIn(
+                ProjectTreeSupport.subtreeProjectIds(projectRepository, projectId))) {
+            return ProjectView.error(Problems.conflict(
+                    "Cannot change currency: project or a descendant sub-project already has funding/spending allocated against it",
+                    ErrorTitleConstants.CURRENCY_CHANGE_HAS_ALLOCATIONS));
+        }
 
         // The budget the project ends up with — parent-fit and child-coverage checks validate this value.
         BigDecimal effectiveTotal = request.getTotalAmount() != null ? request.getTotalAmount() : project.getTotalAmount();
@@ -251,7 +289,8 @@ public class ProjectService {
                 ProjectEntity parent = project.getParentProject();
                 BigDecimal otherSubProjectsTotal = FundingValidations.sumProjectTotals(
                         projectRepository.findByParentProjectId(parent.getId()), project.getId());
-                Optional<ProblemDetail> fit = FundingValidations.subProjectAmount(effectiveTotal, parent, otherSubProjectsTotal);
+                Optional<ProblemDetail> fit = FundingValidations.subProjectAmount(
+                        effectiveTotal, project.getProjectTitle(), parent, otherSubProjectsTotal);
                 if (fit.isPresent()) {
                     return ProjectView.error(fit.get());
                 }
@@ -264,19 +303,48 @@ public class ProjectService {
                 return ProjectView.error(parentProblem.get());
             }
         }
-        // The title must stay unique in the final scope — re-check when the title changes OR the project
-        // is re-parented (a move can collide with a same-named sibling under the new parent).
-        if (request.getProjectTitle() != null || request.getParentProjectId() != null) {
-            String effectiveTitle = request.getProjectTitle() != null ? request.getProjectTitle() : project.getProjectTitle();
+        // projectTitle is now a freely editable display attribute (see ProjectEntity#proId, which stays
+        // fixed and is what everything that needs a stable reference uses instead) — still subject to
+        // the same per-scope uniqueness title always had, checked against every sibling except this
+        // project itself so an unchanged title never conflicts with its own prior value.
+        boolean titleChanging = request.getProjectTitle() != null && !request.getProjectTitle().equals(project.getProjectTitle());
+        String effectiveTitle = titleChanging ? request.getProjectTitle() : project.getProjectTitle();
+        if (titleChanging || request.getParentProjectId() != null) {
+            // A re-parent can also collide with a same-named sibling under the new parent, even when
+            // the title itself doesn't change — projectTitleConflict below checks against the project's
+            // *current* parent association, so this must run after assignParent (above) has already
+            // updated it when both happen in the same request.
             Optional<ProblemDetail> titleConflict = projectTitleConflict(project, effectiveTitle);
             if (titleConflict.isPresent()) {
                 return ProjectView.error(titleConflict.get());
             }
         }
-        if (request.getProjectTitle() != null) project.setProjectTitle(request.getProjectTitle());
+        if (titleChanging) {
+            project.setProjectTitle(request.getProjectTitle());
+        }
         if (request.getTotalAmount() != null) project.setTotalAmount(request.getTotalAmount());
-        if (request.getCurrency() != null) project.setCurrency(request.getCurrency());
+        if (currencyChanging) {
+            cascadeCurrency(project, request.getCurrency());
+        }
         return toView(projectRepository.saveAndFlush(project));
+    }
+
+    /**
+     * Sets {@code project}'s currency to {@code currency} and propagates it down the whole subtree:
+     * every descendant sub-project (recursively) and every milestone belonging to {@code project} or
+     * any of those sub-projects. A sub-project's currency always mirrors its root's, and a
+     * milestone's always mirrors its owning project's — there is no independent currency at either
+     * level (see {@code ProjectStructureService#createSubProject} and CSV import's {@code Currency}
+     * column, which only exists on the root row) — so once a currency changes, this must be the only
+     * value left standing anywhere in the tree.
+     */
+    private void cascadeCurrency(ProjectEntity project, String currency) {
+        project.setCurrency(currency);
+        projectRepository.saveAndFlush(project);
+        milestoneService.updateCurrencyForProject(project.getId(), currency);
+        for (ProjectEntity child : projectRepository.findByParentProjectId(project.getId())) {
+            cascadeCurrency(child, currency);
+        }
     }
 
     /**
@@ -309,7 +377,7 @@ public class ProjectService {
         BigDecimal otherSubProjectsTotal = FundingValidations.sumProjectTotals(
                 projectRepository.findByParentProjectId(parent.getId()), project.getId());
         Optional<ProblemDetail> amountProblem = FundingValidations.subProjectAmount(
-                effectiveTotal, parent, otherSubProjectsTotal);
+                effectiveTotal, project.getProjectTitle(), parent, otherSubProjectsTotal);
         if (amountProblem.isPresent()) {
             return amountProblem;
         }
@@ -407,6 +475,7 @@ public class ProjectService {
                 .fundingId(project.getFundingId())
                 .externalProjectId(project.getExternalProjectId())
                 .projectTitle(project.getProjectTitle())
+                .proId(project.getProId())
                 .totalAmount(project.getTotalAmount())
                 .currency(project.getCurrency())
                 .parentProjectId(parentProjectId)
@@ -431,13 +500,13 @@ public class ProjectService {
                 .toList();
     }
 
-    private ProjectEntity toEntity(ProjectWithMilestonesCreateRequest request, String projectId) {
+    private ProjectEntity toEntity(ProjectWithMilestonesCreateRequest request, String projectId, String proId) {
         return ProjectEntity.builder()
                 .id(projectId)
                 .organisationId(request.getOrganisationId())
                 .fundingId(request.getFundingId())
-                .externalProjectId(request.getExternalProjectId())
                 .projectTitle(request.getProjectTitle())
+                .proId(proId)
                 .totalAmount(request.getTotalAmount())
                 .currency(request.getCurrency())
                 .build();

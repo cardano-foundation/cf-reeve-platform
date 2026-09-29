@@ -109,10 +109,14 @@ public class SpendingEventController {
     @Operation(
             summary = "Create a new event with project and milestone allocations",
             description = "Creates an event (FUNDING, SPENDING or REFUND) and resolves or creates the referenced " +
-                    "projects, sub-projects and milestones in a single atomic request. Supplying only an id " +
-                    "(`externalProjectId` / `externalMilestoneId`) references an existing entity and fails with 404 " +
-                    "when it does not exist; supplying the creation fields (title, amounts, ...) creates it on the fly. " +
-                    "`fundingEntity` is required for FUNDING events; the spend detail fields are required for SPENDING events.",
+                    "projects, sub-projects and milestones in a single atomic request. Supplying only `projectTitle` " +
+                    "(or `milestoneTitle`) references an existing entity and fails with 404 when it does not exist; " +
+                    "supplying the creation fields (totalAmount/currency, or milestoneAmount/currency/milestoneDate) " +
+                    "creates it on the fly. A project/milestone title only needs to be unique within its own scope " +
+                    "(siblings under the same parent project) — the same milestone title may be reused across " +
+                    "different sub-projects, as shown below. `externalProjectId`/`externalMilestoneId` are accepted " +
+                    "for backward compatibility but no longer used to match or create anything. `fundingEntity` is " +
+                    "required for FUNDING events; the spend detail fields are required for SPENDING events.",
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
                     content = @Content(
@@ -120,8 +124,8 @@ public class SpendingEventController {
                             schema = @Schema(implementation = SpendingEventCreateRequest.class),
                             examples = {
                                     @ExampleObject(
-                                            name = "SPENDING – project tree with sub-projects and milestones",
-                                            summary = "Creates project \"project1\" with sub-projects \"sub1\"/\"sub2\" and milestones \"mil1\"/\"mil2\"/\"mil3\" on-the-fly while recording spending",
+                                            name = "SPENDING – sub-projects with same-named milestones, plus a standalone project with a direct milestone",
+                                            summary = "Creates \"Project A\" with sub-projects \"Sub One\"/\"Sub Two\" (each with its own \"Milestone One\"/\"Milestone Two\" — the same titles are fine since they're not siblings), and a separate standalone \"Project B\" with a milestone directly on it (no sub-projects) — all on-the-fly while recording spending",
                                             value = """
                                                     {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
@@ -130,62 +134,83 @@ public class SpendingEventController {
                                                       "fundingHash": "45646",
                                                       "currencyRcy": "EUR",
                                                       "eventDate": "2026-07-17",
-                                                      "amountFcy": "20000.00",
+                                                      "amountFcy": "10000.00",
                                                       "currencyFcy": "USD",
                                                       "fxRate": "0.5",
-                                                      "amountRcy": "10000.00",
+                                                      "amountRcy": "5000.00",
                                                       "allocations": [
                                                         {
-                                                          "externalProjectId": "47014cf0-4088-4a1f-b3fa-d80903b92b37",
-                                                          "projectTitle": "project1",
+                                                          "projectTitle": "Project A",
                                                           "totalAmount": "10000.00",
                                                           "currency": "EUR",
                                                           "subProjects": [
                                                             {
-                                                              "externalProjectId": "98b68eb1-ae19-4421-bee2-3259f5aa24ab",
-                                                              "projectTitle": "sub1",
-                                                              "totalAmount": "5000.00",
+                                                              "externalProjectId": "sub-one",
+                                                              "projectTitle": "Sub One",
+                                                              "totalAmount": "3000.00",
                                                               "currency": "EUR",
                                                               "milestones": [
                                                                 {
                                                                   "milestone": {
-                                                                    "externalMilestoneId": "4f5413fc-88af-43e7-8df5-1dcfade98b59",
-                                                                    "milestoneTitle": "mil1",
-                                                                    "milestoneAmount": "2500.00",
+                                                                    "milestoneTitle": "Milestone One",
+                                                                    "milestoneAmount": "1500.00",
                                                                     "currency": "EUR",
                                                                     "milestoneDate": "2026-07-17"
                                                                   },
-                                                                  "allocatedAmount": "2500.00"
+                                                                  "allocatedAmount": "1000.00"
                                                                 },
                                                                 {
                                                                   "milestone": {
-                                                                    "externalMilestoneId": "3c7a48e6-223c-44de-a075-ca41dff63038",
-                                                                    "milestoneTitle": "mil2",
-                                                                    "milestoneAmount": "2500.00",
+                                                                    "milestoneTitle": "Milestone Two",
+                                                                    "milestoneAmount": "1500.00",
                                                                     "currency": "EUR",
                                                                     "milestoneDate": "2026-07-18"
                                                                   },
-                                                                  "allocatedAmount": "2500.00"
+                                                                  "allocatedAmount": "1000.00"
                                                                 }
                                                               ]
                                                             },
                                                             {
-                                                              "externalProjectId": "82d7d217-980a-4138-b3ae-871c8c5f7bd8",
-                                                              "projectTitle": "sub2",
-                                                              "totalAmount": "5000.00",
+                                                              "externalProjectId": "sub-two",
+                                                              "projectTitle": "Sub Two",
+                                                              "totalAmount": "3000.00",
                                                               "currency": "EUR",
                                                               "milestones": [
                                                                 {
                                                                   "milestone": {
-                                                                    "externalMilestoneId": "3f3c7c12-5214-4f62-ab1a-ae55cefdaff1",
-                                                                    "milestoneTitle": "mil3",
-                                                                    "milestoneAmount": "5000.00",
+                                                                    "milestoneTitle": "Milestone One",
+                                                                    "milestoneAmount": "1500.00",
                                                                     "currency": "EUR",
-                                                                    "milestoneDate": "2026-07-26"
+                                                                    "milestoneDate": "2026-07-17"
                                                                   },
-                                                                  "allocatedAmount": "5000.00"
+                                                                  "allocatedAmount": "1000.00"
+                                                                },
+                                                                {
+                                                                  "milestone": {
+                                                                    "milestoneTitle": "Milestone Two",
+                                                                    "milestoneAmount": "1500.00",
+                                                                    "currency": "EUR",
+                                                                    "milestoneDate": "2026-07-18"
+                                                                  },
+                                                                  "allocatedAmount": "1000.00"
                                                                 }
                                                               ]
+                                                            }
+                                                          ]
+                                                        },
+                                                        {
+                                                          "projectTitle": "Project B",
+                                                          "totalAmount": "2000.00",
+                                                          "currency": "EUR",
+                                                          "milestones": [
+                                                            {
+                                                              "milestone": {
+                                                                "milestoneTitle": "Milestone One",
+                                                                "milestoneAmount": "2000.00",
+                                                                "currency": "EUR",
+                                                                "milestoneDate": "2026-07-17"
+                                                              },
+                                                              "allocatedAmount": "1000.00"
                                                             }
                                                           ]
                                                         }
@@ -194,7 +219,7 @@ public class SpendingEventController {
                                     ),
                                     @ExampleObject(
                                             name = "FUNDING – allocate to the existing project tree",
-                                            summary = "Allocates funding to the existing \"project1\" / \"sub1\" / \"sub2\" project tree and its milestones created by the SPENDING example above",
+                                            summary = "Allocates funding purely by title to the existing \"Project A\" / \"Sub One\" / \"Sub Two\" / \"Project B\" tree and its milestones created by the SPENDING example above — note the same \"Milestone One\"/\"Milestone Two\" titles resolve to different milestones depending on which project they're nested under",
                                             value = """
                                                     {
                                                       "organisationId": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
@@ -206,29 +231,42 @@ public class SpendingEventController {
                                                       "eventDate": "2026-07-18",
                                                       "allocations": [
                                                         {
-                                                          "externalProjectId": "47014cf0-4088-4a1f-b3fa-d80903b92b37",
+                                                          "projectTitle": "Project A",
                                                           "subProjects": [
                                                             {
-                                                              "externalProjectId": "98b68eb1-ae19-4421-bee2-3259f5aa24ab",
+                                                              "projectTitle": "Sub One",
                                                               "milestones": [
                                                                 {
-                                                                  "milestone": { "externalMilestoneId": "4f5413fc-88af-43e7-8df5-1dcfade98b59" },
-                                                                  "allocatedAmount": "2500.00"
+                                                                  "milestone": { "milestoneTitle": "Milestone One" },
+                                                                  "allocatedAmount": "500.00"
                                                                 },
                                                                 {
-                                                                  "milestone": { "externalMilestoneId": "3c7a48e6-223c-44de-a075-ca41dff63038" },
-                                                                  "allocatedAmount": "2500.00"
+                                                                  "milestone": { "milestoneTitle": "Milestone Two" },
+                                                                  "allocatedAmount": "500.00"
                                                                 }
                                                               ]
                                                             },
                                                             {
-                                                              "externalProjectId": "82d7d217-980a-4138-b3ae-871c8c5f7bd8",
+                                                              "projectTitle": "Sub Two",
                                                               "milestones": [
                                                                 {
-                                                                  "milestone": { "externalMilestoneId": "3f3c7c12-5214-4f62-ab1a-ae55cefdaff1" },
-                                                                  "allocatedAmount": "5000.00"
+                                                                  "milestone": { "milestoneTitle": "Milestone One" },
+                                                                  "allocatedAmount": "500.00"
+                                                                },
+                                                                {
+                                                                  "milestone": { "milestoneTitle": "Milestone Two" },
+                                                                  "allocatedAmount": "500.00"
                                                                 }
                                                               ]
+                                                            }
+                                                          ]
+                                                        },
+                                                        {
+                                                          "projectTitle": "Project B",
+                                                          "milestones": [
+                                                            {
+                                                              "milestone": { "milestoneTitle": "Milestone One" },
+                                                              "allocatedAmount": "1000.00"
                                                             }
                                                           ]
                                                         }
@@ -275,10 +313,10 @@ public class SpendingEventController {
                                                       "currencyRcy": "USD",
                                                       "allocations": [
                                                         {
-                                                          "externalProjectId": "PROJ-AB",
+                                                          "projectTitle": "Project AB",
                                                           "milestones": [
                                                             {
-                                                              "milestone": { "externalMilestoneId": "MS-001" },
+                                                              "milestone": { "milestoneTitle": "Milestone AB-1" },
                                                               "allocatedAmount": "150000.00"
                                                             }
                                                           ]

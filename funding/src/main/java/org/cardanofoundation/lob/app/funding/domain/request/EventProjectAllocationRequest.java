@@ -22,8 +22,17 @@ public class EventProjectAllocationRequest {
 
     @Nullable
     @Schema(example = "PROJ-AB",
-            description = "User-defined project ID (externalProjectId field). When externalProjectId maps to an existing project, all new-project fields below are ignored.")
+            description = "User-defined project ID. No longer used to match an existing project — projects are matched by projectTitle. Accepted and stored for backward compatibility only.")
     private String externalProjectId;
+
+    @Nullable
+    @Schema(example = "PRU-KSKS", description = "Permanent identifier assigned when the project was created (see ProjectView#proId). "
+            + "When supplied, matches the existing project by it directly — the reliable way to reference a project that may have "
+            + "since been renamed. When omitted, falls back to matching by the current projectTitle. If no existing project matches "
+            + "and a new one is created, this value is also used as the new project's proId (root projects may choose their own "
+            + "permanent identifier — unlike sub-projects/milestones, whose proId is always system-assigned); when blank, the new "
+            + "project's proId defaults to projectTitle instead.")
+    private String proId;
 
     // --- New project: supply the fields below when creating a new project ---
 
@@ -32,7 +41,7 @@ public class EventProjectAllocationRequest {
     private String fundingId;
 
     @Nullable
-    @Schema(example = "Project AB")
+    @Schema(example = "Project AB", description = "Required. Matches an existing root project by (organisationId, projectTitle), or names a new one.")
     private String projectTitle;
 
     @Nullable

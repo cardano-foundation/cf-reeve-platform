@@ -15,6 +15,9 @@ group = "org.cardano.foundation"
 version = "1.6.0"
 java.sourceCompatibility = JavaVersion.VERSION_21
 
+// support postgres 17
+extra["flyway.version"] = "10.20.1"
+
 configurations {
     compileOnly {
         extendsFrom(configurations.annotationProcessor.get())
@@ -97,6 +100,24 @@ tasks.jacocoTestReport {
     reports {
         csv.required.set(true)
     }
+}
+
+val healthcheckMainClass = "org.cardano.foundation.lob.health.Healthcheck"
+
+val healthcheckJar by tasks.registering(Jar::class) {
+    dependsOn(tasks.named("classes"))
+    archiveBaseName.set("healthcheck")
+    archiveVersion.set("")
+    from(sourceSets.main.get().output) {
+        include(healthcheckMainClass.replace('.', '/') + ".class")
+    }
+    manifest {
+        attributes["Main-Class"] = healthcheckMainClass
+    }
+}
+
+tasks.named("assemble") {
+    dependsOn(healthcheckJar)
 }
 
 tasks.bootJar {

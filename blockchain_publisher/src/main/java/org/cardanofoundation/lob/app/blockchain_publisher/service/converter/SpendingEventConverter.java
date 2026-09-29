@@ -77,10 +77,12 @@ public class SpendingEventConverter {
                     SpendingEventPublishView.SubProject subProject = allocation.getSubProject();
                     EventProjectAllocationEntity entity = EventProjectAllocationEntity.builder()
                             .event(event)
-                            .projectId(allocation.getExternalProjectId())
+                            .projectId(allocation.getProjectId())
                             .projectTitle(allocation.getProjectTitle())
+                            .proId(allocation.getProId())
                             .subProjectId(subProject != null ? subProject.getSubProjectId() : null)
                             .subProjectTitle(subProject != null ? subProject.getSubProjectTitle() : null)
+                            .subProjectProId(subProject != null ? subProject.getProId() : null)
                             .build();
                     entity.setMilestones(convertMilestones(entity,
                             subProject != null ? subProject.getMilestones() : allocation.getMilestones()));
@@ -96,6 +98,7 @@ public class SpendingEventConverter {
                         .allocation(allocation)
                         .milestoneId(milestone.getMilestoneId())
                         .milestoneTitle(milestone.getMilestoneTitle())
+                        .proId(milestone.getProId())
                         .allocatedAmount(milestone.getAllocatedAmount())
                         .build())
                 .collect(Collectors.toCollection(ArrayList::new));

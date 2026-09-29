@@ -24,7 +24,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public class ProjectTreeNodeRequest {
 
     @NotBlank
-    @Schema(example = "WP-1", description = "User-defined id, unique within its parent.")
+    @Schema(example = "WP-1", description = "User-defined id. No longer used for lookups or id generation; kept for backward compatibility only.")
     private String externalProjectId;
 
     @NotBlank

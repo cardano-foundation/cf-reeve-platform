@@ -27,26 +27,50 @@ class TransactionViolationCodeTest {
     }
 
     @Test
-    void exclusions_shouldContainDocumentMustBePresent() {
+    void exclusions_shouldNotContainDocumentMustBePresent() {
         assertThat(TransactionViolationCode.exclusions())
-                .contains(TransactionViolationCode.DOCUMENT_MUST_BE_PRESENT.name());
+                .doesNotContain(TransactionViolationCode.DOCUMENT_MUST_BE_PRESENT.name());
     }
 
     @Test
-    void exclusions_shouldContainAccountCodeCreditIsEmpty() {
+    void exclusions_shouldNotContainAccountCodeCreditIsEmpty() {
         assertThat(TransactionViolationCode.exclusions())
-                .contains(TransactionViolationCode.ACCOUNT_CODE_CREDIT_IS_EMPTY.name());
+                .doesNotContain(TransactionViolationCode.ACCOUNT_CODE_CREDIT_IS_EMPTY.name());
     }
 
     @Test
-    void exclusions_shouldContainAccountCodeDebitIsEmpty() {
+    void exclusions_shouldNotContainAccountCodeDebitIsEmpty() {
         assertThat(TransactionViolationCode.exclusions())
-                .contains(TransactionViolationCode.ACCOUNT_CODE_DEBIT_IS_EMPTY.name());
+                .doesNotContain(TransactionViolationCode.ACCOUNT_CODE_DEBIT_IS_EMPTY.name());
     }
 
     @Test
-    void exclusions_shouldContainExactlySixEntries() {
-        assertThat(TransactionViolationCode.exclusions()).hasSize(6);
+    void exclusions_shouldContainExactlyThreeEntries() {
+        assertThat(TransactionViolationCode.exclusions()).hasSize(3);
+    }
+
+    @Test
+    void exclusions_shouldContainOnlyExpectedCodes() {
+        assertThat(TransactionViolationCode.exclusions())
+                .containsExactlyInAnyOrder(
+                        TransactionViolationCode.NET_OFF_TX.name(),
+                        TransactionViolationCode.TRANSACTION_NOT_IN_ERP.name(),
+                        TransactionViolationCode.ALL_TX_ITEMS_ERASED.name());
+    }
+
+    @Test
+    void exclusions_shouldNotContainAnyOtherViolationCode() {
+        Set<String> excludedFromExclusions = java.util.Arrays.stream(TransactionViolationCode.values())
+                .map(Enum::name)
+                .filter(name -> !Set.of(
+                        TransactionViolationCode.NET_OFF_TX.name(),
+                        TransactionViolationCode.TRANSACTION_NOT_IN_ERP.name(),
+                        TransactionViolationCode.ALL_TX_ITEMS_ERASED.name())
+                        .contains(name))
+                .collect(java.util.stream.Collectors.toSet());
+
+        assertThat(TransactionViolationCode.exclusions())
+                .doesNotContainAnyElementsOf(excludedFromExclusions);
     }
 
     @Test
@@ -54,5 +78,12 @@ class TransactionViolationCodeTest {
         Set<String> first = TransactionViolationCode.exclusions();
         Set<String> second = TransactionViolationCode.exclusions();
         assertThat(first).isEqualTo(second).isNotSameAs(second);
+    }
+
+    @Test
+    void exclusions_returnedSetIsMutable() {
+        Set<String> exclusion = TransactionViolationCode.exclusions();
+        exclusion.add("SOME_OTHER_CODE");
+        assertThat(exclusion).contains("SOME_OTHER_CODE");
     }
 }

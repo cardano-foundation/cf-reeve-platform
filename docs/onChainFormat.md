@@ -196,7 +196,31 @@ Required fields:
 | `year`     | string                      | The year of the report, e.g., "2025".                                                                                                                                  |
 | `period`   | integer                     | The period of the report according to the interval, e.g., if Monthly 1 for January, 2 for February, if quarterly 1 for Q1, 2 for Q2                                    |
 | `subtype`  | string                      | Definition of what of the report type - Organisations can have custom reports, e.g., "BALANCE_SHEET", "INCOME_STATEMENT"                                               |
-| `data`     | anyOf [string, data object] | The actual report data, which can be highly customized and structured according to the organisation's needs. This object should repesent categories and subcategories. |
+| `data`     | leaf \| node                | The actual report data, recursively structured according to the organisation's needs (see [Report Data Structure](#report-data-structure) below).                     |
+
+### Report Data Structure
+
+Every field in the `data` tree — including the root — is exactly one of a **leaf** or a **node**:
+
+- **Leaf**: a value-bearing field. Either:
+  - Old format: a plain decimal string, e.g., `"1000"`.
+  - New format: an object carrying the value under `v`, with an optional display order `_o`:
+
+    | Field | Type    | Required | Description                                                                                                 |
+    | ----- | ------- | -------- | ------------------------------------------------------------------------------------------------------------- |
+    | `v`   | string  | Yes      | The serialised value. Numeric inputs are normalised to a decimal string; textual inputs are kept verbatim.    |
+    | `_o`  | integer | No       | The field's display order among its siblings (non-negative integer). Purely presentational — does not affect the value. |
+
+- **Node**: a section — never carries `v` — holding any number of arbitrarily-named child fields, each itself a leaf or a node:
+
+    | Field        | Type          | Required | Description                                          |
+    | ------------ | ------------- | -------- | ------------------------------------------------------- |
+    | `_o`         | integer       | No       | The section's display order among its siblings.        |
+    | *(any name)* | leaf \| node  | No       | Child field — itself a leaf or a node.                  |
+
+  A node also covers a field whose source value was `null` (serialised as just `{"_o": n}`, with no `v`) and empty sections (`{}`).
+
+The presence of `v` is what distinguishes a leaf from a node. `_o` is optional everywhere; when omitted, no ordering guarantee is implied for that field relative to its siblings. Old and new format leaves can coexist within the same report, since the new format was introduced without invalidating previously published reports.
 
 #### Example json:
 
@@ -209,25 +233,32 @@ Required fields:
   "period": 12,
   "subtype": "BALANCE_SHEET",
   "data": {
+    "_o": 0,
     "assets": {
+      "_o": 0,
       "current_assets": {
-        "cash": "1000"
+        "_o": 0,
+        "cash": { "v": "1000", "_o": 0 }
       },
       "non_current_assets": {
+        "_o": 1,
         "property": "5000"
       }
     },
     "liabilities": {
+      "_o": 1,
       "current_liabilities": {
         "accounts_payable": "200"
       },
       "non_current_liabilities": {
-        "long_term_debt": "1000"
+        "long_term_debt": { "v": "1000" }
       }
     }
   }
 }
 ```
+
+This example mixes both formats to illustrate that they can coexist: `cash` uses the new object format with an explicit order, `long_term_debt` uses the new object format without an order, while `property` and `accounts_payable` are plain old-format strings.
 
 ## Type: Funding
 
