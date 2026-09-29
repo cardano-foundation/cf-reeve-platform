@@ -53,12 +53,12 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.ValidateIngestionResponseWaiter;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.ErrorUtils;
 import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ProjectRepository;
 import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
-import org.cardanofoundation.lob.app.support.javers.BagParser;
 import org.cardanofoundation.lob.app.support.problem_support.IdentifiableProblem;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
@@ -249,10 +249,7 @@ public class AccountingCorePresentationViewService {
                             transactions.stream().map(
                                             this::getTransactionView)
                                     .toList(),
-                            convertBagToJson(transactionBatchEntity.getDetails()
-                                    .orElse(Details.builder()
-                                            .build()))
-                                    .getBag(),
+                            detailsView(transactionBatchEntity),
                             transactions.getTotalElements());
                 }));
     }
@@ -281,10 +278,7 @@ public class AccountingCorePresentationViewService {
                                     transactionBatchEntity
                                             .getFilteringParameters()),
                             List.of(),
-                            convertBagToJson(transactionBatchEntity.getDetails()
-                                    .orElse(Details.builder()
-                                            .build()))
-                                    .getBag(),
+                            detailsView(transactionBatchEntity),
                             null // transactions are not loaded here
                     );
                 }).toList();
@@ -1002,10 +996,9 @@ public class AccountingCorePresentationViewService {
         return filterOptionsListMap;
     }
 
-    private Details convertBagToJson(Details details) {
-        details.setBag(BagParser.parse(details.getBag()));
-        return details;
-
+    // Each adapter stores a differently shaped bag, so batches always expose the normalised one
+    private static Map<String, Object> detailsView(TransactionBatchEntity transactionBatchEntity) {
+        return transactionBatchEntity.getDetails().map(ErrorUtils::normalisedBag).orElseGet(Map::of);
     }
 
     public void downloadCsvTransactions(@Valid String orgId, String batchId, List<TransactionProcessingStatus> txStatus, BatchFilterRequest batchFilterRequest, OutputStream outputStream) {
