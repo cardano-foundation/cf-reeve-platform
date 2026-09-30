@@ -26,9 +26,11 @@ public class EventMilestoneAllocationView {
     @Schema(example = "MS-001", description = "User-defined Milestone ID")
     private String externalMilestoneId;
 
+    @Nullable
     @Schema(example = "Milestone AB")
     private String milestoneTitle;
 
+    @Nullable
     @Schema(example = "50000.00")
     private BigDecimal milestoneAmount;
 
@@ -36,9 +38,11 @@ public class EventMilestoneAllocationView {
     @Schema(example = "50000.00")
     private BigDecimal allocatedAmount;
 
+    @Nullable
     @Schema(example = "USD")
     private String currency;
 
+    @Nullable
     @JsonFormat(pattern = "yyyy-MM-dd")
     @Schema(example = "2025-06-30")
     private LocalDate milestoneDate;
@@ -50,5 +54,10 @@ public class EventMilestoneAllocationView {
     @Schema(example = "true",
             description = "True when spentAmount exceeds milestoneAmount — a warning condition, not a rejection.")
     private boolean overspend;
+
+    @Schema(example = "false",
+            description = "True when the milestone this allocation points at was deleted. The allocation row is "
+                    + "kept for a human to resolve; only milestoneId and allocatedAmount are filled in then.")
+    private boolean milestoneDeleted;
 
 }

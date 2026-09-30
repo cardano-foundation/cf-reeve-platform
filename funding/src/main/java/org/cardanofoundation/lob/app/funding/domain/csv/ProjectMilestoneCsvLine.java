@@ -32,7 +32,9 @@ public class ProjectMilestoneCsvLine {
     /**
      * The project's permanent identifier (see {@code ProjectEntity#proId}) — when present, matching
      * against an existing row prefers this over {@link #projectTitle}, which is the only way to find a
-     * project that's since been renamed.
+     * project that's since been renamed. Mandatory when the row creates a new root project (rejected as
+     * a row error otherwise, matching the UI's own required-field treatment of this input); optional
+     * when matching an existing one, same as every other reference-by-title fallback in this file.
      */
     @CsvBindByName(column = "Project ID", profiles = "optional")
     private String projectId;

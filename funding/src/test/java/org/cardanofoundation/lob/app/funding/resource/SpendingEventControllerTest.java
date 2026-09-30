@@ -25,6 +25,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.OrphanEventsCleanupView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.service.SpendingEventService;
@@ -176,6 +177,28 @@ class SpendingEventControllerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+    }
+
+    @Test
+    void deleteOrphanedErrorEvents_returns200_withDeletedEvents() {
+        OrphanEventsCleanupView view = OrphanEventsCleanupView.success(List.of());
+        when(spendingEventService.deleteOrphanedErrorEvents("org1")).thenReturn(view);
+
+        ResponseEntity<?> response = spendingEventController.deleteOrphanedErrorEvents("org1");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo(view);
+    }
+
+    @Test
+    void deleteOrphanedErrorEvents_returns400_withProblem() {
+        when(spendingEventService.deleteOrphanedErrorEvents("org1"))
+                .thenReturn(OrphanEventsCleanupView.error(problem(HttpStatus.BAD_REQUEST, ErrorTitleConstants.ORGANISATION_NOT_FOUND)));
+
+        ResponseEntity<?> response = spendingEventController.deleteOrphanedErrorEvents("org1");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(((OrphanEventsCleanupView) response.getBody()).getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.ORGANISATION_NOT_FOUND);
     }
 
 }

@@ -15,6 +15,7 @@ public class EventProjectAllocationView {
     @Schema(example = "550e8400-e29b-41d4-a716-446655440001")
     private String eventId;
 
+    @jakarta.annotation.Nullable
     @Schema(example = "8b3753dda23452180bf502db991bcd2ccbf30e648a9b84778477c0d2ee618dfa",
             description = "Internal SHA256 id of the project (project_id)")
     private String projectId;
@@ -22,6 +23,7 @@ public class EventProjectAllocationView {
     @Schema(example = "PROJ-AB", description = "User-defined project identifier")
     private String externalProjectId;
 
+    @jakarta.annotation.Nullable
     @Schema(example = "Project AB")
     private String projectTitle;
 
@@ -31,6 +33,12 @@ public class EventProjectAllocationView {
     private String parentProjectId;
 
     private List<EventMilestoneAllocationView> milestoneAllocations;
+
+    @Schema(example = "false",
+            description = "True for the single placeholder entry that groups this event's allocations whose "
+                    + "milestone was deleted (projectId/projectTitle are null then). Same data as "
+                    + "orphanedAllocations.")
+    private boolean containsDeletedMilestones;
 
     @jakarta.annotation.Nullable
     @Schema(example = "200000.00", description = "This (leaf) project's own budget, when set.")

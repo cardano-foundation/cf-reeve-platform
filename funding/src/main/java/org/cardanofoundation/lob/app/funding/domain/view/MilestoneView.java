@@ -34,10 +34,15 @@ public class MilestoneView implements ErrorAware {
     private String milestoneTitle;
 
     @Schema(example = "Milestone AB", description = "Permanent identifier assigned at creation — never changes afterward, even when milestoneTitle is later renamed. "
-            + "'<project proId>-<n>' when created via the API or an event allocation, or the value supplied when created via CSV "
+            + "'<project proId>-M<n>' when created via the API or an event allocation, or the value supplied when created via CSV "
             + "(milestones that predate this field keep their original title). Reference this, not milestoneTitle, when the "
             + "milestone needs to be found reliably later (e.g. a subsequent event allocation or CSV re-upload).")
     private String proId;
+
+    @Nullable
+    @Schema(example = "Site survey and vendor contract signature", description = "Locked (along with "
+            + "milestoneAmount and milestoneDate) once a published event allocates to this milestone — see #locked.")
+    private String description;
 
     @Schema(example = "50000.00")
     private BigDecimal milestoneAmount;
@@ -53,6 +58,14 @@ public class MilestoneView implements ErrorAware {
     @Nullable
     @Schema(example = "12000.00", description = "Spent = sum of allocated SPENDING amounts. FUNDING and REFUND do not affect this total.")
     private BigDecimal spentAmount;
+
+    /**
+     * Calculated (not stored): {@code true} when at least one PUBLISHED event allocates to this
+     * milestone, in which case {@link #description}, {@link #milestoneAmount}, and {@link #milestoneDate}
+     * are read-only ({@code milestoneTitle} stays editable regardless — see LOB-2365).
+     */
+    @Schema(description = "True when a published event allocates to this milestone, locking description/milestoneAmount/milestoneDate.")
+    private boolean locked;
 
     @Builder.Default
     @Schema(description = "Problem detail describing the failure; absent on success")

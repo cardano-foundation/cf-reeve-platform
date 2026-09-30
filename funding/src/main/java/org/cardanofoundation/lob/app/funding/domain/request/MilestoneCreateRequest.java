@@ -34,6 +34,10 @@ public class MilestoneCreateRequest {
     private String proId;
 
     @Nullable
+    @Schema(example = "Site survey and vendor contract signature")
+    private String description;
+
+    @Nullable
     @Schema(example = "50000.00")
     private BigDecimal milestoneAmount;
 
@@ -45,5 +49,12 @@ public class MilestoneCreateRequest {
     @JsonFormat(pattern = "yyyy-MM-dd")
     @Schema(example = "2025-06-30")
     private LocalDate milestoneDate;
+
+    @Nullable
+    @Schema(example = "DELETE", description = "When set to \"DELETE\", this milestone (matched by proId, "
+            + "falling back to milestoneTitle, same as for an update) is deleted instead of created/updated. "
+            + "All other fields on this node are ignored. Omit, or leave null, for the normal "
+            + "create-or-update behavior.")
+    private String action;
 
 }
