@@ -72,7 +72,7 @@ public class FundingCascadeDeleteService {
                 .map(MilestoneEntity::getId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
-        Either<ProblemDetail, List<FundingEventEntity>> result = flagEventsAllocatedTo(milestoneIds);
+        Either<ProblemDetail, List<FundingEventEntity>> result = checkAndFlagEventsAllocatedTo(milestoneIds);
         if (result.isLeft()) {
             return result;
         }
@@ -92,7 +92,7 @@ public class FundingCascadeDeleteService {
      */
     @Transactional
     public Either<ProblemDetail, List<FundingEventEntity>> deleteMilestone(MilestoneEntity milestone) {
-        Either<ProblemDetail, List<FundingEventEntity>> result = flagEventsAllocatedTo(Set.of(milestone.getId()));
+        Either<ProblemDetail, List<FundingEventEntity>> result = checkAndFlagEventsAllocatedTo(Set.of(milestone.getId()));
         if (result.isLeft()) {
             return result;
         }
@@ -115,6 +115,15 @@ public class FundingCascadeDeleteService {
      */
     @Transactional
     public Either<ProblemDetail, List<FundingEventEntity>> flagEventsAllocatedTo(Set<String> milestoneIds) {
+        return checkAndFlagEventsAllocatedTo(milestoneIds);
+    }
+
+    /**
+     * Body of {@link #flagEventsAllocatedTo}, kept separate so this class's own {@code @Transactional}
+     * methods call it directly rather than through a self-invoked (proxy-bypassing) transactional method;
+     * they already run in a transaction, so it simply joins theirs.
+     */
+    private Either<ProblemDetail, List<FundingEventEntity>> checkAndFlagEventsAllocatedTo(Set<String> milestoneIds) {
         if (milestoneIds.isEmpty()) {
             return Either.right(List.of());
         }

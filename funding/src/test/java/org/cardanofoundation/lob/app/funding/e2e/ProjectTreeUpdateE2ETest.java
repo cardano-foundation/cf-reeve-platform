@@ -202,26 +202,8 @@ class ProjectTreeUpdateE2ETest {
         assertThat(fundingView.getError()).isEmpty();
         assertThat(spendingView.getError()).isEmpty();
 
-        // The SPENDING event only ever allocated to Sub B, so nothing is left under a live project — but
-        // its allocation row was not deleted, and must still show up rather than silently vanish.
-        // Also mirrored into projectAllocations as one project-less placeholder entry.
-        assertThat(spendingView.getProjectAllocations()).hasSize(1);
-        assertThat(spendingView.getProjectAllocations().get(0).isContainsDeletedMilestones()).isTrue();
-        assertThat(spendingView.getProjectAllocations().get(0).getProjectId()).isNull();
-        assertThat(spendingView.getProjectAllocations().get(0).getMilestoneAllocations()).hasSize(1);
-        assertThat(spendingView.getProjectAllocations().get(0).getMilestoneAllocations().get(0).isMilestoneDeleted()).isTrue();
-        assertThat(spendingView.getProjectAllocations().get(0).getMilestoneAllocations().get(0).getAllocatedAmount())
-                .isEqualByComparingTo("10000.00");
-        assertThat(spendingView.getOrphanedAllocations()).hasSize(1);
-        assertThat(spendingView.getOrphanedAllocations().get(0).getAllocatedAmount()).isEqualByComparingTo("10000.00");
-        assertThat(spendingView.getOrphanedAllocations().get(0).isMilestoneDeleted()).isTrue();
-
-        // The FUNDING event spanned both: Sub A's allocation is still live, Sub B's is the orphan.
-        assertThat(fundingView.getProjectAllocations()).hasSize(2);
-        assertThat(fundingView.getProjectAllocations().get(0).isContainsDeletedMilestones()).isFalse();
-        assertThat(fundingView.getProjectAllocations().get(1).isContainsDeletedMilestones()).isTrue();
-        assertThat(fundingView.getOrphanedAllocations()).hasSize(1);
-        assertThat(fundingView.getOrphanedAllocations().get(0).getAllocatedAmount()).isEqualByComparingTo("15000.00");
+        assertSpendingViewShowsOnlyOrphan(spendingView);
+        assertFundingViewShowsLiveAndOrphan(fundingView);
 
         // Step 6 (before fixing anything): the orphan cleanup deletes only the SPENDING event — its sole
         // allocation points at the deleted milestone. The FUNDING event still has a live Sub A
@@ -229,13 +211,7 @@ class ProjectTreeUpdateE2ETest {
         lenient().when(organisationPublicApi.findByOrganisationId(ORG_ID)).thenReturn(Optional.of(new Organisation()));
         OrphanEventsCleanupView cleanup = spendingEventService.deleteOrphanedErrorEvents(ORG_ID);
 
-        assertThat(cleanup.getError()).isEmpty();
-        assertThat(cleanup.getDeletedEvents()).hasSize(1);
-        assertThat(cleanup.getDeletedEvents().get(0).getEventId().trim()).isEqualTo(spending.getEventId());
-        assertThat(fundingEventRepository.findById(spending.getEventId())).isEmpty();
-        assertThat(allocationRepository.findById_EventId(spending.getEventId())).isEmpty();
-        assertThat(fundingEventRepository.findById(funding.getEventId())).isPresent();
-        assertThat(allocationRepository.findById_EventId(funding.getEventId())).hasSize(2);
+        assertCleanupDeletedOnly(cleanup, spending.getEventId(), funding.getEventId());
 
         // Step 5: fixing the FUNDING event by hand (allocations only reference what still exists) replaces
         // all its allocations — the dangling one is dropped and the event is DRAFT again.
@@ -469,4 +445,40 @@ class ProjectTreeUpdateE2ETest {
         assertThat(milestoneRepository.findByProjectId(y.getProjectId())).allSatisfy(m -> assertThat(m.getCurrency()).isEqualTo("ADA"));
     }
 
+    /**
+     * The SPENDING event only ever allocated to Sub B, so nothing is left under a live project — but
+     * its allocation row was not deleted, and must still show up rather than silently vanish.
+     * Also mirrored into projectAllocations as one project-less placeholder entry.
+     */
+    private static void assertSpendingViewShowsOnlyOrphan(SpendingEventView spendingView) {
+        assertThat(spendingView.getProjectAllocations()).hasSize(1);
+        assertThat(spendingView.getProjectAllocations().get(0).isContainsDeletedMilestones()).isTrue();
+        assertThat(spendingView.getProjectAllocations().get(0).getProjectId()).isNull();
+        assertThat(spendingView.getProjectAllocations().get(0).getMilestoneAllocations()).hasSize(1);
+        assertThat(spendingView.getProjectAllocations().get(0).getMilestoneAllocations().get(0).isMilestoneDeleted()).isTrue();
+        assertThat(spendingView.getProjectAllocations().get(0).getMilestoneAllocations().get(0).getAllocatedAmount())
+                .isEqualByComparingTo("10000.00");
+        assertThat(spendingView.getOrphanedAllocations()).hasSize(1);
+        assertThat(spendingView.getOrphanedAllocations().get(0).getAllocatedAmount()).isEqualByComparingTo("10000.00");
+        assertThat(spendingView.getOrphanedAllocations().get(0).isMilestoneDeleted()).isTrue();
+    }
+
+    /** The FUNDING event spanned both: Sub A's allocation is still live, Sub B's is the orphan. */
+    private static void assertFundingViewShowsLiveAndOrphan(SpendingEventView fundingView) {
+        assertThat(fundingView.getProjectAllocations()).hasSize(2);
+        assertThat(fundingView.getProjectAllocations().get(0).isContainsDeletedMilestones()).isFalse();
+        assertThat(fundingView.getProjectAllocations().get(1).isContainsDeletedMilestones()).isTrue();
+        assertThat(fundingView.getOrphanedAllocations()).hasSize(1);
+        assertThat(fundingView.getOrphanedAllocations().get(0).getAllocatedAmount()).isEqualByComparingTo("15000.00");
+    }
+
+    private void assertCleanupDeletedOnly(OrphanEventsCleanupView cleanup, String deletedEventId, String keptEventId) {
+        assertThat(cleanup.getError()).isEmpty();
+        assertThat(cleanup.getDeletedEvents()).hasSize(1);
+        assertThat(cleanup.getDeletedEvents().get(0).getEventId().trim()).isEqualTo(deletedEventId);
+        assertThat(fundingEventRepository.findById(deletedEventId)).isEmpty();
+        assertThat(allocationRepository.findById_EventId(deletedEventId)).isEmpty();
+        assertThat(fundingEventRepository.findById(keptEventId)).isPresent();
+        assertThat(allocationRepository.findById_EventId(keptEventId)).hasSize(2);
+    }
 }

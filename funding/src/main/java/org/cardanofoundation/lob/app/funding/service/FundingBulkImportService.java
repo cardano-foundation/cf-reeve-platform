@@ -1052,9 +1052,11 @@ public class FundingBulkImportService {
         if (parentProject == null) {
             return "project '%s'".formatted(project.getProjectTitle());
         }
-        String parentTitle = projectRepository.findById(parentProject.getId())
+        String parentId = parentProject.getId();
+        String parentTitle = Optional.ofNullable(parentId)
+                .flatMap(projectRepository::findById)
                 .map(ProjectEntity::getProjectTitle)
-                .orElse(parentProject.getId());
+                .orElse(parentId);
         return "sub-project '%s' of project '%s'".formatted(project.getProjectTitle(), parentTitle);
     }
 
