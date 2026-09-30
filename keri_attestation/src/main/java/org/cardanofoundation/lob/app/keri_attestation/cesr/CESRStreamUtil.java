@@ -5,6 +5,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -20,6 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * chains already in circulation. It depends on nothing but {@code java.util} plus Jackson, which is
  * what makes owning it cheap. The indexer carries the same file for the same reason.
  */
+@Slf4j
 public class CESRStreamUtil {
 
     /** Compact, insertion-ordered output — the framing must round-trip byte-for-byte, so no pretty
@@ -87,8 +90,8 @@ public class CESRStreamUtil {
                     eventMap.put("atc", attachment);
                     result.add(eventMap);
                 } catch (Exception e) {
-                    System.err.println("Failed to parse JSON event: " + jsonEvent);
-                    e.printStackTrace();
+                    // The event body is not logged: an ACDC carries credential attributes (possibly PII).
+                    log.warn("Skipping unparseable CESR JSON event ({} chars): {}", jsonEvent.length(), e.getMessage());
                 }
 
                 index = attachmentEnd;
