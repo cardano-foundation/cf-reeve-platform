@@ -29,9 +29,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
+import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventBulkPublishRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.OrphanEventsCleanupView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
+import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventBulkPublishView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.service.SpendingEventService;
 
@@ -654,18 +656,45 @@ public class SpendingEventController {
         return Responses.respond(spendingEventService.updateEvent(eventId, request), HttpStatus.OK);
     }
 
-    @Operation(summary = "Publish an event to the blockchain", responses = {
-            @ApiResponse(responseCode = "200", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
-                    schema = @Schema(implementation = SpendingEventView.class))}),
-            @ApiResponse(responseCode = "404", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
-                    schema = @Schema(implementation = ProblemDetail.class))}),
-            @ApiResponse(responseCode = "409", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
-                    schema = @Schema(implementation = ProblemDetail.class))})
-    })
+    @Operation(summary = "Publish an event to the blockchain",
+            description = "Deprecated: use POST /events/publish with a one-item eventIds list instead. "
+                    + "This endpoint will be removed once the frontend has switched over.",
+            deprecated = true,
+            responses = {
+                    @ApiResponse(responseCode = "200", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = SpendingEventView.class))}),
+                    @ApiResponse(responseCode = "404", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ProblemDetail.class))}),
+                    @ApiResponse(responseCode = "409", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ProblemDetail.class))})
+            })
     @PostMapping(value = "/events/{eventId}/publish", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @Deprecated(forRemoval = true)
     public ResponseEntity<SpendingEventView> publishEvent(@PathVariable String eventId) {
         return Responses.respond(spendingEventService.publishEvent(eventId), HttpStatus.OK);
+    }
+
+    @Operation(summary = "Publish several events to the blockchain in one call",
+            description = "Publishes every listed event of the organisation that single-event publish would accept "
+                    + "(same rules, same effect: on-chain dispatch stays asynchronous via the publish job). Events "
+                    + "that can't be published — already published, in ERROR status, not found, or belonging to "
+                    + "another organisation (reported as not found) — are skipped with the problem single publish "
+                    + "would return, without failing the rest. Duplicate ids yield a single outcome.",
+            responses = {
+                    @ApiResponse(responseCode = "200", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = SpendingEventBulkPublishView.class))}),
+                    @ApiResponse(responseCode = "400", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ProblemDetail.class))}),
+                    @ApiResponse(responseCode = "401", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ProblemDetail.class))})
+            })
+    @PostMapping(value = "/events/publish", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<SpendingEventBulkPublishView> publishEvents(
+            @Valid @RequestBody SpendingEventBulkPublishRequest request) {
+        return Responses.respond(
+                spendingEventService.publishEvents(request.getOrganisationId(), request.getEventIds()), HttpStatus.OK);
     }
 
     @Operation(summary = "Delete a draft event (published events cannot be deleted)", responses = {

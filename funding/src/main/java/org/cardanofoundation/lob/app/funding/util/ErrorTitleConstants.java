@@ -48,6 +48,8 @@ public final class ErrorTitleConstants {
     public static final String SPENDING_EVENT_ALREADY_EXISTS = "SPENDING_EVENT_ALREADY_EXISTS";
     public static final String FUNDING_EVENT_FUNDING_ID_ALREADY_USED = "FUNDING_EVENT_FUNDING_ID_ALREADY_USED";
     public static final String SPENDING_EVENT_ALREADY_PUBLISHED = "SPENDING_EVENT_ALREADY_PUBLISHED";
+    /** LOB-2391: an unexpected failure while publishing one event of a bulk publish; the other events are unaffected. */
+    public static final String SPENDING_EVENT_PUBLISH_FAILED = "SPENDING_EVENT_PUBLISH_FAILED";
     /** LOB-2365: publishing is refused while an event is {@code ERROR} — it no longer fits the current
      * project/milestone structure and must be corrected (which clears it back to {@code DRAFT}) first. */
     public static final String SPENDING_EVENT_HAS_ERROR = "SPENDING_EVENT_HAS_ERROR";
