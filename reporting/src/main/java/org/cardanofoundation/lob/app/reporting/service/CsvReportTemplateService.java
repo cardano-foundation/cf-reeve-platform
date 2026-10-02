@@ -129,6 +129,8 @@ public class CsvReportTemplateService {
             reportTemplateDto.setDescription(firstLine.getDescription());
             reportTemplateDto.setVer(1L);
             List<ReportTemplateFieldDto> fieldDtos = new ArrayList<>();
+            // Every field defined so far at any depth, in CSV order, so a row can reference any earlier row as its parent
+            List<ReportTemplateFieldDto> definedFields = new ArrayList<>();
             for (TemplateCsvLine templateCsvLine : filteredLines) {
                 Either<ProblemDetail, ReportTemplateFieldDto> fieldEntityResult = csvLineToTemplateField(csvTemplateRequest.getOrganisationId(), templateCsvLine);
                 if (fieldEntityResult.isLeft()) {
@@ -137,11 +139,12 @@ public class CsvReportTemplateService {
                 }
                 ReportTemplateFieldDto fieldDto = fieldEntityResult.get();
                 if (!templateCsvLine.getParent().isEmpty()) {
-                    Optional<ReportTemplateFieldDto> parentFieldO = fieldDtos.stream()
+                    // Field names are only unique within a parent, so the same name may exist under different parents; the closest preceding row wins
+                    Optional<ReportTemplateFieldDto> parentFieldO = definedFields.reversed().stream()
                             .filter(fe -> fe.getFieldName().equals(templateCsvLine.getParent()))
                             .findFirst();
                     if (parentFieldO.isEmpty()) {
-                        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Parent field not found: " + templateCsvLine.getParent() + " for field: " + templateCsvLine.getFieldName() + ". Note: The parent field must be defined before the child field in the CSV.");
+                        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Parent field not found: " + templateCsvLine.getParent() + " for field: " + templateCsvLine.getFieldName() + ". The Parent value must exactly match the Field Name of a row that appears earlier in the CSV for the same template.");
                         problem.setTitle(Constants.CSV_PARSING_ERROR);
                         results.add(Either.left(problem));
                         break outerLoop;
@@ -161,6 +164,7 @@ public class CsvReportTemplateService {
                 } else {
                     fieldDtos.add(fieldDto);
                 }
+                definedFields.add(fieldDto);
             }
             reportTemplateDto.setFields(fieldDtos);
             Either<ProblemDetail, Void> dataModeValidation = reportTemplateService.validateDataMode(reportTemplateDto);

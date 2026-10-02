@@ -351,7 +351,7 @@ class CsvReportTemplateServiceTest {
         ReportTemplateResponseDto first = responseDtos.getFirst();
         assertTrue(first.getError().isPresent());
         assertEquals("CSV_PARSING_ERROR", responseDtos.getFirst().getError().get().getTitle());
-        assertEquals("Parent field not found: Parent for field: null. Note: The parent field must be defined before the child field in the CSV.", responseDtos.getFirst().getError().get().getDetail());
+        assertEquals("Parent field not found: Parent for field: null. The Parent value must exactly match the Field Name of a row that appears earlier in the CSV for the same template.", responseDtos.getFirst().getError().get().getDetail());
     }
 
     @Test
@@ -577,6 +577,86 @@ class CsvReportTemplateServiceTest {
         assertEquals(2, revenueField.getChildFields().size());
         assertEquals("Assets", revenueField.getChildFields().get(0).getFieldName());
         assertEquals("Test", revenueField.getChildFields().get(1).getFieldName());
+    }
+
+    @Test
+    void createCsvTemplates_threeLevelNesting() {
+        List<ReportTemplateFieldDto> topLevelFields = importFieldTree(List.of(
+                new String[]{"Assets", ""},
+                new String[]{"Non Current Assets", "Assets"},
+                new String[]{"Tangible Assets", "Non Current Assets"}));
+
+        assertEquals(1, topLevelFields.size());
+        ReportTemplateFieldDto assets = topLevelFields.getFirst();
+        assertEquals("Assets", assets.getFieldName());
+        assertEquals(1, assets.getChildFields().size());
+        ReportTemplateFieldDto nonCurrentAssets = assets.getChildFields().getFirst();
+        assertEquals("Non Current Assets", nonCurrentAssets.getFieldName());
+        assertEquals(1, nonCurrentAssets.getChildFields().size());
+        assertEquals("Tangible Assets", nonCurrentAssets.getChildFields().getFirst().getFieldName());
+    }
+
+    @Test
+    void createCsvTemplates_sameNameUnderDifferentParents_childAttachesToClosestPrecedingParent() {
+        List<ReportTemplateFieldDto> topLevelFields = importFieldTree(List.of(
+                new String[]{"Assets", ""},
+                new String[]{"Other", "Assets"},
+                new String[]{"Other Assets Detail", "Other"},
+                new String[]{"Liabilities", ""},
+                new String[]{"Other", "Liabilities"},
+                new String[]{"Other Liabilities Detail", "Other"}));
+
+        assertEquals(2, topLevelFields.size());
+        ReportTemplateFieldDto assetsOther = topLevelFields.get(0).getChildFields().getFirst();
+        assertEquals(List.of("Other Assets Detail"), assetsOther.getChildFields().stream().map(ReportTemplateFieldDto::getFieldName).toList());
+        ReportTemplateFieldDto liabilitiesOther = topLevelFields.get(1).getChildFields().getFirst();
+        assertEquals(List.of("Other Liabilities Detail"), liabilitiesOther.getChildFields().stream().map(ReportTemplateFieldDto::getFieldName).toList());
+    }
+
+    /**
+     * Imports a single template whose rows are given as {fieldName, parent} pairs and returns the resulting top-level fields.
+     */
+    private List<ReportTemplateFieldDto> importFieldTree(List<String[]> rows) {
+        CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
+        MultipartFile file = mock(MultipartFile.class);
+        ChartOfAccount chartOfAccount = mock(ChartOfAccount.class);
+
+        List<TemplateCsvLine> lines = rows.stream().map(row -> {
+            TemplateCsvLine line = mock(TemplateCsvLine.class);
+            when(line.getName()).thenReturn("Test Template");
+            when(line.getReportType()).thenReturn("Balance sheet");
+            when(line.getAccounts()).thenReturn("1234");
+            when(line.getDateRange()).thenReturn("End-of-Period balance");
+            when(line.getSign()).thenReturn("Positive");
+            when(line.getFieldName()).thenReturn(row[0]);
+            when(line.getParent()).thenReturn(row[1]);
+            return line;
+        }).toList();
+        when(lines.getFirst().getDataMode()).thenReturn("Manual");
+        when(lines.getFirst().getActive()).thenReturn("true");
+
+        Errors errors = mock(Errors.class);
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(any(TemplateCsvLine.class))).thenReturn(errors);
+        when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(new Organisation()));
+        when(request.getOrganisationId()).thenReturn("org123");
+        when(request.getFile()).thenReturn(file);
+        when(csvParser.parseCsv(file, TemplateCsvLine.class)).thenReturn(Either.right(lines));
+        when(chartOfAccountRepository.findById(new ChartOfAccount.Id("org123", "1234"))).thenReturn(Optional.of(chartOfAccount));
+        when(chartOfAccount.getId()).thenReturn(new ChartOfAccount.Id("org123", "1234"));
+        when(reportTemplateMapper.toEntity(any(ReportTemplateDto.class), any())).thenReturn(mock(ReportTemplateEntity.class));
+        when(reportTemplateMapper.toResponseDto(any())).thenReturn(mock(ReportTemplateResponseDto.class));
+        when(reportTemplateServiceDependency.validateDataMode(any(ReportTemplateDto.class))).thenReturn(Either.right(null));
+
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
+
+        assertTrue(result.isRight());
+        assertEquals(1, result.get().size());
+        assertTrue(result.get().getFirst().getError().isEmpty());
+
+        ArgumentCaptor<ReportTemplateDto> dtoCaptor = ArgumentCaptor.forClass(ReportTemplateDto.class);
+        verify(reportTemplateMapper).toEntity(dtoCaptor.capture(), any());
+        return dtoCaptor.getValue().getFields();
     }
 
     @Test
