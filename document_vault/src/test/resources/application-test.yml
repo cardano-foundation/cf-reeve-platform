@@ -1,0 +1,18 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: none
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/postgresql/common
+keycloak:
+  enabled: false
+  token-url: ""
+  authorization-url: ""
+lob:
+  # Test-only key. release/1.8.0's SecretCipher (support) fails fast without one.
+  security:
+    config-encryption:
+      key: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+  document_vault:
+    enabled: true

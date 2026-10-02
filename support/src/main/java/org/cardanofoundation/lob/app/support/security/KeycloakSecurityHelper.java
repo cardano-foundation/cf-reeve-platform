@@ -18,7 +18,7 @@ public class KeycloakSecurityHelper {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.getPrincipal() instanceof Jwt jwt) {
             List<String> organisations = jwt.getClaimAsStringList("organisations");
-            return organisations.contains(orgId);
+            return organisations != null && organisations.contains(orgId);
         }
         return false;
     }
@@ -27,6 +27,14 @@ public class KeycloakSecurityHelper {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.isAuthenticated() && authentication.getPrincipal() instanceof Jwt jwt) {
             return jwt.getClaimAsString("name");
+        }
+        return SYSTEM_USER;
+    }
+
+    public String getCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.isAuthenticated() && authentication.getPrincipal() instanceof Jwt jwt) {
+            return jwt.getClaimAsString("sub");
         }
         return SYSTEM_USER;
     }
