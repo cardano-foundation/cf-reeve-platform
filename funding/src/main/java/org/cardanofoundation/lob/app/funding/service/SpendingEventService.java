@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -16,11 +17,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import io.vavr.control.Either;
 
@@ -49,6 +55,7 @@ public class SpendingEventService {
     private final ProjectStructureService projectStructureService;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
     private final OrganisationPublicApiIF organisationPublicApi;
+    private final PlatformTransactionManager transactionManager;
 
     // -------------------------------------------------------------------------
     // View-returning API (used by the controller — carries the ProblemDetail)
@@ -117,11 +124,64 @@ public class SpendingEventService {
 
     @Transactional
     public SpendingEventView publishEvent(String eventId) {
-        Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId);
-        if (denied.isPresent()) {
-            return SpendingEventView.error(denied.get());
+        // The locked read must be the first load of this event in the transaction (no
+        // denyIfNoEventAccess beforehand): an already-managed entity is not refreshed by the locking
+        // query, so a concurrent publish would be judged against stale, pre-commit state.
+        Either<ProblemDetail, FundingEventEntity> eventOrError = findEventForUpdateOrError(eventId);
+        if (eventOrError.isLeft()) {
+            return SpendingEventView.error(eventOrError.getLeft());
         }
-        return publish(eventId).fold(SpendingEventView::error, this::toView);
+        if (!keycloakSecurityHelper.canUserAccessOrg(eventOrError.get().getOrganisationId())) {
+            return SpendingEventView.error(Problems.unauthorized());
+        }
+        return publish(eventOrError.get()).fold(SpendingEventView::error, this::toView);
+    }
+
+    /**
+     * Publishes every listed event of this organisation that single-event publish would accept, and
+     * skips the rest with the problem single publish would have returned (LOB-2391). An event of another
+     * organisation is reported as not found, so the response doesn't reveal it exists. Duplicate ids
+     * are collapsed into one outcome, in request order.
+     *
+     * <p>Runs outside any transaction: each event is locked, published and committed in its own
+     * transaction, so its row lock is released straight away and an unexpected failure on one event
+     * (reported as {@code SPENDING_EVENT_PUBLISH_FAILED}) never undoes the events already published.
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public SpendingEventBulkPublishView publishEvents(String organisationId, List<String> eventIds) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return SpendingEventBulkPublishView.error(Problems.unauthorized());
+        }
+        if (organisationPublicApi.findByOrganisationId(organisationId).isEmpty()) {
+            return SpendingEventBulkPublishView.error(Problems.organisationNotFound(organisationId));
+        }
+
+        TransactionTemplate perEventTransaction = new TransactionTemplate(transactionManager);
+        perEventTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
+        List<SpendingEventBulkPublishView.Result> results = new ArrayList<>();
+        for (String eventId : new LinkedHashSet<>(eventIds)) {
+            try {
+                results.add(perEventTransaction.execute(status -> publishForBulk(organisationId, eventId)));
+            } catch (RuntimeException e) {
+                log.error("Bulk publish: unexpected failure publishing event {}", eventId, e);
+                results.add(SpendingEventBulkPublishView.Result.skipped(eventId, null, Problems.of(
+                        HttpStatus.INTERNAL_SERVER_ERROR, "Event could not be published: " + eventId,
+                        ErrorTitleConstants.SPENDING_EVENT_PUBLISH_FAILED)));
+            }
+        }
+        return SpendingEventBulkPublishView.success(results);
+    }
+
+    /** One bulk-publish item; runs inside its own transaction (see {@link #publishEvents}). */
+    private SpendingEventBulkPublishView.Result publishForBulk(String organisationId, String eventId) {
+        Either<ProblemDetail, FundingEventEntity> eventOrError = findEventForUpdateOrError(eventId)
+                .filterOrElse(event -> organisationId.equals(event.getOrganisationId()),
+                        ignored -> Problems.eventNotFound(eventId));
+        String fundingId = eventOrError.map(FundingEventEntity::getFundingId).getOrNull();
+        return eventOrError.flatMap(this::publish).fold(
+                problem -> SpendingEventBulkPublishView.Result.skipped(eventId, fundingId, problem),
+                published -> SpendingEventBulkPublishView.Result.published(eventId, fundingId));
     }
 
     @Transactional
@@ -367,10 +427,11 @@ public class SpendingEventService {
 
     @Transactional
     public Either<ProblemDetail, FundingEventEntity> publish(String eventId) {
-        Either<ProblemDetail, FundingEventEntity> eventOrError = findEventOrError(eventId);
-        if (eventOrError.isLeft()) return eventOrError;
+        return findEventForUpdateOrError(eventId).flatMap(this::publish);
+    }
 
-        FundingEventEntity event = eventOrError.get();
+    /** Publish rules, applied to an event already row-locked via {@link FundingEventRepository#findByIdForUpdate}. */
+    private Either<ProblemDetail, FundingEventEntity> publish(FundingEventEntity event) {
         Optional<ProblemDetail> draftProblem = requireDraft(event, "Event with Funding ID %s is already published");
         if (draftProblem.isPresent()) return Either.left(draftProblem.get());
 
@@ -470,6 +531,15 @@ public class SpendingEventService {
     // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------
+
+    private Either<ProblemDetail, FundingEventEntity> findEventForUpdateOrError(String eventId) {
+        Optional<FundingEventEntity> eventM = fundingEventRepository.findByIdForUpdate(eventId);
+        if (eventM.isEmpty()) {
+            log.warn("Event not found: {}", eventId);
+            return Either.left(Problems.eventNotFound(eventId));
+        }
+        return Either.right(eventM.get());
+    }
 
     private Either<ProblemDetail, FundingEventEntity> findEventOrError(String eventId) {
         Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);
