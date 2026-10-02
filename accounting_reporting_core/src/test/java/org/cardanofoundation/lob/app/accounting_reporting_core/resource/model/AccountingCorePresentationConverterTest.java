@@ -441,6 +441,55 @@ class AccountingCorePresentationConverterTest {
     }
 
     @Test
+    void testListAllBatchModel_failedBatchExposesPlainTextError() {
+        BatchSearchRequest batchSearchRequest = new BatchSearchRequest();
+        batchSearchRequest.setOrganisationId("org-id");
+        TransactionBatchEntity transactionBatchEntity = new TransactionBatchEntity();
+        transactionBatchEntity.setId("batch-id");
+        transactionBatchEntity.setCreatedAt(LocalDateTime.now());
+        transactionBatchEntity.setUpdatedAt(LocalDateTime.now());
+        transactionBatchEntity.setStatus(TransactionBatchStatus.FAILED);
+        transactionBatchEntity.setFilteringParameters(new FilteringParameters("org-id", List.of(TransactionType.CardCharge), LocalDate.now(clock), LocalDate.now(clock), LocalDate.now(clock), LocalDate.now(clock), List.of()));
+        // A JSON-looking message is what BagParser expands into an object in the details bag
+        String message = "Error: {\"error\":{\"code\":\"INVALID_LOGIN\",\"message\":\"Invalid login\"}}";
+        transactionBatchEntity.setDetails(Details.builder()
+                .code("ADAPTER_ERROR")
+                .subCode("CLIENT_ERROR")
+                .bag(new HashMap<>(Map.of("error", new HashMap<>(Map.of("code", "CLIENT_ERROR", "message", message)))))
+                .build());
+
+        Pageable pageable = Pageable.unpaged();
+        when(transactionBatchRepositoryGateway.findByFilter(batchSearchRequest, pageable))
+                .thenReturn(new PageImpl<>(List.of(transactionBatchEntity), pageable, 1));
+
+        BatchView result = accountingCorePresentationConverter.listAllBatch(batchSearchRequest, pageable).get().getBatchs().getFirst();
+
+        // details.error.message is what the UI renders: it must be a string, not the parsed JSON object
+        Map<String, Object> error = (Map<String, Object>) result.getDetails().get("error");
+        assertEquals("CLIENT_ERROR", error.get("code"));
+        assertEquals("Error: INVALID_LOGIN - Invalid login", error.get("message"));
+        assertEquals("Error: INVALID_LOGIN - Invalid login", result.getDetails().get("technicalErrorMessage"));
+    }
+
+    @Test
+    void testListAllBatchModel_batchWithoutDetailsHasEmptyDetails() {
+        BatchSearchRequest batchSearchRequest = new BatchSearchRequest();
+        TransactionBatchEntity transactionBatchEntity = new TransactionBatchEntity();
+        transactionBatchEntity.setId("batch-id");
+        transactionBatchEntity.setCreatedAt(LocalDateTime.now());
+        transactionBatchEntity.setUpdatedAt(LocalDateTime.now());
+        transactionBatchEntity.setFilteringParameters(new FilteringParameters("org-id", List.of(TransactionType.CardCharge), LocalDate.now(clock), LocalDate.now(clock), LocalDate.now(clock), LocalDate.now(clock), List.of()));
+
+        Pageable pageable = Pageable.unpaged();
+        when(transactionBatchRepositoryGateway.findByFilter(batchSearchRequest, pageable))
+                .thenReturn(new PageImpl<>(List.of(transactionBatchEntity), pageable, 1));
+
+        BatchView result = accountingCorePresentationConverter.listAllBatch(batchSearchRequest, pageable).get().getBatchs().getFirst();
+
+        assertTrue(result.getDetails().isEmpty());
+    }
+
+    @Test
     void testExtractionTrigger() {
 
         ExtractionRequest extractionRequest = new ExtractionRequest();

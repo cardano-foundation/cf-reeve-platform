@@ -29,6 +29,16 @@ public class ProjectMilestoneCsvLine {
     @CsvBindByName(column = "Project Title")
     private String projectTitle;
 
+    /**
+     * The project's permanent identifier (see {@code ProjectEntity#proId}) — when present, matching
+     * against an existing row prefers this over {@link #projectTitle}, which is the only way to find a
+     * project that's since been renamed. Mandatory when the row creates a new root project (rejected as
+     * a row error otherwise, matching the UI's own required-field treatment of this input); optional
+     * when matching an existing one, same as every other reference-by-title fallback in this file.
+     */
+    @CsvBindByName(column = "Project ID", profiles = "optional")
+    private String projectId;
+
     @CsvBindByName(column = "Total Amount", profiles = "optional")
     private String totalAmount;
 
@@ -38,11 +48,19 @@ public class ProjectMilestoneCsvLine {
     @CsvBindByName(column = "Sub Project Title", profiles = "optional")
     private String subProjectTitle;
 
+    /** See {@link #projectId} — same semantics, for the sub-project this row carries. */
+    @CsvBindByName(column = "Sub Project ID", profiles = "optional")
+    private String subProjectId;
+
     @CsvBindByName(column = "Sub Total Amount", profiles = "optional")
     private String subTotalAmount;
 
     @CsvBindByName(column = "Milestone Title", profiles = "optional")
     private String milestoneTitle;
+
+    /** See {@link #projectId} — same semantics, for the milestone this row carries. */
+    @CsvBindByName(column = "Milestone ID", profiles = "optional")
+    private String milestoneId;
 
     @CsvBindByName(column = "Milestone Amount", profiles = "optional")
     private String milestoneAmount;

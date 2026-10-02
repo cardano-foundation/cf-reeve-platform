@@ -86,6 +86,9 @@ public class SpendingEventPublishView {
         /** Title of the root project. */
         @Nullable
         private String projectTitle;
+        /** The root project's permanent, human-readable identifier (see {@code ProjectEntity#getProId()}); LOB-2384. */
+        @Nullable
+        private String proId;
         /** The allocated sub-project — set only when the allocation targets one; then {@code milestones} is null. */
         @Nullable
         private SubProject subProject;
@@ -105,6 +108,9 @@ public class SpendingEventPublishView {
         private String subProjectId;
         @Nullable
         private String subProjectTitle;
+        /** The sub-project's permanent, human-readable identifier (see {@code ProjectEntity#getProId()}); LOB-2384. */
+        @Nullable
+        private String proId;
         private List<Milestone> milestones;
     }
 
@@ -116,6 +122,9 @@ public class SpendingEventPublishView {
     public static class Milestone {
         private String milestoneId;
         private String milestoneTitle;
+        /** The milestone's permanent, human-readable identifier (see {@code MilestoneEntity#getProId()}); LOB-2384. */
+        @Nullable
+        private String proId;
         @Nullable
         private BigDecimal milestoneAmount;
         @Nullable

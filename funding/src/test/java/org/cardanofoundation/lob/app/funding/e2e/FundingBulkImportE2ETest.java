@@ -7,6 +7,9 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayOutputStream;
+import java.io.StringReader;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -21,6 +24,7 @@ import org.springframework.context.annotation.ComponentScan.Filter;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -28,6 +32,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.opencsv.CSVReader;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -39,6 +44,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.FundingEventEntity;
+import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
@@ -50,6 +56,7 @@ import org.cardanofoundation.lob.app.funding.repository.FundingEventRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 import org.cardanofoundation.lob.app.funding.repository.MilestoneRepository;
 import org.cardanofoundation.lob.app.funding.service.FundingBulkImportService;
+import org.cardanofoundation.lob.app.funding.service.FundingCsvExportService;
 import org.cardanofoundation.lob.app.funding.service.SpendingEventService;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
@@ -83,23 +90,23 @@ class FundingBulkImportE2ETest {
     private static final String ORG_ID = "org1";
 
     private static final String PROJECTS_MILESTONES_TEMPLATE_CSV = """
-            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
-            Project A,100000.00,USD,Sub One,40000.00,Milestone One,20000.00,2026-06-30
-            Project A,,,Sub One,,Milestone Two,20000.00,2026-07-15
+            Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+            Project A,Project A,100000.00,USD,Sub One,sub-one,40000.00,Milestone One,ms-one,20000.00,2026-06-30
+            Project A,,,,Sub One,,,Milestone Two,ms-two,20000.00,2026-07-15
             """;
 
     private static final String EVENTS_TEMPLATE_CSV = """
-            Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
-            FUNDING,GRANT-2025-001,,Cardano Foundation,USD,2026-07-01,,,,,,40000.00,,,Sub One,,Milestone One,20000.00
-            FUNDING,GRANT-2025-001,,Cardano Foundation,USD,2026-07-01,,,,,,40000.00,,,Sub One,,Milestone Two,20000.00
-            SPENDING,GRANT-2025-001,,,USD,2026-07-20,Personnel,Vendor AB,36000.00,EUR,0.9,40000.00,,Invoice #INV-001,Sub One,,Milestone One,20000.00
-            SPENDING,GRANT-2025-001,,,USD,2026-07-20,Personnel,Vendor AB,36000.00,EUR,0.9,40000.00,,Invoice #INV-001,Sub One,,Milestone Two,20000.00
+            Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+            FUNDING,GRANT-2025-001,,Cardano Foundation,USD,2026-07-01,,,,,,40000.00,,,Sub One,,,,Milestone One,,20000.00
+            FUNDING,GRANT-2025-001,,Cardano Foundation,USD,2026-07-01,,,,,,40000.00,,,Sub One,,,,Milestone Two,,20000.00
+            SPENDING,GRANT-2025-001,,,USD,2026-07-20,Personnel,Vendor AB,36000.00,EUR,0.9,40000.00,,Invoice #INV-001,Sub One,,,,Milestone One,,20000.00
+            SPENDING,GRANT-2025-001,,,USD,2026-07-20,Personnel,Vendor AB,36000.00,EUR,0.9,40000.00,,Invoice #INV-001,Sub One,,,,Milestone Two,,20000.00
             """;
 
     private static final String EVENTS_DUPLICATE_MILESTONE_ALLOCATION_CSV = """
-            Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
-            FUNDING,GRANT-2025-Z,,Cardano Foundation,USD,2026-07-01,,,,,,2000.00,,,Dup Project,,Dup Milestone,2000.00
-            FUNDING,GRANT-2025-Z,,Cardano Foundation,USD,2026-07-01,,,,,,2000.00,,,Dup Project,,Dup Milestone,2000.00
+            Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+            FUNDING,GRANT-2025-Z,,Cardano Foundation,USD,2026-07-01,,,,,,2000.00,,,Dup Project,,,,Dup Milestone,,2000.00
+            FUNDING,GRANT-2025-Z,,Cardano Foundation,USD,2026-07-01,,,,,,2000.00,,,Dup Project,,,,Dup Milestone,,2000.00
             """;
 
     // Root Project Title column entirely absent -> mandatory; the file fails to parse (a file-level
@@ -114,8 +121,8 @@ class FundingBulkImportE2ETest {
     // currency (USD; there is no "Sub Currency" column in the template at all), and is created
     // successfully.
     private static final String MISSING_SUB_CURRENCY_CSV = """
-            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
-            Project D,100000.00,USD,Sub One,40000.00,,,
+            Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+            Project D,Project D,100000.00,USD,Sub One,sub-one,40000.00,,,,
             """;
 
     // Sub Project Title blank, but Sub Total Amount filled -> this is an orphaned amount with no
@@ -123,31 +130,31 @@ class FundingBulkImportE2ETest {
     // reports an error instead of silently discarding the amount; the root, being on an independent
     // row, still succeeds and no sub-project is created.
     private static final String BLANK_SUB_PROJECT_TITLE_CSV = """
-            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
-            Project E,100000.00,USD,,40000.00,,,
+            Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+            Project E,Project E,100000.00,USD,,,40000.00,,,,
             """;
 
     // Sub Total Amount's header is present but its value is blank on this row -> required to create a
     // new sub-project; the sub-project row fails, the root is independent and still succeeds.
     private static final String MISSING_SUB_TOTAL_AMOUNT_CSV = """
-            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
-            Project C,100000.00,USD,Sub One,,,,
+            Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+            Project C,Project C,100000.00,USD,Sub One,,,,,,
             """;
 
     // Root with one sub-project, which itself carries one milestone — seeds the tree used by the
     // currency-cascade regression test below. The root can't carry a milestone of its own here: a
     // project holds either milestones or sub-projects, never both.
     private static final String CASCADE_SEED_CSV = """
-            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
-            Project Cascade,100000.00,USD,Sub One,40000.00,Sub Milestone,20000.00,2026-06-30
+            Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+            Project Cascade,Project Cascade,100000.00,USD,Sub One,sub-one,40000.00,Sub Milestone,sub-milestone,20000.00,2026-06-30
             """;
 
     // Only the root row's Currency cell changes; Sub Project/Milestone columns are left entirely
     // blank, so nothing here directly touches the sub-project or its milestone — any change to them
     // can only come from the root's currency change cascading down.
     private static final String CASCADE_CURRENCY_UPDATE_CSV = """
-            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
-            Project Cascade,100000.00,EUR,,,,,
+            Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+            Project Cascade,Project Cascade,100000.00,EUR,,,,,,,
             """;
 
     @Container
@@ -180,6 +187,8 @@ class FundingBulkImportE2ETest {
     private FundingEventRepository fundingEventRepository;
     @Autowired
     private SpendingEventService spendingEventService;
+    @Autowired
+    private FundingCsvExportService fundingCsvExportService;
     @MockitoBean
     private OrganisationPublicApiIF organisationPublicApi;
     @MockitoBean
@@ -278,30 +287,43 @@ class FundingBulkImportE2ETest {
 
         // Fund + spend the milestone's full 10000.00 so it has a real allocation on record.
         String eventsCsv = """
-                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
-                FUNDING,GRANT-CHANGE,,Cardano Foundation,USD,2026-07-01,,,,,,10000.00,,,Change Project,,Change Milestone,10000.00
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+                FUNDING,GRANT-CHANGE,,Cardano Foundation,USD,2026-07-01,,,,,,10000.00,,,Change Project,,,,Change Milestone,,10000.00
                 """;
         MultipartFile eventsFile = new MockMultipartFile("file", "fund.csv", "text/csv", eventsCsv.getBytes());
         FundingBulkImportResult fundResult = bulkImportService.importFiles(BulkImportRequest.builder()
                 .organisationId(orgId).files(List.of(eventsFile)).build());
         assertThat(reasons(fundResult)).isEmpty();
 
-        // Attempting to shrink the milestone below its already-allocated 10000.00 must still fail —
-        // this is a real change, not a same-value resend. Total Amount/Currency/Sub Project
-        // Title/Sub Total Amount are present in the header but left blank: this row only touches the
-        // milestone, not the root project.
+        // LOB-2365: shrinking the milestone below its already-allocated 10000.00 no longer rejects
+        // outright — this is a real change, not a same-value resend, but the edit proceeds exactly as
+        // typed (the FUNDING event's own allocation is never rewritten) and the linked draft event is
+        // instead marked ERROR for a human to review. Total Amount/Currency/Sub Project Title/Sub
+        // Total Amount are present in the header but left blank: this row only touches the milestone,
+        // not the root project.
         String shrinkCsv = """
-                Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
-                Change Project,,,,,Change Milestone,5000.00,2026-06-30
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Change Project,,,,,,,Change Milestone,,5000.00,2026-06-30
                 """;
         MultipartFile shrinkFile = new MockMultipartFile("file", "shrink.csv", "text/csv", shrinkCsv.getBytes());
         FundingBulkImportResult shrinkResult = bulkImportService.importFiles(BulkImportRequest.builder()
                 .organisationId(orgId).files(List.of(shrinkFile)).build());
 
-        assertThat(reasons(shrinkResult)).containsExactly(
-                "Milestone amount 5000.00 is below the total already allocated to it 10000.00. "
-                        + "All changes for project \"Change Project\" in this request were rolled back because of this error.");
-        assertThat(shrinkResult.getMilestonesUpdated()).isZero();
+        assertThat(reasons(shrinkResult)).isEmpty();
+        assertThat(shrinkResult.getMilestonesUpdated()).isEqualTo(1);
+        MilestoneEntity milestone = milestoneRepository.findByProjectIdAndMilestoneTitle(
+                projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(orgId, "Change Project")
+                        .orElseThrow().getId(),
+                "Change Milestone").orElseThrow();
+        assertThat(milestone.getMilestoneAmount()).isEqualByComparingTo("5000.00"); // the milestone's own figure IS updated...
+        String fundingEventId = FundingEventEntity.id(orgId, EventType.FUNDING, "GRANT-CHANGE", null,
+                "Cardano Foundation", "USD", null, null, null, null, null, new BigDecimal("10000.00"), LocalDate.of(2026, 7, 1));
+        assertThat(fundingEventRepository.findById(fundingEventId).orElseThrow().getStatus())
+                .as("the linked FUNDING event is flagged for human review, not silently left inconsistent")
+                .isEqualTo(EventStatus.ERROR);
+        // ...but the event's own already-recorded allocation is never rewritten — only its status changed.
+        assertThat(fundingEventRepository.findById(fundingEventId).orElseThrow().getAmountRcy())
+                .isEqualByComparingTo("10000.00");
     }
 
     @Test
@@ -346,8 +368,8 @@ class FundingBulkImportE2ETest {
         // cleanly. Amount RCY, however, is required for every event type and must equal the row's
         // allocated amount (2000.00).
         String csv = """
-                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
-                FUNDING,GRANT-SINGLE,,Cardano Foundation,USD,2026-07-01,,,,,,2000.00,,,Seed Project X,,Seed Milestone X,2000.00
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+                FUNDING,GRANT-SINGLE,,Cardano Foundation,USD,2026-07-01,,,,,,2000.00,,,Seed Project X,,,,Seed Milestone X,,2000.00
                 """;
         MultipartFile file = new MockMultipartFile("file", "single-funding-blank-amountfcy.csv", "text/csv", csv.getBytes());
 
@@ -377,10 +399,10 @@ class FundingBulkImportE2ETest {
         seedProjectAndMilestone(orgId, "Dup Project", "Dup Milestone");
 
         String csv = """
-                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
-                FUNDING,GRANT-DUP,hash-1,Cardano Foundation,USD,2026-07-01,,,,,,5000.00,,,Dup Project,,Dup Milestone,5000.00
-                FUNDING,GRANT-DUP,hash-2,Cardano Foundation,USD,2026-07-01,,,,,,3000.00,,,Dup Project,,Dup Milestone,3000.00
-                SPENDING,GRANT-DUP,hash-1,,USD,2026-07-20,Personnel,Vendor AB,4500.00,EUR,0.9,5000.00,,Invoice #1,Dup Project,,Dup Milestone,5000.00
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+                FUNDING,GRANT-DUP,hash-1,Cardano Foundation,USD,2026-07-01,,,,,,5000.00,,,Dup Project,,,,Dup Milestone,,5000.00
+                FUNDING,GRANT-DUP,hash-2,Cardano Foundation,USD,2026-07-01,,,,,,3000.00,,,Dup Project,,,,Dup Milestone,,3000.00
+                SPENDING,GRANT-DUP,hash-1,,USD,2026-07-20,Personnel,Vendor AB,4500.00,EUR,0.9,5000.00,,Invoice #1,Dup Project,,,,Dup Milestone,,5000.00
                 """;
         MultipartFile file = new MockMultipartFile("file", "dup-funding-id.csv", "text/csv", csv.getBytes());
 
@@ -435,8 +457,8 @@ class FundingBulkImportE2ETest {
         // SPENDING per FundingValidations.spendDetail, and must fail with a clean 400-shaped row error,
         // not an exception.
         String csv = """
-                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
-                SPENDING,GRANT-SINGLE-2,,,USD,2026-07-20,,,,,,,,,Seed Project Y,,Seed Milestone Y,2000.00
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+                SPENDING,GRANT-SINGLE-2,,,USD,2026-07-20,,,,,,,,,Seed Project Y,,,,Seed Milestone Y,,2000.00
                 """;
         MultipartFile file = new MockMultipartFile("file", "single-spending-blank-cols.csv", "text/csv", csv.getBytes());
 
@@ -487,8 +509,8 @@ class FundingBulkImportE2ETest {
         seedProjectAndMilestone(orgId, "Seed Project Z", "Seed Milestone Z");
 
         String csv = """
-                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
-                FUNDING,GRANT-TITLE,,Cardano Foundation,USD,2026-07-01,,,,,,2000.00,,,Never Seeded Project,,Seed Milestone Z,2000.00
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+                FUNDING,GRANT-TITLE,,Cardano Foundation,USD,2026-07-01,,,,,,2000.00,,,Never Seeded Project,,,,Seed Milestone Z,,2000.00
                 """;
         MultipartFile file = new MockMultipartFile("file", "events-unknown-title.csv", "text/csv", csv.getBytes());
 
@@ -515,12 +537,12 @@ class FundingBulkImportE2ETest {
         when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
 
         String seedRootX = """
-                Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
-                Root X,50000.00,USD,Twin Sub,50000.00,Wrong Milestone,10000.00,2026-06-30
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Root X,Root X,50000.00,USD,Twin Sub,x-twin-sub,50000.00,Wrong Milestone,x-wrong-milestone,10000.00,2026-06-30
                 """;
         String seedRootY = """
-                Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
-                Root Y,50000.00,USD,Twin Sub,50000.00,Milestone One,10000.00,2026-06-30
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Root Y,Root Y,50000.00,USD,Twin Sub,y-twin-sub,50000.00,Milestone One,y-milestone-one,10000.00,2026-06-30
                 """;
         FundingBulkImportResult seedXResult = bulkImportService.importFiles(BulkImportRequest.builder()
                 .organisationId(orgId).files(List.of(new MockMultipartFile("file", "x.csv", "text/csv", seedRootX.getBytes()))).build());
@@ -531,8 +553,8 @@ class FundingBulkImportE2ETest {
 
         // Without Sub Project Title: ambiguous, since "Twin Sub" alone matches two projects.
         String ambiguousCsv = """
-                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
-                FUNDING,GRANT-AMBIG,,Cardano Foundation,USD,2026-07-01,,,,,,10000.00,,,Twin Sub,,Milestone One,10000.00
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+                FUNDING,GRANT-AMBIG,,Cardano Foundation,USD,2026-07-01,,,,,,10000.00,,,Twin Sub,,,,Milestone One,,10000.00
                 """;
         MultipartFile ambiguousFile = new MockMultipartFile("file", "ambiguous.csv", "text/csv", ambiguousCsv.getBytes());
         FundingBulkImportResult ambiguousResult = bulkImportService.importFiles(BulkImportRequest.builder()
@@ -544,8 +566,8 @@ class FundingBulkImportE2ETest {
         // With Root Y named via Project Title and Twin Sub named via Sub Project Title: resolved
         // deterministically to Root Y's Twin Sub, where "Milestone One" actually exists.
         String disambiguatedCsv = """
-                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
-                FUNDING,GRANT-DISAMBIG,,Cardano Foundation,USD,2026-07-01,,,,,,10000.00,,,Root Y,Twin Sub,Milestone One,10000.00
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+                FUNDING,GRANT-DISAMBIG,,Cardano Foundation,USD,2026-07-01,,,,,,10000.00,,,Root Y,,Twin Sub,,Milestone One,,10000.00
                 """;
         MultipartFile disambiguatedFile = new MockMultipartFile("file", "disambiguated.csv", "text/csv", disambiguatedCsv.getBytes());
         FundingBulkImportResult disambiguatedResult = bulkImportService.importFiles(BulkImportRequest.builder()
@@ -553,6 +575,59 @@ class FundingBulkImportE2ETest {
 
         assertThat(reasons(disambiguatedResult)).isEmpty();
         assertThat(disambiguatedResult.getEventsCreated()).isEqualTo(1);
+    }
+
+    @Test
+    void eventsCsv_oneEventAllocatingToTwoRootsOneOfThemViaSubProjects_resolvesEveryRowAgainstItsOwnProject() {
+        // Reproduces a user-reported bug: one event's allocation rows span two different root
+        // projects, one of them (with several sub-projects, each carrying its own milestones) directly,
+        // and the other via sub-projects. A sub-project row's milestone lookup was seen to resolve
+        // against the OTHER root project instead of the row's own resolved sub-project — every row must
+        // be validated only against the project it actually names.
+        String orgId = "org-events-two-roots-subprojects";
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+
+        String seedJuno = """
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Project Juno,Project Juno,100000.00,EUR,,,,Milestone 4,ms-juno-4,10000.00,2026-06-30
+                Project Juno,,,,,,,Milestone 1,ms-juno-1,10000.00,2026-06-30
+                """;
+        String seedEmber = """
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Project Ember,Project Ember,100000.00,EUR,Sub 2,Sub 2,10000.00,Milestone 2,ms-sub2-2,3000.00,2026-06-30
+                Project Ember,,,,Sub 2,,,Milestone 1,ms-sub2-1,3000.00,2026-06-30
+                Project Ember,,,,Sub 3,Sub 3,10000.00,Milestone 1,ms-sub3-1,3000.00,2026-06-30
+                Project Ember,,,,Sub 5,Sub 5,10000.00,Milestone 2,ms-sub5-2,3000.00,2026-06-30
+                Project Ember,,,,Sub 6,Sub 6,10000.00,Milestone 2,ms-sub6-2,3000.00,2026-06-30
+                Project Ember,,,,Sub 6,,,Milestone 1,ms-sub6-1,3000.00,2026-06-30
+                """;
+        FundingBulkImportResult seedJunoResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(new MockMultipartFile("file", "juno.csv", "text/csv", seedJuno.getBytes()))).build());
+        assertThat(reasons(seedJunoResult)).isEmpty();
+        FundingBulkImportResult seedEmberResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(new MockMultipartFile("file", "ember.csv", "text/csv", seedEmber.getBytes()))).build());
+        assertThat(reasons(seedEmberResult)).isEmpty();
+
+        // Row order mirrors the reported file: a Juno row, several Ember sub-project rows, another
+        // Juno row, more Ember sub-project rows — all one event (same Funding ID/hash/entity/date).
+        String eventsCsv = """
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+                FUNDING,GRANT-TWO-ROOTS,,Cardano Foundation,EUR,2026-07-01,,,,,,36.00,,,Project Juno,Project Juno,,,Milestone 4,,1.00
+                FUNDING,GRANT-TWO-ROOTS,,Cardano Foundation,EUR,2026-07-01,,,,,,36.00,,,Project Ember,Project Ember,Sub 6,,Milestone 2,,2.00
+                FUNDING,GRANT-TWO-ROOTS,,Cardano Foundation,EUR,2026-07-01,,,,,,36.00,,,Project Ember,Project Ember,Sub 2,,Milestone 2,,3.00
+                FUNDING,GRANT-TWO-ROOTS,,Cardano Foundation,EUR,2026-07-01,,,,,,36.00,,,Project Ember,Project Ember,Sub 3,,Milestone 1,,4.00
+                FUNDING,GRANT-TWO-ROOTS,,Cardano Foundation,EUR,2026-07-01,,,,,,36.00,,,Project Ember,Project Ember,Sub 2,,Milestone 1,,5.00
+                FUNDING,GRANT-TWO-ROOTS,,Cardano Foundation,EUR,2026-07-01,,,,,,36.00,,,Project Juno,Project Juno,,,Milestone 1,,6.00
+                FUNDING,GRANT-TWO-ROOTS,,Cardano Foundation,EUR,2026-07-01,,,,,,36.00,,,Project Ember,Project Ember,Sub 5,,Milestone 2,,7.00
+                FUNDING,GRANT-TWO-ROOTS,,Cardano Foundation,EUR,2026-07-01,,,,,,36.00,,,Project Ember,Project Ember,Sub 6,,Milestone 1,,8.00
+                """;
+        MultipartFile eventsFile = new MockMultipartFile("file", "events-two-roots.csv", "text/csv", eventsCsv.getBytes());
+        FundingBulkImportResult result = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(eventsFile)).build());
+
+        assertThat(reasons(result)).isEmpty();
+        assertThat(result.getEventsCreated()).isEqualTo(1);
+        assertThat(result.getAllocationsCreated()).isEqualTo(8);
     }
 
     /** Seeds Project A/Sub One + Milestone One/Two exactly as the downloadable template does. */
@@ -566,8 +641,12 @@ class FundingBulkImportE2ETest {
 
     /** Seeds a root project and one milestone directly on it, via the real Projects+Milestones CSV path. */
     private void seedProjectAndMilestone(String orgId, String projectTitle, String milestoneTitle) {
-        String csv = "Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date\n"
-                + projectTitle + ",50000.00,USD,,," + milestoneTitle + ",10000.00,2026-06-30\n";
+        // Milestone ID is optional on CSV creation (auto-assigns when blank, same as the API — see
+        // LOB-2384's CSV-optional-ID follow-up) — supplied explicitly here purely so a deterministic
+        // value can be asserted on in tests, not because it's required.
+        String milestoneId = "ms-" + milestoneTitle.toLowerCase().replace(" ", "-");
+        String csv = "Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date\n"
+                + projectTitle + "," + projectTitle + ",50000.00,USD,,,," + milestoneTitle + "," + milestoneId + ",10000.00,2026-06-30\n";
         MultipartFile file = new MockMultipartFile("file", "seed.csv", "text/csv", csv.getBytes());
         FundingBulkImportResult result = bulkImportService.importFiles(BulkImportRequest.builder()
                 .organisationId(orgId).files(List.of(file)).build());
@@ -619,10 +698,10 @@ class FundingBulkImportE2ETest {
         when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
 
         String csv = """
-                Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
-                Project Cascade,200,CHF,,,,,
-                Project Cascade,,,Sub 1,190,Milestone 1,190,2026-10-08
-                Project Cascade,,,Sub 2,190,Milestone 1,190,2026-09-24
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Project Cascade,Project Cascade,200,CHF,,,,,,,
+                Project Cascade,,,,Sub 1,sub-1,190,Milestone 1,sub1-milestone-1,190,2026-10-08
+                Project Cascade,,,,Sub 2,sub-2,190,Milestone 1,sub2-milestone-1,190,2026-09-24
                 """;
         MultipartFile file = new MockMultipartFile("file", "funding-project_milestone.csv", "text/csv", csv.getBytes());
 
@@ -638,9 +717,11 @@ class FundingBulkImportE2ETest {
         String reason = result.getFiles().get(0).getRowErrors().get(0).getReason();
         // The message must make the rollback itself visible, not just the validation failure — otherwise
         // there's no hint that row 2's already-succeeded sub-project and milestone were undone too.
+        // The budget-exceeded text itself is the LOB-2365-standardized generic string — it no longer
+        // names which sub-project/milestone (see FundingValidations#ENTERED_AMOUNTS_EXCEED_PROJECT_TOTAL)
+        // — this test's own single row-error (asserted above) already pins it to the one offending row.
         assertThat(reason)
-                .contains("exceeds project")
-                .contains("Sub 2")
+                .contains("Entered amounts cannot exceed the total project amount")
                 .contains("rolled back")
                 .contains("Project Cascade");
         // Nothing from the group survives — not the root, not the first (successful-on-its-own)
@@ -675,11 +756,11 @@ class FundingBulkImportE2ETest {
         when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
 
         String csv = """
-                Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
-                Project Test,100000.00,USD,,,,,
-                Project Test,,,Sub One,150000.00,Milestone One,20000.00,2026-06-30
-                Project Test,,,Sub One,50000.00,Milestone Two,20000.00,2026-07-15
-                Project Test,,,Sub One,30000.00,Milestone Three,25000.00,2026-08-01
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Project Test,Project Test,100000.00,USD,,,,,,,
+                Project Test,,,,Sub One,sub-one,150000.00,Milestone One,milestone-one,20000.00,2026-06-30
+                Project Test,,,,Sub One,sub-one,50000.00,Milestone Two,milestone-two,20000.00,2026-07-15
+                Project Test,,,,Sub One,sub-one,30000.00,Milestone Three,milestone-three,25000.00,2026-08-01
                 """;
         MultipartFile file = new MockMultipartFile("file", "funding-project_test_3_milestones.csv", "text/csv", csv.getBytes());
 
@@ -691,13 +772,15 @@ class FundingBulkImportE2ETest {
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
         // Both underlying issues are reported, and every one of them is annotated with the rollback
-        // note for this project's group.
+        // note for this project's group. Both budget-exceeded messages are now the same LOB-2365-
+        // standardized generic string (see FundingValidations.ENTERED_AMOUNTS_EXCEED_PROJECT_TOTAL) —
+        // row 1's sub-project-level and row 3's milestone-level failures are no longer distinguishable
+        // by message text alone, only by which row each FundingRowError is attached to.
         assertThat(result.getFiles()).hasSize(1);
         List<String> reasons = reasons(result);
         assertThat(reasons)
                 .hasSize(2)
-                .anySatisfy(reason -> assertThat(reason).contains("exceeds project").contains("Sub One"))
-                .anySatisfy(reason -> assertThat(reason).contains("exceeds the project total"))
+                .allSatisfy(reason -> assertThat(reason).contains("Entered amounts cannot exceed the total project amount"))
                 .allSatisfy(reason -> assertThat(reason).contains("rolled back").contains("Project Test"));
         // Nothing from the group survives — not the root, not Sub One (regardless of which amount it
         // was ever set to), not Milestone Two, which was individually clean and would have persisted
@@ -708,6 +791,201 @@ class FundingBulkImportE2ETest {
         assertThat(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(orgId, "Project Test"))
                 .isEmpty();
         assertThat(projectRepository.findByOrganisationIdAndProjectTitle(orgId, "Sub One")).isEmpty();
+    }
+
+    @Test
+    void updateGroupShrinksRootAndBothSubProjectsTogether_succeedsWhenTheWholeTreeStaysConsistent() {
+        // Reproduces the real production scenario this whole feature was built for: a root project's
+        // total, and both its sub-projects' (and their milestones') totals, shrink together in the same
+        // CSV upload. Before this fix, ProjectService#updateProject's per-row coverage check would have
+        // rejected the root's row against whichever sub-project's row hadn't been processed yet in this
+        // same group (still at its old, larger total) — this proves the whole group is now validated as
+        // one consistent unit, once, after every row in it has been applied.
+        String orgId = "org-csv-tree-shrink";
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+
+        String seedCsv = """
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Project Orion,Project Orion,705702.86,ADA,,,,,,,
+                Project Orion,,,,Sub 1,sub-1,286728.71,Milestone 1,sub1-milestone-1,286728.71,2026-10-08
+                Project Orion,,,,Sub 2,sub-2,418974.15,Milestone 1,sub2-milestone-1,418974.15,2026-09-24
+                """;
+        MultipartFile seedFile = new MockMultipartFile("file", "seed.csv", "text/csv", seedCsv.getBytes());
+        FundingBulkImportResult seedResult = bulkImportService.importFiles(
+                BulkImportRequest.builder().organisationId(orgId).files(List.of(seedFile)).build());
+        assertThat(seedResult.getFiles().get(0).getRowErrors()).isEmpty();
+
+        String updateCsv = """
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Project Orion,Project Orion,100000,ADA,,,,,,,
+                Project Orion,,,,Sub 1,sub-1,40000,Milestone 1,sub1-milestone-1,35000,2026-10-08
+                Project Orion,,,,Sub 2,sub-2,60000,Milestone 1,sub2-milestone-1,55000,2026-09-24
+                """;
+        MultipartFile updateFile = new MockMultipartFile("file", "update.csv", "text/csv", updateCsv.getBytes());
+        FundingBulkImportResult result = bulkImportService.importFiles(
+                BulkImportRequest.builder().organisationId(orgId).files(List.of(updateFile)).build());
+
+        assertThat(result.getFiles().get(0).getRowErrors()).isEmpty();
+        assertThat(result.getProjectsUpdated()).isEqualTo(3); // root + 2 sub-projects
+        assertThat(result.getMilestonesUpdated()).isEqualTo(2);
+
+        ProjectEntity root = projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(orgId, "Project Orion").orElseThrow();
+        assertThat(root.getTotalAmount()).isEqualByComparingTo("100000");
+        ProjectEntity sub1 = projectRepository.findByOrganisationIdAndProjectTitle(orgId, "Sub 1").get(0);
+        ProjectEntity sub2 = projectRepository.findByOrganisationIdAndProjectTitle(orgId, "Sub 2").get(0);
+        assertThat(sub1.getTotalAmount()).isEqualByComparingTo("40000");
+        assertThat(sub2.getTotalAmount()).isEqualByComparingTo("60000");
+    }
+
+    @Test
+    void updateGroupShrinksRootOnly_rollsBackWholeGroup_whenASubProjectStillDoesNotFitAfterward() {
+        // Same starting tree as above, but only the root and Sub 1 are resized down in the update file —
+        // Sub 2 is left completely untouched at its old, larger total, so the root's new total still
+        // can't cover its children even after every row in this group has been applied. The whole group
+        // must roll back, including Sub 1's own (individually valid) shrink.
+        String orgId = "org-csv-tree-shrink-inconsistent";
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+
+        String seedCsv = """
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Project Orion 2,Project Orion 2,705702.86,ADA,,,,,,,
+                Project Orion 2,,,,Sub 1,sub-1,286728.71,Milestone 1,sub1-milestone-1,286728.71,2026-10-08
+                Project Orion 2,,,,Sub 2,sub-2,418974.15,Milestone 1,sub2-milestone-1,418974.15,2026-09-24
+                """;
+        MultipartFile seedFile = new MockMultipartFile("file", "seed.csv", "text/csv", seedCsv.getBytes());
+        FundingBulkImportResult seedResult = bulkImportService.importFiles(
+                BulkImportRequest.builder().organisationId(orgId).files(List.of(seedFile)).build());
+        assertThat(seedResult.getFiles().get(0).getRowErrors()).isEmpty();
+
+        String updateCsv = """
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Project Orion 2,Project Orion 2,100000,ADA,,,,,,,
+                Project Orion 2,,,,Sub 1,sub-1,40000,Milestone 1,sub1-milestone-1,35000,2026-10-08
+                """;
+        MultipartFile updateFile = new MockMultipartFile("file", "update.csv", "text/csv", updateCsv.getBytes());
+        FundingBulkImportResult result = bulkImportService.importFiles(
+                BulkImportRequest.builder().organisationId(orgId).files(List.of(updateFile)).build());
+
+        assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+        assertThat(result.getProjectsUpdated()).isZero();
+        ProjectEntity root = projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(orgId, "Project Orion 2").orElseThrow();
+        assertThat(root.getTotalAmount()).isEqualByComparingTo("705702.86"); // rolled back
+        ProjectEntity sub1 = projectRepository.findByOrganisationIdAndProjectTitle(orgId, "Sub 1").get(0);
+        assertThat(sub1.getTotalAmount()).isEqualByComparingTo("286728.71"); // rolled back
+    }
+
+    @Test
+    void fullCsvLifecycle_createFundAndSpend_shrinkTriggersError_fixEventsBringsBackToDraft() {
+        // The full CSV counterpart to the JSON PUT /projects + PUT /events walkthrough: create a project
+        // via CSV, fund and spend it via CSV (one event of each type, each allocating across BOTH
+        // sub-projects' milestones — the exact shape that would wrongly hit the cross-project block
+        // instead of ERROR if Scenario B flagging weren't batched across the whole CSV group), shrink
+        // the project via CSV (both events now exceed their milestones' new, smaller amounts and flip to
+        // ERROR), then fix each event via a follow-up Events CSV and confirm it resets to DRAFT.
+        String orgId = "org-csv-full-lifecycle";
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+
+        // 1. Create "Project Orion" with two sub-projects, each with one milestone.
+        String createCsv = """
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Project Orion,Project Orion,1000000.00,ADA,,,,,,,
+                Project Orion,,,,Sub 1,sub-1,400000.00,Milestone 1,sub1-m1,400000.00,2026-10-08
+                Project Orion,,,,Sub 2,sub-2,600000.00,Milestone 1,sub2-m1,600000.00,2026-09-24
+                """;
+        FundingBulkImportResult createResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(new MockMultipartFile("file", "create.csv", "text/csv", createCsv.getBytes())))
+                .build());
+        assertThat(reasons(createResult)).isEmpty();
+
+        // 2. Fund it fully — one FUNDING event allocating across both sub-projects' milestones.
+        String fundCsv = """
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+                FUNDING,GRANT-CSV-0001,,Cardano Foundation,ADA,2026-09-01,,,,,,1000000.00,,,Project Orion,,Sub 1,,Milestone 1,,400000.00
+                FUNDING,GRANT-CSV-0001,,Cardano Foundation,ADA,2026-09-01,,,,,,1000000.00,,,Project Orion,,Sub 2,,Milestone 1,,600000.00
+                """;
+        FundingBulkImportResult fundResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(new MockMultipartFile("file", "fund.csv", "text/csv", fundCsv.getBytes())))
+                .build());
+        assertThat(reasons(fundResult)).isEmpty();
+
+        // 3. Spend some of it — one SPENDING event, also allocating across both sub-projects' milestones.
+        String spendCsv = """
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+                SPENDING,GRANT-CSV-1000,,,ADA,2026-09-10,Personnel,Vendor AB,250000.00,USD,1.0,250000.00,sha256:demo-csv-0001,Invoice #CSV-0001,Project Orion,,Sub 1,,Milestone 1,,100000.00
+                SPENDING,GRANT-CSV-1000,,,ADA,2026-09-10,Personnel,Vendor AB,250000.00,USD,1.0,250000.00,sha256:demo-csv-0001,Invoice #CSV-0001,Project Orion,,Sub 2,,Milestone 1,,150000.00
+                """;
+        FundingBulkImportResult spendResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(new MockMultipartFile("file", "spend.csv", "text/csv", spendCsv.getBytes())))
+                .build());
+        assertThat(reasons(spendResult)).isEmpty();
+
+        String fundingEventId = FundingEventEntity.id(orgId, EventType.FUNDING, "GRANT-CSV-0001", null,
+                "Cardano Foundation", "ADA", null, null, null, null, null, null, LocalDate.of(2026, 9, 1));
+        String spendingEventId = FundingEventEntity.id(orgId, EventType.SPENDING, "GRANT-CSV-1000", null, null, "ADA",
+                "Personnel", "Vendor AB", "sha256:demo-csv-0001", new BigDecimal("250000.00"), "USD",
+                new BigDecimal("250000.00"), LocalDate.of(2026, 9, 10));
+        assertThat(fundingEventRepository.findById(fundingEventId).orElseThrow().getStatus()).isEqualTo(EventStatus.DRAFT);
+        assertThat(fundingEventRepository.findById(spendingEventId).orElseThrow().getStatus()).isEqualTo(EventStatus.DRAFT);
+
+        // 4. Shrink the project — both sub-projects' milestones shrink together, in the same CSV group.
+        // Their combined new capacity (90,000 + 160,000 = 250,000) exactly matches the SPENDING event's
+        // total, so it stays fixable purely by redistributing (its amountRcy is part of its identity —
+        // see FundingEventEntity#id — so it can't just be lowered like FUNDING's can). Both milestones'
+        // new amounts are still well below what the FUNDING event already allocated (400,000/600,000),
+        // so it needs a real reduction, which — unlike SPENDING — it's free to do.
+        String shrinkCsv = """
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Project Orion,,300000.00,,,,,,,,
+                Project Orion,,,,Sub 1,,120000.00,Milestone 1,,90000.00,
+                Project Orion,,,,Sub 2,,180000.00,Milestone 1,,160000.00,
+                """;
+        FundingBulkImportResult shrinkResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(new MockMultipartFile("file", "shrink.csv", "text/csv", shrinkCsv.getBytes())))
+                .build());
+        assertThat(reasons(shrinkResult)).isEmpty();
+        assertThat(shrinkResult.getMilestonesUpdated()).isEqualTo(2);
+
+        // Both events must be flagged ERROR — proving they're batched across the whole shrink group
+        // (both milestones are in scope together), not checked one at a time (which would wrongly
+        // cross-project-block instead, since each event allocates to both milestones).
+        assertThat(fundingEventRepository.findById(fundingEventId).orElseThrow().getStatus())
+                .as("FUNDING event no longer fits the shrunk milestones").isEqualTo(EventStatus.ERROR);
+        assertThat(fundingEventRepository.findById(spendingEventId).orElseThrow().getStatus())
+                .as("SPENDING event no longer fits the shrunk milestones").isEqualTo(EventStatus.ERROR);
+        // Neither event's own recorded figures were ever rewritten by the shrink.
+        assertThat(fundingEventRepository.findById(fundingEventId).orElseThrow().getAmountRcy()).isEqualByComparingTo("1000000.00");
+        assertThat(fundingEventRepository.findById(spendingEventId).orElseThrow().getAmountRcy()).isEqualByComparingTo("250000.00");
+
+        // 5. Fix the FUNDING event — same identity fields (fundingId/hash/entity/currencyRcy/eventDate,
+        // none of which include amountRcy for FUNDING), smaller allocations that fit the shrunk budgets.
+        String fixFundingCsv = """
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+                FUNDING,GRANT-CSV-0001,,Cardano Foundation,ADA,2026-09-01,,,,,,50000.00,,,Project Orion,,Sub 1,,Milestone 1,,20000.00
+                FUNDING,GRANT-CSV-0001,,Cardano Foundation,ADA,2026-09-01,,,,,,50000.00,,,Project Orion,,Sub 2,,Milestone 1,,30000.00
+                """;
+        FundingBulkImportResult fixFundingResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(new MockMultipartFile("file", "fix-funding.csv", "text/csv", fixFundingCsv.getBytes())))
+                .build());
+        assertThat(reasons(fixFundingResult)).isEmpty();
+        assertThat(fundingEventRepository.findById(fundingEventId).orElseThrow().getStatus())
+                .as("fixed FUNDING event resets from ERROR back to DRAFT").isEqualTo(EventStatus.DRAFT);
+        assertThat(fundingEventRepository.findById(fundingEventId).orElseThrow().getAmountRcy()).isEqualByComparingTo("50000.00");
+
+        // 6. Fix the SPENDING event — amountRcy is part of its identity, so it must stay exactly
+        // 250,000.00 (same as before) for this to resolve to the same event; only the split across the
+        // two milestones changes, to exactly their new capacities (90,000 + 160,000 = 250,000).
+        String fixSpendingCsv = """
+                Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+                SPENDING,GRANT-CSV-1000,,,ADA,2026-09-10,Personnel,Vendor AB,250000.00,USD,1.0,250000.00,sha256:demo-csv-0001,Invoice #CSV-0001,Project Orion,,Sub 1,,Milestone 1,,90000.00
+                SPENDING,GRANT-CSV-1000,,,ADA,2026-09-10,Personnel,Vendor AB,250000.00,USD,1.0,250000.00,sha256:demo-csv-0001,Invoice #CSV-0001,Project Orion,,Sub 2,,Milestone 1,,160000.00
+                """;
+        FundingBulkImportResult fixSpendingResult = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(new MockMultipartFile("file", "fix-spending.csv", "text/csv", fixSpendingCsv.getBytes())))
+                .build());
+        assertThat(reasons(fixSpendingResult)).isEmpty();
+        assertThat(fundingEventRepository.findById(spendingEventId).orElseThrow().getStatus())
+                .as("fixed SPENDING event resets from ERROR back to DRAFT").isEqualTo(EventStatus.DRAFT);
+        assertThat(fundingEventRepository.findById(spendingEventId).orElseThrow().getAmountRcy()).isEqualByComparingTo("250000.00");
     }
 
     /**
@@ -776,22 +1054,22 @@ class FundingBulkImportE2ETest {
     // -------------------------------------------------------------------------
 
     private static final String TICKET_STRUCTURE_CSV = """
-            Project Title,Total Amount,Currency,Sub Project Title,Sub Total Amount,Milestone Title,Milestone Amount,Milestone Date
-            Ticket Project,100000.00,EUR,Ticket Sub,50000.00,Ticket Milestone,20000.00,2026-06-30
+            Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+            Ticket Project,Ticket Project,100000.00,EUR,Ticket Sub,ticket-sub,50000.00,Ticket Milestone,ticket-milestone,20000.00,2026-06-30
             """;
 
     private static final String TICKET_PUBLISHED_SEED_CSV = """
-            Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
-            FUNDING,TICKET-PUBLISHED,,Cardano Foundation,EUR,2026-06-01,,,,,,5000.00,,,Ticket Project,Ticket Sub,Ticket Milestone,5000.00
+            Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+            FUNDING,TICKET-PUBLISHED,,Cardano Foundation,EUR,2026-06-01,,,,,,5000.00,,,Ticket Project,,Ticket Sub,,Ticket Milestone,,5000.00
             """;
 
     private static final String TICKET_FIVE_ERRORS_CSV = """
-            Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Sub Project Title,Milestone Title,Allocated Amount
-            FUNDING,TICKET-ERR-1,,Cardano Foundation,EUR,2026-06-01,,,,,,,,,Ticket Project,Ticket Sub,Ticket Milestone,1000.00
-            FUNDING,TICKET-ERR-2,,Cardano Foundation,USD,2026-06-01,,,,,,1000.00,,,Ticket Project,Ticket Sub,Ticket Milestone,1000.00
-            FUNDING,TICKET-ERR-3,,Cardano Foundation,EUR,2026-06-01,,,,,,1000.00,,,Ticket Project,,Ticket Milestone,1000.00
-            FUNDING,TICKET-ERR-4,,Cardano Foundation,EUR,2026-06-01,,,,,,1000.00,,,Nonexistent Project,,Ticket Milestone,1000.00
-            FUNDING,TICKET-PUBLISHED,,Cardano Foundation,EUR,2026-06-01,,,,,,5000.00,,,Ticket Project,Ticket Sub,Ticket Milestone,5000.00
+            Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+            FUNDING,TICKET-ERR-1,,Cardano Foundation,EUR,2026-06-01,,,,,,,,,Ticket Project,,Ticket Sub,,Ticket Milestone,,1000.00
+            FUNDING,TICKET-ERR-2,,Cardano Foundation,USD,2026-06-01,,,,,,1000.00,,,Ticket Project,,Ticket Sub,,Ticket Milestone,,1000.00
+            FUNDING,TICKET-ERR-3,,Cardano Foundation,EUR,2026-06-01,,,,,,1000.00,,,Ticket Project,,,,Ticket Milestone,,1000.00
+            FUNDING,TICKET-ERR-4,,Cardano Foundation,EUR,2026-06-01,,,,,,1000.00,,,Nonexistent Project,,,,Ticket Milestone,,1000.00
+            FUNDING,TICKET-PUBLISHED,,Cardano Foundation,EUR,2026-06-01,,,,,,5000.00,,,Ticket Project,,Ticket Sub,,Ticket Milestone,,5000.00
             """;
 
     @Test
@@ -849,6 +1127,55 @@ class FundingBulkImportE2ETest {
         assertThat(result.getEventsCreated()).isZero();
     }
 
+    // -------------------------------------------------------------------------
+    // Projects+Milestones export endpoint — real DB, proves the new derived repository queries
+    // (findByOrganisationIdAndParentProjectIsNull / findByOrganisationIdAndProIdInAndParentProjectIsNull)
+    // actually resolve correctly, which FundingCsvExportServiceTest's mocked unit tests can't prove.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void exportProjectsMilestones_reflectsTheRealDbTree_forASeededProject() throws Exception {
+        String orgId = "org-export-seeded";
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+        // Seeds Project A (proId defaults to its title, its "Project ID" cell is blank) with one
+        // sub-project (Sub One / sub-one) carrying two milestones (Milestone One+Two / ms-one/ms-two) —
+        // exactly the downloadable template's own shape, see PROJECTS_MILESTONES_TEMPLATE_CSV.
+        seedProjectsAndMilestonesTemplate(orgId);
+
+        List<String[]> rows = exportAndParse(orgId, null);
+
+        assertThat(rows).hasSize(3); // header + one row per milestone under Sub One
+        assertThat(rows.get(1)).containsExactly("Project A", "Project A", "100000.00", "USD",
+                "Sub One", "sub-one", "40000.00", "Milestone One", "ms-one", "20000.00", "2026-06-30");
+        assertThat(rows.get(2)).containsExactly("Project A", "Project A", "100000.00", "USD",
+                "Sub One", "sub-one", "40000.00", "Milestone Two", "ms-two", "20000.00", "2026-07-15");
+    }
+
+    @Test
+    void exportProjectsMilestones_withProIds_filtersToJustThoseRoots_realDb() throws Exception {
+        String orgId = "org-export-filtered";
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+        seedProjectAndMilestone(orgId, "Keep Project", "Keep Milestone");
+        seedProjectAndMilestone(orgId, "Skip Project", "Skip Milestone");
+
+        // Both projects' proId default to their own title (their CSV "Project ID" cell was left
+        // blank by seedProjectAndMilestone) — filtering to "Keep Project" must exclude "Skip Project"
+        // even though both exist in the same organisation.
+        List<String[]> rows = exportAndParse(orgId, List.of("Keep Project"));
+
+        assertThat(rows).hasSize(2); // header + Keep Project's one milestone row
+        assertThat(rows.get(1)[0]).isEqualTo("Keep Project");
+        assertThat(rows.get(1)[8]).isEqualTo("ms-keep-milestone");
+    }
+
+    private List<String[]> exportAndParse(String orgId, List<String> proIds) throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        fundingCsvExportService.writeProjectsMilestonesExport(orgId, proIds, Pageable.unpaged(), out);
+        try (CSVReader reader = new CSVReader(new StringReader(out.toString()))) {
+            return reader.readAll();
+        }
+    }
+
     @Configuration
     @EnableAutoConfiguration
     @ComponentScan(basePackages = {
@@ -862,7 +1189,15 @@ class FundingBulkImportE2ETest {
             // requested parameterization" autowiring for a scanned class whose own generic is left
             // unresolved, not for a @Bean method whose declared return type fixes the parameter.
             "org.cardanofoundation.lob.app.organisation.service.csv"
-    }, excludeFilters = @Filter(type = FilterType.ASSIGNABLE_TYPE, classes = EventPublishJob.class))
+    }, excludeFilters = {
+            @Filter(type = FilterType.ASSIGNABLE_TYPE, classes = EventPublishJob.class),
+            // org.cardanofoundation.lob.app.funding.e2e (this package) is itself under the
+            // org.cardanofoundation.lob.app.funding scan root above, so without this exclusion this
+            // scan also picks up every OTHER e2e test's own nested @Configuration TestConfig (e.g.
+            // FundingCascadeDeleteE2ETest.TestConfig) and double-registers its repository beans in
+            // this context — mirror this exclusion in any new e2e test class added under this package.
+            @Filter(type = FilterType.REGEX, pattern = "org\\.cardanofoundation\\.lob\\.app\\.funding\\.e2e\\..*")
+    })
     // EventPublishJob is unrelated to the bulk-import flow under test and needs the *concrete*
     // OrganisationPublicApi (vs. everything else here, which needs the OrganisationPublicApiIF
     // interface) — mocking both would make every interface-typed injection point ambiguous.

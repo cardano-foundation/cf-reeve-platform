@@ -24,8 +24,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
+import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventBulkPublishRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.OrphanEventsCleanupView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
+import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventBulkPublishView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.service.SpendingEventService;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
@@ -148,6 +151,7 @@ class SpendingEventControllerTest {
     }
 
     @Test
+    @SuppressWarnings("removal") // the single-event endpoint stays tested until it is removed
     void publishEvent_returns200_withView() {
         SpendingEventView view = eventView();
         when(spendingEventService.publishEvent("e1")).thenReturn(view);
@@ -156,6 +160,32 @@ class SpendingEventControllerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo(view);
+    }
+
+    @Test
+    void publishEvents_returns200_withPerEventResults() {
+        SpendingEventBulkPublishView view = SpendingEventBulkPublishView.success(List.of(
+                SpendingEventBulkPublishView.Result.published("e1", "GRANT-1"),
+                SpendingEventBulkPublishView.Result.skipped("e2", "GRANT-2",
+                        problem(HttpStatus.CONFLICT, ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED))));
+        SpendingEventBulkPublishRequest request = SpendingEventBulkPublishRequest.builder()
+                .organisationId("org1").eventIds(List.of("e1", "e2")).build();
+        when(spendingEventService.publishEvents("org1", List.of("e1", "e2"))).thenReturn(view);
+
+        ResponseEntity<?> response = spendingEventController.publishEvents(request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo(view);
+    }
+
+    @Test
+    void publishEvents_returns401_whenRequestRejected() {
+        SpendingEventBulkPublishRequest request = SpendingEventBulkPublishRequest.builder()
+                .organisationId("org1").eventIds(List.of("e1")).build();
+        when(spendingEventService.publishEvents("org1", List.of("e1")))
+                .thenReturn(SpendingEventBulkPublishView.error(problem(HttpStatus.UNAUTHORIZED, ErrorTitleConstants.UNAUTHORIZED)));
+
+        assertThat(spendingEventController.publishEvents(request).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     @Test
@@ -176,6 +206,28 @@ class SpendingEventControllerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+    }
+
+    @Test
+    void deleteOrphanedErrorEvents_returns200_withDeletedEvents() {
+        OrphanEventsCleanupView view = OrphanEventsCleanupView.success(List.of());
+        when(spendingEventService.deleteOrphanedErrorEvents("org1")).thenReturn(view);
+
+        ResponseEntity<?> response = spendingEventController.deleteOrphanedErrorEvents("org1");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo(view);
+    }
+
+    @Test
+    void deleteOrphanedErrorEvents_returns400_withProblem() {
+        when(spendingEventService.deleteOrphanedErrorEvents("org1"))
+                .thenReturn(OrphanEventsCleanupView.error(problem(HttpStatus.BAD_REQUEST, ErrorTitleConstants.ORGANISATION_NOT_FOUND)));
+
+        ResponseEntity<?> response = spendingEventController.deleteOrphanedErrorEvents("org1");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(((OrphanEventsCleanupView) response.getBody()).getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.ORGANISATION_NOT_FOUND);
     }
 
 }

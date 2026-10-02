@@ -80,6 +80,14 @@ public class EventCsvLine {
     private String projectTitle;
 
     /**
+     * The referenced project's permanent identifier (see {@code ProjectEntity#proId}) — when present,
+     * resolution prefers this over {@link #projectTitle}, the only reliable way to reference a project
+     * that's since been renamed.
+     */
+    @CsvBindByName(column = "Project ID", profiles = "optional")
+    private String projectId;
+
+    /**
      * Disambiguates which sub-project {@code Project Title} + this column refers to, when a
      * sub-project title alone isn't unique across the organisation (sub-project titles are only
      * guaranteed unique within their parent). When set, {@code Project Title} is resolved as the
@@ -91,8 +99,16 @@ public class EventCsvLine {
     @CsvBindByName(column = "Sub Project Title", profiles = "optional")
     private String subProjectTitle;
 
+    /** See {@link #projectId} — same semantics, for the sub-project named by {@link #subProjectTitle}. */
+    @CsvBindByName(column = "Sub Project ID", profiles = "optional")
+    private String subProjectId;
+
     @CsvBindByName(column = "Milestone Title")
     private String milestoneTitle;
+
+    /** See {@link #projectId} — same semantics, for the referenced milestone. */
+    @CsvBindByName(column = "Milestone ID", profiles = "optional")
+    private String milestoneId;
 
     @CsvBindByName(column = "Allocated Amount")
     private String allocatedAmount;
