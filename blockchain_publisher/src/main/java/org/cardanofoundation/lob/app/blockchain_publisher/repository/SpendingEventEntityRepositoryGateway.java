@@ -22,6 +22,7 @@ import com.google.common.collect.Sets;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.spending.SpendingEventEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
 
 @Service
 @RequiredArgsConstructor
@@ -50,17 +51,38 @@ public class SpendingEventEntityRepositoryGateway {
     }
 
     /**
-     * Store only new spending events so re-delivery of the same event is idempotent.
+     * Store only new spending events so re-delivery of the same event is idempotent. The one exception is an event
+     * that failed for good ({@code ERROR}) and is published again: its stored copy is replaced by the incoming one -
+     * the event may have been corrected in the meantime - and it starts over from {@code STORED}. Its publish attempt
+     * history lives in a separate table and is kept.
      */
     @Transactional
     public Set<SpendingEventEntity> storeOnlyNew(Set<SpendingEventEntity> entities) {
         Set<String> ids = entities.stream().map(SpendingEventEntity::getId).collect(toSet());
 
         Set<SpendingEventEntity> existing = new HashSet<>(spendingEventEntityRepository.findAllById(ids));
+        Set<SpendingEventEntity> failed = existing.stream()
+                .filter(SpendingEventEntityRepositoryGateway::isFailed)
+                .collect(toSet());
+        if (!failed.isEmpty()) {
+            log.info("Replacing {} failed spending event(s) published again: {}", failed.size(), failed.stream().map(SpendingEventEntity::getId).toList());
+            spendingEventEntityRepository.deleteAll(failed);
+            // the replacements reuse the same ids, so the deletes must reach the database before the inserts
+            spendingEventEntityRepository.flush();
+            existing.removeAll(failed);
+        }
+
         Sets.SetView<SpendingEventEntity> newEntities = Sets.difference(entities, existing);
 
         return Stream.concat(spendingEventEntityRepository.saveAll(newEntities).stream(), existing.stream())
                 .collect(toSet());
+    }
+
+    private static boolean isFailed(SpendingEventEntity entity) {
+        return entity.getL1SubmissionData()
+                .flatMap(L1SubmissionData::getPublishStatus)
+                .filter(BlockchainPublishStatus.ERROR::equals)
+                .isPresent();
     }
 
     @Transactional

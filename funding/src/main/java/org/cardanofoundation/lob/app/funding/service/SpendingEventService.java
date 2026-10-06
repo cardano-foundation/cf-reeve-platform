@@ -30,6 +30,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import io.vavr.control.Either;
 
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.funding.domain.entity.*;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
@@ -447,6 +448,9 @@ public class SpendingEventService {
 
         event.setStatus(EventStatus.PUBLISHED);
         event.setLedgerDispatchApproved(true);
+        // a draft reverted after a failed on-chain publish (LOB-2380) still carries FAILED; the publish job only
+        // picks up NOT_DISPATCHED events
+        event.setLedgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED);
         return Either.right(fundingEventRepository.saveAndFlush(event));
     }
 
@@ -487,6 +491,8 @@ public class SpendingEventService {
                 .currencyRcy(event.getCurrencyRcy())
                 .txHash(event.getTxHash())
                 .ledgerDispatchStatus(event.getLedgerDispatchStatus())
+                .lastFailureMessage(event.getLastFailureMessage())
+                .lastFailureAt(event.getLastFailureAt())
                 .fundingHash(event.getFundingHash())
                 .fundingEntity(event.getFundingEntity())
                 .eventDate(event.getEventDate())
