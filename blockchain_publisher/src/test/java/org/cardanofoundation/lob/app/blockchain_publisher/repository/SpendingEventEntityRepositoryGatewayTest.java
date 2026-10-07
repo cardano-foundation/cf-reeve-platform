@@ -11,6 +11,8 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Set;
 
+import jakarta.persistence.EntityManager;
+
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -30,11 +32,14 @@ class SpendingEventEntityRepositoryGatewayTest {
     @Mock
     private SpendingEventEntityRepository repository;
 
+    @Mock
+    private EntityManager entityManager;
+
     private SpendingEventEntityRepositoryGateway gateway;
 
     @BeforeEach
     void setUp() {
-        gateway = new SpendingEventEntityRepositoryGateway(repository, Clock.systemUTC());
+        gateway = new SpendingEventEntityRepositoryGateway(repository, Clock.systemUTC(), entityManager);
     }
 
     private static SpendingEventEntity event(String id, BlockchainPublishStatus status, String vendor) {
@@ -63,7 +68,7 @@ class SpendingEventEntityRepositoryGatewayTest {
         gateway.storeOnlyNew(Set.of(incoming));
 
         assertThat(savedEntities()).containsExactly(incoming);
-        verify(repository, never()).deleteAll(any());
+        verify(entityManager, never()).remove(any());
     }
 
     @Test
@@ -77,7 +82,7 @@ class SpendingEventEntityRepositoryGatewayTest {
 
         assertThat(savedEntities()).isEmpty();
         assertThat(result).singleElement().extracting(SpendingEventEntity::getVendor).isEqualTo("Old vendor");
-        verify(repository, never()).deleteAll(any());
+        verify(entityManager, never()).remove(any());
     }
 
     @Test
@@ -89,9 +94,9 @@ class SpendingEventEntityRepositoryGatewayTest {
 
         Set<SpendingEventEntity> result = gateway.storeOnlyNew(Set.of(corrected));
 
-        InOrder inOrder = inOrder(repository);
-        inOrder.verify(repository).deleteAll(Set.of(failed));
-        inOrder.verify(repository).flush();
+        InOrder inOrder = inOrder(entityManager, repository);
+        inOrder.verify(entityManager).remove(failed);
+        inOrder.verify(entityManager).flush();
         inOrder.verify(repository).saveAll(any());
         assertThat(savedEntities()).singleElement().extracting(SpendingEventEntity::getVendor).isEqualTo("Corrected vendor");
         assertThat(result).singleElement().extracting(SpendingEventEntity::getVendor).isEqualTo("Corrected vendor");

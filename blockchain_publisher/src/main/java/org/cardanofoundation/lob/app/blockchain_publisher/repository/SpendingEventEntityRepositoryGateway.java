@@ -10,6 +10,8 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Stream;
 
+import jakarta.persistence.EntityManager;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -32,6 +34,7 @@ public class SpendingEventEntityRepositoryGateway {
 
     private final SpendingEventEntityRepository spendingEventEntityRepository;
     private final Clock clock;
+    private final EntityManager entityManager;
 
     @Value("${lob.blockchain_publisher.dispatcher.lock_timeout:PT3H}")
     private Duration lockTimeoutDuration;
@@ -66,9 +69,11 @@ public class SpendingEventEntityRepositoryGateway {
                 .collect(toSet());
         if (!failed.isEmpty()) {
             log.info("Replacing {} failed spending event(s) published again: {}", failed.size(), failed.stream().map(SpendingEventEntity::getId).toList());
-            spendingEventEntityRepository.deleteAll(failed);
+            // removed through the EntityManager because the repository's delete is a silent no-op for this entity:
+            // its isNew() always reports true (see CommonDateOnlyLockableEntity), so Spring Data skips it
+            failed.forEach(entityManager::remove);
             // the replacements reuse the same ids, so the deletes must reach the database before the inserts
-            spendingEventEntityRepository.flush();
+            entityManager.flush();
             existing.removeAll(failed);
         }
 
