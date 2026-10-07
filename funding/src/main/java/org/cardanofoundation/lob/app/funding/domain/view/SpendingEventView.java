@@ -58,6 +58,7 @@ public class SpendingEventView implements ErrorAware {
     private String lastFailureMessage;
 
     @Nullable
+    @JsonFormat(pattern = "yyyy-MM-dd hh:mm")
     @Schema(description = "When the event was reverted to draft after a failed on-chain publish")
     private LocalDateTime lastFailureAt;
 
