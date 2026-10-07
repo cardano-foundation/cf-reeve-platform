@@ -29,6 +29,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.funding.domain.entity.*;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
@@ -1107,6 +1108,26 @@ class SpendingEventServiceTest {
     }
 
     @Test
+    void publish_revertedFailedDraft_isPublishedAgainAndQueuedForDispatch() {
+        // LOB-2380: a draft reverted after a failed on-chain publish still carries FAILED; publishing it again
+        // must reset it so the publish job picks it up
+        FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        event.setLedgerDispatchStatus(LedgerDispatchStatus.FAILED);
+        event.setLastFailureMessage("Cardano node timeout");
+        when(fundingEventRepository.findByIdForUpdate("e1")).thenReturn(Optional.of(event));
+        when(fundingEventRepository.saveAndFlush(event)).thenReturn(event);
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.publish("e1");
+
+        assertThat(result.isRight()).isTrue();
+        assertThat(event.getStatus()).isEqualTo(EventStatus.PUBLISHED);
+        assertThat(event.isLedgerDispatchApproved()).isTrue();
+        assertThat(event.getLedgerDispatchStatus()).isEqualTo(LedgerDispatchStatus.NOT_DISPATCHED);
+        // kept until a later attempt reaches the chain
+        assertThat(event.getLastFailureMessage()).isEqualTo("Cardano node timeout");
+    }
+
+    @Test
     void publish_returnsLeft_whenAlreadyPublished() {
         when(fundingEventRepository.findByIdForUpdate("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.PUBLISHED)));
 
@@ -1310,6 +1331,21 @@ class SpendingEventServiceTest {
         assertThat(view.getProjectAllocations()).hasSize(1);
         var mv = view.getProjectAllocations().get(0).getMilestoneAllocations().get(0);
         assertThat(mv.getAllocatedAmount()).isEqualByComparingTo(ALLOCATED);
+    }
+
+    @Test
+    void toView_exposesLastFailure() {
+        FundingEventEntity event = spendingEventEntity();
+        LocalDateTime failedAt = LocalDateTime.of(2026, 10, 5, 12, 0);
+        event.setLedgerDispatchStatus(LedgerDispatchStatus.FAILED);
+        event.setLastFailureMessage("Cardano node timeout");
+        event.setLastFailureAt(failedAt);
+
+        SpendingEventView view = spendingEventService.toView(event);
+
+        assertThat(view.getLedgerDispatchStatus()).isEqualTo(LedgerDispatchStatus.FAILED);
+        assertThat(view.getLastFailureMessage()).isEqualTo("Cardano node timeout");
+        assertThat(view.getLastFailureAt()).isEqualTo(failedAt);
     }
 
     // --- toView: overspend detection (the hard budget cap was removed; overspend is surfaced instead) ---

@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.funding.domain.view;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -51,6 +52,15 @@ public class SpendingEventView implements ErrorAware {
     @Nullable
     @Schema(example = "FINALIZED")
     private LedgerDispatchStatus ledgerDispatchStatus;
+
+    @Nullable
+    @Schema(description = "Reason of the last failed on-chain publish; set while the event is a draft reverted after a failed publish")
+    private String lastFailureMessage;
+
+    @Nullable
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm")
+    @Schema(description = "When the event was reverted to draft after a failed on-chain publish")
+    private LocalDateTime lastFailureAt;
 
     @Nullable
     @Schema(example = "2736ff28...")
