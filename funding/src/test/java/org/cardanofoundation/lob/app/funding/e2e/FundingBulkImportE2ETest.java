@@ -49,14 +49,19 @@ import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.BulkImportRequest;
+import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.request.ProjectTreeNodeRequest;
+import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingBulkImportResult;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingRowError;
+import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.job.EventPublishJob;
 import org.cardanofoundation.lob.app.funding.repository.FundingEventRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 import org.cardanofoundation.lob.app.funding.repository.MilestoneRepository;
 import org.cardanofoundation.lob.app.funding.service.FundingBulkImportService;
 import org.cardanofoundation.lob.app.funding.service.FundingCsvExportService;
+import org.cardanofoundation.lob.app.funding.service.ProjectTreeUpdateService;
 import org.cardanofoundation.lob.app.funding.service.SpendingEventService;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
@@ -189,6 +194,8 @@ class FundingBulkImportE2ETest {
     private SpendingEventService spendingEventService;
     @Autowired
     private FundingCsvExportService fundingCsvExportService;
+    @Autowired
+    private ProjectTreeUpdateService projectTreeUpdateService;
     @MockitoBean
     private OrganisationPublicApiIF organisationPublicApi;
     @MockitoBean
@@ -1071,6 +1078,124 @@ class FundingBulkImportE2ETest {
             FUNDING,TICKET-ERR-4,,Cardano Foundation,EUR,2026-06-01,,,,,,1000.00,,,Nonexistent Project,,,,Ticket Milestone,,1000.00
             FUNDING,TICKET-PUBLISHED,,Cardano Foundation,EUR,2026-06-01,,,,,,5000.00,,,Ticket Project,,Ticket Sub,,Ticket Milestone,,5000.00
             """;
+
+    private static final String PARTLY_PUBLISHED_STRUCTURE_CSV = """
+            Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+            Partly Project,partly,100000.00,USD,Sub One,sub-one,40000.00,Milestone One,ms-one,40000.00,2026-06-30
+            Partly Project,,,,Sub Two,sub-two,30000.00,Milestone Two,ms-two,30000.00,2026-06-30
+            """;
+
+    private static final String PARTLY_PUBLISHED_EVENT_CSV = """
+            Event Type,Funding ID,Funding Hash,Funding Entity,Currency RCY,Event Date,Category,Vendor,Amount FCY,Currency FCY,FX Rate,Amount RCY,Hash,Notes,Project Title,Project ID,Sub Project Title,Sub Project ID,Milestone Title,Milestone ID,Allocated Amount
+            FUNDING,PARTLY-PUBLISHED,,Cardano Foundation,USD,2026-06-01,,,,,,10000.00,,,Partly Project,,Sub One,,Milestone One,,10000.00
+            """;
+
+    // Root and Sub One resent unchanged; only Sub Two's title and amount (and its milestone) change.
+    private static final String PARTLY_PUBLISHED_EDIT_SUB_TWO_CSV = """
+            Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+            Partly Project,partly,100000.00,USD,Sub One,sub-one,40000.00,Milestone One,ms-one,40000.00,2026-06-30
+            Partly Project,,,,Sub Two Renamed,sub-two,50000.00,Milestone Two,ms-two,45000.00,2026-06-30
+            """;
+
+    private static final String PARTLY_PUBLISHED_EDIT_SUB_ONE_CSV = """
+            Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+            Partly Project,partly,100000.00,USD,Sub One Renamed,sub-one,40000.00,,,,
+            """;
+
+    /** Seeds root + Sub One + Sub Two (one milestone each) and publishes an event allocated to Sub One's milestone. */
+    private ProjectEntity seedPartlyPublishedProject(String orgId) {
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+        assertThat(reasons(bulkImportService.importFiles(BulkImportRequest.builder().organisationId(orgId)
+                .files(List.of(new MockMultipartFile("file", "structure.csv", "text/csv", PARTLY_PUBLISHED_STRUCTURE_CSV.getBytes())))
+                .build()))).as("seed structure").isEmpty();
+        assertThat(reasons(bulkImportService.importFiles(BulkImportRequest.builder().organisationId(orgId)
+                .files(List.of(new MockMultipartFile("file", "event.csv", "text/csv", PARTLY_PUBLISHED_EVENT_CSV.getBytes())))
+                .build()))).as("seed event").isEmpty();
+        String eventId = FundingEventEntity.id(orgId, EventType.FUNDING, "PARTLY-PUBLISHED", null,
+                "Cardano Foundation", "USD", null, null, null, null, null, null, LocalDate.of(2026, 6, 1));
+        assertThat(spendingEventService.publish(eventId).isRight()).as("publish event").isTrue();
+        return projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull(orgId, "partly").orElseThrow();
+    }
+
+    @Test
+    void csv_editsUnpublishedSubProject_whenASiblingSubProjectIsPublished() {
+        String orgId = "org-partly-csv";
+        ProjectEntity root = seedPartlyPublishedProject(orgId);
+
+        FundingBulkImportResult result = bulkImportService.importFiles(BulkImportRequest.builder().organisationId(orgId)
+                .files(List.of(new MockMultipartFile("file", "edit.csv", "text/csv", PARTLY_PUBLISHED_EDIT_SUB_TWO_CSV.getBytes())))
+                .build());
+
+        assertThat(reasons(result)).isEmpty();
+        ProjectEntity subTwo = projectRepository.findByParentProjectIdAndProId(root.getId(), "sub-two").orElseThrow();
+        assertThat(subTwo.getProjectTitle()).isEqualTo("Sub Two Renamed");
+        assertThat(subTwo.getTotalAmount()).isEqualByComparingTo("50000");
+        assertThat(milestoneRepository.findByProjectIdAndProId(subTwo.getId(), "ms-two").orElseThrow().getMilestoneAmount())
+                .isEqualByComparingTo("45000");
+    }
+
+    @Test
+    void csv_rejectsEditingThePublishedSubProject() {
+        String orgId = "org-partly-csv-locked";
+        ProjectEntity root = seedPartlyPublishedProject(orgId);
+
+        FundingBulkImportResult result = bulkImportService.importFiles(BulkImportRequest.builder().organisationId(orgId)
+                .files(List.of(new MockMultipartFile("file", "edit.csv", "text/csv", PARTLY_PUBLISHED_EDIT_SUB_ONE_CSV.getBytes())))
+                .build());
+
+        assertThat(result.getFiles().get(0).getRowErrors()).extracting(FundingRowError::getTitle)
+                .containsExactly(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+        assertThat(projectRepository.findByParentProjectIdAndProId(root.getId(), "sub-one").orElseThrow().getProjectTitle())
+                .isEqualTo("Sub One");
+    }
+
+    /** The full tree as the edit form resends it, with Sub One/Two's title and amounts overridable. */
+    private static ProjectWithMilestonesCreateRequest partlyPublishedTree(String orgId, String subOneTitle,
+            String subTwoTitle, String subTwoAmount, String milestoneTwoAmount) {
+        ProjectWithMilestonesCreateRequest request = ProjectWithMilestonesCreateRequest.builder()
+                .organisationId(orgId).projectTitle("Partly Project").proId("partly")
+                .totalAmount(new BigDecimal("100000.00")).currency("USD").build();
+        request.setMilestones(List.of());
+        request.setSubProjects(List.of(
+                ProjectTreeNodeRequest.builder().proId("sub-one").projectTitle(subOneTitle).totalAmount(new BigDecimal("40000.00"))
+                        .milestones(List.of(MilestoneCreateRequest.builder().proId("ms-one").milestoneTitle("Milestone One")
+                                .milestoneAmount(new BigDecimal("40000.00")).currency("USD").milestoneDate(LocalDate.of(2026, 6, 30)).build()))
+                        .build(),
+                ProjectTreeNodeRequest.builder().proId("sub-two").projectTitle(subTwoTitle).totalAmount(new BigDecimal(subTwoAmount))
+                        .milestones(List.of(MilestoneCreateRequest.builder().proId("ms-two").milestoneTitle("Milestone Two")
+                                .milestoneAmount(new BigDecimal(milestoneTwoAmount)).currency("USD").milestoneDate(LocalDate.of(2026, 6, 30)).build()))
+                        .build()));
+        return request;
+    }
+
+    @Test
+    void api_editsUnpublishedSubProject_whenASiblingSubProjectIsPublished() {
+        String orgId = "org-partly-api";
+        ProjectEntity root = seedPartlyPublishedProject(orgId);
+
+        ProjectView view = projectTreeUpdateService.updateWithMilestones(root.getId(),
+                partlyPublishedTree(orgId, "Sub One", "Sub Two Renamed", "50000", "45000"));
+
+        assertThat(view.getError()).isEmpty();
+        ProjectEntity subTwo = projectRepository.findByParentProjectIdAndProId(root.getId(), "sub-two").orElseThrow();
+        assertThat(subTwo.getProjectTitle()).isEqualTo("Sub Two Renamed");
+        assertThat(subTwo.getTotalAmount()).isEqualByComparingTo("50000");
+        assertThat(milestoneRepository.findByProjectIdAndProId(subTwo.getId(), "ms-two").orElseThrow().getMilestoneAmount())
+                .isEqualByComparingTo("45000");
+    }
+
+    @Test
+    void api_rejectsEditingThePublishedSubProject() {
+        String orgId = "org-partly-api-locked";
+        ProjectEntity root = seedPartlyPublishedProject(orgId);
+
+        ProjectView view = projectTreeUpdateService.updateWithMilestones(root.getId(),
+                partlyPublishedTree(orgId, "Sub One Renamed", "Sub Two", "30000.00", "30000.00"));
+
+        assertThat(view.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+        assertThat(projectRepository.findByParentProjectIdAndProId(root.getId(), "sub-one").orElseThrow().getProjectTitle())
+                .isEqualTo("Sub One");
+    }
 
     @Test
     void eventsFile_fiveTicketScenarios_eachReportsItsOwnDistinctCause() {

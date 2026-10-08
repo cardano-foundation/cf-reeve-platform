@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
@@ -14,6 +15,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -125,7 +127,7 @@ class ProjectTreeUpdateServiceTest {
     }
 
     @Test
-    void update_blocksEverything_whenAnyPublishedEventExistsAnywhereInSubtree() {
+    void update_blocksRootFields_whenAnyPublishedEventExistsAnywhereInSubtree() {
         ProjectEntity root = root(new BigDecimal("250000"));
         when(projectRepository.findById("root")).thenReturn(Optional.of(root));
         when(projectRepository.findByParentProjectId("root")).thenReturn(List.of());
@@ -134,7 +136,88 @@ class ProjectTreeUpdateServiceTest {
         ProjectView result = service.updateWithMilestones("root", request(new BigDecimal("100000")));
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+        assertThat(root.getTotalAmount()).isEqualByComparingTo("250000");
         verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    /**
+     * Ticket scenario: root with sub1 (milestone allocated to a published event) and sub2 (nothing
+     * published). The FE resends the whole tree with root and sub1 unchanged and only sub2's title and
+     * amount edited — sub2 must update, nothing locked is touched.
+     */
+    @Test
+    void update_allowsEditingAnUnpublishedSubProject_whenASiblingSubProjectIsPublished() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        ProjectEntity sub1 = subProject(root, "sub1", "PRJ-1000-1", new BigDecimal("100000"));
+        ProjectEntity sub2 = subProject(root, "sub2", "PRJ-1000-2", new BigDecimal("50000"));
+        MilestoneEntity published = MilestoneEntity.builder().id("m1").proId("PRJ-1000-1-M1").milestoneTitle("M1")
+                .milestoneAmount(new BigDecimal("100000")).currency("USD").milestoneDate(LocalDate.of(2026, 1, 1)).project(sub1).build();
+        MilestoneEntity open = MilestoneEntity.builder().id("m2").proId("PRJ-1000-2-M1").milestoneTitle("M2")
+                .milestoneAmount(new BigDecimal("50000")).currency("USD").milestoneDate(LocalDate.of(2026, 1, 1)).project(sub2).build();
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+        when(projectRepository.findById("sub1")).thenReturn(Optional.of(sub1));
+        when(projectRepository.findById("sub2")).thenReturn(Optional.of(sub2));
+        when(projectRepository.findByParentProjectId("root")).thenReturn(List.of(sub1, sub2));
+        when(projectRepository.findByParentProjectId("sub1")).thenReturn(List.of());
+        when(projectRepository.findByParentProjectId("sub2")).thenReturn(List.of());
+        when(projectRepository.findByParentProjectIdAndProId("root", "PRJ-1000-1")).thenReturn(Optional.of(sub1));
+        when(projectRepository.findByParentProjectIdAndProId("root", "PRJ-1000-2")).thenReturn(Optional.of(sub2));
+        when(milestoneRepository.findByProjectIdAndProId("sub1", "PRJ-1000-1-M1")).thenReturn(Optional.of(published));
+        when(milestoneRepository.findByProjectIdAndProId("sub2", "PRJ-1000-2-M1")).thenReturn(Optional.of(open));
+        when(milestoneService.findByProjectId(anyString())).thenAnswer(inv -> switch ((String) inv.getArgument(0)) {
+            case "sub1" -> List.of(published);
+            case "sub2" -> List.of(open);
+            default -> List.of();
+        });
+        when(milestoneService.checkFieldLock(anyString(), any(), anyBoolean())).thenReturn(Optional.empty());
+        when(milestoneService.checkCurrencyLock(any(), any(), any())).thenReturn(Optional.empty());
+        when(milestoneService.checkTitleConflict(any(), anyString(), any(), anyBoolean())).thenReturn(Optional.empty());
+        // sub1 (and therefore root) carries a published event; sub2 does not.
+        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED)))
+                .thenAnswer(inv -> ((Set<?>) inv.getArgument(0)).contains("sub1"));
+
+        ProjectWithMilestonesCreateRequest request = request(new BigDecimal("200000.00"));
+        request.setCurrency("USD");
+        request.setSubProjects(List.of(
+                ProjectTreeNodeRequest.builder().proId("PRJ-1000-1").projectTitle("PRJ-1000-1")
+                        .totalAmount(new BigDecimal("100000.00"))
+                        .milestones(List.of(MilestoneCreateRequest.builder().proId("PRJ-1000-1-M1").milestoneTitle("M1")
+                                .milestoneAmount(new BigDecimal("100000.00")).currency("USD").milestoneDate(LocalDate.of(2026, 1, 1)).build()))
+                        .build(),
+                ProjectTreeNodeRequest.builder().proId("PRJ-1000-2").projectTitle("Renamed Sub 2")
+                        .totalAmount(new BigDecimal("80000"))
+                        .milestones(List.of(MilestoneCreateRequest.builder().proId("PRJ-1000-2-M1").milestoneTitle("M2")
+                                .milestoneAmount(new BigDecimal("60000")).currency("USD").milestoneDate(LocalDate.of(2026, 1, 1)).build()))
+                        .build()));
+
+        ProjectView result = service.updateWithMilestones("root", request);
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(sub2.getProjectTitle()).isEqualTo("Renamed Sub 2");
+        assertThat(sub2.getTotalAmount()).isEqualByComparingTo("80000");
+        assertThat(open.getMilestoneAmount()).isEqualByComparingTo("60000");
+        assertThat(sub1.getTotalAmount()).isEqualByComparingTo("100000");
+        // the published milestone was resent unchanged — nothing forwarded that could trip its lock
+        verify(milestoneService).checkFieldLock(eq("m1"), argThat(r -> r.getMilestoneAmount() == null
+                && r.getMilestoneDate() == null && r.getCurrency() == null && r.getDescription() == null), eq(false));
+    }
+
+    @Test
+    void update_blocksEditingASubProject_whenItsOwnSubtreeHasAPublishedEvent() {
+        ProjectEntity root = root(new BigDecimal("200000"));
+        ProjectEntity sub1 = subProject(root, "sub1", "PRJ-1000-1", new BigDecimal("100000"));
+        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
+        when(projectRepository.findByParentProjectId("sub1")).thenReturn(List.of());
+        when(projectRepository.findByParentProjectIdAndProId("root", "PRJ-1000-1")).thenReturn(Optional.of(sub1));
+        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(Set.of("sub1"), EventStatus.PUBLISHED)).thenReturn(true);
+
+        ProjectWithMilestonesCreateRequest request = request(null);
+        request.setSubProjects(List.of(ProjectTreeNodeRequest.builder().proId("PRJ-1000-1").projectTitle("Renamed Sub 1").build()));
+
+        ProjectView result = service.updateWithMilestones("root", request);
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+        assertThat(sub1.getProjectTitle()).isEqualTo("PRJ-1000-1");
     }
 
     @Test

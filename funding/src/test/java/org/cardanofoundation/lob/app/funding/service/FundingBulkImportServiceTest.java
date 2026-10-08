@@ -339,7 +339,8 @@ class FundingBulkImportServiceTest {
                 List.of(rootLine("Project A", "100000.00", "USD"))));
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
                 .thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
-        when(projectTreeUpdateService.isLockedByPublishedEvent(any())).thenReturn(true);
+        when(projectTreeUpdateService.applyRootFields(any(), any(), any()))
+                .thenReturn(Optional.of(problem(HttpStatus.CONFLICT, ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED)));
 
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);
@@ -672,7 +673,8 @@ class FundingBulkImportServiceTest {
                 .thenReturn(Optional.of(root));
         ProjectEntity sub = subProjectEntity("s1", "Sub One", "USD", root);
         when(projectRepository.findByParentProjectIdAndProjectTitle("p1", "Sub One")).thenReturn(Optional.of(sub));
-        when(projectTreeUpdateService.isLockedByPublishedEvent(sub)).thenReturn(true);
+        when(projectTreeUpdateService.applySubProjectFields(eq(sub), any()))
+                .thenReturn(Optional.of(problem(HttpStatus.CONFLICT, ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED)));
 
         BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
         FundingBulkImportResult result = bulkImportService.importFiles(request);

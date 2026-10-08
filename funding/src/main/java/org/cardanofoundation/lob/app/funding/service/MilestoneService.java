@@ -409,7 +409,7 @@ public class MilestoneService {
     /**
      * Currency lock (LOB-2365): cascades from the project level — once any PUBLISHED event exists
      * anywhere in the milestone's owning project's own subtree, currency is blocked there too, mirroring
-     * ProjectTreeUpdateService#updateWithMilestones's matching check for that same project id. Package-visible for reuse
+     * ProjectTreeUpdateService#applyRootFields's matching check for that same project. Package-visible for reuse
      * by {@code ProjectTreeUpdateService} — see {@link #checkFieldLock}'s Javadoc.
      */
     Optional<ProblemDetail> checkCurrencyLock(ProjectEntity project, MilestoneEntity milestone, MilestoneUpdateRequest request) {

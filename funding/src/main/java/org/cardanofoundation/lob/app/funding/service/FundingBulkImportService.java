@@ -553,8 +553,8 @@ public class FundingBulkImportService {
      * apply-then-validate-whole-group-once helpers, the same path used by the JSON tree-update endpoint —
      * deliberately not an embedded, per-row coverage check, which would read this group's other,
      * not-yet-processed rows' stale (pre-update) totals (see {@code ProjectTreeUpdateService}'s class
-     * Javadoc). The publish lock that endpoint also carries is replicated explicitly here instead
-     * ({@link ProjectTreeUpdateService#isLockedByPublishedEvent}), since it isn't part of what's deferred.
+     * Javadoc). The per-node publish lock is enforced inside those same helpers (only for a field that
+     * actually changes, and only by a published event in {@code existing}'s own subtree).
      * The whole group's structural coverage is validated once, after every row in it has been applied —
      * see {@link #processProjectMilestoneGroup}.
      */
@@ -562,12 +562,6 @@ public class FundingBulkImportService {
         String newTitle = ifChanged(blankToNull(title), existing.getProjectTitle());
         BigDecimal newTotal = ifChanged(totalAmount, existing.getTotalAmount());
         String newCurrency = ifChanged(blankToNull(currency), existing.getCurrency());
-        if ((newTitle != null || newTotal != null || newCurrency != null) && projectTreeUpdateService.isLockedByPublishedEvent(existing)) {
-            return Either.left(Problems.conflict(
-                    "Cannot update projectTitle, totalAmount, or currency: project %s is locked because a published event exists in its structure"
-                            .formatted(existing.getId()),
-                    ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED));
-        }
         Optional<ProblemDetail> problem = existing.getParentProject() == null
                 ? projectTreeUpdateService.applyRootFields(existing, ProjectWithMilestonesCreateRequest.builder()
                         .organisationId(existing.getOrganisationId())
