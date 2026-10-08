@@ -473,12 +473,6 @@ public class ProjectTreeUpdateService {
         return Optional.empty();
     }
 
-    /**
-     * Final, whole-tree structural pass: for every project touched by this update, its (now final)
-     * totalAmount must cover the (now final) sum of its own milestones or sub-projects — using only
-     * post-walk, freshly re-read values, never a value read mid-walk. A hard reject here rolls the
-     * entire update back; nothing is partially saved.
-     */
     private static boolean isAmountChanging(BigDecimal requested, BigDecimal current) {
         return requested != null && (current == null || requested.compareTo(current) != 0);
     }
@@ -490,6 +484,12 @@ public class ProjectTreeUpdateService {
                 ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
     }
 
+    /**
+     * Final, whole-tree structural pass: for every project touched by this update, its (now final)
+     * totalAmount must cover the (now final) sum of its own milestones or sub-projects — using only
+     * post-walk, freshly re-read values, never a value read mid-walk. A hard reject here rolls the
+     * entire update back; nothing is partially saved.
+     */
     Optional<ProblemDetail> validateWholeTreeCoverage(Set<String> touchedProjectIds) {
         for (String projectId : touchedProjectIds) {
             ProjectEntity project = projectRepository.findById(projectId).orElseThrow();
