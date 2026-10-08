@@ -182,24 +182,9 @@ public class ProjectTreeUpdateService {
         if ((titleChanging || totalChanging || currencyChanging) && isLockedByPublishedEvent(root)) {
             return Optional.of(projectLocked(root));
         }
-        if (titleChanging && projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNullAndIdNot(
-                root.getOrganisationId(), request.getProjectTitle(), root.getId())) {
-            return Optional.of(Problems.conflict(
-                    "Project title already exists in this organisation: " + request.getProjectTitle(),
-                    ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS));
-        }
-        if (request.getTotalAmount() != null) {
-            Optional<ProblemDetail> amountProblem = FundingValidations.projectAmount(request.getTotalAmount());
-            if (amountProblem.isPresent()) {
-                return amountProblem;
-            }
-        }
-        if (currencyChanging) {
-            Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(request.getCurrency(),
-                    milestoneService.isCurrencyRegisteredAndActive(root.getOrganisationId(), request.getCurrency()));
-            if (currencyProblem.isPresent()) {
-                return currencyProblem;
-            }
+        Optional<ProblemDetail> valueProblem = validateRootValues(root, request, titleChanging, currencyChanging);
+        if (valueProblem.isPresent()) {
+            return valueProblem;
         }
         if (titleChanging) {
             root.setProjectTitle(request.getProjectTitle());
@@ -218,6 +203,28 @@ public class ProjectTreeUpdateService {
             projectService.cascadeCurrency(root, request.getCurrency());
         } else {
             projectRepository.saveAndFlush(root);
+        }
+        return Optional.empty();
+    }
+
+    /** Title uniqueness, amount and currency checks for {@link #applyRootFields} — nothing is written here. */
+    private Optional<ProblemDetail> validateRootValues(ProjectEntity root, ProjectWithMilestonesCreateRequest request,
+            boolean titleChanging, boolean currencyChanging) {
+        if (titleChanging && projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNullAndIdNot(
+                root.getOrganisationId(), request.getProjectTitle(), root.getId())) {
+            return Optional.of(Problems.conflict(
+                    "Project title already exists in this organisation: " + request.getProjectTitle(),
+                    ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS));
+        }
+        if (request.getTotalAmount() != null) {
+            Optional<ProblemDetail> amountProblem = FundingValidations.projectAmount(request.getTotalAmount());
+            if (amountProblem.isPresent()) {
+                return amountProblem;
+            }
+        }
+        if (currencyChanging) {
+            return FundingValidations.currencyCode(request.getCurrency(),
+                    milestoneService.isCurrencyRegisteredAndActive(root.getOrganisationId(), request.getCurrency()));
         }
         return Optional.empty();
     }
