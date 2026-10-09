@@ -157,6 +157,25 @@ public final class FundingValidations {
     }
 
     /**
+     * A sub-project's or milestone's currency always matches its owning project's (see
+     * {@link #eventCurrencyMatchesMilestone} and {@code ProjectService#cascadeCurrency}, which both rely
+     * on it). CSV import enforces this structurally (no sub-project/milestone currency column), but the
+     * JSON API accepts a {@code currency} per node — this rejects one that differs from the parent's
+     * instead of silently storing a mixed-currency tree. Null/blank means "inherit" and always passes.
+     * {@code childLabel} names the node being created/updated, e.g. {@code "milestone 'M1'"}.
+     */
+    public static Optional<ProblemDetail> currencyMatchesParent(String currency, ProjectEntity parent, String childLabel) {
+        if (currency != null && !currency.isBlank() && parent.getCurrency() != null
+                && !currency.equals(parent.getCurrency())) {
+            return Optional.of(Problems.badRequest(
+                    "Currency %s of %s does not match the currency %s of %s".formatted(
+                            currency, childLabel, parent.getCurrency(), projectPath(parent)),
+                    ErrorTitleConstants.CURRENCY_PARENT_MISMATCH));
+        }
+        return Optional.empty();
+    }
+
+    /**
      * An event's total is the sum of its milestone allocations, so it must end up strictly positive —
      * guarding against an event whose allocations are absent or sum to zero (e.g. when no milestones
      * were supplied).

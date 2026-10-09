@@ -426,6 +426,13 @@ public class ProjectTreeUpdateService {
             if (currencyProblem.isPresent()) {
                 return currencyProblem;
             }
+            // The root's currency has already been cascaded (applyRootFields runs first), so a milestone
+            // resent with the new root currency is "unchanged" here and never reaches this check.
+            Optional<ProblemDetail> parentCurrencyProblem = FundingValidations.currencyMatchesParent(
+                    updateRequest.getCurrency(), project, "milestone '%s'".formatted(milestone.getMilestoneTitle()));
+            if (parentCurrencyProblem.isPresent()) {
+                return parentCurrencyProblem;
+            }
         }
 
         if (milestoneService.invalidatesEvents(milestone, updateRequest)) {

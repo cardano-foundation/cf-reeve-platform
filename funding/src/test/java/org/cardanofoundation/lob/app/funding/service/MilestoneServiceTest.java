@@ -327,8 +327,11 @@ class MilestoneServiceTest {
 
     @Test
     void update_updatesAmountCurrencyDate_whenProvided() {
-        // Covers every field except title (see the dedicated rename tests above).
+        // Covers every field except title (see the dedicated rename tests above). A milestone's currency
+        // can only ever be its project's, so the currency change here realigns a (legacy) EUR milestone
+        // with its USD project.
         MilestoneEntity milestone = milestoneEntity("m1");
+        milestone.setCurrency("EUR");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
         when(allocationRepository.existsByMilestoneIdAndEventStatus("m1", EventStatus.PUBLISHED)).thenReturn(false);
         when(milestoneRepository.findByProjectId("p1")).thenReturn(List.of(milestone));
@@ -336,7 +339,7 @@ class MilestoneServiceTest {
 
         MilestoneUpdateRequest request = MilestoneUpdateRequest.builder()
                 .milestoneAmount(new BigDecimal("99000.00"))
-                .currency("EUR")
+                .currency("USD")
                 .milestoneDate(FUTURE_DATE)
                 .build();
 
@@ -345,7 +348,7 @@ class MilestoneServiceTest {
         assertThat(result.isRight()).isTrue();
         assertThat(milestone.getMilestoneTitle()).isEqualTo("Milestone AB");
         assertThat(milestone.getMilestoneAmount()).isEqualByComparingTo("99000.00");
-        assertThat(milestone.getCurrency()).isEqualTo("EUR");
+        assertThat(milestone.getCurrency()).isEqualTo("USD");
         assertThat(milestone.getMilestoneDate()).isEqualTo(FUTURE_DATE);
     }
 
@@ -493,18 +496,53 @@ class MilestoneServiceTest {
     void update_allowsCurrencyChange_whenOnlyDraftEventsExistInProjectStructure() {
         // The currency-lock rule triggers on PUBLISHED specifically, not on any allocation — a
         // draft-only allocation in the project's structure must not block a milestone's own currency
-        // change either (mirrors ProjectService#updateProject's matching rule).
+        // change either (mirrors ProjectService#updateProject's matching rule). The only change still
+        // accepted is realigning a (legacy) mismatched milestone with its project's currency.
         MilestoneEntity milestone = milestoneEntity("m1");
+        milestone.setCurrency("EUR");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
         when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of());
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(Set.of("p1"), EventStatus.PUBLISHED)).thenReturn(false);
         when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
 
         Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1",
-                MilestoneUpdateRequest.builder().currency("EUR").build());
+                MilestoneUpdateRequest.builder().currency("USD").build());
 
         assertThat(result.isRight()).isTrue();
-        assertThat(milestone.getCurrency()).isEqualTo("EUR");
+        assertThat(milestone.getCurrency()).isEqualTo("USD");
+    }
+
+    @Test
+    void update_rejected_whenCurrencyDiffersFromProject() {
+        MilestoneEntity milestone = milestoneEntity("m1"); // project currency "USD"
+        when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
+        when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of());
+        when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(Set.of("p1"), EventStatus.PUBLISHED)).thenReturn(false);
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1",
+                MilestoneUpdateRequest.builder().currency("EUR").build());
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.CURRENCY_PARENT_MISMATCH);
+        assertThat(milestone.getCurrency()).isEqualTo("USD"); // untouched
+        verify(milestoneRepository, never()).saveAndFlush(any());
+        verify(cascadeDeleteService, never()).flagEventsAllocatedTo(any());
+    }
+
+    @Test
+    void create_rejected_whenCurrencyDiffersFromProject() {
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity("p1"))); // USD
+        MilestoneCreateRequest request = MilestoneCreateRequest.builder()
+                .milestoneTitle("MS").milestoneAmount(new BigDecimal("50000.00"))
+                .currency("EUR").milestoneDate(FUTURE_DATE).build();
+
+        Either<ProblemDetail, MilestoneEntity> result = milestoneService.create("p1", request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.CURRENCY_PARENT_MISMATCH);
+        assertThat(result.getLeft().getDetail())
+                .isEqualTo("Currency EUR of milestone 'MS' does not match the currency USD of project 'Project AB'");
+        verify(milestoneRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -858,7 +896,9 @@ class MilestoneServiceTest {
 
     @Test
     void update_flagsEventsAsError_whenTheCurrencyChanges_evenThoughEveryAmountStillFits() {
-        MilestoneEntity milestone = milestoneEntity("m1"); // currency "USD", 50,000
+        // Realigning a (legacy) EUR milestone with its USD project leaves its events booked in EUR.
+        MilestoneEntity milestone = milestoneEntity("m1"); // 50,000
+        milestone.setCurrency("EUR");
         when(milestoneRepository.findById("m1")).thenReturn(Optional.of(milestone));
         when(projectRepository.findByParentProjectId("p1")).thenReturn(List.of());
         when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(Set.of("p1"), EventStatus.PUBLISHED)).thenReturn(false);
@@ -866,10 +906,10 @@ class MilestoneServiceTest {
         when(milestoneRepository.saveAndFlush(milestone)).thenReturn(milestone);
 
         Either<ProblemDetail, MilestoneEntity> result = milestoneService.update("m1",
-                MilestoneUpdateRequest.builder().currency("EUR").build());
+                MilestoneUpdateRequest.builder().currency("USD").build());
 
         assertThat(result.isRight()).isTrue();
-        assertThat(milestone.getCurrency()).isEqualTo("EUR");
+        assertThat(milestone.getCurrency()).isEqualTo("USD");
         verify(cascadeDeleteService).flagEventsAllocatedTo(Set.of("m1"));
     }
 

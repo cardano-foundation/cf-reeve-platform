@@ -280,6 +280,49 @@ class ProjectTreeUpdateE2ETest {
         assertThat(updated.getAffectedEvents()).isEmpty();
     }
 
+    @Test
+    void create_rejectsMilestoneWithCurrencyDifferentFromProject_andPersistsNothing() {
+        stubAccessAndActiveCurrencies();
+
+        ProjectView rejected = projectService.createWithMilestones(ProjectWithMilestonesCreateRequest.builder()
+                .organisationId(ORG_ID).proId("QA-REG-3").externalProjectId("QA-REG-3").projectTitle("Regression 3")
+                .totalAmount(new BigDecimal("1000")).currency("USD")
+                .milestones(List.of(MilestoneCreateRequest.builder()
+                        .milestoneTitle("Reg3-M1").milestoneAmount(new BigDecimal("500"))
+                        .currency("EUR").milestoneDate(LocalDate.of(2026, 12, 31)).build()))
+                .build());
+
+        assertThat(rejected.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.CURRENCY_PARENT_MISMATCH);
+        assertThat(projectRepository.existsByOrganisationIdAndProIdAndParentProjectIsNull(ORG_ID, "QA-REG-3")).isFalse();
+    }
+
+    @Test
+    void create_rejectsSubProjectWithCurrencyDifferentFromProject_andPersistsNothing() {
+        stubAccessAndActiveCurrencies();
+
+        ProjectView rejected = projectService.createWithMilestones(ProjectWithMilestonesCreateRequest.builder()
+                .organisationId(ORG_ID).proId("QA-NEG-5b").externalProjectId("QA-NEG-5b").projectTitle("QA-NEG-5b")
+                .totalAmount(new BigDecimal("1000")).currency("USD")
+                .subProjects(List.of(ProjectTreeNodeRequest.builder()
+                        .proId("QA-NEG-5b-S1").externalProjectId("QA-NEG-5b-S1").projectTitle("S1")
+                        .totalAmount(new BigDecimal("500")).currency("EUR")
+                        .milestones(List.of(MilestoneCreateRequest.builder()
+                                .milestoneTitle("N5b-M1").milestoneAmount(new BigDecimal("100"))
+                                .currency("EUR").milestoneDate(LocalDate.of(2026, 12, 31)).build()))
+                        .build()))
+                .build());
+
+        assertThat(rejected.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.CURRENCY_PARENT_MISMATCH);
+        assertThat(projectRepository.existsByOrganisationIdAndProIdAndParentProjectIsNull(ORG_ID, "QA-NEG-5b")).isFalse();
+    }
+
+    private void stubAccessAndActiveCurrencies() {
+        when(keycloakSecurityHelper.canUserAccessOrg(anyString())).thenReturn(true);
+        Currency activeCurrency = new Currency(new Currency.Id(ORG_ID, "x"), "ISO_4217:x", true);
+        lenient().when(organisationPublicApi.findCurrencyByCustomerCurrencyCode(anyString(), anyString()))
+                .thenReturn(Optional.of(activeCurrency));
+    }
+
     @Configuration
     @EnableAutoConfiguration
     @ComponentScan(basePackages = {

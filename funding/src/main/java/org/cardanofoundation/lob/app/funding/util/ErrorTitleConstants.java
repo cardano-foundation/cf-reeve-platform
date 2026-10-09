@@ -43,6 +43,8 @@ public final class ErrorTitleConstants {
     public static final String SPEND_FIELDS_REQUIRED = "SPEND_FIELDS_REQUIRED";
     public static final String FX_RATE_MISMATCH = "FX_RATE_MISMATCH";
     public static final String EVENT_CURRENCY_MISMATCH = "EVENT_CURRENCY_MISMATCH";
+    /** A sub-project's or milestone's currency differs from its owning project's. */
+    public static final String CURRENCY_PARENT_MISMATCH = "CURRENCY_PARENT_MISMATCH";
     public static final String EVENT_AMOUNT_INVALID = "EVENT_AMOUNT_INVALID";
     public static final String SPENDING_EVENT_NOT_FOUND = "SPENDING_EVENT_NOT_FOUND";
     public static final String SPENDING_EVENT_ALREADY_EXISTS = "SPENDING_EVENT_ALREADY_EXISTS";
