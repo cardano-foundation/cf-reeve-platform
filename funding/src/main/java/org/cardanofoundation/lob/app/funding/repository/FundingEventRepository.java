@@ -1,10 +1,15 @@
 package org.cardanofoundation.lob.app.funding.repository;
 
+import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+
+import jakarta.persistence.LockModeType;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -15,6 +20,15 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 public interface FundingEventRepository extends JpaRepository<FundingEventEntity, String> {
 
     Page<FundingEventEntity> findByOrganisationId(String organisationId, Pageable pageable);
+
+    /**
+     * Row-locked read used by publish: a concurrent publish of the same event (same or another request)
+     * blocks here until the first one commits, then sees it PUBLISHED — so an event can never be
+     * published twice, nor have its dispatch status reset by a stale write after the publish job ran.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT e FROM funding.FundingEventEntity e WHERE e.id = :id")
+    Optional<FundingEventEntity> findByIdForUpdate(@Param("id") String id);
 
     @Query("""
             SELECT e FROM funding.FundingEventEntity e
@@ -50,5 +64,23 @@ public interface FundingEventRepository extends JpaRepository<FundingEventEntity
             AND e.organisationId = :organisationId
             """)
     Set<FundingEventEntity> findAllToBePublished(@Param("organisationId") String organisationId);
+
+    /**
+     * ERROR events for this organisation none of whose allocations points at an existing milestone —
+     * every milestone they referenced was removed by an earlier project/milestone cascade delete
+     * (LOB-2365 follow-up), which deliberately keeps the allocation rows (dangling), so "no allocation
+     * rows" is never the test. Used by the bulk orphan-cleanup endpoint; deliberately excludes an ERROR
+     * event that still has at least one allocation to an existing milestone, since that one can still be
+     * fixed by a human rather than discarded.
+     */
+    @Query("""
+            SELECT e FROM funding.FundingEventEntity e
+            WHERE e.organisationId = :organisationId AND e.status = :status
+            AND NOT EXISTS (
+                SELECT a FROM funding.EventMilestoneAllocationEntity a
+                WHERE a.event = e
+                AND EXISTS (SELECT m FROM funding.MilestoneEntity m WHERE m.id = a.id.milestoneId))
+            """)
+    List<FundingEventEntity> findOrphanedEvents(@Param("organisationId") String organisationId, @Param("status") EventStatus status);
 
 }

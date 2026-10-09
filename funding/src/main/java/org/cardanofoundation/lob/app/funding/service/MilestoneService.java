@@ -3,6 +3,9 @@ package org.cardanofoundation.lob.app.funding.service;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+
+import jakarta.annotation.Nullable;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +24,7 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.CascadeDeletionView;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
@@ -45,6 +49,7 @@ public class MilestoneService {
     private final KeycloakSecurityHelper keycloakSecurityHelper;
     private final FundingCascadeDeleteService cascadeDeleteService;
     private final OrganisationPublicApiIF organisationPublicApi;
+    private final ProjectChildSequenceService childSequenceService;
 
     // -------------------------------------------------------------------------
     // View-returning API (used by the controller — carries the ProblemDetail).
@@ -72,11 +77,27 @@ public class MilestoneService {
 
     @Transactional
     public MilestoneView createMilestone(String projectId, MilestoneCreateRequest request) {
+        return createMilestoneInternal(projectId, request, null);
+    }
+
+    /** CSV-bulk-import-only: see {@link #create(String, MilestoneCreateRequest, String)}'s Javadoc. */
+    @Transactional
+    public MilestoneView createMilestone(String projectId, MilestoneCreateRequest request, @Nullable String explicitProId) {
+        return createMilestoneInternal(projectId, request, explicitProId);
+    }
+
+    /**
+     * Shared body for both {@code createMilestone} overloads above — calling {@link #createInternal}
+     * directly (not the public, {@code @Transactional} {@link #create} methods) so neither overload
+     * invokes another {@code @Transactional} method via {@code this}, which would silently bypass
+     * Spring's proxy-based transaction management.
+     */
+    private MilestoneView createMilestoneInternal(String projectId, MilestoneCreateRequest request, @Nullable String explicitProId) {
         Optional<ProblemDetail> denied = authorizeProject(projectId);
         if (denied.isPresent()) {
             return MilestoneView.error(denied.get());
         }
-        return create(projectId, request).fold(MilestoneView::error, this::toView);
+        return createInternal(projectId, request, explicitProId).fold(MilestoneView::error, this::toView);
     }
 
     @Transactional
@@ -92,18 +113,20 @@ public class MilestoneService {
     }
 
     @Transactional
-    public Optional<ProblemDetail> deleteMilestone(String projectId, String milestoneId) {
+    public CascadeDeletionView deleteMilestone(String projectId, String milestoneId) {
         Optional<ProblemDetail> denied = authorizeProject(projectId);
         if (denied.isPresent()) {
-            return denied;
+            return CascadeDeletionView.error(denied.get());
         }
         Optional<MilestoneEntity> milestoneM = milestoneRepository.findByIdAndProjectId(milestoneId, projectId);
         if (milestoneM.isEmpty()) {
-            return Optional.of(Problems.milestoneNotFound(milestoneId));
+            return CascadeDeletionView.error(Problems.milestoneNotFound(milestoneId));
         }
-        // Cascade: fails when the milestone is linked to a published event; otherwise the referencing
-        // draft-event allocations are cleaned up and the milestone is removed.
-        return cascadeDeleteService.deleteMilestone(milestoneM.get());
+        // Cascade: fails when the milestone is linked to a published event; otherwise it is removed, and
+        // every non-published event that had an allocation to it is detached from it and flagged ERROR
+        // (see FundingCascadeDeleteService) — those are reported back so the UI can warn about them.
+        return cascadeDeleteService.deleteMilestone(milestoneM.get())
+                .fold(CascadeDeletionView::error, events -> CascadeDeletionView.success(FundingCascadeDeleteService.toAffectedEventViews(events)));
     }
 
     private Optional<ProblemDetail> authorizeProject(String projectId) {
@@ -136,6 +159,11 @@ public class MilestoneService {
         return milestoneRepository.findByProjectIdAndMilestoneTitle(projectId, milestoneTitle);
     }
 
+    /** Looks up a milestone by its permanent proId within a project — preferred over title once a rename may have happened. See {@link MilestoneEntity#proId}. */
+    public Optional<MilestoneEntity> findByProjectIdAndProId(String projectId, String proId) {
+        return milestoneRepository.findByProjectIdAndProId(projectId, proId);
+    }
+
     public List<MilestoneEntity> findByProjectId(String projectId) {
         return milestoneRepository.findByProjectId(projectId);
     }
@@ -161,8 +189,31 @@ public class MilestoneService {
         milestoneRepository.saveAll(milestones);
     }
 
+    /** Creates a milestone with an auto-assigned proId — the UI-facing JSON API entry point, which never supplies one. */
     @Transactional
     public Either<ProblemDetail, MilestoneEntity> create(String projectId, MilestoneCreateRequest request) {
+        return createInternal(projectId, request, null);
+    }
+
+    /**
+     * CSV-bulk-import-only entry point: {@code explicitProId} is used as the new milestone's proId as-is
+     * (after a uniqueness check) instead of the usual system-assigned {@code project.proId + "-M" + n}.
+     * See {@link ProjectStructureService}'s matching overload for why CSV is the one caller allowed to
+     * supply its own value.
+     */
+    @Transactional
+    public Either<ProblemDetail, MilestoneEntity> create(String projectId, MilestoneCreateRequest request, @Nullable String explicitProId) {
+        return createInternal(projectId, request, explicitProId);
+    }
+
+    /**
+     * Shared body for both {@code create} overloads above (and for {@link #createMilestoneInternal}) —
+     * a plain, non-{@code @Transactional} private method, so nothing here is ever reached via a
+     * self-invoked {@code this.create(...)} call that would silently bypass Spring's proxy-based
+     * transaction management; each public overload above carries its own {@code @Transactional}
+     * instead, since each is independently called from outside this class.
+     */
+    private Either<ProblemDetail, MilestoneEntity> createInternal(String projectId, MilestoneCreateRequest request, @Nullable String explicitProId) {
         if (missingCreationFields(request)) {
             log.warn("Missing required fields for milestone creation in project: {}", projectId);
             return Either.left(milestoneFieldsRequired());
@@ -175,7 +226,7 @@ public class MilestoneService {
         }
         ProjectEntity project = projectM.orElseThrow();
 
-        return validateAndSave(project, toEntity(request, project), request);
+        return validateAndSave(project, toEntity(request, project), request, explicitProId);
     }
 
     /**
@@ -190,8 +241,15 @@ public class MilestoneService {
             return Either.left(milestoneFieldsRequired());
         }
 
-        Optional<MilestoneEntity> existing = milestoneRepository.findById(
-                MilestoneEntity.id(project.getId(), request.getMilestoneTitle()));
+        // proId is permanent (see MilestoneEntity#proId) — when the caller supplies it, it's the
+        // reliable way to find a milestone that may have since been renamed. Falling back to the
+        // current title only resolves a milestone whose title still matches; recomputing the id hash
+        // from the request's title (the old strategy) is deliberately not done here any more — see the
+        // matching comment in SpendingEventService#resolveOrCreateRootProject for why.
+        // A blank proId means "not supplied" — same as null — and falls back to title matching.
+        Optional<MilestoneEntity> existing = (request.getProId() != null && !request.getProId().isBlank())
+                ? milestoneRepository.findByProjectIdAndProId(project.getId(), request.getProId())
+                : milestoneRepository.findByProjectIdAndMilestoneTitle(project.getId(), request.getMilestoneTitle());
         if (existing.isPresent()) {
             return Either.right(existing.get());
         }
@@ -203,12 +261,15 @@ public class MilestoneService {
             return Either.left(Problems.milestoneNotFound(request.getMilestoneTitle()));
         }
 
-        return validateAndSave(project, toEntity(request, project), request);
+        // resolveOrCreate is the event-allocation flow — always auto-assigns proId on creation, same
+        // as the plain create() JSON entry point; only the CSV-only overload of create() ever supplies
+        // an explicit value.
+        return validateAndSave(project, toEntity(request, project), request, null);
     }
 
     /** Shared creation core: structure rule, budget validations, persist. */
     private Either<ProblemDetail, MilestoneEntity> validateAndSave(ProjectEntity project,
-            MilestoneEntity entity, MilestoneCreateRequest request) {
+            MilestoneEntity entity, MilestoneCreateRequest request, @Nullable String explicitProId) {
         Optional<ProblemDetail> structure = FundingValidations.milestoneAllowed(
                 projectRepository.existsByParentProjectId(project.getId()));
         if (structure.isPresent()) {
@@ -231,6 +292,25 @@ public class MilestoneService {
         if (validation.isPresent()) {
             return Either.left(validation.get());
         }
+        // Assigned last, only once every other validation has passed — computing it earlier would burn
+        // a sequence number (or reject a valid explicit value) on a request that ultimately fails
+        // validation for an unrelated reason.
+        if (explicitProId != null && !explicitProId.isBlank()) {
+            // CSV path only — see the create() overload's Javadoc. Needs its own uniqueness pre-check
+            // since, unlike the auto-assigned case, a caller-chosen value isn't guaranteed unique by
+            // construction.
+            if (milestoneRepository.existsByProjectIdAndProId(project.getId(), explicitProId)) {
+                return Either.left(Problems.conflict(
+                        "Milestone ID already exists in this project: " + explicitProId,
+                        ErrorTitleConstants.MILESTONE_PROID_ALREADY_EXISTS));
+            }
+            entity.setProId(explicitProId);
+        } else {
+            entity.setProId(childSequenceService.nextChildProId(project, ProjectChildSequenceService.ChildKind.MILESTONE));
+        }
+        // The primary key is derived from the proId (unique within the project), never from the
+        // editable title — so it can only be set once the proId is known.
+        entity.setId(MilestoneEntity.id(project.getId(), entity.getProId()));
         return Either.right(milestoneRepository.saveAndFlush(entity));
     }
 
@@ -267,26 +347,18 @@ public class MilestoneService {
         }
 
         MilestoneEntity milestone = milestoneM.orElseThrow();
+        ProjectEntity project = milestone.getProject();
+        boolean titleChanging = request.getMilestoneTitle() != null && !request.getMilestoneTitle().equals(milestone.getMilestoneTitle());
 
-        if (allocationRepository.existsByMilestoneIdAndEventStatus(milestoneId, EventStatus.PUBLISHED)) {
-            log.warn("Cannot update milestone linked to a published event: {}", milestoneId);
-            return Either.left(Problems.conflict(
-                    "Cannot update milestone linked to a published event: %s".formatted(milestoneId),
-                    ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED));
+        Optional<ProblemDetail> problem = checkFieldLock(milestoneId, request, titleChanging)
+                .or(() -> checkCurrencyLock(project, milestone, request))
+                .or(() -> checkTitleConflict(project, milestoneId, request, titleChanging));
+        if (problem.isPresent()) {
+            return Either.left(problem.get());
         }
 
         // Validate only the supplied fields against the milestone's project; cumulative budget
         // excludes this milestone's current amount so an unchanged amount can't trip the check.
-        ProjectEntity project = milestone.getProject();
-
-        // milestoneTitle is immutable — the milestone's id is derived from it, so changing it would
-        // leave the id stale relative to its new title.
-        if (request.getMilestoneTitle() != null && !request.getMilestoneTitle().equals(milestone.getMilestoneTitle())) {
-            log.warn("Attempted to change immutable milestoneTitle for milestone: {}", milestoneId);
-            return Either.left(Problems.badRequest(
-                    "milestoneTitle cannot be changed on update (id is derived from it)",
-                    ErrorTitleConstants.MILESTONE_TITLE_IMMUTABLE));
-        }
         BigDecimal otherMilestonesTotal = FundingValidations.sumMilestoneAmounts(
                 milestoneRepository.findByProjectId(project.getId()), milestoneId);
         Optional<ProblemDetail> validation = FundingValidations.milestone(
@@ -300,14 +372,130 @@ public class MilestoneService {
             return Either.left(currencyProblem.get());
         }
 
-        if (request.getMilestoneAmount() != null) {
-            Optional<ProblemDetail> coverage = FundingValidations.milestoneCoversAllocations(
-                    request.getMilestoneAmount(), allocationRepository.sumAllocatedByMilestoneId(milestoneId));
-            if (coverage.isPresent()) {
-                return Either.left(coverage.get());
-            }
+        Optional<ProblemDetail> flagProblem = handleEventInvalidatingChange(milestone, request);
+        if (flagProblem.isPresent()) {
+            return Either.left(flagProblem.get());
         }
 
+        applyChanges(milestone, request, titleChanging);
+
+        return Either.right(milestoneRepository.saveAndFlush(milestone));
+    }
+
+    /**
+     * Milestone-specific lock (LOB-2365): milestoneTitle/description/milestoneAmount/milestoneDate are
+     * all frozen once a PUBLISHED event allocates to THIS milestone — a field-aware replacement for what
+     * used to be a wholesale block on the entire request. milestoneTitle is editable right up until that
+     * point (LOB-2384), but once an event is published (i.e. on-chain), nothing about the milestone it
+     * references — including its title — can change; currency is governed by the separate, project-wide
+     * rule below, not this one.
+     *
+     * <p>Package-visible (not private) so {@code ProjectTreeUpdateService} can run the identical check
+     * for a milestone matched inside the whole-tree PUT/CSV update path, instead of duplicating it.
+     */
+    Optional<ProblemDetail> checkFieldLock(String milestoneId, MilestoneUpdateRequest request, boolean titleChanging) {
+        boolean touchesLockedField = titleChanging || request.getDescription() != null
+                || request.getMilestoneAmount() != null || request.getMilestoneDate() != null;
+        if (touchesLockedField && isLocked(milestoneId)) {
+            log.warn("Cannot update locked fields on milestone linked to a published event: {}", milestoneId);
+            return Optional.of(Problems.conflict(
+                    "Cannot update milestoneTitle, description, milestoneAmount, or milestoneDate: milestone %s is locked because a published event is allocated to it"
+                            .formatted(milestoneId),
+                    ErrorTitleConstants.MILESTONE_LOCKED));
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Currency lock (LOB-2365): cascades from the project level — once any PUBLISHED event exists
+     * anywhere in the milestone's owning project's own subtree, currency is blocked there too, mirroring
+     * ProjectTreeUpdateService#applyRootFields's matching check for that same project. Package-visible for reuse
+     * by {@code ProjectTreeUpdateService} — see {@link #checkFieldLock}'s Javadoc.
+     */
+    Optional<ProblemDetail> checkCurrencyLock(ProjectEntity project, MilestoneEntity milestone, MilestoneUpdateRequest request) {
+        boolean currencyChanging = request.getCurrency() != null && !request.getCurrency().equals(milestone.getCurrency());
+        if (currencyChanging && allocationRepository.existsByMilestoneProjectIdInAndEventStatus(
+                ProjectTreeSupport.subtreeProjectIds(projectRepository, project.getId()), EventStatus.PUBLISHED)) {
+            return Optional.of(Problems.conflict(
+                    "Cannot change currency: a published event exists in this project's structure",
+                    ErrorTitleConstants.CURRENCY_CHANGE_HAS_ALLOCATIONS));
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * milestoneTitle is editable up until the milestone locks (see MilestoneEntity#proId, which stays
+     * fixed and is what everything needing a stable reference uses instead) — still subject to the same
+     * per-project uniqueness title always had. Package-visible for reuse by {@code ProjectTreeUpdateService}
+     * — see {@link #checkFieldLock}'s Javadoc.
+     */
+    Optional<ProblemDetail> checkTitleConflict(ProjectEntity project, String milestoneId, MilestoneUpdateRequest request, boolean titleChanging) {
+        if (titleChanging && milestoneRepository.existsByProjectIdAndMilestoneTitleAndIdNot(
+                project.getId(), request.getMilestoneTitle(), milestoneId)) {
+            return Optional.of(Problems.conflict(
+                    "Milestone title already exists in this project: " + request.getMilestoneTitle(),
+                    ErrorTitleConstants.MILESTONE_TITLE_ALREADY_EXISTS));
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Shrinking below what's already allocated, or changing the currency, used to be rejected outright
+     * (currency still is once a published event exists — see {@link #checkCurrencyLock}). Otherwise the
+     * edit proceeds exactly as typed — the allocation's own recorded figure is never rewritten — and every
+     * non-published event allocated to this milestone is marked ERROR instead, for a human to review and
+     * fix: after either change the event no longer fits the milestone (its amount exceeds the milestone,
+     * or it is booked in another currency). Same rule as deleting the milestone, and as the project-level
+     * case in {@code ProjectTreeUpdateService#updateWithMilestones}; it makes no difference whether the
+     * event also allocates elsewhere.
+     *
+     * <p>For this class's own {@link #update}, one milestone per call. A caller that changes several
+     * milestones per request ({@code ProjectTreeUpdateService}/CSV import) uses {@link #invalidatesEvents}
+     * to collect them and flags them all in one {@link FundingCascadeDeleteService#flagEventsAllocatedTo} call.
+     */
+    Optional<ProblemDetail> handleEventInvalidatingChange(MilestoneEntity milestone, MilestoneUpdateRequest request) {
+        if (!invalidatesEvents(milestone, request)) {
+            return Optional.empty();
+        }
+        return cascadeDeleteService.flagEventsAllocatedTo(Set.of(milestone.getId())).fold(Optional::of, events -> Optional.empty());
+    }
+
+    /**
+     * Whether applying {@code request} to {@code milestone} would leave events allocated to it out of
+     * step: its amount shrinks below what is allocated (see {@link #needsErrorFlagging}), or its currency
+     * changes. Does not flag anything itself.
+     */
+    boolean invalidatesEvents(MilestoneEntity milestone, MilestoneUpdateRequest request) {
+        boolean currencyChanging = request.getCurrency() != null && !request.getCurrency().equals(milestone.getCurrency());
+        return currencyChanging || needsErrorFlagging(milestone.getId(), request.getMilestoneAmount());
+    }
+
+    /**
+     * Whether shrinking {@code milestoneId} to {@code newAmount} would leave it covering less than
+     * the FUNDING already allocated to it — i.e. whether it needs {@code ERROR}-flagging — without
+     * actually performing that flagging. Amount only — see {@link #invalidatesEvents} for the combined check.
+     *
+     * <p>FUNDING only, the same budget rule {@link FundingValidations#overfunding} applies when an event
+     * is saved: SPENDING may overspend (flagged, never rejected) and REFUND is unrestricted, so neither
+     * counts here. Summing every event type made a milestone both fully funded and fully spent look
+     * over-allocated, flagging its events ERROR on an unchanged re-save.
+     */
+    boolean needsErrorFlagging(String milestoneId, BigDecimal newAmount) {
+        if (newAmount == null) {
+            return false;
+        }
+        return FundingValidations.milestoneCoversAllocations(
+                newAmount, allocationRepository.spentAmountByMilestoneId(milestoneId, EventType.FUNDING)).isPresent();
+    }
+
+    /** Package-visible for reuse by {@code ProjectTreeUpdateService} — see {@link #checkFieldLock}'s Javadoc. */
+    void applyChanges(MilestoneEntity milestone, MilestoneUpdateRequest request, boolean titleChanging) {
+        if (titleChanging) {
+            milestone.setMilestoneTitle(request.getMilestoneTitle());
+        }
+        if (request.getDescription() != null) {
+            milestone.setDescription(request.getDescription());
+        }
         if (request.getMilestoneAmount() != null) {
             milestone.setMilestoneAmount(request.getMilestoneAmount());
         }
@@ -317,8 +505,6 @@ public class MilestoneService {
         if (request.getMilestoneDate() != null) {
             milestone.setMilestoneDate(request.getMilestoneDate());
         }
-
-        return Either.right(milestoneRepository.saveAndFlush(milestone));
     }
 
     public boolean belongsToProject(MilestoneEntity milestone, ProjectEntity project) {
@@ -331,18 +517,31 @@ public class MilestoneService {
                 .externalMilestoneId(milestone.getExternalMilestoneId())
                 .projectId(milestone.getProject().getId())
                 .milestoneTitle(milestone.getMilestoneTitle())
+                .proId(milestone.getProId())
+                .description(milestone.getDescription())
                 .milestoneAmount(milestone.getMilestoneAmount())
                 .currency(milestone.getCurrency())
                 .milestoneDate(milestone.getMilestoneDate())
                 .spentAmount(allocationRepository.spentAmountByMilestoneId(
                         milestone.getId(), EventType.SPENDING))
+                .locked(isLocked(milestone.getId()))
                 .build();
     }
 
+    /**
+     * Whether {@code milestoneTitle}/{@code description}/{@code milestoneAmount}/{@code milestoneDate}
+     * are locked on this milestone — {@code true} once at least one PUBLISHED event allocates to it,
+     * i.e. once the milestone is referenced by data that's gone on-chain (LOB-2365).
+     */
+    private boolean isLocked(String milestoneId) {
+        return allocationRepository.existsByMilestoneIdAndEventStatus(milestoneId, EventStatus.PUBLISHED);
+    }
+
+    /** proId and id are deliberately not set here — see where they're assigned in {@link #validateAndSave}. */
     private MilestoneEntity toEntity(MilestoneCreateRequest request, ProjectEntity project) {
         return MilestoneEntity.builder()
-                .id(MilestoneEntity.id(project.getId(), request.getMilestoneTitle()))
                 .milestoneTitle(request.getMilestoneTitle())
+                .description(request.getDescription())
                 .milestoneAmount(request.getMilestoneAmount())
                 .currency(request.getCurrency())
                 .milestoneDate(request.getMilestoneDate())

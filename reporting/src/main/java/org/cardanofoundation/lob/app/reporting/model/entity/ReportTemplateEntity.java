@@ -65,6 +65,8 @@ public class ReportTemplateEntity extends CommonEntity {
     @Builder.Default
     private boolean editable = true;
 
+    private String accountingRegime;
+
     @OneToMany(mappedBy = "reportTemplate", cascade = CascadeType.ALL, orphanRemoval = true)
     @SQLRestriction("parent_field_id IS NULL")
     @OrderBy("fieldOrder ASC")

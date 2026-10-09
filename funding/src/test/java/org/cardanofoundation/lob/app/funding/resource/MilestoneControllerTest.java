@@ -6,7 +6,6 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -23,6 +22,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.CascadeDeletionView;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.service.MilestoneService;
@@ -121,23 +121,25 @@ class MilestoneControllerTest {
     }
 
     @Test
-    void deleteMilestone_returns204_whenNoError() {
-        when(milestoneService.deleteMilestone("p1", "m1")).thenReturn(Optional.empty());
+    void deleteMilestone_returns200_withAffectedEvents_whenNoError() {
+        CascadeDeletionView view = CascadeDeletionView.success(List.of());
+        when(milestoneService.deleteMilestone("p1", "m1")).thenReturn(view);
 
         ResponseEntity<?> response = milestoneController.deleteMilestone("p1", "m1");
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo(view);
     }
 
     @Test
     void deleteMilestone_returns404_withProblem() {
         when(milestoneService.deleteMilestone("p1", "m1"))
-                .thenReturn(Optional.of(problem(HttpStatus.NOT_FOUND, ErrorTitleConstants.MILESTONE_NOT_FOUND)));
+                .thenReturn(CascadeDeletionView.error(problem(HttpStatus.NOT_FOUND, ErrorTitleConstants.MILESTONE_NOT_FOUND)));
 
         ResponseEntity<?> response = milestoneController.deleteMilestone("p1", "m1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_FOUND);
+        assertThat(((CascadeDeletionView) response.getBody()).getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_NOT_FOUND);
     }
 
 }

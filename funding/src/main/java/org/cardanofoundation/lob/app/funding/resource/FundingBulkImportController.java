@@ -3,10 +3,17 @@ package org.cardanofoundation.lob.app.funding.resource;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 
+import java.util.List;
+import java.util.Optional;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -15,10 +22,12 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -28,6 +37,7 @@ import org.cardanofoundation.lob.app.funding.domain.csv.FundingCsvFileType;
 import org.cardanofoundation.lob.app.funding.domain.request.BulkImportRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingBulkImportResult;
 import org.cardanofoundation.lob.app.funding.service.FundingBulkImportService;
+import org.cardanofoundation.lob.app.funding.service.FundingCsvExportService;
 import org.cardanofoundation.lob.app.funding.service.FundingCsvTemplateService;
 
 @Slf4j
@@ -40,6 +50,7 @@ public class FundingBulkImportController {
 
     private final FundingBulkImportService fundingBulkImportService;
     private final FundingCsvTemplateService fundingCsvTemplateService;
+    private final FundingCsvExportService fundingCsvExportService;
 
     @Operation(
             summary = "Bulk-import projects, milestones and/or events from CSV files",
@@ -70,6 +81,45 @@ public class FundingBulkImportController {
         StreamingResponseBody responseBody = outputStream -> fundingCsvTemplateService.writeTemplate(fileType, outputStream);
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=\"funding_%s_template.csv\"".formatted(fileType.name().toLowerCase()))
+                .body(responseBody);
+    }
+
+    @Operation(
+            summary = "Download the organisation's current Projects+Milestones as a CSV in the bulk-import template shape",
+            description = "Same header/column shape as the Projects+Milestones bulk-import template, populated with the " +
+                    "organisation's actual current data — including every row's assigned proId, which is how an " +
+                    "auto-assigned sub-project/milestone proId is discovered after creation (see LOB-2384). The file is " +
+                    "itself a valid re-upload: every row's ID columns are populated, so a re-import matches by proId. " +
+                    "organisationId is required; proIds, when supplied, restricts the export to just those root " +
+                    "projects (and their full descendant tree) instead of the whole organisation — same filter shape " +
+                    "as GET /projects. pageable paginates the root projects returned (each expanded in full), " +
+                    "defaulting to all of them.",
+            responses = {
+                    @ApiResponse(responseCode = "200", content = {@Content(mediaType = "text/csv")}),
+                    @ApiResponse(responseCode = "401", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ProblemDetail.class))}),
+                    @ApiResponse(responseCode = "404", description = "Organisation not found", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ProblemDetail.class))})
+            }
+    )
+    @GetMapping(value = "/bulk-import/export/projects-milestones")
+    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    public ResponseEntity<Object> exportProjectsMilestones(
+            @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
+            @RequestParam String organisationId,
+            @Parameter(description = "Restricts the export to these root projects' proId (and their full descendant tree) instead of the whole organisation")
+            @RequestParam(required = false) List<String> proIds,
+            @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
+        Optional<ProblemDetail> error = fundingCsvExportService.validateExport(organisationId);
+        if (error.isPresent()) {
+            ProblemDetail problem = error.get();
+            return ResponseEntity.status(problem.getStatus()).body(problem);
+        }
+        StreamingResponseBody responseBody = outputStream ->
+                fundingCsvExportService.writeProjectsMilestonesExport(organisationId, proIds, pageable, outputStream);
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"funding_projects_milestones_export.csv\"")
+                .contentType(MediaType.parseMediaType("text/csv"))
                 .body(responseBody);
     }
 

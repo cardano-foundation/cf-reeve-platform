@@ -58,6 +58,9 @@ public class ReportResponseDto {
     @Schema(description = "Data mode", example = "SYSTEM", allowableValues = {"SYSTEM", "USER"})
     private String dataMode;
 
+    @Schema(description = "Accounting regime declared on the report template", example = "IFRS", nullable = true)
+    private String accountingRegime;
+
     @Schema(description = "Indicates if the report is ready to be published to blockchain", example = "true")
     private Boolean isReadyToPublish;
 

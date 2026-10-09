@@ -35,9 +35,9 @@ class FundingCsvTemplateServiceTest {
         List<String[]> rows = readRows(FundingCsvFileType.PROJECTS_MILESTONES);
 
         assertThat(rows).hasSize(1);
-        assertThat(rows.get(0)).containsExactly("Project Title", "Total Amount", "Currency",
-                "Sub Project Title", "Sub Total Amount",
-                "Milestone Title", "Milestone Amount", "Milestone Date");
+        assertThat(rows.get(0)).containsExactly("Project Title", "Project ID", "Total Amount", "Currency",
+                "Sub Project Title", "Sub Project ID", "Sub Total Amount",
+                "Milestone Title", "Milestone ID", "Milestone Amount", "Milestone Date");
     }
 
     @Test
@@ -47,7 +47,8 @@ class FundingCsvTemplateServiceTest {
         assertThat(rows).hasSize(1);
         assertThat(rows.get(0)).containsExactly("Event Type", "Funding ID", "Funding Hash", "Funding Entity",
                 "Currency RCY", "Event Date", "Category", "Vendor", "Amount FCY", "Currency FCY", "FX Rate",
-                "Amount RCY", "Hash", "Notes", "Project Title", "Sub Project Title", "Milestone Title", "Allocated Amount");
+                "Amount RCY", "Hash", "Notes", "Project Title", "Project ID", "Sub Project Title", "Sub Project ID",
+                "Milestone Title", "Milestone ID", "Allocated Amount");
     }
 
     @Test
