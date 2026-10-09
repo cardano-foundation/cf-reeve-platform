@@ -26,6 +26,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
+import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 
 @ExtendWith(MockitoExtension.class)
 class ProjectStructureServiceTest {
@@ -61,7 +62,7 @@ class ProjectStructureServiceTest {
 
     @ParameterizedTest(name = "sub-project currency \"{0}\" resolves to \"{1}\"")
     @CsvSource(nullValues = "NULL", value = {
-            "EUR,  EUR",
+            "USD,  USD",
             "NULL, USD",
             "'  ', USD",
     })
@@ -74,6 +75,20 @@ class ProjectStructureServiceTest {
 
         assertThat(result.isRight()).isTrue();
         assertThat(result.get().getCurrency()).isEqualTo(expectedCurrency);
+    }
+
+    @Test
+    void rejected_whenCurrencyDiffersFromParent() {
+        ProjectEntity parent = root("USD");
+
+        Either<ProblemDetail, ProjectEntity> result = projectStructureService.createSubProject(
+                parent, "Sub One", null, new BigDecimal("40000.00"), "EUR");
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.CURRENCY_PARENT_MISMATCH);
+        assertThat(result.getLeft().getDetail())
+                .isEqualTo("Currency EUR of sub-project 'Sub One' does not match the currency USD of project 'Root'");
+        verify(projectRepository, never()).saveAndFlush(any());
     }
 
     @Test
