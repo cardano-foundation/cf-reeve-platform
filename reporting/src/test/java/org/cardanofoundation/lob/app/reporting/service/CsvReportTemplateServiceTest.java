@@ -170,7 +170,41 @@ class CsvReportTemplateServiceTest {
 
         assertTrue(result.isLeft());
         assertEquals("CSV_PARSING_ERROR", result.getLeft().getTitle());
-        assertEquals("Accounting Regime is required", result.getLeft().getDetail());
+        assertEquals("Row 1: Accounting Regime is required", result.getLeft().getDetail());
+    }
+
+    @Test
+    void createCsvTemplates_missingSign_errorPointsToFailingRow() {
+        LocalValidatorFactoryBean realValidator = new LocalValidatorFactoryBean();
+        realValidator.afterPropertiesSet();
+
+        CsvReportTemplateService serviceWithRealValidator = new CsvReportTemplateService(
+                organisationPublicApi,
+                csvParser,
+                reportTemplateRepository,
+                null,
+                reportTemplateMapper,
+                chartOfAccountRepository,
+                realValidator,
+                reportTemplateServiceDependency);
+
+        CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
+        MultipartFile file = mock(MultipartFile.class);
+        TemplateCsvLine revenue = new TemplateCsvLine("Test Template", "Balance sheet", "Manual", "IFRS", "true", "", "Revenue", "", "", "", "Positive");
+        TemplateCsvLine costs = new TemplateCsvLine("Test Template", "Balance sheet", "Manual", "IFRS", "true", "", "Costs", "", "", "", "Negative");
+        TemplateCsvLine profit = new TemplateCsvLine("Test Template", "Balance sheet", "Manual", "IFRS", "true", "", "Profit", "", "", "", null);
+
+        when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(new Organisation()));
+        when(request.getOrganisationId()).thenReturn("org123");
+        when(csvParser.parseCsv(file, TemplateCsvLine.class)).thenReturn(Either.right(List.of(revenue, costs, profit)));
+        when(request.getFile()).thenReturn(file);
+
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = serviceWithRealValidator.createCsvTemplates(request);
+
+        assertTrue(result.isLeft());
+        assertEquals("CSV_PARSING_ERROR", result.getLeft().getTitle());
+        assertEquals("Row 3: Sign is required. Options are: Positive, Negative", result.getLeft().getDetail());
+        assertEquals(3, result.getLeft().getProperties().get("rowNumber"));
     }
 
     @Test
@@ -196,7 +230,7 @@ class CsvReportTemplateServiceTest {
         assertEquals(1, responseDtos.size());
         assertTrue(responseDtos.getFirst().getError().isPresent());
         assertEquals("CSV_PARSING_ERROR", responseDtos.getFirst().getError().get().getTitle());
-        assertEquals("Invalid report type: WRONG_TYPE. Options are: Balance sheet, Income statement, Custom", responseDtos.getFirst().getError().get().getDetail());
+        assertEquals("Row 1: Invalid report type: WRONG_TYPE. Options are: Balance sheet, Income statement, Custom", responseDtos.getFirst().getError().get().getDetail());
     }
 
     @Test
@@ -226,7 +260,7 @@ class CsvReportTemplateServiceTest {
         assertEquals(1, responseDtos.size());
         assertTrue(responseDtos.getFirst().getError().isPresent());
         assertEquals("CSV_PARSING_ERROR", responseDtos.getFirst().getError().get().getTitle());
-        assertEquals("Chart of account not found: InvalidMapping", responseDtos.getFirst().getError().get().getDetail());
+        assertEquals("Row 1: Chart of account not found: InvalidMapping", responseDtos.getFirst().getError().get().getDetail());
     }
 
     @Test
@@ -254,7 +288,7 @@ class CsvReportTemplateServiceTest {
         assertEquals(1, responseDtos.size());
         assertTrue(responseDtos.getFirst().getError().isPresent());
         assertEquals("CSV_PARSING_ERROR", responseDtos.getFirst().getError().get().getTitle());
-        assertEquals("Invalid date range: InvalidMapping. Options are: Period-Only balance, End-of-Period balance, Year-to-Date balance, Previous-Year balance, Previous-Year-to-Date balance, End-of-Previous-Year balance", responseDtos.getFirst().getError().get().getDetail());
+        assertEquals("Row 1: Invalid date range: InvalidMapping. Options are: Period-Only balance, End-of-Period balance, Year-to-Date balance, Previous-Year balance, Previous-Year-to-Date balance, End-of-Previous-Year balance", responseDtos.getFirst().getError().get().getDetail());
     }
 
     @Test
@@ -283,7 +317,7 @@ class CsvReportTemplateServiceTest {
         assertEquals(1, responseDtos.size());
         assertTrue(responseDtos.getFirst().getError().isPresent());
         assertEquals("CSV_PARSING_ERROR", responseDtos.getFirst().getError().get().getTitle());
-        assertEquals("Invalid Sign value: Neutral. Options are: Positive, Negative", responseDtos.getFirst().getError().get().getDetail());
+        assertEquals("Row 1: Invalid Sign value: Neutral. Options are: Positive, Negative", responseDtos.getFirst().getError().get().getDetail());
     }
 
     @Test
@@ -314,7 +348,7 @@ class CsvReportTemplateServiceTest {
         assertEquals(1, responseDtos.size());
         assertTrue(responseDtos.getFirst().getError().isPresent());
         assertEquals("CSV_PARSING_ERROR", responseDtos.getFirst().getError().get().getTitle());
-        assertEquals("Chart of account not found: 1233", responseDtos.getFirst().getError().get().getDetail());
+        assertEquals("Row 1: Chart of account not found: 1233", responseDtos.getFirst().getError().get().getDetail());
     }
 
     @Test
@@ -351,7 +385,7 @@ class CsvReportTemplateServiceTest {
         ReportTemplateResponseDto first = responseDtos.getFirst();
         assertTrue(first.getError().isPresent());
         assertEquals("CSV_PARSING_ERROR", responseDtos.getFirst().getError().get().getTitle());
-        assertEquals("Parent field not found: Parent for field: null. The Parent value must exactly match the Field Name of a row that appears earlier in the CSV for the same template.", responseDtos.getFirst().getError().get().getDetail());
+        assertEquals("Row 1: Parent field not found: Parent for field: null. The Parent value must exactly match the Field Name of a row that appears earlier in the CSV for the same template.", responseDtos.getFirst().getError().get().getDetail());
     }
 
     @Test
@@ -720,7 +754,7 @@ class CsvReportTemplateServiceTest {
         ReportTemplateResponseDto first = responseDtos.getFirst();
         assertTrue(first.getError().isPresent());
         assertEquals("INVALID_FIELD_MAPPINGS", first.getError().get().getTitle());
-        assertEquals("All fields must have mappings when data mode is SYSTEM", first.getError().get().getDetail());
+        assertEquals("Row 1: All fields must have mappings when data mode is SYSTEM", first.getError().get().getDetail());
         verify(reportTemplateRepository, never()).saveAndFlush(any());
     }
 }

@@ -4,7 +4,9 @@ package org.cardanofoundation.lob.app.reporting.service;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -52,6 +54,7 @@ import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 public class CsvReportTemplateService {
 
     private static final String OPTIONS_ARE = ". Options are: ";
+    private static final String ROW_NUMBER = "rowNumber";
 
     private final OrganisationPublicApiIF organisationPublicApiIF;
     private final CsvParser<TemplateCsvLine> csvParser;
@@ -75,19 +78,26 @@ public class CsvReportTemplateService {
             return Either.left(parsedLines.getLeft());
         }
         List<TemplateCsvLine> templateCsvLines = new ArrayList<>(parsedLines.get());
+        // 1-based data row number of each line (header excluded), same convention as the funding bulk import.
+        // Identity-keyed because TemplateCsvLine has no equals/hashCode and identical rows must keep their own number.
+        Map<TemplateCsvLine, Integer> rowNumbers = new IdentityHashMap<>();
+        for (int i = 0; i < templateCsvLines.size(); i++) {
+            rowNumbers.put(templateCsvLines.get(i), i + 1);
+        }
         if (templateCsvLines.isEmpty()) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "CSV file has no content lines.");
             problem.setTitle(Constants.CSV_PARSING_ERROR);
             return Either.left(problem);
         }
-        Either<List<ProblemDetail>, Void> validationResult = validateTemplateCsvLines(templateCsvLines);
+        Either<List<ProblemDetail>, Void> validationResult = validateTemplateCsvLines(templateCsvLines, rowNumbers);
         if (validationResult.isLeft()) {
             return Either.left(validationResult.getLeft().getFirst());
         }
-        List<Either<ProblemDetail, ReportTemplateDto>> results = new ArrayList<>();
+        List<Either<ProblemDetail, ParsedTemplate>> results = new ArrayList<>();
         outerLoop:
         while (!templateCsvLines.isEmpty()) {
             TemplateCsvLine firstLine = templateCsvLines.getFirst();
+            int firstRowNumber = rowNumbers.get(firstLine);
             List<TemplateCsvLine> filteredLines = templateCsvLines.stream()
                     .filter(line -> line.getName().equals(firstLine.getName()) && line.getReportType().equals(firstLine.getReportType()))
                     .toList();
@@ -96,7 +106,7 @@ public class CsvReportTemplateService {
             if (reportTemplateTypeO.isEmpty()) {
                 ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid report type: " + firstLine.getReportType() + OPTIONS_ARE + String.join(", ", Arrays.stream(ReportTemplateType.values()).map(ReportTemplateType::getCsvLabel).toList()));
                 problem.setTitle(Constants.CSV_PARSING_ERROR);
-                results.add(Either.left(problem));
+                results.add(Either.left(atRow(problem, firstRowNumber)));
                 continue;
             }
             ReportTemplateType reportTemplateType = reportTemplateTypeO.get();
@@ -104,7 +114,7 @@ public class CsvReportTemplateService {
             if (dataModeO.isEmpty()) {
                 ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid generation method: " + firstLine.getDataMode() + OPTIONS_ARE + String.join(", ", Arrays.stream(DataMode.values()).map(DataMode::getCsvLabel).toList()));
                 problem.setTitle(Constants.CSV_PARSING_ERROR);
-                results.add(Either.left(problem));
+                results.add(Either.left(atRow(problem, firstRowNumber)));
                 continue;
             }
             DataMode dataMode = dataModeO.get();
@@ -116,7 +126,7 @@ public class CsvReportTemplateService {
             } else {
                 ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid Active value: " + firstLine.getActive() + ". Options are: true, false");
                 problem.setTitle(Constants.CSV_PARSING_ERROR);
-                results.add(Either.left(problem));
+                results.add(Either.left(atRow(problem, firstRowNumber)));
                 continue;
             }
             ReportTemplateDto reportTemplateDto = new ReportTemplateDto();
@@ -132,9 +142,10 @@ public class CsvReportTemplateService {
             // Every field defined so far at any depth, in CSV order, so a row can reference any earlier row as its parent
             List<ReportTemplateFieldDto> definedFields = new ArrayList<>();
             for (TemplateCsvLine templateCsvLine : filteredLines) {
+                int rowNumber = rowNumbers.get(templateCsvLine);
                 Either<ProblemDetail, ReportTemplateFieldDto> fieldEntityResult = csvLineToTemplateField(csvTemplateRequest.getOrganisationId(), templateCsvLine);
                 if (fieldEntityResult.isLeft()) {
-                    results.add(Either.left(fieldEntityResult.getLeft()));
+                    results.add(Either.left(atRow(fieldEntityResult.getLeft(), rowNumber)));
                     break outerLoop;
                 }
                 ReportTemplateFieldDto fieldDto = fieldEntityResult.get();
@@ -146,7 +157,7 @@ public class CsvReportTemplateService {
                     if (parentFieldO.isEmpty()) {
                         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Parent field not found: " + templateCsvLine.getParent() + " for field: " + templateCsvLine.getFieldName() + ". The Parent value must exactly match the Field Name of a row that appears earlier in the CSV for the same template.");
                         problem.setTitle(Constants.CSV_PARSING_ERROR);
-                        results.add(Either.left(problem));
+                        results.add(Either.left(atRow(problem, rowNumber)));
                         break outerLoop;
                     }
                     ReportTemplateFieldDto parentField = parentFieldO.get();
@@ -157,7 +168,7 @@ public class CsvReportTemplateService {
                     if (childWithSameName.isPresent()) {
                         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Duplicate field name under the same parent: " + fieldDto.getFieldName() + " under parent: " + parentField.getFieldName());
                         problem.setTitle(Constants.CSV_PARSING_ERROR);
-                        results.add(Either.left(problem));
+                        results.add(Either.left(atRow(problem, rowNumber)));
                         break outerLoop;
                     }
                     parentField.getChildFields().add(fieldDto);
@@ -169,10 +180,10 @@ public class CsvReportTemplateService {
             reportTemplateDto.setFields(fieldDtos);
             Either<ProblemDetail, Void> dataModeValidation = reportTemplateService.validateDataMode(reportTemplateDto);
             if (dataModeValidation.isLeft()) {
-                results.add(Either.left(dataModeValidation.getLeft()));
+                results.add(Either.left(atRow(dataModeValidation.getLeft(), firstRowNumber)));
                 continue;
             }
-            results.add(Either.right(reportTemplateDto));
+            results.add(Either.right(new ParsedTemplate(firstRowNumber, reportTemplateDto)));
         }
         return Either.right(results.stream().map(e -> e.fold(
                 left -> ReportTemplateResponseDto.builder().error(Optional.of(left)).build(),
@@ -180,14 +191,15 @@ public class CsvReportTemplateService {
         )).toList());
     }
 
-    private ReportTemplateResponseDto saveOrUpdateFromCsv(ReportTemplateDto dto) {
+    private ReportTemplateResponseDto saveOrUpdateFromCsv(ParsedTemplate parsedTemplate) {
+        ReportTemplateDto dto = parsedTemplate.dto();
         Optional<ReportTemplateEntity> existingTemplateO = reportTemplateRepository
                 .findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion(dto.getOrganisationId(), dto.getName(), ReportTemplateType.valueOf(dto.getReportTemplateType()));
 
         if (existingTemplateO.isPresent()) {
             Either<ProblemDetail, Void> accountingRegimeImmutable = reportTemplateService.checkAccountingRegimeImmutable(existingTemplateO.get(), dto);
             if (accountingRegimeImmutable.isLeft()) {
-                return ReportTemplateResponseDto.builder().error(Optional.of(accountingRegimeImmutable.getLeft())).build();
+                return ReportTemplateResponseDto.builder().error(Optional.of(atRow(accountingRegimeImmutable.getLeft(), parsedTemplate.rowNumber()))).build();
             }
         }
 
@@ -242,7 +254,7 @@ public class CsvReportTemplateService {
         return Either.right(fieldEntity);
     }
 
-    private Either<List<ProblemDetail>, Void> validateTemplateCsvLines(List<TemplateCsvLine> reportCsvLines) {
+    private Either<List<ProblemDetail>, Void> validateTemplateCsvLines(List<TemplateCsvLine> reportCsvLines, Map<TemplateCsvLine, Integer> rowNumbers) {
         List<ProblemDetail> problems = new ArrayList<>();
         for (TemplateCsvLine templateCsvLine : reportCsvLines) {
             Errors validateObject = validator.validateObject(templateCsvLine);
@@ -250,12 +262,26 @@ public class CsvReportTemplateService {
             if (!allErrors.isEmpty()) {
                 ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, allErrors.stream().map(ObjectError::getDefaultMessage).collect(Collectors.joining(", ")));
                 error.setTitle(Constants.CSV_PARSING_ERROR);
-                problems.add(error);
+                problems.add(atRow(error, rowNumbers.get(templateCsvLine)));
             }
         }
         if (!problems.isEmpty()) {
             return Either.left(problems);
         }
         return Either.right(null);
+    }
+
+    /**
+     * Points a CSV error at the row that caused it: prefixes the detail with "Row N: " so it is readable as-is,
+     * and exposes the number as a {@code rowNumber} property for clients that want to highlight the row.
+     */
+    private static ProblemDetail atRow(ProblemDetail problem, int rowNumber) {
+        problem.setDetail("Row %d: %s".formatted(rowNumber, problem.getDetail()));
+        problem.setProperty(ROW_NUMBER, rowNumber);
+        return problem;
+    }
+
+    /** A template built from the CSV, with the data row of its first line, so save-time errors can point back to it. */
+    private record ParsedTemplate(int rowNumber, ReportTemplateDto dto) {
     }
 }
