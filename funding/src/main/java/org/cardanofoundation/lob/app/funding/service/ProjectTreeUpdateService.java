@@ -1,8 +1,10 @@
 package org.cardanofoundation.lob.app.funding.service;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -93,14 +95,11 @@ public class ProjectTreeUpdateService {
                     ErrorTitleConstants.PROJECT_NOT_ROOT));
         }
 
-        // Whole-subtree publish lock, unconditional: if any PUBLISHED event exists anywhere in this
-        // project's own subtree, no field of it or anything under it can be updated at all — same rule
-        // as the narrow endpoints, applied up front here for the entire tree in one go.
-        if (isLockedByPublishedEvent(root)) {
-            return ProjectView.error(Problems.conflict(
-                    "Cannot update: a published event exists in project %s's structure".formatted(root.getId()),
-                    ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED));
-        }
+        // The publish lock is applied per node, not to the whole tree up front: a project's own fields
+        // are frozen once a PUBLISHED event exists anywhere in its subtree (see applyRootFields/
+        // applySubProjectFields), a milestone's once a PUBLISHED event allocates to it (see
+        // applyExistingMilestone) — so a sibling sub-project with nothing published under it stays
+        // editable even after another sub-project of the same root has been published.
 
         Optional<ProblemDetail> xor = FundingValidations.milestonesXorSubProjects(
                 !request.getMilestones().isEmpty(), !request.getSubProjects().isEmpty());
@@ -162,44 +161,35 @@ public class ProjectTreeUpdateService {
     }
 
     /**
-     * Whether any PUBLISHED event exists anywhere in {@code project}'s own subtree — the same
-     * unconditional lock {@code ProjectService#updateProject}/{@code MilestoneService#update} each
-     * apply to their own narrower scope. Package-visible so {@code FundingBulkImportService} can apply
-     * the identical check when it bypasses those methods for the same ordering reasons this class
-     * exists for (see the class Javadoc).
+     * Whether any PUBLISHED event exists anywhere in {@code project}'s own subtree — what freezes
+     * that project's own title/total/currency (see {@link #applyRootFields}/{@link #applySubProjectFields}).
      */
-    boolean isLockedByPublishedEvent(ProjectEntity project) {
+    private boolean isLockedByPublishedEvent(ProjectEntity project) {
         Set<String> subtreeProjectIds = ProjectTreeSupport.subtreeProjectIds(projectRepository, project.getId());
         return allocationRepository.existsByMilestoneProjectIdInAndEventStatus(subtreeProjectIds, EventStatus.PUBLISHED);
     }
 
-    /** Applies title/total/currency on the root itself — the same independent checks the narrow update endpoint runs, minus the sibling-total check (deferred to the whole-tree pass). */
+    /**
+     * Applies title/total/currency on the root itself — the same independent checks the narrow update
+     * endpoint runs, minus the sibling-total check (deferred to the whole-tree pass). Rejected when any
+     * of them actually changes while the root is locked by a published event (a resent, unchanged
+     * value is not a change).
+     */
     Optional<ProblemDetail> applyRootFields(ProjectEntity root, ProjectWithMilestonesCreateRequest request, Set<String> changedMilestoneIds) {
         boolean titleChanging = request.getProjectTitle() != null && !request.getProjectTitle().equals(root.getProjectTitle());
-        if (titleChanging && projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNullAndIdNot(
-                root.getOrganisationId(), request.getProjectTitle(), root.getId())) {
-            return Optional.of(Problems.conflict(
-                    "Project title already exists in this organisation: " + request.getProjectTitle(),
-                    ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS));
-        }
-        if (request.getTotalAmount() != null) {
-            Optional<ProblemDetail> amountProblem = FundingValidations.projectAmount(request.getTotalAmount());
-            if (amountProblem.isPresent()) {
-                return amountProblem;
-            }
-        }
+        boolean totalChanging = isAmountChanging(request.getTotalAmount(), root.getTotalAmount());
         boolean currencyChanging = request.getCurrency() != null && !request.getCurrency().equals(root.getCurrency());
-        if (currencyChanging) {
-            Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(request.getCurrency(),
-                    milestoneService.isCurrencyRegisteredAndActive(root.getOrganisationId(), request.getCurrency()));
-            if (currencyProblem.isPresent()) {
-                return currencyProblem;
-            }
+        if ((titleChanging || totalChanging || currencyChanging) && isLockedByPublishedEvent(root)) {
+            return Optional.of(projectLocked(root));
+        }
+        Optional<ProblemDetail> valueProblem = validateRootValues(root, request, titleChanging, currencyChanging);
+        if (valueProblem.isPresent()) {
+            return valueProblem;
         }
         if (titleChanging) {
             root.setProjectTitle(request.getProjectTitle());
         }
-        if (request.getTotalAmount() != null) {
+        if (totalChanging) {
             root.setTotalAmount(request.getTotalAmount());
         }
         if (currencyChanging) {
@@ -213,6 +203,28 @@ public class ProjectTreeUpdateService {
             projectService.cascadeCurrency(root, request.getCurrency());
         } else {
             projectRepository.saveAndFlush(root);
+        }
+        return Optional.empty();
+    }
+
+    /** Title uniqueness, amount and currency checks for {@link #applyRootFields} — nothing is written here. */
+    private Optional<ProblemDetail> validateRootValues(ProjectEntity root, ProjectWithMilestonesCreateRequest request,
+            boolean titleChanging, boolean currencyChanging) {
+        if (titleChanging && projectRepository.existsByOrganisationIdAndProjectTitleAndParentProjectIsNullAndIdNot(
+                root.getOrganisationId(), request.getProjectTitle(), root.getId())) {
+            return Optional.of(Problems.conflict(
+                    "Project title already exists in this organisation: " + request.getProjectTitle(),
+                    ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS));
+        }
+        if (request.getTotalAmount() != null) {
+            Optional<ProblemDetail> amountProblem = FundingValidations.projectAmount(request.getTotalAmount());
+            if (amountProblem.isPresent()) {
+                return amountProblem;
+            }
+        }
+        if (currencyChanging) {
+            return FundingValidations.currencyCode(request.getCurrency(),
+                    milestoneService.isCurrencyRegisteredAndActive(root.getOrganisationId(), request.getCurrency()));
         }
         return Optional.empty();
     }
@@ -267,9 +279,8 @@ public class ProjectTreeUpdateService {
      * Deletes an existing milestone named by this node (proId, falling back to title) via
      * {@link FundingCascadeDeleteService#deleteMilestone} — same PUBLISHED-block / non-published
      * detach-and-flag behavior as the standalone milestone-delete endpoint (LOB-2365 follow-up: "add
-     * deletion to the tree-update PUT payload"). The whole-subtree PUBLISHED lock already checked
-     * up front in {@link #updateWithMilestones} covers this project, so no separate lock check is
-     * needed here. Events flagged as a side effect are appended to {@code affectedEvents}, so the whole
+     * deletion to the tree-update PUT payload"). That delete refuses a milestone with a published
+     * event itself, so no separate lock check is needed here. Events flagged as a side effect are appended to {@code affectedEvents}, so the whole
      * tree update's response can report every event affected anywhere in the request in one place.
      */
     private Optional<ProblemDetail> deleteMilestoneNode(ProjectEntity project, MilestoneCreateRequest request,
@@ -384,12 +395,16 @@ public class ProjectTreeUpdateService {
     Optional<ProblemDetail> applyExistingMilestone(ProjectEntity project, MilestoneEntity milestone,
             MilestoneCreateRequest request, Set<String> changedMilestoneIds) {
         boolean titleChanging = request.getMilestoneTitle() != null && !request.getMilestoneTitle().equals(milestone.getMilestoneTitle());
+        // Only fields that actually change are forwarded: the PUT body resends the whole tree, so a
+        // published milestone resent as-is must not trip checkFieldLock (nor an unchanged amount
+        // re-trigger the allocation-coverage flagging) — same "unchanged = not sent" rule the CSV import
+        // applies before calling this.
         MilestoneUpdateRequest updateRequest = MilestoneUpdateRequest.builder()
                 .milestoneTitle(request.getMilestoneTitle())
-                .description(request.getDescription())
-                .milestoneAmount(request.getMilestoneAmount())
-                .currency(request.getCurrency())
-                .milestoneDate(request.getMilestoneDate())
+                .description(Objects.equals(request.getDescription(), milestone.getDescription()) ? null : request.getDescription())
+                .milestoneAmount(isAmountChanging(request.getMilestoneAmount(), milestone.getMilestoneAmount()) ? request.getMilestoneAmount() : null)
+                .currency(Objects.equals(request.getCurrency(), milestone.getCurrency()) ? null : request.getCurrency())
+                .milestoneDate(Objects.equals(request.getMilestoneDate(), milestone.getMilestoneDate()) ? null : request.getMilestoneDate())
                 .build();
 
         Optional<ProblemDetail> lockProblem = milestoneService.checkFieldLock(milestone.getId(), updateRequest, titleChanging)
@@ -401,14 +416,13 @@ public class ProjectTreeUpdateService {
 
         // Positivity is independent of the parent-fit half of FundingValidations#milestone (deliberately
         // deferred to the whole-tree pass) — no reason to skip it too.
-        Optional<ProblemDetail> amountProblem = FundingValidations.milestoneAmountPositive(request.getMilestoneAmount());
+        Optional<ProblemDetail> amountProblem = FundingValidations.milestoneAmountPositive(updateRequest.getMilestoneAmount());
         if (amountProblem.isPresent()) {
             return amountProblem;
         }
-        boolean currencyChanging = request.getCurrency() != null && !request.getCurrency().equals(milestone.getCurrency());
-        if (currencyChanging) {
-            Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(request.getCurrency(),
-                    milestoneService.isCurrencyRegisteredAndActive(project.getOrganisationId(), request.getCurrency()));
+        if (updateRequest.getCurrency() != null) {
+            Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(updateRequest.getCurrency(),
+                    milestoneService.isCurrencyRegisteredAndActive(project.getOrganisationId(), updateRequest.getCurrency()));
             if (currencyProblem.isPresent()) {
                 return currencyProblem;
             }
@@ -423,8 +437,17 @@ public class ProjectTreeUpdateService {
         return Optional.empty();
     }
 
+    /**
+     * Applies title/total on an existing sub-project. Locked only by a published event in this
+     * sub-project's own subtree — never by one under a sibling — so the other sub-projects of a
+     * partly-published root stay editable.
+     */
     Optional<ProblemDetail> applySubProjectFields(ProjectEntity subProject, ProjectTreeNodeRequest node) {
         boolean titleChanging = node.getProjectTitle() != null && !node.getProjectTitle().equals(subProject.getProjectTitle());
+        boolean totalChanging = isAmountChanging(node.getTotalAmount(), subProject.getTotalAmount());
+        if ((titleChanging || totalChanging) && isLockedByPublishedEvent(subProject)) {
+            return Optional.of(projectLocked(subProject));
+        }
         if (titleChanging && projectRepository.existsByParentProjectIdAndProjectTitleAndIdNot(
                 subProject.getParentProject().getId(), node.getProjectTitle(), subProject.getId())) {
             return Optional.of(Problems.conflict(
@@ -440,7 +463,7 @@ public class ProjectTreeUpdateService {
         if (titleChanging) {
             subProject.setProjectTitle(node.getProjectTitle());
         }
-        if (node.getTotalAmount() != null) {
+        if (totalChanging) {
             subProject.setTotalAmount(node.getTotalAmount());
         }
         // Currency is never set independently on a sub-project — it always mirrors its root's (cascaded
@@ -448,6 +471,17 @@ public class ProjectTreeUpdateService {
         // would just be silently out of sync with the rest of the tree; not accepted.
         projectRepository.saveAndFlush(subProject);
         return Optional.empty();
+    }
+
+    private static boolean isAmountChanging(BigDecimal requested, BigDecimal current) {
+        return requested != null && (current == null || requested.compareTo(current) != 0);
+    }
+
+    private static ProblemDetail projectLocked(ProjectEntity project) {
+        return Problems.conflict(
+                "Cannot update projectTitle, totalAmount, or currency: project %s is locked because a published event exists in its structure"
+                        .formatted(project.getId()),
+                ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
     }
 
     /**
