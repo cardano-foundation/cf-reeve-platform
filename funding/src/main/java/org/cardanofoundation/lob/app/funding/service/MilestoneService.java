@@ -285,6 +285,11 @@ public class MilestoneService {
         if (currencyProblem.isPresent()) {
             return Either.left(currencyProblem.get());
         }
+        Optional<ProblemDetail> parentCurrencyProblem = FundingValidations.currencyMatchesParent(
+                request.getCurrency(), project, "milestone '%s'".formatted(entity.getMilestoneTitle()));
+        if (parentCurrencyProblem.isPresent()) {
+            return Either.left(parentCurrencyProblem.get());
+        }
         BigDecimal otherMilestonesTotal = FundingValidations.sumMilestoneAmounts(
                 milestoneRepository.findByProjectId(project.getId()), null);
         Optional<ProblemDetail> validation = FundingValidations.milestone(
@@ -370,6 +375,11 @@ public class MilestoneService {
                 request.getCurrency(), isCurrencyRegisteredAndActive(project.getOrganisationId(), request.getCurrency()));
         if (currencyProblem.isPresent()) {
             return Either.left(currencyProblem.get());
+        }
+        Optional<ProblemDetail> parentCurrencyProblem = FundingValidations.currencyMatchesParent(
+                request.getCurrency(), project, "milestone '%s'".formatted(milestone.getMilestoneTitle()));
+        if (parentCurrencyProblem.isPresent()) {
+            return Either.left(parentCurrencyProblem.get());
         }
 
         Optional<ProblemDetail> flagProblem = handleEventInvalidatingChange(milestone, request);

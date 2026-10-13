@@ -88,6 +88,12 @@ public class ProjectStructureService {
             return Either.left(currencyProblem.get());
         }
 
+        Optional<ProblemDetail> parentCurrencyProblem = FundingValidations.currencyMatchesParent(
+                currency, parent, "sub-project '%s'".formatted(projectTitle));
+        if (parentCurrencyProblem.isPresent()) {
+            return Either.left(parentCurrencyProblem.get());
+        }
+
         Optional<ProblemDetail> structure = FundingValidations.subProjectAllowed(
                 milestoneService.hasMilestones(parent.getId()));
         if (structure.isPresent()) {

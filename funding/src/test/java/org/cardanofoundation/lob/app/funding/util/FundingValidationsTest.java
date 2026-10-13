@@ -177,6 +177,35 @@ class FundingValidationsTest {
                 .isEqualTo(ErrorTitleConstants.EVENT_AMOUNT_INVALID);
     }
 
+    // --- currencyMatchesParent(currency, parent, childLabel) ---
+
+    @Test
+    void currencyMatchesParent_matching_isAllowed() {
+        assertThat(FundingValidations.currencyMatchesParent("USD", project(new BigDecimal("1000")), "milestone 'M1'"))
+                .isEmpty();
+    }
+
+    @Test
+    void currencyMatchesParent_nullOrBlank_inheritsAndIsAllowed() {
+        assertThat(FundingValidations.currencyMatchesParent(null, project(new BigDecimal("1000")), "milestone 'M1'")).isEmpty();
+        assertThat(FundingValidations.currencyMatchesParent("  ", project(new BigDecimal("1000")), "milestone 'M1'")).isEmpty();
+    }
+
+    @Test
+    void currencyMatchesParent_mismatched_isRejected() {
+        Optional<ProblemDetail> problem = FundingValidations.currencyMatchesParent(
+                "EUR", project(new BigDecimal("1000")), "milestone 'M1'");
+        assertThat(title(problem)).isEqualTo(ErrorTitleConstants.CURRENCY_PARENT_MISMATCH);
+        assertThat(problem.get().getDetail())
+                .isEqualTo("Currency EUR of milestone 'M1' does not match the currency USD of project 'Parent Project'");
+    }
+
+    @Test
+    void currencyMatchesParent_caseSensitive_isRejected() {
+        assertThat(title(FundingValidations.currencyMatchesParent("usd", project(new BigDecimal("1000")), "milestone 'M1'")))
+                .isEqualTo(ErrorTitleConstants.CURRENCY_PARENT_MISMATCH);
+    }
+
     // --- eventCurrencyMatchesMilestone(eventCurrencyRcy, milestone) ---
 
     @Test
