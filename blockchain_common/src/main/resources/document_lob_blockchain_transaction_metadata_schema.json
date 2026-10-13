@@ -1,0 +1,127 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Document Schema",
+  "description": "Validates the structure (shape) of a label-1447 metadata transaction of type DOCUMENT. The metadata/org sections mirror API3MetadataSerialiser byte-for-byte (see DocumentMetadataSerialiser), so their coverage matches api3_lob_blockchain_transaction_metadata_schema.json. The data section is the manifest body: exactly the seven fields below, nothing else.",
+  "definitions": {
+    "countryCodePattern": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$"
+    },
+    "currencyIdPattern": {
+      "type": "string",
+      "pattern": "^ISO_4217:[A-Z]{3}$|^ISO_24165:[A-Z0-9]+(:[A-Z0-9]+)?$"
+    },
+    "hexHash64Pattern": {
+      "description": "Lowercase 64-char hex SHA-256 digest, e.g. content_hash / plaintext_hash.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "ipfsCidPattern": {
+      "type": "string",
+      "pattern": "^(bafy[0-9a-z]+|baf[0-9a-z]+|Qm[1-9A-HJ-NP-Za-km-z]{44})$"
+    },
+    "recipientKeyHashArray": {
+      "description": "sha256 of each recipient's X25519 public key, lowercase hex. Index-aligned with the IPFS envelope's slots array, so its length must equal slot_count (enforced programmatically, not here).",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/hexHash64Pattern"
+      }
+    }
+  },
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "description": "Schema version only. creation_slot and timestamp are deliberately NOT part of a DOCUMENT manifest: both are decided at dispatch (the slot needs a live chain tip, the timestamp is the publisher's clock), so a wallet attesting the document beforehand cannot reproduce them and therefore cannot commit to the manifest. An indexer takes both from the containing block instead, which the publisher cannot influence. Other publishable types still carry them.",
+      "properties": {
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "org": {
+      "type": "object",
+      "properties": {
+        "country_code": {
+          "$ref": "#/definitions/countryCodePattern"
+        },
+        "name": {
+          "type": "string"
+        },
+        "tax_id_number": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "currency_id": {
+          "$ref": "#/definitions/currencyIdPattern"
+        }
+      },
+      "required": [
+        "country_code",
+        "name",
+        "tax_id_number",
+        "id",
+        "currency_id"
+      ]
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "DOCUMENT"
+      ]
+    },
+    "data": {
+      "type": "object",
+      "description": "1447 DOCUMENT manifest body: exactly these seven fields, nothing else. Six are PII-free; recipient_key_hashes deliberately identifies recipients by a hash of their public key (see docs/onChainFormat.md).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ipfs_cid": {
+          "$ref": "#/definitions/ipfsCidPattern"
+        },
+        "content_hash": {
+          "$ref": "#/definitions/hexHash64Pattern"
+        },
+        "plaintext_hash": {
+          "$ref": "#/definitions/hexHash64Pattern"
+        },
+        "envelope_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "slot_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "recipient_key_hashes": {
+          "$ref": "#/definitions/recipientKeyHashArray"
+        }
+      },
+      "required": [
+        "id",
+        "ipfs_cid",
+        "content_hash",
+        "plaintext_hash",
+        "envelope_version",
+        "slot_count",
+        "recipient_key_hashes"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "metadata",
+    "org",
+    "type",
+    "data"
+  ]
+}

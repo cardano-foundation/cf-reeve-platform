@@ -17,9 +17,9 @@ import org.springframework.stereotype.Component;
 import com.bloxbean.cardano.client.api.model.ProtocolParams;
 import com.bloxbean.cardano.client.api.model.Result;
 import com.bloxbean.cardano.client.backend.api.BackendService;
+import id.veridian.signify.app.clienting.SignifyClient;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.IdentifierConfig;
-import org.cardanofoundation.signify.app.clienting.SignifyClient;
 
 @Component("Publisher")
 @RequiredArgsConstructor
