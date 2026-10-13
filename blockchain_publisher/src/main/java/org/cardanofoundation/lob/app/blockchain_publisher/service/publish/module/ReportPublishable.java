@@ -21,8 +21,8 @@ import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.Cardan
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report.API3L1TransactionCreator;
 
 /**
- * Publishable module for reports (API3): each report becomes its own Cardano transaction, dispatched without a
- * locking window.
+ * Publishable module for reports (API3): each report becomes its own Cardano transaction, claimed atomically
+ * under the same locking window as the other publishable types.
  */
 @Service
 @RequiredArgsConstructor
@@ -38,8 +38,18 @@ public class ReportPublishable implements CardanoPublishable<ReportEntity> {
     }
 
     @Override
-    public Set<ReportEntity> findReadyToDispatch(String organisationId, int batchSize) {
-        return repositoryGateway.findReportsV2ByStatus(organisationId, batchSize);
+    public Set<String> claimReadyToDispatch(String organisationId, int batchSize) {
+        return repositoryGateway.claimReportsReadyToBeDispatched(organisationId, batchSize, dispatchingStrategy());
+    }
+
+    @Override
+    public Set<ReportEntity> loadByIds(Set<String> ids) {
+        return repositoryGateway.findAllByIdsPreservingOrder(ids);
+    }
+
+    @Override
+    public void unlock(Set<ReportEntity> entities) {
+        repositoryGateway.unlockReports(entities);
     }
 
     @Override

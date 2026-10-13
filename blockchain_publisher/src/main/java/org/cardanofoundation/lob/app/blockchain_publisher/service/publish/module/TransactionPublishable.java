@@ -41,8 +41,13 @@ public class TransactionPublishable implements CardanoPublishable<TransactionEnt
     }
 
     @Override
-    public Set<TransactionEntity> findReadyToDispatch(String organisationId, int batchSize) {
-        return repositoryGateway.findTransactionsReadyToBeDispatched(organisationId, batchSize);
+    public Set<String> claimReadyToDispatch(String organisationId, int batchSize) {
+        return repositoryGateway.claimTransactionsReadyToBeDispatched(organisationId, batchSize, dispatchingStrategy);
+    }
+
+    @Override
+    public Set<TransactionEntity> loadByIds(Set<String> ids) {
+        return repositoryGateway.findAllByIdsPreservingOrder(ids);
     }
 
     @Override
@@ -70,16 +75,6 @@ public class TransactionPublishable implements CardanoPublishable<TransactionEnt
     @Override
     public void storeAll(Set<TransactionEntity> entities) {
         repositoryGateway.storeTransactions(entities);
-    }
-
-    @Override
-    public boolean supportsLocking() {
-        return true;
-    }
-
-    @Override
-    public void lock(Set<TransactionEntity> entities) {
-        repositoryGateway.lockTransactions(entities);
     }
 
     @Override
