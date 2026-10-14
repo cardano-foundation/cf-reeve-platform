@@ -196,11 +196,10 @@ public class CsvReportTemplateService {
         Optional<ReportTemplateEntity> existingTemplateO = reportTemplateRepository
                 .findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion(dto.getOrganisationId(), dto.getName(), ReportTemplateType.valueOf(dto.getReportTemplateType()));
 
-        if (existingTemplateO.isPresent()) {
-            Either<ProblemDetail, Void> accountingRegimeImmutable = reportTemplateService.checkAccountingRegimeImmutable(existingTemplateO.get(), dto);
-            if (accountingRegimeImmutable.isLeft()) {
-                return ReportTemplateResponseDto.builder().error(Optional.of(atRow(accountingRegimeImmutable.getLeft(), parsedTemplate.rowNumber()))).build();
-            }
+        // Same rules as the template API, checked here because they depend on the template being created or updated
+        Either<ProblemDetail, Void> accountingRegime = reportTemplateService.validateAccountingRegime(dto, existingTemplateO);
+        if (accountingRegime.isLeft()) {
+            return ReportTemplateResponseDto.builder().error(Optional.of(atRow(accountingRegime.getLeft(), parsedTemplate.rowNumber()))).build();
         }
 
         ReportTemplateEntity entity = existingTemplateO.map(existingTemplate -> {

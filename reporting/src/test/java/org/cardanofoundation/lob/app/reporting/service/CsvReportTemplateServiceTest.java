@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -12,6 +14,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -23,16 +26,18 @@ import org.springframework.web.multipart.MultipartFile;
 
 import io.vavr.control.Either;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
+import org.cardanofoundation.lob.app.organisation.domain.entity.AccountingRegime;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
+import org.cardanofoundation.lob.app.organisation.repository.AccountingRegimeRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 import org.cardanofoundation.lob.app.reporting.dto.CreateCsvTemplateRequest;
@@ -44,6 +49,7 @@ import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
+import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 import org.cardanofoundation.lob.app.reporting.typeValidations.ReportTemplateTypeValidator;
 
 @ExtendWith(MockitoExtension.class)
@@ -63,8 +69,28 @@ class CsvReportTemplateServiceTest {
     private Validator validator;
     @Mock
     private ReportTemplateService reportTemplateServiceDependency;
-    @InjectMocks
+    @Mock
+    private ReportingRepository reportingRepository;
+    @Mock
+    private AccountingRegimeRepository accountingRegimeRepository;
+    private AccountingRegimeResolver accountingRegimeResolver;
     private CsvReportTemplateService reportTemplateService;
+
+    @BeforeEach
+    void setUpAccountingRegimes() {
+        lenient().when(accountingRegimeRepository.findAllByOrganisationId("org123")).thenReturn(Set.of(
+                new AccountingRegime(new AccountingRegime.Id("org123", "IFRS"), "IFRS", true),
+                new AccountingRegime(new AccountingRegime.Id("org123", "GAAP"), "GAAP", true),
+                new AccountingRegime(new AccountingRegime.Id("org123", "OLD"), "Old Regime", false)));
+        accountingRegimeResolver = new AccountingRegimeResolver(accountingRegimeRepository);
+        // The regime rules live in ReportTemplateService; run the real ones unless a test stubs them
+        ReportTemplateService regimeRules = new ReportTemplateService(reportTemplateRepository, reportTemplateMapper, chartOfAccountRepository,
+                reportingRepository, validator, mock(ReportTemplateTypeValidator.class), mock(ReportingService.class), accountingRegimeResolver);
+        lenient().when(reportTemplateServiceDependency.validateAccountingRegime(any(), any()))
+                .thenAnswer(invocation -> regimeRules.validateAccountingRegime(invocation.getArgument(0), invocation.getArgument(1)));
+        reportTemplateService = new CsvReportTemplateService(organisationPublicApi, csvParser, reportTemplateRepository, reportingRepository,
+                reportTemplateMapper, chartOfAccountRepository, validator, reportTemplateServiceDependency);
+    }
 
     @Test
     void createCsvTemplates_orgNotFound() {
@@ -250,6 +276,7 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getReportType()).thenReturn("Balance sheet");
         when(templateCsvLine.getDataMode()).thenReturn("Manual");
         when(templateCsvLine.getActive()).thenReturn("true");
+        when(templateCsvLine.getAccountingRegime()).thenReturn("IFRS");
         when(templateCsvLine.getAccounts()).thenReturn("InvalidMapping");
         when(templateCsvLine.getDateRange()).thenReturn("Period-Only balance");
         when(templateCsvLine.getSign()).thenReturn("Positive");
@@ -280,6 +307,7 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getReportType()).thenReturn("Balance sheet");
         when(templateCsvLine.getDataMode()).thenReturn("Manual");
         when(templateCsvLine.getActive()).thenReturn("true");
+        when(templateCsvLine.getAccountingRegime()).thenReturn("IFRS");
         when(templateCsvLine.getDateRange()).thenReturn("InvalidMapping");
         Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
 
@@ -308,6 +336,7 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getReportType()).thenReturn("Balance sheet");
         when(templateCsvLine.getDataMode()).thenReturn("Manual");
         when(templateCsvLine.getActive()).thenReturn("true");
+        when(templateCsvLine.getAccountingRegime()).thenReturn("IFRS");
         when(templateCsvLine.getDateRange()).thenReturn("Period-Only balance");
         when(templateCsvLine.getSign()).thenReturn("Neutral");
         Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
@@ -337,6 +366,7 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getReportType()).thenReturn("Balance sheet");
         when(templateCsvLine.getDataMode()).thenReturn("Manual");
         when(templateCsvLine.getActive()).thenReturn("true");
+        when(templateCsvLine.getAccountingRegime()).thenReturn("IFRS");
         when(templateCsvLine.getAccounts()).thenReturn("1233");
         when(templateCsvLine.getDateRange()).thenReturn("Period-Only balance");
         when(templateCsvLine.getSign()).thenReturn("Positive");
@@ -371,6 +401,7 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getReportType()).thenReturn("Balance sheet");
         when(templateCsvLine.getDataMode()).thenReturn("Manual");
         when(templateCsvLine.getActive()).thenReturn("true");
+        when(templateCsvLine.getAccountingRegime()).thenReturn("IFRS");
         when(templateCsvLine.getAccounts()).thenReturn("1234");
         when(templateCsvLine.getDateRange()).thenReturn("Period-Only balance");
         when(templateCsvLine.getSign()).thenReturn("Positive");
@@ -408,6 +439,7 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getReportType()).thenReturn("Balance sheet");
         when(templateCsvLine.getDataMode()).thenReturn("Manual");
         when(templateCsvLine.getActive()).thenReturn("true");
+        when(templateCsvLine.getAccountingRegime()).thenReturn("IFRS");
         when(templateCsvLine.getAccounts()).thenReturn("1234");
         when(templateCsvLine.getDateRange()).thenReturn("Period-Only balance");
         when(templateCsvLine.getSign()).thenReturn("Positive");
@@ -445,6 +477,7 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getReportType()).thenReturn("Balance sheet");
         when(templateCsvLine.getDataMode()).thenReturn("Manual");
         when(templateCsvLine.getActive()).thenReturn("true");
+        when(templateCsvLine.getAccountingRegime()).thenReturn("IFRS");
         when(templateCsvLine.getAccounts()).thenReturn("1234");
         when(templateCsvLine.getDateRange()).thenReturn("Period-Only balance");
         when(templateCsvLine.getSign()).thenReturn("Negative");
@@ -533,8 +566,9 @@ class CsvReportTemplateServiceTest {
         when(chartOfAccount.getId()).thenReturn(new ChartOfAccount.Id("org123", "1234"));
         when(reportTemplateRepository.findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion("org123", "Test Template", ReportTemplateType.BALANCE_SHEET))
                 .thenReturn(Optional.of(existingTemplate));
-        when(reportTemplateServiceDependency.checkAccountingRegimeImmutable(eq(existingTemplate), any(ReportTemplateDto.class)))
-                .thenReturn(Either.left(immutableProblem));
+        // doReturn: when(...) would run the default answer that delegates to the real rules
+        doReturn(Either.left(immutableProblem)).when(reportTemplateServiceDependency)
+                .validateAccountingRegime(any(ReportTemplateDto.class), eq(Optional.of(existingTemplate)));
         when(reportTemplateServiceDependency.validateDataMode(any(ReportTemplateDto.class))).thenReturn(Either.right(null));
 
         Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
@@ -668,6 +702,7 @@ class CsvReportTemplateServiceTest {
         }).toList();
         when(lines.getFirst().getDataMode()).thenReturn("Manual");
         when(lines.getFirst().getActive()).thenReturn("true");
+        when(lines.getFirst().getAccountingRegime()).thenReturn("IFRS");
 
         Errors errors = mock(Errors.class);
         when(errors.getAllErrors()).thenReturn(List.of());
@@ -702,7 +737,8 @@ class CsvReportTemplateServiceTest {
                 null,
                 validator,
                 mock(ReportTemplateTypeValidator.class),
-                mock(ReportingService.class));
+                mock(ReportingService.class),
+                accountingRegimeResolver);
 
         CsvReportTemplateService serviceUnderTest = new CsvReportTemplateService(
                 organisationPublicApi,
@@ -754,7 +790,103 @@ class CsvReportTemplateServiceTest {
         ReportTemplateResponseDto first = responseDtos.getFirst();
         assertTrue(first.getError().isPresent());
         assertEquals("INVALID_FIELD_MAPPINGS", first.getError().get().getTitle());
-        assertEquals("Row 1: All fields must have mappings when data mode is SYSTEM", first.getError().get().getDetail());
+        assertEquals("Row 1: All fields must have mappings when data mode is Automatic", first.getError().get().getDetail());
         verify(reportTemplateRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void createCsvTemplates_unknownAccountingRegime_failsAndListsOptions() {
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = importSingleManualRow("test");
+
+        assertTrue(result.isRight());
+        ReportTemplateResponseDto first = result.get().getFirst();
+        assertTrue(first.getError().isPresent());
+        assertEquals("INVALID_ACCOUNTING_REGIME", first.getError().get().getTitle());
+        assertEquals("Row 1: Accounting regime not found: test. Options are: GAAP, IFRS, Not applicable", first.getError().get().getDetail());
+        assertEquals(1, first.getError().get().getProperties().get("rowNumber"));
+        verify(reportTemplateRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void createCsvTemplates_inactiveAccountingRegime_fails() {
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = importSingleManualRow("Old Regime");
+
+        assertTrue(result.isRight());
+        ReportTemplateResponseDto first = result.get().getFirst();
+        assertTrue(first.getError().isPresent());
+        assertEquals("Row 1: Accounting regime not found: Old Regime. Options are: GAAP, IFRS, Not applicable", first.getError().get().getDetail());
+        verify(reportTemplateRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void createCsvTemplates_accountingRegimeMatchesCaseInsensitivelyAndStoresLabel() {
+        ArgumentCaptor<ReportTemplateDto> dtoCaptor = ArgumentCaptor.forClass(ReportTemplateDto.class);
+        when(reportTemplateMapper.toEntity(dtoCaptor.capture(), isNull())).thenReturn(mock(ReportTemplateEntity.class));
+        when(reportTemplateMapper.toResponseDto(any())).thenReturn(ReportTemplateResponseDto.builder().error(Optional.empty()).build());
+
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = importSingleManualRow(" ifrs ");
+
+        assertTrue(result.isRight());
+        assertTrue(result.get().getFirst().getError().isEmpty());
+        assertEquals("IFRS", dtoCaptor.getValue().getAccountingRegime());
+    }
+
+    @Test
+    void createCsvTemplates_notApplicableAccountingRegime_isAccepted() {
+        ArgumentCaptor<ReportTemplateDto> dtoCaptor = ArgumentCaptor.forClass(ReportTemplateDto.class);
+        when(reportTemplateMapper.toEntity(dtoCaptor.capture(), isNull())).thenReturn(mock(ReportTemplateEntity.class));
+        when(reportTemplateMapper.toResponseDto(any())).thenReturn(ReportTemplateResponseDto.builder().error(Optional.empty()).build());
+
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = importSingleManualRow("Not applicable");
+
+        assertTrue(result.isRight());
+        assertTrue(result.get().getFirst().getError().isEmpty());
+        assertEquals("Not applicable", dtoCaptor.getValue().getAccountingRegime());
+    }
+
+    @Test
+    void createCsvTemplates_existingTemplateWithUnchangedDeactivatedRegime_isSaved() {
+        ReportTemplateEntity existing = ReportTemplateEntity.builder().id("t1").ver(1L).accountingRegime("Old Regime").build();
+        when(reportTemplateRepository.findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion("org123", "Template CSV", ReportTemplateType.INCOME_STATEMENT))
+                .thenReturn(Optional.of(existing));
+        when(reportTemplateMapper.toEntity(any(ReportTemplateDto.class), eq(existing))).thenReturn(existing);
+        when(reportTemplateMapper.toResponseDto(any())).thenReturn(ReportTemplateResponseDto.builder().error(Optional.empty()).build());
+
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = importSingleManualRow("Old Regime");
+
+        assertTrue(result.isRight());
+        assertTrue(result.get().getFirst().getError().isEmpty());
+        verify(reportTemplateRepository).saveAndFlush(existing);
+    }
+
+    @Test
+    void createCsvTemplates_existingTemplateRegimeChangedToUnknown_fails() {
+        ReportTemplateEntity existing = ReportTemplateEntity.builder().id("t1").ver(1L).accountingRegime("IFRS").build();
+        when(reportTemplateRepository.findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion("org123", "Template CSV", ReportTemplateType.INCOME_STATEMENT))
+                .thenReturn(Optional.of(existing));
+
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = importSingleManualRow("test");
+
+        assertTrue(result.isRight());
+        assertEquals("Row 1: Accounting regime not found: test. Options are: GAAP, IFRS, Not applicable",
+                result.get().getFirst().getError().get().getDetail());
+        verify(reportTemplateRepository, never()).saveAndFlush(any());
+    }
+
+    private Either<ProblemDetail, List<ReportTemplateResponseDto>> importSingleManualRow(String accountingRegime) {
+        CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
+        MultipartFile file = mock(MultipartFile.class);
+        TemplateCsvLine line = new TemplateCsvLine("Template CSV", "Income statement", "Manual", accountingRegime, "true", "", "Revenue", "", "", "End-of-Period balance", "Positive");
+        Errors errors = mock(Errors.class);
+
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(validator.validateObject(line)).thenReturn(errors);
+        when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(new Organisation()));
+        when(request.getOrganisationId()).thenReturn("org123");
+        when(request.getFile()).thenReturn(file);
+        when(csvParser.parseCsv(file, TemplateCsvLine.class)).thenReturn(Either.right(List.of(line)));
+        when(reportTemplateServiceDependency.validateDataMode(any(ReportTemplateDto.class))).thenReturn(Either.right(null));
+
+        return reportTemplateService.createCsvTemplates(request);
     }
 }
