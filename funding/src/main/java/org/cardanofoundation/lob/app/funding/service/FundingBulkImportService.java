@@ -1271,8 +1271,9 @@ public class FundingBulkImportService {
         if (newCurrency != null) {
             changes.add(columnChange("Currency", project.getCurrency(), newCurrency));
         }
+        String idColumn = root ? "Project ID" : "Sub Project ID";
         String subject = (root ? "Project" : "Sub-project") + " \"" + project.getProjectTitle() + "\""
-                + (isBlank(project.getProId()) ? "" : " (" + (root ? "Project ID " : "Sub Project ID ") + project.getProId() + ")");
+                + (isBlank(project.getProId()) ? "" : " (" + idColumn + " " + project.getProId() + ")");
         String lockedColumns = root ? "Project Title, Total Amount and Currency" : "Sub Project Title and Sub Total Amount";
         return lockedForCsv(subject, "a published event exists in its structure", lockedColumns, changes, ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
     }
