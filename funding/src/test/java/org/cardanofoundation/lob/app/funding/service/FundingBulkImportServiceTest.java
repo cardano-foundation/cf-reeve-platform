@@ -12,6 +12,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -1103,6 +1105,118 @@ class FundingBulkImportServiceTest {
 
         assertThat(result.getMilestonesUpdated()).isZero();
         assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
+    }
+
+    @Test
+    void milestoneLocked_reportsCsvColumnsMilestoneIdAndHowToFix() {
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+        ProjectMilestoneCsvLine line = continuationLine("Project 10 Fold");
+        line.setMilestoneTitle("M100");
+        line.setMilestoneId("PRJ10-M1");
+        line.setMilestoneAmount("4000");
+        line.setMilestoneDate("2026-01-31");
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
+        ProjectEntity root = projectEntity("p1", "Project 10 Fold", "EUR");
+        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project 10 Fold"))
+                .thenReturn(Optional.of(root));
+        MilestoneEntity existing = MilestoneEntity.builder().id("a1b3bfe2").proId("PRJ10-M1").milestoneTitle("M100")
+                .milestoneAmount(new BigDecimal("5000.0000000000")).currency("EUR").milestoneDate(LocalDate.of(2026, 1, 31)).build();
+        when(milestoneService.findByProjectIdAndProId("p1", "PRJ10-M1")).thenReturn(Optional.of(existing));
+        when(projectTreeUpdateService.applyExistingMilestone(eq(root), eq(existing), any(), any()))
+                .thenReturn(Optional.of(problem(HttpStatus.CONFLICT, ErrorTitleConstants.MILESTONE_LOCKED)));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        FundingRowError error = result.getFiles().get(0).getRowErrors().get(0);
+        assertThat(error.getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_LOCKED);
+        assertThat(error.getReason()).isEqualTo(
+                "Milestone \"M100\" (Milestone ID PRJ10-M1) is locked because a published event is allocated to it, "
+                        + "so its Milestone Title, Milestone Amount and Milestone Date can't be changed. "
+                        + "This row changes Milestone Amount from 5000.00 to 4000.00. "
+                        + "To fix it, set that cell back to its current value or leave it blank. "
+                        + "All changes for project \"Project 10 Fold\" in this request were rolled back because of this error.");
+    }
+
+    @Test
+    void milestoneLocked_severalChangedColumns_listsEachOne() {
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+        ProjectMilestoneCsvLine line = continuationLine("Project A");
+        line.setMilestoneTitle("Milestone One");
+        line.setMilestoneAmount("4000");
+        line.setMilestoneDate("2026-02-28");
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
+        ProjectEntity root = projectEntity("p1", "Project A", "USD");
+        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
+                .thenReturn(Optional.of(root));
+        MilestoneEntity existing = MilestoneEntity.builder().id("m1").milestoneTitle("Milestone One")
+                .milestoneAmount(new BigDecimal("5000")).currency("USD").milestoneDate(LocalDate.of(2026, 1, 31)).build();
+        when(milestoneService.findByProjectIdAndMilestoneTitle("p1", "Milestone One")).thenReturn(Optional.of(existing));
+        when(projectTreeUpdateService.applyExistingMilestone(eq(root), eq(existing), any(), any()))
+                .thenReturn(Optional.of(problem(HttpStatus.CONFLICT, ErrorTitleConstants.MILESTONE_LOCKED)));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getReason()).startsWith(
+                "Milestone \"Milestone One\" is locked because a published event is allocated to it, "
+                        + "so its Milestone Title, Milestone Amount and Milestone Date can't be changed. "
+                        + "This row changes Milestone Amount from 5000.00 to 4000.00 and Milestone Date from 2026-01-31 to 2026-02-28. "
+                        + "To fix it, set those cells back to their current values or leave them blank. ");
+    }
+
+    @Test
+    void rootProjectLocked_reportsCsvColumnsProjectIdAndHowToFix() {
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+        ProjectMilestoneCsvLine line = rootLine("Project 10 Fold", "90000", "EUR");
+        line.setProjectId("PRJ10");
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
+        ProjectEntity root = ProjectEntity.builder().id("p1").organisationId(ORG_ID).proId("PRJ10").projectTitle("Project 10 Fold")
+                .currency("EUR").totalAmount(new BigDecimal("100000")).build();
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull(ORG_ID, "PRJ10")).thenReturn(Optional.of(root));
+        when(projectTreeUpdateService.applyRootFields(any(), any(), any()))
+                .thenReturn(Optional.of(problem(HttpStatus.CONFLICT, ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED)));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        FundingRowError error = result.getFiles().get(0).getRowErrors().get(0);
+        assertThat(error.getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+        assertThat(error.getReason()).startsWith(
+                "Project \"Project 10 Fold\" (Project ID PRJ10) is locked because a published event exists in its structure, "
+                        + "so its Project Title, Total Amount and Currency can't be changed. "
+                        + "This row changes Total Amount from 100000.00 to 90000.00. "
+                        + "To fix it, set that cell back to its current value or leave it blank. ");
+    }
+
+    @Test
+    void subProjectLocked_reportsSubProjectColumns() {
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+        ProjectMilestoneCsvLine line = continuationLine("Project A");
+        line.setSubProjectTitle("Folder1");
+        line.setSubProjectId("PRJ10-S1");
+        line.setSubTotalAmount("30000");
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(line)));
+        ProjectEntity root = projectEntity("p1", "Project A", "USD");
+        when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(ORG_ID, "Project A"))
+                .thenReturn(Optional.of(root));
+        ProjectEntity sub = ProjectEntity.builder().id("s1").organisationId(ORG_ID).proId("PRJ10-S1").projectTitle("Folder1")
+                .currency("USD").totalAmount(new BigDecimal("25000")).parentProject(root).build();
+        when(projectRepository.findByParentProjectIdAndProId("p1", "PRJ10-S1")).thenReturn(Optional.of(sub));
+        when(projectTreeUpdateService.applySubProjectFields(eq(sub), any()))
+                .thenReturn(Optional.of(problem(HttpStatus.CONFLICT, ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED)));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getFiles().get(0).getRowErrors().get(0).getReason()).startsWith(
+                "Sub-project \"Folder1\" (Sub Project ID PRJ10-S1) is locked because a published event exists in its structure, "
+                        + "so its Sub Project Title and Sub Total Amount can't be changed. "
+                        + "This row changes Sub Total Amount from 25000.00 to 30000.00. ");
     }
 
     @Test
