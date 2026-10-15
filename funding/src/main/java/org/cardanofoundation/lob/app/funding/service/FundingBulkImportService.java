@@ -574,7 +574,9 @@ public class FundingBulkImportService {
                         .totalAmount(newTotal)
                         .build());
         if (problem.isPresent()) {
-            return Either.left(problem.get());
+            return Either.left(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED.equals(problem.get().getTitle())
+                    ? projectLockedForCsv(existing, newTitle, newTotal, newCurrency).orElse(problem.get())
+                    : problem.get());
         }
         return Either.right(new UpsertOutcome<>(existing, false));
     }
@@ -629,7 +631,9 @@ public class FundingBulkImportService {
                     .build();
             Optional<ProblemDetail> error = projectTreeUpdateService.applyExistingMilestone(project, current, applyRequest, changedMilestoneIds);
             if (error.isPresent()) {
-                return Either.left(error.get());
+                return Either.left(ErrorTitleConstants.MILESTONE_LOCKED.equals(error.get().getTitle())
+                        ? milestoneLockedForCsv(current, applyRequest).orElse(error.get())
+                        : error.get());
             }
             return Either.right(false);
         }
@@ -637,7 +641,7 @@ public class FundingBulkImportService {
         // CREATE — full data is required.
         if (amount == null || date == null) {
             return Either.left(Problems.badRequest(
-                    "milestoneAmount and milestoneDate are required to create milestone: " + line.getMilestoneTitle(),
+                    "Milestone Amount and Milestone Date are required to create milestone: " + line.getMilestoneTitle(),
                     ErrorTitleConstants.MILESTONE_FIELDS_REQUIRED));
         }
         if (isBlank(currency)) {
@@ -1247,6 +1251,67 @@ public class FundingBulkImportService {
      * needlessly re-trigger validations tied to other, independently-changing state (e.g. a
      * milestone's cumulative event allocations).
      */
+    /**
+     * CSV wording for {@code ProjectTreeUpdateService}'s publish lock on a project/sub-project. The API
+     * message names request fields and the internal id; here the row's columns, title and Project ID
+     * are named instead, along with the values that changed and how to fix them. Empty when no
+     * changed column can be identified, so the caller keeps the original message.
+     */
+    private static Optional<ProblemDetail> projectLockedForCsv(ProjectEntity project, String newTitle, BigDecimal newTotal, String newCurrency) {
+        boolean root = project.getParentProject() == null;
+        String titleColumn = root ? "Project Title" : "Sub Project Title";
+        String amountColumn = root ? "Total Amount" : "Sub Total Amount";
+        List<String> changes = new ArrayList<>();
+        if (newTitle != null) {
+            changes.add(columnChange(titleColumn, "\"" + project.getProjectTitle() + "\"", "\"" + newTitle + "\""));
+        }
+        if (newTotal != null) {
+            changes.add(columnChange(amountColumn, project.getTotalAmount() == null ? "empty" : formatAmount(project.getTotalAmount()), formatAmount(newTotal)));
+        }
+        if (newCurrency != null) {
+            changes.add(columnChange("Currency", project.getCurrency(), newCurrency));
+        }
+        String subject = (root ? "Project" : "Sub-project") + " \"" + project.getProjectTitle() + "\""
+                + (isBlank(project.getProId()) ? "" : " (" + (root ? "Project ID " : "Sub Project ID ") + project.getProId() + ")");
+        String lockedColumns = root ? "Project Title, Total Amount and Currency" : "Sub Project Title and Sub Total Amount";
+        return lockedForCsv(subject, "a published event exists in its structure", lockedColumns, changes, ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+    }
+
+    /** CSV wording for {@code MilestoneService#checkFieldLock} — see {@link #projectLockedForCsv}. */
+    private static Optional<ProblemDetail> milestoneLockedForCsv(MilestoneEntity milestone, MilestoneCreateRequest changed) {
+        List<String> changes = new ArrayList<>();
+        if (changed.getMilestoneTitle() != null) {
+            changes.add(columnChange("Milestone Title", "\"" + milestone.getMilestoneTitle() + "\"", "\"" + changed.getMilestoneTitle() + "\""));
+        }
+        if (changed.getMilestoneAmount() != null) {
+            changes.add(columnChange("Milestone Amount", milestone.getMilestoneAmount() == null ? "empty" : formatAmount(milestone.getMilestoneAmount()), formatAmount(changed.getMilestoneAmount())));
+        }
+        if (changed.getMilestoneDate() != null) {
+            changes.add(columnChange("Milestone Date", String.valueOf(milestone.getMilestoneDate()), changed.getMilestoneDate().toString()));
+        }
+        String subject = "Milestone \"" + milestone.getMilestoneTitle() + "\""
+                + (isBlank(milestone.getProId()) ? "" : " (Milestone ID " + milestone.getProId() + ")");
+        return lockedForCsv(subject, "a published event is allocated to it", "Milestone Title, Milestone Amount and Milestone Date",
+                changes, ErrorTitleConstants.MILESTONE_LOCKED);
+    }
+
+    private static Optional<ProblemDetail> lockedForCsv(String subject, String lockReason, String lockedColumns, List<String> changes, String title) {
+        if (changes.isEmpty()) {
+            return Optional.empty();
+        }
+        boolean single = changes.size() == 1;
+        // No trailing period: withRollbackNote appends its own sentence after this one.
+        return Optional.of(Problems.conflict(
+                "%s is locked because %s, so its %s can't be changed. This row changes %s. To fix it, set %s back to %s or leave %s blank"
+                        .formatted(subject, lockReason, lockedColumns, String.join(" and ", changes),
+                                single ? "that cell" : "those cells", single ? "its current value" : "their current values", single ? "it" : "them"),
+                title));
+    }
+
+    private static String columnChange(String column, String current, String requested) {
+        return "%s from %s to %s".formatted(column, current, requested);
+    }
+
     private static BigDecimal ifChanged(BigDecimal newValue, BigDecimal current) {
         return (newValue != null && (current == null || newValue.compareTo(current) != 0)) ? newValue : null;
     }
