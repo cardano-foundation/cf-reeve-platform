@@ -1,6 +1,8 @@
 package org.cardanofoundation.lob.app.reporting.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -216,9 +218,9 @@ class CsvReportTemplateServiceTest {
 
         CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
         MultipartFile file = mock(MultipartFile.class);
-        TemplateCsvLine revenue = new TemplateCsvLine("Test Template", "Balance sheet", "Manual", "IFRS", "true", "", "Revenue", "", "", "", "Positive");
-        TemplateCsvLine costs = new TemplateCsvLine("Test Template", "Balance sheet", "Manual", "IFRS", "true", "", "Costs", "", "", "", "Negative");
-        TemplateCsvLine profit = new TemplateCsvLine("Test Template", "Balance sheet", "Manual", "IFRS", "true", "", "Profit", "", "", "", null);
+        TemplateCsvLine revenue = new TemplateCsvLine("Test Template", "Balance sheet", "Automatic", "IFRS", "true", "", "Revenue", "", "", "End-of-Period balance", "Positive");
+        TemplateCsvLine costs = new TemplateCsvLine("Test Template", "Balance sheet", "Automatic", "IFRS", "true", "", "Costs", "", "", "End-of-Period balance", "Negative");
+        TemplateCsvLine profit = new TemplateCsvLine("Test Template", "Balance sheet", "Automatic", "IFRS", "true", "", "Profit", "", "", "End-of-Period balance", null);
 
         when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(new Organisation()));
         when(request.getOrganisationId()).thenReturn("org123");
@@ -227,10 +229,74 @@ class CsvReportTemplateServiceTest {
 
         Either<ProblemDetail, List<ReportTemplateResponseDto>> result = serviceWithRealValidator.createCsvTemplates(request);
 
-        assertTrue(result.isLeft());
-        assertEquals("CSV_PARSING_ERROR", result.getLeft().getTitle());
-        assertEquals("Row 3: Sign is required. Options are: Positive, Negative", result.getLeft().getDetail());
-        assertEquals(3, result.getLeft().getProperties().get("rowNumber"));
+        assertTrue(result.isRight());
+        ProblemDetail error = result.get().getFirst().getError().orElseThrow();
+        assertEquals("CSV_PARSING_ERROR", error.getTitle());
+        assertEquals("Row 3: Sign is required for Automatic templates. Options are: Positive, Negative", error.getDetail());
+        assertEquals(3, error.getProperties().get("rowNumber"));
+    }
+
+    @Test
+    void createCsvTemplates_automaticMissingDateRange_isRejected() {
+        CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
+        MultipartFile file = mock(MultipartFile.class);
+        Errors errors = mock(Errors.class);
+        TemplateCsvLine line = new TemplateCsvLine("Test Template", "Balance sheet", "Automatic", "IFRS", "true", "", "Revenue", "", "", "", "Positive");
+
+        when(errors.getAllErrors()).thenReturn(List.of());
+        when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(new Organisation()));
+        when(request.getOrganisationId()).thenReturn("org123");
+        when(csvParser.parseCsv(file, TemplateCsvLine.class)).thenReturn(Either.right(List.of(line)));
+        when(request.getFile()).thenReturn(file);
+        when(validator.validateObject(line)).thenReturn(errors);
+
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
+
+        assertTrue(result.isRight());
+        assertEquals("Row 1: Date Range is required for Automatic templates. Options are: Period-Only balance, End-of-Period balance, Year-to-Date balance, Previous-Year balance, Previous-Year-to-Date balance, End-of-Previous-Year balance",
+                result.get().getFirst().getError().orElseThrow().getDetail());
+    }
+
+    @Test
+    void createCsvTemplates_manualWithoutDateRangeAndSign_isAccepted() {
+        LocalValidatorFactoryBean realValidator = new LocalValidatorFactoryBean();
+        realValidator.afterPropertiesSet();
+        CsvReportTemplateService serviceWithRealValidator = new CsvReportTemplateService(
+                organisationPublicApi,
+                csvParser,
+                reportTemplateRepository,
+                null,
+                reportTemplateMapper,
+                chartOfAccountRepository,
+                realValidator,
+                reportTemplateServiceDependency);
+
+        CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
+        MultipartFile file = mock(MultipartFile.class);
+        // Sign column left blank on one row and omitted entirely (null) on the other; Date Range blank on both
+        TemplateCsvLine revenue = new TemplateCsvLine("Test Template", "Balance sheet", "Manual", "IFRS", "true", "", "Revenue", "", "", "", "");
+        TemplateCsvLine costs = new TemplateCsvLine("Test Template", "Balance sheet", "Manual", "IFRS", "true", "", "Costs", "", "", null, null);
+
+        when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(new Organisation()));
+        when(request.getOrganisationId()).thenReturn("org123");
+        when(csvParser.parseCsv(file, TemplateCsvLine.class)).thenReturn(Either.right(List.of(revenue, costs)));
+        when(request.getFile()).thenReturn(file);
+        when(reportTemplateServiceDependency.validateDataMode(any(ReportTemplateDto.class))).thenReturn(Either.right(null));
+        ArgumentCaptor<ReportTemplateDto> dtoCaptor = ArgumentCaptor.forClass(ReportTemplateDto.class);
+        when(reportTemplateMapper.toEntity(dtoCaptor.capture(), isNull())).thenReturn(mock(ReportTemplateEntity.class));
+        when(reportTemplateMapper.toResponseDto(any())).thenReturn(mock(ReportTemplateResponseDto.class));
+
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = serviceWithRealValidator.createCsvTemplates(request);
+
+        assertTrue(result.isRight());
+        assertEquals(1, result.get().size());
+        List<ReportTemplateFieldDto> fields = dtoCaptor.getValue().getFields();
+        assertEquals(2, fields.size());
+        // Left unset, so the mapper applies the same defaults as the template builder
+        assertNull(fields.getFirst().getDateRange());
+        assertFalse(fields.getFirst().isNegated());
+        assertNull(fields.get(1).getDateRange());
+        assertFalse(fields.get(1).isNegated());
     }
 
     @Test
@@ -278,8 +344,6 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getActive()).thenReturn("true");
         when(templateCsvLine.getAccountingRegime()).thenReturn("IFRS");
         when(templateCsvLine.getAccounts()).thenReturn("InvalidMapping");
-        when(templateCsvLine.getDateRange()).thenReturn("Period-Only balance");
-        when(templateCsvLine.getSign()).thenReturn("Positive");
         Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
 
         assertTrue(result.isRight());
@@ -305,7 +369,7 @@ class CsvReportTemplateServiceTest {
         when(validator.validateObject(templateCsvLine)).thenReturn(errors);
         when(templateCsvLine.getName()).thenReturn("Test Template");
         when(templateCsvLine.getReportType()).thenReturn("Balance sheet");
-        when(templateCsvLine.getDataMode()).thenReturn("Manual");
+        when(templateCsvLine.getDataMode()).thenReturn("Automatic");
         when(templateCsvLine.getActive()).thenReturn("true");
         when(templateCsvLine.getAccountingRegime()).thenReturn("IFRS");
         when(templateCsvLine.getDateRange()).thenReturn("InvalidMapping");
@@ -334,7 +398,7 @@ class CsvReportTemplateServiceTest {
         when(validator.validateObject(templateCsvLine)).thenReturn(errors);
         when(templateCsvLine.getName()).thenReturn("Test Template");
         when(templateCsvLine.getReportType()).thenReturn("Balance sheet");
-        when(templateCsvLine.getDataMode()).thenReturn("Manual");
+        when(templateCsvLine.getDataMode()).thenReturn("Automatic");
         when(templateCsvLine.getActive()).thenReturn("true");
         when(templateCsvLine.getAccountingRegime()).thenReturn("IFRS");
         when(templateCsvLine.getDateRange()).thenReturn("Period-Only balance");
@@ -368,8 +432,6 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getActive()).thenReturn("true");
         when(templateCsvLine.getAccountingRegime()).thenReturn("IFRS");
         when(templateCsvLine.getAccounts()).thenReturn("1233");
-        when(templateCsvLine.getDateRange()).thenReturn("Period-Only balance");
-        when(templateCsvLine.getSign()).thenReturn("Positive");
         when(chartOfAccountRepository.findById(any(ChartOfAccount.Id.class))).thenReturn(Optional.empty());
         Either<ProblemDetail, List<ReportTemplateResponseDto>> result = reportTemplateService.createCsvTemplates(request);
 
@@ -403,8 +465,6 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getActive()).thenReturn("true");
         when(templateCsvLine.getAccountingRegime()).thenReturn("IFRS");
         when(templateCsvLine.getAccounts()).thenReturn("1234");
-        when(templateCsvLine.getDateRange()).thenReturn("Period-Only balance");
-        when(templateCsvLine.getSign()).thenReturn("Positive");
         when(chartOfAccountRepository.findById(any(ChartOfAccount.Id.class))).thenReturn(Optional.of(chartOfAccount));
         when(templateCsvLine.getParent()).thenReturn("Parent");
 
@@ -441,8 +501,6 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getActive()).thenReturn("true");
         when(templateCsvLine.getAccountingRegime()).thenReturn("IFRS");
         when(templateCsvLine.getAccounts()).thenReturn("1234");
-        when(templateCsvLine.getDateRange()).thenReturn("Period-Only balance");
-        when(templateCsvLine.getSign()).thenReturn("Positive");
         when(chartOfAccountRepository.findById(new ChartOfAccount.Id("org123", "1234"))).thenReturn(Optional.of(chartOfAccount));
         when(templateCsvLine.getParent()).thenReturn("");
         when(chartOfAccount.getId()).thenReturn(new ChartOfAccount.Id("org123", "1234"));
@@ -475,7 +533,7 @@ class CsvReportTemplateServiceTest {
         when(validator.validateObject(templateCsvLine)).thenReturn(errors);
         when(templateCsvLine.getName()).thenReturn("Test Template");
         when(templateCsvLine.getReportType()).thenReturn("Balance sheet");
-        when(templateCsvLine.getDataMode()).thenReturn("Manual");
+        when(templateCsvLine.getDataMode()).thenReturn("Automatic");
         when(templateCsvLine.getActive()).thenReturn("true");
         when(templateCsvLine.getAccountingRegime()).thenReturn("IFRS");
         when(templateCsvLine.getAccounts()).thenReturn("1234");
@@ -517,8 +575,6 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getDataMode()).thenReturn("Manual");
         when(templateCsvLine.getActive()).thenReturn("true");
         when(templateCsvLine.getAccounts()).thenReturn("1234");
-        when(templateCsvLine.getDateRange()).thenReturn("Period-Only balance");
-        when(templateCsvLine.getSign()).thenReturn("Positive");
         when(templateCsvLine.getAccountingRegime()).thenReturn("IFRS");
         when(chartOfAccountRepository.findById(new ChartOfAccount.Id("org123", "1234"))).thenReturn(Optional.of(chartOfAccount));
         when(templateCsvLine.getParent()).thenReturn("");
@@ -558,8 +614,6 @@ class CsvReportTemplateServiceTest {
         when(templateCsvLine.getDataMode()).thenReturn("Manual");
         when(templateCsvLine.getActive()).thenReturn("true");
         when(templateCsvLine.getAccounts()).thenReturn("1234");
-        when(templateCsvLine.getDateRange()).thenReturn("Period-Only balance");
-        when(templateCsvLine.getSign()).thenReturn("Positive");
         when(templateCsvLine.getAccountingRegime()).thenReturn("GAAP");
         when(chartOfAccountRepository.findById(new ChartOfAccount.Id("org123", "1234"))).thenReturn(Optional.of(chartOfAccount));
         when(templateCsvLine.getParent()).thenReturn("");
@@ -597,8 +651,6 @@ class CsvReportTemplateServiceTest {
         for (TemplateCsvLine line : List.of(revenueLine, assetsLine, testLine)) {
             when(line.getReportType()).thenReturn("Balance sheet");
             when(line.getAccounts()).thenReturn("1234");
-            when(line.getDateRange()).thenReturn("Period-Only balance");
-            when(line.getSign()).thenReturn("Positive");
         }
         when(revenueLine.getDataMode()).thenReturn("Manual");
         when(revenueLine.getActive()).thenReturn("true");
@@ -694,8 +746,6 @@ class CsvReportTemplateServiceTest {
             when(line.getName()).thenReturn("Test Template");
             when(line.getReportType()).thenReturn("Balance sheet");
             when(line.getAccounts()).thenReturn("1234");
-            when(line.getDateRange()).thenReturn("End-of-Period balance");
-            when(line.getSign()).thenReturn("Positive");
             when(line.getFieldName()).thenReturn(row[0]);
             when(line.getParent()).thenReturn(row[1]);
             return line;
