@@ -64,14 +64,15 @@ import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
  * existing JSON-API request DTOs, then calls the existing, already-validated service methods — this
  * class does not reimplement any funding business rule, it only parses CSV rows into those requests.
  *
- * <p>Every reference in these files is by <b>title</b>, not by any external/user-defined id — project
- * identity is (parent scope, projectTitle), milestone identity is (project, milestoneTitle), matching
- * the JSON API. A bare title is not necessarily unique across the whole organisation (only within its
- * sibling scope); the Projects+Milestones file always knows a project's exact scope from the row itself
- * (root, or the specific parent named on that row), so its lookups are exact. Only the Events file
- * references a project purely by title with no other context, so it searches broadly and fails with an
- * "ambiguous reference" error if more than one project shares that title — see
- * {@link #findExistingProjectByTitle}.
+ * <p>Every reference to an <em>existing</em> project, sub-project or milestone in these files is by
+ * its permanent <b>proId</b> ({@code Project ID} / {@code Sub Project ID} / {@code Milestone ID}
+ * columns) — never by title, which is editable and so can't reliably identify a row (a title that
+ * drifted by one character used to silently create a duplicate instead of editing the original). In
+ * the Projects+Milestones file, {@code Project ID} is mandatory, and a blank {@code Sub Project ID} /
+ * {@code Milestone ID} always means "create a new one" with an auto-assigned proId. In the Events
+ * file, {@code Project ID} and {@code Milestone ID} are mandatory on every allocation row, plus
+ * {@code Sub Project ID} when the allocation targets a sub-project. Titles are only data to write
+ * (on create / rename) and context in error messages.
  *
  * <p><b>Upsert semantics</b> (so re-uploading a file with one changed row is safe):
  * <ul>
@@ -84,9 +85,10 @@ import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
  *   row's sub-project and milestone are then resolved independently of the other rows, so one bad row
  *   doesn't block its siblings. This is deliberately row-order-independent within a group: a sub-project
  *   or milestone is always created directly from the data on its own row, never by looking up another
- *   row's title, so shuffling rows around never breaks the import.</li>
- *   <li>Events file: pure validation, no creation. Both {@code Project Title} and
- *   {@code Milestone Title} must already exist — this file carries only allocation amounts, not
+ *   row's title, so shuffling rows around never breaks the import. To put several milestones under one
+ *   new sub-project, every one of those rows must carry the same explicit {@code Sub Project ID}.</li>
+ *   <li>Events file: pure validation, no creation. The referenced {@code Project ID} (and
+ *   {@code Sub Project ID}, when set) and {@code Milestone ID} must already exist — this file carries only allocation amounts, not
  *   enough data to create a project or milestone from scratch.</li>
  * </ul>
  *
@@ -451,18 +453,26 @@ public class FundingBulkImportService {
     }
 
     /**
-     * proId is permanent (see {@code ProjectEntity#proId}) — when the row's {@code Project ID} column
-     * is set, matching prefers it over the title, the reliable way to find a project that's since been
-     * renamed. When two row groups in the same file carry different titles but the same {@code Project
-     * ID}, both resolve to the same underlying row and are applied in file order — the later group's
-     * title is what the project ends up titled, a deliberate "last one in the file wins" rule rather
-     * than a rejected conflict, matching how bulk-import already resolves every other same-batch field
-     * change.
+     * proId is permanent (see {@code ProjectEntity#proId}) and is the <em>only</em> key an existing
+     * root project is matched by — never its title, which is editable and so can't reliably identify
+     * the row (a title that drifted by a space silently created/attached the wrong thing before). The
+     * {@code Project ID} column is therefore mandatory on the row carrying the root's columns, for an
+     * update as well as a create. When two row groups in the same file carry different titles but the
+     * same {@code Project ID}, both resolve to the same underlying row and are applied in file order —
+     * the later group's title is what the project ends up titled, a deliberate "last one in the file
+     * wins" rule rather than a rejected conflict, matching how bulk-import already resolves every other
+     * same-batch field change.
      */
     private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> upsertRootProject(String organisationId, ProjectMilestoneCsvLine rootLine, Set<String> changedMilestoneIds) {
-        Optional<ProjectEntity> existing = isBlank(rootLine.getProjectId())
-                ? projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(organisationId, rootLine.getProjectTitle())
-                : projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull(organisationId, rootLine.getProjectId());
+        // Project ID is mandatory for a root project, matching the UI's own required-field treatment of
+        // this input — it's the value a caller must hold onto to reference this project later. Sub
+        // Project ID / Milestone ID work differently: blank means "create a new one", auto-assigning
+        // <parent's proId>-<S|M><n> (see upsertSubProject / upsertMilestoneRow).
+        if (isBlank(rootLine.getProjectId())) {
+            return Either.left(Problems.badRequest(
+                    "Project ID is required for project: " + rootLine.getProjectTitle(), ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
+        }
+        Optional<ProjectEntity> existing = projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull(organisationId, rootLine.getProjectId());
 
         Either<ProblemDetail, BigDecimal> totalAmountE = parseDecimal(rootLine.getTotalAmount(), "Total Amount");
         if (totalAmountE.isLeft()) {
@@ -481,16 +491,6 @@ public class FundingBulkImportService {
             return Either.left(Problems.badRequest(
                     "Currency is required to create project: " + rootLine.getProjectTitle(), ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
-        // Project ID is mandatory for a root project, matching the UI's own required-field treatment of
-        // this input — it's the value a caller must hold onto to reliably reference this project later
-        // (e.g. an update row after a rename), since matching by title alone can drift. Sub Project ID /
-        // Milestone ID work differently: they stay optional on creation, auto-assigning <parent's
-        // proId>-<S|M><n> when blank (see upsertSubProject / upsertMilestoneRow) — only the root level needs
-        // a caller-chosen value, since a sub-project's/milestone's proId is always system-assigned.
-        if (isBlank(rootLine.getProjectId())) {
-            return Either.left(Problems.badRequest(
-                    "Project ID is required to create project: " + rootLine.getProjectTitle(), ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
-        }
         ProjectView view = projectService.createWithMilestones(ProjectWithMilestonesCreateRequest.builder()
                 .organisationId(organisationId)
                 .projectTitle(rootLine.getProjectTitle())
@@ -506,10 +506,15 @@ public class FundingBulkImportService {
         return Either.right(new UpsertOutcome<>(created, true));
     }
 
-    /** See {@link #upsertRootProject}'s Javadoc — same proId-first matching and same-batch "last wins" rule. */
+    /**
+     * See {@link #upsertRootProject}'s Javadoc — same proId-only matching and same-batch "last wins"
+     * rule. A blank {@code Sub Project ID} always means "create a new sub-project" (its proId is then
+     * auto-assigned); it never falls back to matching an existing one by title, so a row meant to edit
+     * an existing sub-project must carry its ID (the Projects+Milestones export provides it).
+     */
     private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> upsertSubProject(ProjectEntity root, ProjectMilestoneCsvLine line) {
         Optional<ProjectEntity> existing = isBlank(line.getSubProjectId())
-                ? projectRepository.findByParentProjectIdAndProjectTitle(root.getId(), line.getSubProjectTitle())
+                ? Optional.empty()
                 : projectRepository.findByParentProjectIdAndProId(root.getId(), line.getSubProjectId());
 
         Either<ProblemDetail, BigDecimal> subAmountE = parseDecimal(line.getSubTotalAmount(), "Sub Total Amount");
@@ -535,7 +540,8 @@ public class FundingBulkImportService {
         Either<ProblemDetail, ProjectEntity> created = projectStructureService.createSubProject(
                 root, line.getSubProjectTitle(), line.getSubProjectId(), null, subAmountE.get(), null);
         if (created.isLeft()) {
-            return Either.left(created.getLeft());
+            return Either.left(withMissingIdHint(created.getLeft(), line.getSubProjectId(),
+                    ErrorTitleConstants.PROJECT_TITLE_ALREADY_EXISTS, "Sub Project ID", "sub-project"));
         }
         return Either.right(new UpsertOutcome<>(created.get(), true));
     }
@@ -601,12 +607,13 @@ public class FundingBulkImportService {
         LocalDate date = dateE.get();
         String currency = project.getCurrency();
 
-        // proId is permanent (see MilestoneEntity#proId) — when the row's Milestone ID column is set,
-        // matching prefers it over the title, the reliable way to find a milestone that's since been
-        // renamed. See upsertRootProject's Javadoc for the same-batch "last group in the file wins" rule
-        // this produces for free when two rows share an ID under different titles.
+        // proId is permanent (see MilestoneEntity#proId) and is the only key an existing milestone is
+        // matched by — a blank Milestone ID always means "create a new milestone" (proId auto-assigned),
+        // never a title lookup (see upsertSubProject). See upsertRootProject's Javadoc for the same-batch
+        // "last group in the file wins" rule this produces for free when two rows share an ID under
+        // different titles.
         Optional<MilestoneEntity> existing = isBlank(line.getMilestoneId())
-                ? milestoneService.findByProjectIdAndMilestoneTitle(project.getId(), line.getMilestoneTitle())
+                ? Optional.empty()
                 : milestoneService.findByProjectIdAndProId(project.getId(), line.getMilestoneId());
         if (existing.isPresent()) {
             // UPDATE — partial: a blank (or unchanged) value means "leave this field alone" — see
@@ -660,9 +667,27 @@ public class FundingBulkImportService {
         MilestoneView view = milestoneService.createMilestone(project.getId(), request, line.getMilestoneId());
         Optional<ProblemDetail> error = view.getError();
         if (error.isPresent()) {
-            return Either.left(error.get());
+            return Either.left(withMissingIdHint(error.get(), line.getMilestoneId(),
+                    ErrorTitleConstants.MILESTONE_TITLE_ALREADY_EXISTS, "Milestone ID", "milestone"));
         }
         return Either.right(true);
+    }
+
+    /**
+     * A blank ID column means "create", so a row that was really meant to edit an existing sub-project
+     * or milestone (but left its ID out) lands on the create path and trips the duplicate-title check.
+     * The bare "title already exists" message doesn't say why a create was attempted at all — this
+     * appends the actual fix (set the ID column) for exactly that case, leaving every other error as-is.
+     */
+    private static ProblemDetail withMissingIdHint(ProblemDetail problem, String idColumnValue,
+            String titleConflictCode, String idColumnName, String kind) {
+        if (!isBlank(idColumnValue) || !titleConflictCode.equals(problem.getTitle())) {
+            return problem;
+        }
+        return Problems.conflict(
+                "%s. %s is blank, so a new %s was going to be created — set %s to edit the existing one"
+                        .formatted(problem.getDetail(), idColumnName, kind, idColumnName),
+                problem.getTitle());
     }
 
     // -------------------------------------------------------------------------
@@ -878,14 +903,14 @@ public class FundingBulkImportService {
     /**
      * Groups allocation rows by target project, preserving first-seen order, so a project that receives
      * several milestone allocations in this event appears once with all its milestones. A row with a
-     * blank {@code Project Title} is reported and skipped — never bails out of the whole group, so
+     * blank {@code Project ID} is reported and skipped — never bails out of the whole group, so
      * every other row still gets grouped and validated (see {@link #processEventGroup}).
      */
     private LinkedHashMap<String, List<IndexedLine>> groupAllocationRowsByProject(List<IndexedLine> group, List<FundingRowError> errors) {
         LinkedHashMap<String, List<IndexedLine>> byProject = new LinkedHashMap<>();
         for (IndexedLine il : group) {
-            if (isBlank(il.line().getProjectTitle())) {
-                errors.add(rowError(il.rowNumber(), Problems.badRequest("Project Title is required for every allocation row",
+            if (isBlank(il.line().getProjectId())) {
+                errors.add(rowError(il.rowNumber(), Problems.badRequest("Project ID is required for every allocation row",
                         ErrorTitleConstants.PROJECT_FIELDS_REQUIRED)));
                 continue;
             }
@@ -895,13 +920,12 @@ public class FundingBulkImportService {
     }
 
     /**
-     * Identifies an allocation row's target: {@code Project Title} alone, plus {@code Sub Project
-     * Title} when set. Two rows only share a target when both match — so allocations to two
-     * different, same-titled sub-projects under the same root (disambiguated by their own {@code Sub
-     * Project Title}) never merge into one group.
+     * Identifies an allocation row's target: {@code Project ID} alone, plus {@code Sub Project ID}
+     * when set. Two rows only share a target when both match. Titles play no part — they're editable
+     * and only ever used in messages.
      */
     private static String allocationTargetKey(EventCsvLine line) {
-        return line.getProjectTitle() + "||" + nullToEmpty(line.getSubProjectTitle());
+        return line.getProjectId() + "||" + nullToEmpty(line.getSubProjectId());
     }
 
     /**
@@ -923,7 +947,7 @@ public class FundingBulkImportService {
             EventType eventType, List<FundingRowError> errors,
             Map<String, Integer> milestoneRowNumbers, Map<String, Integer> projectRowNumbers) {
 
-        LinkedHashMap<String, ProjectEntity> rootsByTitle = new LinkedHashMap<>();
+        LinkedHashMap<String, ProjectEntity> rootsById = new LinkedHashMap<>();
         LinkedHashMap<String, List<EventMilestoneAllocationRequest>> rootDirectMilestones = new LinkedHashMap<>();
         LinkedHashMap<String, List<EventSubProjectAllocationRequest>> subAllocationsByRoot = new LinkedHashMap<>();
 
@@ -943,10 +967,10 @@ public class FundingBulkImportService {
             List<EventMilestoneAllocationRequest> milestones =
                     buildMilestoneAllocations(project, projectLines, eventType, errors, milestoneRowNumbers);
 
-            attachAllocation(project, milestones, rootsByTitle, rootDirectMilestones, subAllocationsByRoot);
+            attachAllocation(project, milestones, rootsById, rootDirectMilestones, subAllocationsByRoot);
         }
 
-        return buildAllocationRequests(rootsByTitle, rootDirectMilestones, subAllocationsByRoot);
+        return buildAllocationRequests(rootsById, rootDirectMilestones, subAllocationsByRoot);
     }
 
     /**
@@ -976,31 +1000,31 @@ public class FundingBulkImportService {
             IndexedLine il, EventType eventType, List<FundingRowError> errors, Map<String, Integer> milestoneRowNumbers) {
 
         EventCsvLine line = il.line();
-        if (isBlank(line.getMilestoneTitle())) {
-            errors.add(rowError(il.rowNumber(), Problems.badRequest("Milestone Title is required for every allocation row",
+        if (isBlank(line.getMilestoneId())) {
+            errors.add(rowError(il.rowNumber(), Problems.badRequest("Milestone ID is required for every allocation row",
                     ErrorTitleConstants.MILESTONE_FIELDS_REQUIRED)));
             return Optional.empty();
         }
-        // Validation only — the milestone must already exist, this file never creates one. proId (see
-        // MilestoneEntity#proId), when the row's Milestone ID column is set, is preferred over title —
-        // the reliable way to reference a milestone that's since been renamed.
-        Optional<MilestoneEntity> milestone = isBlank(line.getMilestoneId())
-                ? milestoneService.findByProjectIdAndMilestoneTitle(project.getId(), line.getMilestoneTitle())
-                : milestoneService.findByProjectIdAndProId(project.getId(), line.getMilestoneId());
+        // Validation only — the milestone must already exist, this file never creates one. Matched by
+        // proId (see MilestoneEntity#proId) only, never by its editable title.
+        Optional<MilestoneEntity> milestone = milestoneService.findByProjectIdAndProId(project.getId(), line.getMilestoneId());
         if (milestone.isEmpty()) {
             // A project holds either milestones or sub-projects, never both — so if this "milestone not
-            // found" project actually has sub-projects, the real problem isn't a typo'd milestone title,
+            // found" project actually has sub-projects, the real problem isn't a typo'd Milestone ID,
             // it's a row that forgot to name which sub-project the milestone belongs to. Reporting that
             // distinctly (rather than the generic not-found) is what actually points the user at the fix.
-            if (isBlank(line.getSubProjectTitle()) && projectRepository.existsByParentProjectId(project.getId())) {
+            if (isBlank(line.getSubProjectId()) && projectRepository.existsByParentProjectId(project.getId())) {
                 errors.add(rowError(il.rowNumber(), Problems.badRequest(
-                        "%s organises milestones under sub-projects; set Sub Project Title to name the sub-project that owns milestone '%s'"
-                                .formatted(capitalize(projectPath(project)), line.getMilestoneTitle()),
+                        "%s organises milestones under sub-projects; set Sub Project ID to name the sub-project that owns milestone '%s'"
+                                .formatted(capitalize(projectPath(project)), line.getMilestoneId()),
                         ErrorTitleConstants.SUBPROJECT_TITLE_REQUIRED)));
                 return Optional.empty();
             }
+            String milestoneLabel = isBlank(line.getMilestoneTitle())
+                    ? "Milestone ID '%s'".formatted(line.getMilestoneId())
+                    : "Milestone '%s' (ID '%s')".formatted(line.getMilestoneTitle(), line.getMilestoneId());
             errors.add(rowError(il.rowNumber(), Problems.notFound(
-                    "Milestone '%s' not found under %s".formatted(line.getMilestoneTitle(), projectPath(project)),
+                    "%s not found under %s".formatted(milestoneLabel, projectPath(project)),
                     ErrorTitleConstants.MILESTONE_NOT_FOUND)));
             return Optional.empty();
         }
@@ -1030,8 +1054,8 @@ public class FundingBulkImportService {
 
         return Optional.of(EventMilestoneAllocationRequest.builder()
                 .milestone(MilestoneCreateRequest.builder()
-                        .milestoneTitle(line.getMilestoneTitle())
-                        .proId(line.getMilestoneId())
+                        .milestoneTitle(milestone.get().getMilestoneTitle())
+                        .proId(milestone.get().getProId())
                         .build())
                 .allocatedAmount(allocatedAmount)
                 .build());
@@ -1058,45 +1082,53 @@ public class FundingBulkImportService {
         return "sub-project '%s' of project '%s'".formatted(project.getProjectTitle(), parentTitle);
     }
 
-    /** Records {@code project}'s allocation as a root-level entry, or nests it under its root's sub-projects. */
+    /**
+     * Records {@code project}'s allocation as a root-level entry, or nests it under its root's
+     * sub-projects. Keyed by entity id, and every request carries the resolved proId, so the
+     * downstream {@code SpendingEventService} matches the same rows by proId rather than re-resolving
+     * them by (editable) title.
+     */
     private void attachAllocation(ProjectEntity project, List<EventMilestoneAllocationRequest> milestones,
-            Map<String, ProjectEntity> rootsByTitle,
+            Map<String, ProjectEntity> rootsById,
             Map<String, List<EventMilestoneAllocationRequest>> rootDirectMilestones,
             Map<String, List<EventSubProjectAllocationRequest>> subAllocationsByRoot) {
 
         ProjectEntity parentProject = project.getParentProject();
         if (parentProject == null) {
-            rootsByTitle.put(project.getProjectTitle(), project);
-            rootDirectMilestones.put(project.getProjectTitle(), milestones);
+            rootsById.put(project.getId(), project);
+            rootDirectMilestones.put(project.getId(), milestones);
             return;
         }
         // `parentProject` is a lazy association — reading only its id is safe on a detached entity
         // (the id is already loaded via the FK column); a fresh findById avoids triggering lazy
-        // initialization when the parent's own fields (projectTitle) are needed.
+        // initialization when the parent's own fields (projectTitle, proId) are needed.
         String parentId = Objects.requireNonNull(parentProject.getId(), "parentProject id must not be null");
         ProjectEntity root = projectRepository.findById(parentId).orElseThrow();
-        rootsByTitle.putIfAbsent(root.getProjectTitle(), root);
-        subAllocationsByRoot.computeIfAbsent(root.getProjectTitle(), k -> new ArrayList<>())
+        rootsById.putIfAbsent(root.getId(), root);
+        subAllocationsByRoot.computeIfAbsent(root.getId(), k -> new ArrayList<>())
                 .add(EventSubProjectAllocationRequest.builder()
                         .projectTitle(project.getProjectTitle())
+                        .proId(project.getProId())
                         .milestones(milestones)
                         .build());
     }
 
     private List<EventProjectAllocationRequest> buildAllocationRequests(
-            Map<String, ProjectEntity> rootsByTitle,
+            Map<String, ProjectEntity> rootsById,
             Map<String, List<EventMilestoneAllocationRequest>> rootDirectMilestones,
             Map<String, List<EventSubProjectAllocationRequest>> subAllocationsByRoot) {
 
         List<EventProjectAllocationRequest> allocations = new ArrayList<>();
-        for (String rootTitle : rootsByTitle.keySet()) {
+        for (ProjectEntity root : rootsById.values()) {
             EventProjectAllocationRequest.EventProjectAllocationRequestBuilder allocation =
-                    EventProjectAllocationRequest.builder().projectTitle(rootTitle);
-            if (rootDirectMilestones.containsKey(rootTitle)) {
-                allocation.milestones(rootDirectMilestones.get(rootTitle));
+                    EventProjectAllocationRequest.builder()
+                            .projectTitle(root.getProjectTitle())
+                            .proId(root.getProId());
+            if (rootDirectMilestones.containsKey(root.getId())) {
+                allocation.milestones(rootDirectMilestones.get(root.getId()));
             }
-            if (subAllocationsByRoot.containsKey(rootTitle)) {
-                allocation.subProjects(subAllocationsByRoot.get(rootTitle));
+            if (subAllocationsByRoot.containsKey(root.getId())) {
+                allocation.subProjects(subAllocationsByRoot.get(root.getId()));
             }
             allocations.add(allocation.build());
         }
@@ -1139,68 +1171,53 @@ public class FundingBulkImportService {
 
     /**
      * Resolves a CSV project reference (Events file) to its project entity — never creates anything.
-     * When {@code subProjectTitle} is blank, {@code projectTitle} is resolved by title alone at any
-     * depth (root or sub-project), exactly as before: an error when no project matches, or when more
-     * than one project in the organisation shares that title (a bare title is only guaranteed unique
-     * within its sibling scope, not organisation-wide) — see {@link #findExistingProjectByTitle}.
-     * When {@code subProjectTitle} is set, {@code projectTitle} is instead resolved as the <em>root</em>
-     * project (unique per organisation), and {@code subProjectTitle} is resolved as that root's
-     * immediate sub-project — this scoped lookup can never be ambiguous, since the parent is fixed by
-     * the root lookup, so it's the way to disambiguate two same-titled sub-projects under different
-     * roots.
-     */
-    /**
-     * proId is permanent (see {@code ProjectEntity#proId}) — {@code projectIdColumn}/{@code
-     * subProjectIdColumn}, when set, are preferred over the title columns, the reliable way to
-     * reference a project/sub-project that's since been renamed. Falls back to the title columns
-     * exactly as before when the ID column is blank or absent (older exported templates keep working
-     * unchanged).
+     * proId is permanent (see {@code ProjectEntity#proId}) and is the only key used; titles are
+     * editable and only appear in messages. When {@code subProjectIdColumn} is blank,
+     * {@code projectIdColumn} is resolved at any depth (root or sub-project) — an error when nothing
+     * matches, or when more than one project in the organisation shares that proId (a sub-project's
+     * proId is only guaranteed unique under its parent). When {@code subProjectIdColumn} is set,
+     * {@code projectIdColumn} is resolved as the <em>root</em> (unique per organisation) and
+     * {@code subProjectIdColumn} as that root's immediate sub-project — this scoped lookup can never
+     * be ambiguous. A {@code Sub Project Title} without a {@code Sub Project ID} is rejected rather
+     * than silently resolving to the root.
      */
     private Either<ProblemDetail, ProjectEntity> resolveExistingProjectEntity(String organisationId,
             String projectTitle, String projectIdColumn, String subProjectTitle, String subProjectIdColumn,
             Map<String, String> resolvedProjectIds) {
 
-        if (isBlank(subProjectTitle) && isBlank(subProjectIdColumn)) {
-            Either<ProblemDetail, Optional<ProjectEntity>> existingE = isBlank(projectIdColumn)
-                    ? findExistingProjectByTitle(organisationId, projectTitle)
-                    : findExistingProjectByProId(organisationId, projectIdColumn);
+        if (isBlank(subProjectIdColumn)) {
+            if (!isBlank(subProjectTitle)) {
+                return Either.left(Problems.badRequest(
+                        "Sub Project ID is required when Sub Project Title is set: " + subProjectTitle,
+                        ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
+            }
+            Either<ProblemDetail, Optional<ProjectEntity>> existingE = findExistingProjectByProId(organisationId, projectIdColumn);
             if (existingE.isLeft()) {
                 return Either.left(existingE.getLeft());
             }
             return existingE.get()
                     .map(project -> {
-                        resolvedProjectIds.put(projectTitle, project.getId());
+                        resolvedProjectIds.put(project.getProjectTitle(), project.getId());
                         return Either.<ProblemDetail, ProjectEntity>right(project);
                     })
-                    .orElseGet(() -> Either.left(Problems.projectReferenceNotFound(projectTitle)));
+                    .orElseGet(() -> Either.left(Problems.projectReferenceNotFound(projectIdColumn)));
         }
 
-        Optional<ProjectEntity> root = isBlank(projectIdColumn)
-                ? projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(organisationId, projectTitle)
-                : projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull(organisationId, projectIdColumn);
+        Optional<ProjectEntity> root = projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull(organisationId, projectIdColumn);
         if (root.isEmpty()) {
-            return Either.left(Problems.projectReferenceNotFound(projectTitle));
+            return Either.left(Problems.projectReferenceNotFound(projectIdColumn));
         }
-        Optional<ProjectEntity> sub = isBlank(subProjectIdColumn)
-                ? projectRepository.findByParentProjectIdAndProjectTitle(root.get().getId(), subProjectTitle)
-                : projectRepository.findByParentProjectIdAndProId(root.get().getId(), subProjectIdColumn);
+        Optional<ProjectEntity> sub = projectRepository.findByParentProjectIdAndProId(root.get().getId(), subProjectIdColumn);
         if (sub.isEmpty()) {
-            return Either.left(Problems.subProjectReferenceNotFound(projectTitle, subProjectTitle));
+            return Either.left(Problems.notFound(
+                    "Sub Project ID '%s' not found under Project ID '%s'".formatted(subProjectIdColumn, projectIdColumn),
+                    ErrorTitleConstants.SUBPROJECT_REFERENCE_NOT_FOUND));
         }
-        resolvedProjectIds.put(subProjectTitle, sub.get().getId());
+        resolvedProjectIds.put(sub.get().getProjectTitle(), sub.get().getId());
         return Either.right(sub.get());
     }
 
-    /** Looks up a project by title (any level) without erroring on "not found" — the caller decides what a missing project means. */
-    private Either<ProblemDetail, Optional<ProjectEntity>> findExistingProjectByTitle(String organisationId, String projectTitle) {
-        List<ProjectEntity> matches = projectRepository.findByOrganisationIdAndProjectTitle(organisationId, projectTitle);
-        if (matches.size() > 1) {
-            return Either.left(Problems.ambiguousProjectReference(projectTitle));
-        }
-        return Either.right(matches.isEmpty() ? Optional.empty() : Optional.of(matches.get(0)));
-    }
-
-    /** proId equivalent of {@link #findExistingProjectByTitle} — same "search broadly, flag ambiguity" contract. */
+    /** Looks up a project by proId (any level) — flags ambiguity, leaves "not found" to the caller. */
     private Either<ProblemDetail, Optional<ProjectEntity>> findExistingProjectByProId(String organisationId, String proId) {
         List<ProjectEntity> matches = projectRepository.findByOrganisationIdAndProId(organisationId, proId);
         if (matches.size() > 1) {

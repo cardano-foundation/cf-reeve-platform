@@ -30,11 +30,9 @@ public class ProjectMilestoneCsvLine {
     private String projectTitle;
 
     /**
-     * The project's permanent identifier (see {@code ProjectEntity#proId}) — when present, matching
-     * against an existing row prefers this over {@link #projectTitle}, which is the only way to find a
-     * project that's since been renamed. Mandatory when the row creates a new root project (rejected as
-     * a row error otherwise, matching the UI's own required-field treatment of this input); optional
-     * when matching an existing one, same as every other reference-by-title fallback in this file.
+     * The project's permanent identifier (see {@code ProjectEntity#proId}) — the only key an existing
+     * root project is matched by ({@link #projectTitle} is just the value to write). Mandatory on the
+     * row carrying the root's columns, for an update as well as a create.
      */
     @CsvBindByName(column = "Project ID", profiles = "optional")
     private String projectId;
@@ -48,7 +46,10 @@ public class ProjectMilestoneCsvLine {
     @CsvBindByName(column = "Sub Project Title", profiles = "optional")
     private String subProjectTitle;
 
-    /** See {@link #projectId} — same semantics, for the sub-project this row carries. */
+    /**
+     * The sub-project's permanent identifier — the only key an existing sub-project is matched by. Blank
+     * means "create a new sub-project" (proId auto-assigned); it never falls back to matching by title.
+     */
     @CsvBindByName(column = "Sub Project ID", profiles = "optional")
     private String subProjectId;
 
@@ -58,7 +59,7 @@ public class ProjectMilestoneCsvLine {
     @CsvBindByName(column = "Milestone Title", profiles = "optional")
     private String milestoneTitle;
 
-    /** See {@link #projectId} — same semantics, for the milestone this row carries. */
+    /** See {@link #subProjectId} — same semantics, for the milestone this row carries. */
     @CsvBindByName(column = "Milestone ID", profiles = "optional")
     private String milestoneId;
 
