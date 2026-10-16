@@ -59,6 +59,11 @@ public class EventMilestoneAllocationEntity {
     @Column(name = "milestone_title", nullable = false)
     private String milestoneTitle;
 
+    /** The milestone's permanent, human-readable identifier at publish time (LOB-2384). */
+    @Nullable
+    @Column(name = "pro_id")
+    private String proId;
+
     /** Amount allocated to this milestone by the event. */
     @Nullable
     @Column(name = "allocated_amount")

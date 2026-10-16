@@ -6,7 +6,6 @@ import java.util.List;
 
 import jakarta.annotation.Nullable;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 
 import lombok.*;
 
@@ -25,13 +24,21 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Builder
 public class EventSubProjectAllocationRequest {
 
-    @NotBlank
+    @Nullable
     @Schema(example = "Sub1", description = "User-defined sub-project id. No longer used to match an existing sub-project — matched by projectTitle instead. Accepted and stored for backward compatibility only.")
     private String externalProjectId;
 
     @Nullable
     @Schema(example = "Project leaf 1", description = "Required. Matches an existing sub-project by (parentProjectId, projectTitle), or names a new one.")
     private String projectTitle;
+
+    @Nullable
+    @Schema(example = "PRU-KSKS-1", description = "Permanent identifier assigned when the sub-project was created (see ProjectView#proId). "
+            + "When supplied, matches the existing sub-project by it directly — the reliable way to reference one that may have since been "
+            + "renamed. When omitted, falls back to matching by the current projectTitle. Only meaningful for matching an existing "
+            + "sub-project — a sub-project's proId is always system-assigned on creation (parent's proId + '-S' + a sequence number) and cannot "
+            + "be chosen, so this is ignored if no existing sub-project matches and a new one is created instead.")
+    private String proId;
 
     @Nullable
     @Schema(example = "GRANT-2025-001-SUB1", description = "Optional funding reference of the sub-project. Unique per organisation — no two projects may share it.")

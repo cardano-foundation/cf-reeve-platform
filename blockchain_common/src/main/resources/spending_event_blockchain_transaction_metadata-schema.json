@@ -95,6 +95,7 @@
       "properties": {
         "milestone_id": { "type": "string", "minLength": 1 },
         "milestone_title": { "$ref": "#/$defs/freeText" },
+        "pro_id": { "$ref": "#/$defs/freeText", "description": "The milestone's permanent, human-readable identifier (LOB-2384) — set once at creation and never changed, unlike milestone_title which may be renamed after this record was published. Optional: absent on records published before this field existed." },
         "allocated_amount": { "$ref": "#/$defs/decimalString" }
       }
     },
@@ -110,6 +111,7 @@
       "properties": {
         "project_id": { "type": "string", "minLength": 1 },
         "project_title": { "$ref": "#/$defs/freeText" },
+        "pro_id": { "$ref": "#/$defs/freeText", "description": "The root project's permanent, human-readable identifier (LOB-2384) — set once at creation and never changed, unlike project_title which may be renamed after this record was published. Optional: absent on records published before this field existed." },
         "sub_project": { "$ref": "#/$defs/subProjectAllocation" },
         "milestones": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/milestone" } }
       }
@@ -122,6 +124,7 @@
       "properties": {
         "sub_project_id": { "type": "string", "minLength": 1 },
         "sub_project_title": { "$ref": "#/$defs/freeText" },
+        "pro_id": { "$ref": "#/$defs/freeText", "description": "The sub-project's permanent, human-readable identifier (LOB-2384) — set once at creation and never changed, unlike sub_project_title which may be renamed after this record was published. Optional: absent on records published before this field existed." },
         "milestones": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/milestone" } }
       }
     },

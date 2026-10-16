@@ -90,6 +90,17 @@ public class FundingEventEntity extends CommonEntity implements Persistable<Stri
     @Column(name = "ledger_dispatch_status_error_reason")
     private String ledgerDispatchStatusErrorReason;
 
+    // --- Last failed on-chain publish (LOB-2380). Kept while the reverted event is edited, cleared once a later
+    // publish reaches the chain, overwritten by a newer failure. ---
+
+    @Nullable
+    @Column(name = "last_failure_message")
+    private String lastFailureMessage;
+
+    @Nullable
+    @Column(name = "last_failure_at")
+    private LocalDateTime lastFailureAt;
+
     @NotNull
     @Column(name = "total_amount", nullable = false)
     @Builder.Default
