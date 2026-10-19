@@ -387,38 +387,46 @@ public class FundingBulkImportService {
             milestonesUpdated += row.milestonesUpdated();
         }
 
-        // Every row in the group has now been applied — validate the group's final, whole-tree
-        // structural consistency exactly once, the same way ProjectTreeUpdateService does for the JSON
-        // endpoint, since updateProjectEntity above deferred it for exactly this reason. A failure here
-        // rolls the whole group back via the existing all-or-nothing group transaction (see
-        // processGroupAtomically), same as any other row error.
-        if (errors.isEmpty()) {
-            Optional<ProblemDetail> coverage = projectTreeUpdateService.validateWholeTreeCoverage(touchedProjectIds);
-            if (coverage.isPresent()) {
-                errors.add(rowError(idxs.get(0) + 1, coverage.get()));
-            }
-        }
-
-        // Flag the events of every milestone shrunk or moved to another currency anywhere in this group
-        // together, in one call, only once the whole group has been accepted — see
-        // ProjectTreeUpdateService#flagEventsOfChangedMilestones.
         List<FundingRowWarning> warnings = List.of();
         if (errors.isEmpty()) {
-            // Read before flagging: only events this import moves from DRAFT to ERROR are worth a warning,
-            // same as the UI — one already ERROR was blocked before and stays so.
-            Set<String> draftEventIds = changedMilestoneIds.isEmpty() ? Set.of()
-                    : Set.copyOf(allocationRepository.findEventIdsByMilestoneIdInAndEventStatus(changedMilestoneIds, EventStatus.DRAFT));
-            Either<ProblemDetail, List<FundingEventEntity>> flagged = projectTreeUpdateService.flagEventsOfChangedMilestones(changedMilestoneIds);
-            if (flagged.isLeft()) {
-                errors.add(rowError(idxs.get(0) + 1, flagged.getLeft()));
+            Either<FundingRowError, List<FundingRowWarning>> finished = validateAndFlagGroup(
+                    idxs.get(0) + 1, touchedProjectIds, changedMilestoneIds, impactByMilestoneId);
+            if (finished.isLeft()) {
+                errors.add(finished.getLeft());
             } else {
-                warnings = eventImpactWarnings(impactByMilestoneId, flagged.get().stream()
-                        .filter(event -> draftEventIds.contains(event.getId()))
-                        .toList());
+                warnings = finished.get();
             }
         }
 
         return new ProjectMilestoneGroupOutcome(errors, warnings, succeeded, projectsCreated, projectsUpdated, milestonesCreated, milestonesUpdated);
+    }
+
+    /**
+     * Runs once every row of an error-free group has been applied. First validates the group's final,
+     * whole-tree structural consistency exactly once, the same way ProjectTreeUpdateService does for the
+     * JSON endpoint, since updateProjectEntity deferred it for exactly this reason. Then flags the events
+     * of every milestone shrunk or moved to another currency anywhere in the group together, in one call
+     * (see ProjectTreeUpdateService#flagEventsOfChangedMilestones), and returns the resulting warnings.
+     * A failure is reported against the group's first row and rolls the whole group back via the
+     * all-or-nothing group transaction (see processGroupAtomically), same as any other row error.
+     */
+    private Either<FundingRowError, List<FundingRowWarning>> validateAndFlagGroup(int firstRowNumber, Set<String> touchedProjectIds,
+            Set<String> changedMilestoneIds, Map<String, EventImpact> impactByMilestoneId) {
+        Optional<ProblemDetail> coverage = projectTreeUpdateService.validateWholeTreeCoverage(touchedProjectIds);
+        if (coverage.isPresent()) {
+            return Either.left(rowError(firstRowNumber, coverage.get()));
+        }
+        // Read before flagging: only events this import moves from DRAFT to ERROR are worth a warning,
+        // same as the UI — one already ERROR was blocked before and stays so.
+        Set<String> draftEventIds = changedMilestoneIds.isEmpty() ? Set.of()
+                : Set.copyOf(allocationRepository.findEventIdsByMilestoneIdInAndEventStatus(changedMilestoneIds, EventStatus.DRAFT));
+        Either<ProblemDetail, List<FundingEventEntity>> flagged = projectTreeUpdateService.flagEventsOfChangedMilestones(changedMilestoneIds);
+        if (flagged.isLeft()) {
+            return Either.left(rowError(firstRowNumber, flagged.getLeft()));
+        }
+        return Either.right(eventImpactWarnings(impactByMilestoneId, flagged.get().stream()
+                .filter(event -> draftEventIds.contains(event.getId()))
+                .toList()));
     }
 
     /**
