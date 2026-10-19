@@ -38,8 +38,11 @@ import org.cardanofoundation.lob.app.funding.domain.csv.EventCsvLine;
 import org.cardanofoundation.lob.app.funding.domain.csv.FundingCsvFileType;
 import org.cardanofoundation.lob.app.funding.domain.csv.FundingCsvTypeDetector;
 import org.cardanofoundation.lob.app.funding.domain.csv.ProjectMilestoneCsvLine;
+import org.cardanofoundation.lob.app.funding.domain.entity.EventMilestoneAllocationEntity;
+import org.cardanofoundation.lob.app.funding.domain.entity.FundingEventEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
+import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.request.BulkImportRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.EventProjectAllocationRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
@@ -54,6 +57,7 @@ import org.cardanofoundation.lob.app.funding.domain.view.FundingRowError;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
+import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
@@ -85,6 +89,8 @@ class FundingBulkImportServiceTest {
     private SpendingEventService spendingEventService;
     @Mock
     private OrganisationPublicApiIF organisationPublicApi;
+    @Mock
+    private EventMilestoneAllocationRepository allocationRepository;
 
     private FundingBulkImportService bulkImportService;
 
@@ -96,7 +102,7 @@ class FundingBulkImportServiceTest {
         // behavior is integration-test territory.
         bulkImportService = new FundingBulkImportService(projectMilestoneCsvParser, eventCsvParser,
                 csvTypeDetector, projectRepository, projectService, projectTreeUpdateService, projectStructureService,
-                milestoneService, spendingEventService, organisationPublicApi, new FundingBulkImportTransactionRunner());
+                milestoneService, spendingEventService, organisationPublicApi, new FundingBulkImportTransactionRunner(), allocationRepository);
         // Flagging the events of changed milestones succeeds (and finds nothing) unless a test says otherwise.
         lenient().when(projectTreeUpdateService.flagEventsOfChangedMilestones(any())).thenReturn(Either.right(List.of()));
         lenient().when(organisationPublicApi.findByOrganisationId(ORG_ID)).thenReturn(Optional.of(new Organisation()));
@@ -2441,6 +2447,98 @@ class FundingBulkImportServiceTest {
         assertThat(result.getProjectsUpdated()).isZero();
         assertThat(result.getFiles().get(0).getRowErrors()).hasSize(1);
         assertThat(result.getFiles().get(0).getRowErrors().get(0).getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+    }
+
+    // -------------------------------------------------------------------------
+    // Projects+Milestones warnings — draft events blocked by the import's changes
+    // -------------------------------------------------------------------------
+
+    private static FundingEventEntity eventAllocatedTo(String eventId, String fundingId, String... milestoneIds) {
+        List<EventMilestoneAllocationEntity> allocations = java.util.Arrays.stream(milestoneIds)
+                .map(milestoneId -> EventMilestoneAllocationEntity.builder()
+                        .id(new EventMilestoneAllocationEntity.Id(eventId, milestoneId))
+                        .build())
+                .toList();
+        return FundingEventEntity.builder().id(eventId).fundingId(fundingId).milestoneAllocations(allocations).build();
+    }
+
+    @Test
+    void milestoneShrink_reportsWarningNamingTheBlockedDraftEvents() {
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+        ProjectMilestoneCsvLine root = rootLine("Project A", null, null);
+        ProjectMilestoneCsvLine shrunk = continuationLine("Project A");
+        shrunk.setMilestoneTitle("Milestone One");
+        shrunk.setMilestoneId("M1");
+        shrunk.setMilestoneAmount("1000.00");
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(root, shrunk)));
+        ProjectEntity project = projectEntity("p1", "Project A", "USD");
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull(ORG_ID, "Project A")).thenReturn(Optional.of(project));
+        MilestoneEntity existing = MilestoneEntity.builder().id("m1").milestoneTitle("Milestone One").build();
+        when(milestoneService.findByProjectIdAndProId("p1", "M1")).thenReturn(Optional.of(existing));
+        when(projectTreeUpdateService.applyExistingMilestone(eq(project), eq(existing), any(), any())).thenAnswer(invocation -> {
+            invocation.<Set<String>>getArgument(3).add("m1");
+            return Optional.empty();
+        });
+        when(allocationRepository.findEventIdsByMilestoneIdInAndEventStatus(Set.of("m1"), EventStatus.DRAFT)).thenReturn(List.of("e1", "e2"));
+        when(projectTreeUpdateService.flagEventsOfChangedMilestones(Set.of("m1"))).thenReturn(Either.right(List.of(
+                eventAllocatedTo("e1", "GRANT-1", "m1"),
+                eventAllocatedTo("e2", "GRANT-2", "m1", "m9"))));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        FundingFileImportResult fileResult = result.getFiles().get(0);
+        assertThat(fileResult.getRowErrors()).isEmpty();
+        assertThat(result.getMilestonesUpdated()).isEqualTo(1);
+        assertThat(fileResult.getRowWarnings()).singleElement().satisfies(warning -> {
+            assertThat(warning.getRowNumber()).isEqualTo(2);
+            assertThat(warning.getReason()).isEqualTo("Reducing the amount of Milestone One marks 2 already-allocated "
+                    + "draft event(s) as blocked. They will need to be corrected before they can be published.");
+        });
+    }
+
+    @Test
+    void rootCurrencyChange_reportsOneWarningOnTheRootRow_countingOnlyEventsItMovedFromDraft() {
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(
+                List.of(rootLine("Project A", null, "EUR"))));
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull(ORG_ID, "Project A"))
+                .thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
+        when(projectTreeUpdateService.applyRootFields(any(), any(), any())).thenAnswer(invocation -> {
+            invocation.<Set<String>>getArgument(2).addAll(List.of("m1", "m2"));
+            return Optional.empty();
+        });
+        // e3 was already blocked before the import, so it isn't counted again.
+        when(allocationRepository.findEventIdsByMilestoneIdInAndEventStatus(any(), eq(EventStatus.DRAFT))).thenReturn(List.of("e1", "e2"));
+        when(projectTreeUpdateService.flagEventsOfChangedMilestones(any())).thenReturn(Either.right(List.of(
+                eventAllocatedTo("e1", "GRANT-1", "m1"),
+                eventAllocatedTo("e2", "GRANT-2", "m2"),
+                eventAllocatedTo("e3", "GRANT-3", "m2"))));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getFiles().get(0).getRowWarnings()).singleElement().satisfies(warning -> {
+            assertThat(warning.getRowNumber()).isEqualTo(1);
+            assertThat(warning.getReason()).startsWith("Changing the currency marks 2 already-allocated draft event(s) as blocked.");
+        });
+    }
+
+    @Test
+    void noWarning_whenNoEventIsBlocked() {
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(
+                List.of(rootLine("Project A", null, "EUR"))));
+        when(projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull(ORG_ID, "Project A"))
+                .thenReturn(Optional.of(projectEntity("p1", "Project A", "USD")));
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getFiles().get(0).getRowWarnings()).isEmpty();
     }
 
 }

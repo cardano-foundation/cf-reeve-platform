@@ -54,6 +54,7 @@ import org.cardanofoundation.lob.app.funding.domain.request.ProjectTreeNodeReque
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingBulkImportResult;
 import org.cardanofoundation.lob.app.funding.domain.view.FundingRowError;
+import org.cardanofoundation.lob.app.funding.domain.view.FundingRowWarning;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.job.EventPublishJob;
 import org.cardanofoundation.lob.app.funding.repository.FundingEventRepository;
@@ -1024,11 +1025,23 @@ class FundingBulkImportE2ETest {
                 Project Orion,,,,Sub 1,sub-1,120000.00,Milestone 1,sub1-m1,90000.00,
                 Project Orion,,,,Sub 2,sub-2,180000.00,Milestone 1,sub2-m1,160000.00,
                 """;
+        // A dry run reports the same warnings without blocking anything — what a UI preview would show.
+        FundingBulkImportResult shrinkPreview = bulkImportService.importFiles(BulkImportRequest.builder()
+                .organisationId(orgId).files(List.of(new MockMultipartFile("file", "shrink.csv", "text/csv", shrinkCsv.getBytes())))
+                .dryRun(true).build());
+        assertThat(shrinkPreview.getFiles().get(0).getRowWarnings()).extracting(FundingRowWarning::getRowNumber).containsExactly(2, 3);
+        assertThat(fundingEventRepository.findById(fundingEventId).orElseThrow().getStatus()).isEqualTo(EventStatus.DRAFT);
+
         FundingBulkImportResult shrinkResult = bulkImportService.importFiles(BulkImportRequest.builder()
                 .organisationId(orgId).files(List.of(new MockMultipartFile("file", "shrink.csv", "text/csv", shrinkCsv.getBytes())))
                 .build());
         assertThat(reasons(shrinkResult)).isEmpty();
         assertThat(shrinkResult.getMilestonesUpdated()).isEqualTo(2);
+        // One warning per shrunk milestone's row, each counting both events allocated to it.
+        assertThat(shrinkResult.getFiles().get(0).getRowWarnings()).extracting(FundingRowWarning::getRowNumber).containsExactly(2, 3);
+        assertThat(shrinkResult.getFiles().get(0).getRowWarnings()).extracting(FundingRowWarning::getReason).containsOnly(
+                "Reducing the amount of Milestone 1 marks 2 already-allocated draft event(s) as blocked. "
+                        + "They will need to be corrected before they can be published.");
 
         // Both events must be flagged ERROR — proving they're batched across the whole shrink group
         // (both milestones are in scope together), not checked one at a time (which would wrongly
