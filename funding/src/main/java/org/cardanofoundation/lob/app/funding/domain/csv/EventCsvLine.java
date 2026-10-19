@@ -19,8 +19,9 @@ import com.opencsv.bean.CsvBindByName;
  * distinct real-world transactions, not two allocations of the same one. FUNDING/REFUND rows carry
  * no spend detail, so for them this reduces to Funding ID, Hash, Entity, Currency and Date.
  *
- * <p>Both {@code projectTitle} and {@code milestoneTitle} must reference an <em>already-existing</em>
- * project and milestone — this file carries only allocation data (which milestone gets how much of
+ * <p>{@code projectId} (plus {@code subProjectId} for a sub-project) and {@code milestoneId} must
+ * reference an <em>already-existing</em> project and milestone by proId — the title columns are only
+ * used in messages, never to resolve anything. This file carries only allocation data (which milestone gets how much of
  * this event), not enough data to create a project or milestone from scratch. Create/update those
  * first via the Projects+Milestones file.
  */
@@ -80,33 +81,28 @@ public class EventCsvLine {
     private String projectTitle;
 
     /**
-     * The referenced project's permanent identifier (see {@code ProjectEntity#proId}) — when present,
-     * resolution prefers this over {@link #projectTitle}, the only reliable way to reference a project
-     * that's since been renamed.
+     * The referenced project's permanent identifier (see {@code ProjectEntity#proId}) — mandatory on
+     * every allocation row, and the only key it's resolved by.
      */
     @CsvBindByName(column = "Project ID", profiles = "optional")
     private String projectId;
 
-    /**
-     * Disambiguates which sub-project {@code Project Title} + this column refers to, when a
-     * sub-project title alone isn't unique across the organisation (sub-project titles are only
-     * guaranteed unique within their parent). When set, {@code Project Title} is resolved as the
-     * root project (unique per organisation) and this column names its immediate sub-project;
-     * when left blank, {@code Project Title} is resolved by title alone at any depth, exactly as
-     * before — so existing files that only ever named a globally-unique title keep working
-     * unchanged.
-     */
+    /** Informational only — a sub-project is resolved by {@link #subProjectId}, which is required when this is set. */
     @CsvBindByName(column = "Sub Project Title", profiles = "optional")
     private String subProjectTitle;
 
-    /** See {@link #projectId} — same semantics, for the sub-project named by {@link #subProjectTitle}. */
+    /**
+     * When set, {@link #projectId} is resolved as the root project and this names its immediate
+     * sub-project (a sub-project's proId is only unique under its parent). When blank,
+     * {@link #projectId} is resolved at any depth.
+     */
     @CsvBindByName(column = "Sub Project ID", profiles = "optional")
     private String subProjectId;
 
     @CsvBindByName(column = "Milestone Title")
     private String milestoneTitle;
 
-    /** See {@link #projectId} — same semantics, for the referenced milestone. */
+    /** The referenced milestone's proId — mandatory on every allocation row, the only key it's resolved by. */
     @CsvBindByName(column = "Milestone ID", profiles = "optional")
     private String milestoneId;
 
