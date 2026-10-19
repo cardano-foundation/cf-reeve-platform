@@ -683,6 +683,38 @@ class FundingBulkImportE2ETest {
         assertThat(milestoneRepository.findByProjectIdAndMilestoneTitle(marketing.getId(), "Milestone1")).isEmpty();
     }
 
+    @Test
+    void followOnRowsWithBlankSubProjectId_addMilestonesToTheSubProjectCreatedEarlierInTheFile() {
+        // The shape generator_funding.py produces: only a sub-project's first row carries its ID and Sub
+        // Total Amount, later rows just repeat its title. Those rows must continue that sub-project rather
+        // than try to create a second one ("Sub Total Amount is required to create sub-project"). Sub 2
+        // has no ID on any row, so it's auto-assigned and still resolved by its title within the file.
+        String orgId = "org-csv-follow-on-sub-rows";
+        when(organisationPublicApi.findByOrganisationId(orgId)).thenReturn(Optional.of(new Organisation()));
+        String csv = """
+                Project Title,Project ID,Total Amount,Currency,Sub Project Title,Sub Project ID,Sub Total Amount,Milestone Title,Milestone ID,Milestone Amount,Milestone Date
+                Project Orion,PRJ-1,1000,ADA,,,,,,,
+                Project Orion,,,,Sub 1,PRJ-1-1,600,Milestone 1,PRJ-1-1-1,200,2026-11-25
+                Project Orion,,,,Sub 1,,,Milestone 2,PRJ-1-1-2,400,2027-01-10
+                Project Orion,,,,Sub 2,,400,Milestone 1,,150,2026-12-31
+                Project Orion,,,,Sub 2,,,Milestone 2,,250,2027-02-14
+                """;
+        FundingBulkImportResult result = bulkImportService.importFiles(BulkImportRequest.builder().organisationId(orgId)
+                .files(List.of(new MockMultipartFile("file", "funding-project_milestone.csv", "text/csv", csv.getBytes()))).build());
+
+        assertThat(reasons(result)).isEmpty();
+        assertThat(result.getProjectsCreated()).isEqualTo(3); // root + Sub 1 + Sub 2
+        assertThat(result.getMilestonesCreated()).isEqualTo(4);
+        ProjectEntity root = projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull(orgId, "PRJ-1").orElseThrow();
+        assertThat(projectRepository.findByParentProjectId(root.getId())).hasSize(2);
+        ProjectEntity sub1 = projectRepository.findByParentProjectIdAndProId(root.getId(), "PRJ-1-1").orElseThrow();
+        assertThat(sub1.getTotalAmount()).isEqualByComparingTo("600");
+        assertThat(milestoneRepository.findByProjectId(sub1.getId())).hasSize(2);
+        ProjectEntity sub2 = projectRepository.findByParentProjectIdAndProjectTitle(root.getId(), "Sub 2").orElseThrow();
+        assertThat(sub2.getTotalAmount()).isEqualByComparingTo("400");
+        assertThat(milestoneRepository.findByProjectId(sub2.getId())).hasSize(2);
+    }
+
     /** Seeds Project A/Sub One + Milestone One/Two exactly as the downloadable template does. */
     private void seedProjectsAndMilestonesTemplate(String orgId) {
         MultipartFile file = new MockMultipartFile("file", "funding_projects_milestones_template.csv", "text/csv",

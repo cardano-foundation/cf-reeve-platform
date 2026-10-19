@@ -350,9 +350,12 @@ public class FundingBulkImportService {
         int milestonesCreated = 0;
         int milestonesUpdated = 0;
         Set<String> touchedProjectIds = new LinkedHashSet<>(Set.of(root.getId()));
+        // Sub-projects already created or matched by ID on an earlier row of this group, keyed by the
+        // title as written in the file — see upsertSubProject.
+        Map<String, ProjectEntity> subProjectsInGroup = new HashMap<>();
 
         for (int idx : idxs) {
-            RowOutcome row = processGroupRow(root, idx, lines.get(idx), resolvedProjectIds, changedMilestoneIds);
+            RowOutcome row = processGroupRow(root, idx, lines.get(idx), resolvedProjectIds, subProjectsInGroup, changedMilestoneIds);
             if (row.error() != null) {
                 errors.add(row.error());
             }
@@ -403,7 +406,7 @@ public class FundingBulkImportService {
      * the wrong project.
      */
     private RowOutcome processGroupRow(ProjectEntity root, int idx, ProjectMilestoneCsvLine line,
-            Map<String, String> resolvedProjectIds, Set<String> changedMilestoneIds) {
+            Map<String, String> resolvedProjectIds, Map<String, ProjectEntity> subProjectsInGroup, Set<String> changedMilestoneIds) {
         ProjectEntity target = root;
         int succeeded = 0;
         int projectsCreated = 0;
@@ -417,13 +420,14 @@ public class FundingBulkImportService {
         }
 
         if (line.hasSubProject()) {
-            Either<ProblemDetail, UpsertOutcome<ProjectEntity>> subE = upsertSubProject(root, line);
+            Either<ProblemDetail, UpsertOutcome<ProjectEntity>> subE = upsertSubProject(root, line, subProjectsInGroup);
             if (subE.isLeft()) {
                 return new RowOutcome(rowError(idx + 1, subE.getLeft()), 0, 0, 0, 0, 0, null);
             }
             target = subE.get().entity();
             touchedSubProjectId = target.getId();
             resolvedProjectIds.put(line.getSubProjectTitle(), target.getId());
+            subProjectsInGroup.put(line.getSubProjectTitle(), target);
             succeeded++;
             if (subE.get().created()) projectsCreated++; else projectsUpdated++;
         }
@@ -508,13 +512,20 @@ public class FundingBulkImportService {
 
     /**
      * See {@link #upsertRootProject}'s Javadoc — same proId-only matching and same-batch "last wins"
-     * rule. A blank {@code Sub Project ID} always means "create a new sub-project" (its proId is then
-     * auto-assigned); it never falls back to matching an existing one by title, so a row meant to edit
-     * an existing sub-project must carry its ID (the Projects+Milestones export provides it).
+     * rule. A blank {@code Sub Project ID} never matches a sub-project already in the database by title,
+     * so a row meant to edit one of those must carry its ID (the Projects+Milestones export provides it).
+     *
+     * <p>The one exception is a sub-project an earlier row of this same group already created or matched
+     * by ID: a later row with a blank ID and the same {@code Sub Project Title} continues that one (e.g.
+     * to add its second milestone) instead of creating a duplicate — the same in-file grouping the root
+     * project gets by {@code Project Title}. Only the file's own rows are matched this way, so there's no
+     * risk of a renamed title resolving the wrong stored row. Otherwise a blank ID means "create a new
+     * sub-project" and its proId is auto-assigned.
      */
-    private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> upsertSubProject(ProjectEntity root, ProjectMilestoneCsvLine line) {
+    private Either<ProblemDetail, UpsertOutcome<ProjectEntity>> upsertSubProject(ProjectEntity root, ProjectMilestoneCsvLine line,
+            Map<String, ProjectEntity> subProjectsInGroup) {
         Optional<ProjectEntity> existing = isBlank(line.getSubProjectId())
-                ? Optional.empty()
+                ? Optional.ofNullable(subProjectsInGroup.get(line.getSubProjectTitle()))
                 : projectRepository.findByParentProjectIdAndProId(root.getId(), line.getSubProjectId());
 
         Either<ProblemDetail, BigDecimal> subAmountE = parseDecimal(line.getSubTotalAmount(), "Sub Total Amount");
