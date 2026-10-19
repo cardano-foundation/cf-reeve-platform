@@ -1423,9 +1423,8 @@ class FundingBulkImportServiceTest {
         when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
 
         ProjectEntity sub = subProjectEntity("s1", "Sub One", "USD", root);
-        // Both rows carry the same Sub Project ID — the only way to put several milestones under one new
-        // sub-project, since a blank ID always means "create". Row 1's lookup finds nothing -> create
-        // with that explicit ID; row 2's finds the sub-project row 1 just created.
+        // Both rows carry the same Sub Project ID. Row 1's lookup finds nothing -> create with that
+        // explicit ID; row 2's finds the sub-project row 1 just created.
         when(projectRepository.findByParentProjectIdAndProId("p1", "sub-1")).thenReturn(Optional.empty(), Optional.of(sub));
         when(projectStructureService.createSubProject(eq(root), eq("Sub One"), any(), any(), any(), any())).thenReturn(Either.right(sub));
         when(milestoneService.createMilestone(eq("s1"), any(), any())).thenReturn(MilestoneView.builder().milestoneId("m1").build());
@@ -1438,6 +1437,54 @@ class FundingBulkImportServiceTest {
         verify(projectStructureService, times(1)).createSubProject(eq(root), eq("Sub One"), any(), any(), any(), any());
         verify(projectTreeUpdateService, times(1)).applySubProjectFields(eq(sub), any());
         verify(milestoneService, times(2)).createMilestone(eq("s1"), any(), any());
+    }
+
+    @ParameterizedTest
+    @CsvSource(value = {"NULL", "sub-1"}, nullValues = "NULL")
+    void twoMilestonesInSameSubProject_followOnRowWithBlankSubProjectId_continuesTheSubProjectAnEarlierRowResolved(String firstRowSubProjectId) {
+        // A follow-on row with a blank Sub Project ID and no Sub Total Amount continues the sub-project an
+        // earlier row of the same group created, matched by its title in the file — the same in-file
+        // grouping the root gets by Project Title — instead of being treated as a second create (which
+        // failed with "Sub Total Amount is required to create sub-project").
+        MultipartFile file = file("import.csv");
+        when(csvTypeDetector.detect(file)).thenReturn(Optional.of(FundingCsvFileType.PROJECTS_MILESTONES));
+
+        ProjectMilestoneCsvLine row1 = rootLine("Project A", "100000.00", "USD");
+        row1.setProjectId("Project A");
+        row1.setSubProjectTitle("Sub One");
+        row1.setSubProjectId(firstRowSubProjectId);
+        row1.setSubTotalAmount("40000.00");
+        row1.setMilestoneTitle("Milestone One");
+        row1.setMilestoneAmount("20000.00");
+        row1.setMilestoneDate("2026-06-30");
+
+        ProjectMilestoneCsvLine row2 = continuationLine("Project A");
+        row2.setSubProjectTitle("Sub One");
+        // Sub Project ID and Sub Total Amount deliberately left unset.
+        row2.setMilestoneTitle("Milestone Two");
+        row2.setMilestoneAmount("20000.00");
+        row2.setMilestoneDate("2026-07-15");
+
+        when(projectMilestoneCsvParser.parseCsv(file, ProjectMilestoneCsvLine.class)).thenReturn(Either.right(List.of(row1, row2)));
+        when(projectService.createWithMilestones(any())).thenReturn(successProjectView("p1"));
+        ProjectEntity root = projectEntity("p1", "Project A", "USD");
+        when(projectRepository.findById("p1")).thenReturn(Optional.of(root));
+
+        ProjectEntity sub = subProjectEntity("s1", "Sub One", "USD", root);
+        when(projectStructureService.createSubProject(eq(root), eq("Sub One"), any(), any(), any(), any())).thenReturn(Either.right(sub));
+        when(milestoneService.createMilestone(eq("s1"), any(), any())).thenReturn(MilestoneView.builder().milestoneId("m1").build());
+
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID).files(List.of(file)).build();
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getFiles().get(0).getRowErrors()).isEmpty();
+        assertThat(result.getProjectsCreated()).isEqualTo(2); // root + one sub-project, not two
+        assertThat(result.getMilestonesCreated()).isEqualTo(2);
+        verify(projectStructureService, times(1)).createSubProject(any(), any(), any(), any(), any(), any());
+        verify(projectTreeUpdateService, times(1)).applySubProjectFields(eq(sub), any());
+        verify(milestoneService, times(2)).createMilestone(eq("s1"), any(), any());
+        // Row 2 is resolved from row 1 in the file, never by a title lookup against the database.
+        verify(projectRepository, never()).findByParentProjectIdAndProjectTitle(any(), any());
     }
 
     // -------------------------------------------------------------------------
