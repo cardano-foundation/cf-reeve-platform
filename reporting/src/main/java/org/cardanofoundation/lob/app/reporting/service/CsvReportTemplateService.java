@@ -143,7 +143,7 @@ public class CsvReportTemplateService {
             List<ReportTemplateFieldDto> definedFields = new ArrayList<>();
             for (TemplateCsvLine templateCsvLine : filteredLines) {
                 int rowNumber = rowNumbers.get(templateCsvLine);
-                Either<ProblemDetail, ReportTemplateFieldDto> fieldEntityResult = csvLineToTemplateField(csvTemplateRequest.getOrganisationId(), templateCsvLine);
+                Either<ProblemDetail, ReportTemplateFieldDto> fieldEntityResult = csvLineToTemplateField(csvTemplateRequest.getOrganisationId(), dataMode, templateCsvLine);
                 if (fieldEntityResult.isLeft()) {
                     results.add(Either.left(atRow(fieldEntityResult.getLeft(), rowNumber)));
                     break outerLoop;
@@ -217,24 +217,28 @@ public class CsvReportTemplateService {
         return reportTemplateMapper.toResponseDto(entity);
     }
 
-    private Either<ProblemDetail, ReportTemplateFieldDto> csvLineToTemplateField(String organisationId, TemplateCsvLine templateCsvLine) {
+    private Either<ProblemDetail, ReportTemplateFieldDto> csvLineToTemplateField(String organisationId, DataMode dataMode, TemplateCsvLine templateCsvLine) {
         ReportTemplateFieldDto fieldEntity = new ReportTemplateFieldDto();
         fieldEntity.setFieldName(templateCsvLine.getFieldName());
-        Optional<ReportFieldDateRange> dateRangeO = ReportFieldDateRange.fromCsvLabel(templateCsvLine.getDateRange());
-        if (dateRangeO.isEmpty()) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid date range: " + templateCsvLine.getDateRange() + OPTIONS_ARE + String.join(", ", Arrays.stream(ReportFieldDateRange.values()).map(ReportFieldDateRange::getCsvLabel).toList()));
-            problem.setTitle(Constants.CSV_PARSING_ERROR);
-            return Either.left(problem);
+        // Date Range and Sign only drive Automatic generation, so a Manual template ignores them, as the template builder does
+        if (dataMode == DataMode.SYSTEM) {
+            if (isBlank(templateCsvLine.getDateRange())) {
+                return Either.left(csvError("Date Range is required for " + DataMode.SYSTEM.getCsvLabel() + " templates" + OPTIONS_ARE + dateRangeOptions()));
+            }
+            Optional<ReportFieldDateRange> dateRangeO = ReportFieldDateRange.fromCsvLabel(templateCsvLine.getDateRange());
+            if (dateRangeO.isEmpty()) {
+                return Either.left(csvError("Invalid date range: " + templateCsvLine.getDateRange() + OPTIONS_ARE + dateRangeOptions()));
+            }
+            fieldEntity.setDateRange(dateRangeO.get());
+            if (isBlank(templateCsvLine.getSign())) {
+                return Either.left(csvError("Sign is required for " + DataMode.SYSTEM.getCsvLabel() + " templates" + OPTIONS_ARE + signOptions()));
+            }
+            Optional<FieldSign> signO = FieldSign.fromCsvLabel(templateCsvLine.getSign());
+            if (signO.isEmpty()) {
+                return Either.left(csvError("Invalid Sign value: " + templateCsvLine.getSign() + OPTIONS_ARE + signOptions()));
+            }
+            fieldEntity.setNegated(signO.get().isNegated());
         }
-        ReportFieldDateRange dateRange = dateRangeO.get();
-        fieldEntity.setDateRange(dateRange);
-        Optional<FieldSign> signO = FieldSign.fromCsvLabel(templateCsvLine.getSign());
-        if (signO.isEmpty()) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid Sign value: " + templateCsvLine.getSign() + OPTIONS_ARE + String.join(", ", Arrays.stream(FieldSign.values()).map(FieldSign::getCsvLabel).toList()));
-            problem.setTitle(Constants.CSV_PARSING_ERROR);
-            return Either.left(problem);
-        }
-        fieldEntity.setNegated(signO.get().isNegated());
         String[] mappedAccounts = templateCsvLine.getAccounts().split(";");
         Set<ChartOfAccount> mappendAccountTypes = new HashSet<>();
         for (String mappedAccount : mappedAccounts) {
@@ -251,6 +255,24 @@ public class CsvReportTemplateService {
         }
         fieldEntity.setAccounts(mappendAccountTypes.stream().map(coa -> coa.getId().getCustomerCode()).collect(Collectors.toSet()));
         return Either.right(fieldEntity);
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private static String dateRangeOptions() {
+        return String.join(", ", Arrays.stream(ReportFieldDateRange.values()).map(ReportFieldDateRange::getCsvLabel).toList());
+    }
+
+    private static String signOptions() {
+        return String.join(", ", Arrays.stream(FieldSign.values()).map(FieldSign::getCsvLabel).toList());
+    }
+
+    private static ProblemDetail csvError(String detail) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, detail);
+        problem.setTitle(Constants.CSV_PARSING_ERROR);
+        return problem;
     }
 
     private Either<List<ProblemDetail>, Void> validateTemplateCsvLines(List<TemplateCsvLine> reportCsvLines, Map<TemplateCsvLine, Integer> rowNumbers) {
