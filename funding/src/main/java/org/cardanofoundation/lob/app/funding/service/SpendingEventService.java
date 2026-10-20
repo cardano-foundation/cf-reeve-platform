@@ -62,15 +62,44 @@ public class SpendingEventService {
     // View-returning API (used by the controller — carries the ProblemDetail)
     // -------------------------------------------------------------------------
 
-    public PagedResponse<SpendingEventView> listEvents(String organisationId, Optional<EventStatus> status,
-            Optional<EventType> eventType, Pageable pageable) {
+    public PagedResponse<SpendingEventView> listEvents(String organisationId, SpendingEventFilterRequest filter,
+            Pageable pageable) {
         if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
             return PagedResponse.error(Problems.unauthorized());
         }
         if (organisationPublicApi.findByOrganisationId(organisationId).isEmpty()) {
             return PagedResponse.error(Problems.organisationNotFound(organisationId));
         }
-        return PagedResponse.of(findByOrganisationIdAndFilter(organisationId, status, eventType, pageable), this::toView);
+        Optional<ProblemDetail> invalidFilter = validateFilter(filter);
+        if (invalidFilter.isPresent()) {
+            return PagedResponse.error(invalidFilter.get());
+        }
+        return PagedResponse.of(findByOrganisationIdAndFilter(organisationId, filter, pageable), this::toView);
+    }
+
+    /** Rejects ranges that can never match: inverted date/amount ranges and negative amount bounds. */
+    private static Optional<ProblemDetail> validateFilter(SpendingEventFilterRequest filter) {
+        if (filter.getDateFrom() != null && filter.getDateTo() != null && filter.getDateFrom().isAfter(filter.getDateTo())) {
+            return Optional.of(Problems.badRequest(
+                    "Event date 'from' (%s) must not be after 'to' (%s).".formatted(filter.getDateFrom(), filter.getDateTo()),
+                    ErrorTitleConstants.EVENT_FILTER_INVALID));
+        }
+        if (isNegative(filter.getMinAmount()) || isNegative(filter.getMaxAmount())) {
+            return Optional.of(Problems.badRequest(
+                    "Amount filters must not be negative.", ErrorTitleConstants.EVENT_FILTER_INVALID));
+        }
+        if (filter.getMinAmount() != null && filter.getMaxAmount() != null
+                && filter.getMinAmount().compareTo(filter.getMaxAmount()) > 0) {
+            return Optional.of(Problems.badRequest(
+                    "Minimum amount (%s) must not be greater than maximum amount (%s).".formatted(
+                            filter.getMinAmount().toPlainString(), filter.getMaxAmount().toPlainString()),
+                    ErrorTitleConstants.EVENT_FILTER_INVALID));
+        }
+        return Optional.empty();
+    }
+
+    private static boolean isNegative(BigDecimal amount) {
+        return amount != null && amount.signum() < 0;
     }
 
     public PagedResponse<SpendingEventView> listEventsByProject(String projectId, Optional<EventStatus> status,
@@ -230,14 +259,28 @@ public class SpendingEventService {
 
     public Page<FundingEventEntity> findByOrganisationIdAndFilter(
             String organisationId,
-            Optional<EventStatus> status,
-            Optional<EventType> eventType,
+            SpendingEventFilterRequest filter,
             Pageable pageable) {
         return fundingEventRepository.findByOrganisationIdAndFilter(
                 organisationId,
-                status.orElse(null),
-                eventType.orElse(null),
+                emptyToNull(filter.getStatuses()),
+                emptyToNull(filter.getEventTypes()),
+                blankToNull(filter.getProjectTitle()),
+                blankToNull(filter.getCurrency()),
+                filter.getDateFrom(),
+                filter.getDateTo(),
+                filter.getMinAmount(),
+                filter.getMaxAmount(),
                 pageable);
+    }
+
+    // The repository query treats null as "filter off"; an empty list or blank string must mean the same.
+    private static <T> List<T> emptyToNull(List<T> values) {
+        return values == null || values.isEmpty() ? null : values;
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     public Page<FundingEventEntity> findByProjectIdAndFilter(
