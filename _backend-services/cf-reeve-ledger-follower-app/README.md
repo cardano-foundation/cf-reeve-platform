@@ -50,16 +50,13 @@ not reported as `0`). Refresh failures keep the last known values instead of wip
 
 | Property (`application.properties` / `application.yaml`) | Environment variable                     | Default   | Meaning                                                                                     |
 |----------------------------------------------------------|------------------------------------------|-----------|---------------------------------------------------------------------------------------------|
-| `lob.utxo.filter.addresses`                              | `LOB_UTXO_FILTER_ADDRESSES`              | *(empty)* | Comma- **or** whitespace-separated list of addresses to monitor.                            |
+| `lob.utxo.filter.addresses`                              | `LOB_UTXO_FILTER_ADDRESSES`              | *(empty)* | Addresses to monitor — **comma-separated only** (Spring splits on `,`). |
 | `lob.metrics.address-balance.refresh-interval`           | `LOB_ADDRESS_BALANCE_REFRESH_INTERVAL`   | `PT30S`   | How often balances are re-queried (ISO-8601 duration, e.g. `PT10S`, `PT5M`).                |
 
 > **Empty allow-list = nothing is monitored.** The filter drops every unspent UTXO, `address_utxo`
 > stays empty and **no `cardano_address_balance` series are published**. Monitoring is opt-in: you
 > must list at least one address. The allow-list is captured once when the plugin is created, so
 > **changing it requires a restart** of the app.
->
-> Note: the inline comment in `application.yaml` still documents the old MVEL filter's "empty = no
-> filtering" default. The Java filter in `AddressUtxoFilterPlugin` is what runs, and it keeps nothing.
 
 ### Usage — local dev (Yaci DevKit, no external services)
 
@@ -139,49 +136,3 @@ Notes for consumers:
 - Only the address's own unspent UTXOs count: contract/market-order UTXOs are included when their
   `ownerAddr` is on the allow-list; anything else is filtered out before it is ever stored, which is
   what keeps `address_utxo` small enough to aggregate on every tick.
-
-### Troubleshooting
-
-| Symptom                                                       | Cause / fix                                                                                                   |
-|---------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------|
-| No `cardano_address_balance` lines at all                      | Allow-list is empty (see log line `AddressUtxoFilterPlugin created: 0 address(es) (no allow-list; ...)`), or no refresh has ticked yet. |
-| Series exists but value stays `0`                              | `SUM(lovelace_amount)` was empty for that address — the address holds no UTXOs at the last refresh.               |
-| Values lag behind the chain                                    | Normal up to `LOB_ADDRESS_BALANCE_REFRESH_INTERVAL`; lower it if you need tighter latency.                        |
-| `address_utxo` / `tx_input` tables missing                     | Utxo indexing not enabled (`store.utxo.enabled`, `store.utxo.pruning-enabled=true`) or DB not shared with the indexer (`DB_URL`). |
-| Chain not moving at all (so balances never move)               | Check chain sync first: `curl http://localhost:9090/actuator/health` → `yaciStoreChainSync` indicator reports `diffSlots`. |
-| Restart needed after editing addresses                         | Yes — the allow-list is read at plugin creation time, not per request.                                           |
-
-### Testing the feature in isolation
-
-Unit tests cover each stage of the pipeline:
-
-```bash
-cd _backend-services/cf-reeve-ledger-follower-app
-./gradlew test --tests "*AddressUtxoFilterPluginTest*"   # allow-list filtering
-./gradlew test --tests "*AddressBalanceServiceTest*"      # aggregate rows -> balances map
-./gradlew test --tests "*AddressBalanceMetricsTest*"      # series added/removed/updated on refresh
-```
-
----
-
-## Project layout (feature-relevant files)
-
-```
-src/main/resources/application.properties        # defaults: refresh interval, network, DB, endpoints
-src/main/resources/application.yaml              # lob.utxo.filter.addresses + store plugin registration
-src/main/resources/db/migration/postgresql/      # Flyway migrations (this app's own tables)
-src/main/java/org/cardano/foundation/lob/
-    ├── plugin/       AddressUtxoFilterPlugin, JavaPluginFactory   # what gets indexed
-    ├── repository/   AddressBalanceRepository, AddressBalance     # where it is stored / queried
-    ├── service/      AddressBalanceService, ChainSyncService, ... # what it computes
-    ├── metrics/      AddressBalanceMetrics                        # how it is published
-    ├── resource/     LedgerFollowerResource                       # JSON API
-    └── health/       YaciStoreTipHealthIndicator, Healthcheck     # health endpoints + image healthcheck
-docker-compose.yml                               # local dev: follower app + yaci-cli + postgres
-Dockerfile                                       # hardened image (java --enable-preview -jar /app.jar)
-```
-
-## Legal & community
-
-- Distributed under Apache-2.0 — see [LICENSE](LICENSE).
-- [Code of Conduct](CODE-OF-CONDUCT.md), [Contributing](CONTRIBUTING.md), [Security](SECURITY.md).
