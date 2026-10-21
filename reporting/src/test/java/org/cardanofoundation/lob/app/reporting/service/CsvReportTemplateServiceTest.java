@@ -2,7 +2,6 @@ package org.cardanofoundation.lob.app.reporting.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -49,10 +48,14 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.TemplateCsvLine;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldEntity;
+import org.cardanofoundation.lob.app.reporting.model.enums.ReportFieldDateRange;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 import org.cardanofoundation.lob.app.reporting.typeValidations.ReportTemplateTypeValidator;
+import org.cardanofoundation.lob.app.reporting.typeValidations.validator.BalanceSheetValidator;
+import org.cardanofoundation.lob.app.reporting.typeValidations.validator.IncomeStatementValidator;
 
 @ExtendWith(MockitoExtension.class)
 class CsvReportTemplateServiceTest {
@@ -76,6 +79,8 @@ class CsvReportTemplateServiceTest {
     @Mock
     private AccountingRegimeRepository accountingRegimeRepository;
     private AccountingRegimeResolver accountingRegimeResolver;
+    private final ReportTemplateTypeValidator reportTemplateTypeValidator =
+            new ReportTemplateTypeValidator(List.of(new BalanceSheetValidator(), new IncomeStatementValidator()));
     private CsvReportTemplateService reportTemplateService;
 
     @BeforeEach
@@ -91,7 +96,7 @@ class CsvReportTemplateServiceTest {
         lenient().when(reportTemplateServiceDependency.validateAccountingRegime(any(), any()))
                 .thenAnswer(invocation -> regimeRules.validateAccountingRegime(invocation.getArgument(0), invocation.getArgument(1)));
         reportTemplateService = new CsvReportTemplateService(organisationPublicApi, csvParser, reportTemplateRepository, reportingRepository,
-                reportTemplateMapper, chartOfAccountRepository, validator, reportTemplateServiceDependency);
+                reportTemplateMapper, chartOfAccountRepository, validator, reportTemplateServiceDependency, reportTemplateTypeValidator);
     }
 
     @Test
@@ -175,7 +180,8 @@ class CsvReportTemplateServiceTest {
                 reportTemplateMapper,
                 chartOfAccountRepository,
                 realValidator,
-                reportTemplateServiceDependency);
+                reportTemplateServiceDependency,
+                reportTemplateTypeValidator);
 
         CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
         Organisation organisation = new Organisation();
@@ -214,7 +220,8 @@ class CsvReportTemplateServiceTest {
                 reportTemplateMapper,
                 chartOfAccountRepository,
                 realValidator,
-                reportTemplateServiceDependency);
+                reportTemplateServiceDependency,
+                reportTemplateTypeValidator);
 
         CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
         MultipartFile file = mock(MultipartFile.class);
@@ -269,7 +276,8 @@ class CsvReportTemplateServiceTest {
                 reportTemplateMapper,
                 chartOfAccountRepository,
                 realValidator,
-                reportTemplateServiceDependency);
+                reportTemplateServiceDependency,
+                reportTemplateTypeValidator);
 
         CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
         MultipartFile file = mock(MultipartFile.class);
@@ -292,10 +300,10 @@ class CsvReportTemplateServiceTest {
         assertEquals(1, result.get().size());
         List<ReportTemplateFieldDto> fields = dtoCaptor.getValue().getFields();
         assertEquals(2, fields.size());
-        // Left unset, so the mapper applies the same defaults as the template builder
-        assertNull(fields.getFirst().getDateRange());
+        // Same defaults as the template builder, so the Balance Sheet accumulated rule holds when the template is edited later
+        assertEquals(ReportFieldDateRange.ACCUMULATED_START_TO_PERIOD_END, fields.getFirst().getDateRange());
         assertFalse(fields.getFirst().isNegated());
-        assertNull(fields.get(1).getDateRange());
+        assertEquals(ReportFieldDateRange.ACCUMULATED_START_TO_PERIOD_END, fields.get(1).getDateRange());
         assertFalse(fields.get(1).isNegated());
     }
 
@@ -504,6 +512,7 @@ class CsvReportTemplateServiceTest {
         when(chartOfAccountRepository.findById(new ChartOfAccount.Id("org123", "1234"))).thenReturn(Optional.of(chartOfAccount));
         when(templateCsvLine.getParent()).thenReturn("");
         when(chartOfAccount.getId()).thenReturn(new ChartOfAccount.Id("org123", "1234"));
+        when(reportTemplateMapper.toEntity(any(ReportTemplateDto.class), isNull())).thenReturn(mock(ReportTemplateEntity.class));
         when(reportTemplateMapper.toResponseDto(any())).thenReturn(responseDto);
         when(reportTemplateServiceDependency.validateDataMode(any(ReportTemplateDto.class))).thenReturn(Either.right(null));
 
@@ -798,7 +807,8 @@ class CsvReportTemplateServiceTest {
                 reportTemplateMapper,
                 chartOfAccountRepository,
                 validator,
-                realReportTemplateService);
+                realReportTemplateService,
+                reportTemplateTypeValidator);
 
         CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
         Organisation organisation = new Organisation();
@@ -899,6 +909,7 @@ class CsvReportTemplateServiceTest {
         ReportTemplateEntity existing = ReportTemplateEntity.builder().id("t1").ver(1L).accountingRegime("Old Regime").build();
         when(reportTemplateRepository.findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion("org123", "Template CSV", ReportTemplateType.INCOME_STATEMENT))
                 .thenReturn(Optional.of(existing));
+        when(reportTemplateMapper.toEntity(any(ReportTemplateDto.class), isNull())).thenReturn(mock(ReportTemplateEntity.class));
         when(reportTemplateMapper.toEntity(any(ReportTemplateDto.class), eq(existing))).thenReturn(existing);
         when(reportTemplateMapper.toResponseDto(any())).thenReturn(ReportTemplateResponseDto.builder().error(Optional.empty()).build());
 
@@ -921,6 +932,41 @@ class CsvReportTemplateServiceTest {
         assertEquals("Row 1: Accounting regime not found: test. Options are: GAAP, IFRS, Not applicable",
                 result.get().getFirst().getError().get().getDetail());
         verify(reportTemplateRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void createCsvTemplates_newTemplateFailingReportTypeRules_isRejected() {
+        when(reportTemplateMapper.toEntity(any(ReportTemplateDto.class), isNull())).thenReturn(incomeStatementWithLeafDateRange(ReportFieldDateRange.PERIOD));
+
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = importSingleManualRow("IFRS");
+
+        assertTrue(result.isRight());
+        ProblemDetail error = result.get().getFirst().getError().orElseThrow();
+        assertEquals("ALL_FIELDS_MUST_BE_ACCUMULATED_YEARLY", error.getTitle());
+        assertEquals(1, error.getProperties().get("rowNumber"));
+        verify(reportTemplateRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void createCsvTemplates_inPlaceUpdateFailingReportTypeRules_leavesExistingTemplateUntouched() {
+        ReportTemplateEntity existing = ReportTemplateEntity.builder().id("t1").ver(1L).accountingRegime("IFRS").build();
+        when(reportTemplateRepository.findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion("org123", "Template CSV", ReportTemplateType.INCOME_STATEMENT))
+                .thenReturn(Optional.of(existing));
+        when(reportTemplateMapper.toEntity(any(ReportTemplateDto.class), isNull())).thenReturn(incomeStatementWithLeafDateRange(ReportFieldDateRange.PERIOD));
+
+        Either<ProblemDetail, List<ReportTemplateResponseDto>> result = importSingleManualRow("IFRS");
+
+        assertTrue(result.isRight());
+        assertEquals("ALL_FIELDS_MUST_BE_ACCUMULATED_YEARLY", result.get().getFirst().getError().orElseThrow().getTitle());
+        verify(reportTemplateMapper, never()).toEntity(any(ReportTemplateDto.class), eq(existing));
+        verify(reportTemplateRepository, never()).saveAndFlush(any());
+    }
+
+    private static ReportTemplateEntity incomeStatementWithLeafDateRange(ReportFieldDateRange dateRange) {
+        return ReportTemplateEntity.builder()
+                .reportTemplateType(ReportTemplateType.INCOME_STATEMENT)
+                .fields(List.of(ReportTemplateFieldEntity.builder().name("Revenue").dateRange(dateRange).build()))
+                .build();
     }
 
     private Either<ProblemDetail, List<ReportTemplateResponseDto>> importSingleManualRow(String accountingRegime) {

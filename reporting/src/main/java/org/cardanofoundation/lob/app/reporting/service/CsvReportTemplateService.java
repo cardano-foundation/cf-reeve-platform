@@ -38,7 +38,6 @@ import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateFieldDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateResponseDto;
 import org.cardanofoundation.lob.app.reporting.dto.TemplateCsvLine;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
-import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.model.enums.DataMode;
 import org.cardanofoundation.lob.app.reporting.model.enums.FieldSign;
@@ -46,6 +45,7 @@ import org.cardanofoundation.lob.app.reporting.model.enums.ReportFieldDateRange;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
+import org.cardanofoundation.lob.app.reporting.typeValidations.ReportTemplateTypeValidator;
 
 @Service
 @RequiredArgsConstructor
@@ -64,6 +64,7 @@ public class CsvReportTemplateService {
     private final ChartOfAccountRepository chartOfAccountRepository;
     private final Validator validator;
     private final ReportTemplateService reportTemplateService;
+    private final ReportTemplateTypeValidator reportTemplateTypeValidator;
 
     public Either<ProblemDetail, List<ReportTemplateResponseDto>> createCsvTemplates(@Valid CreateCsvTemplateRequest csvTemplateRequest) {
         Optional<Organisation> organisationO = organisationPublicApiIF.findByOrganisationId(csvTemplateRequest.getOrganisationId());
@@ -143,7 +144,7 @@ public class CsvReportTemplateService {
             List<ReportTemplateFieldDto> definedFields = new ArrayList<>();
             for (TemplateCsvLine templateCsvLine : filteredLines) {
                 int rowNumber = rowNumbers.get(templateCsvLine);
-                Either<ProblemDetail, ReportTemplateFieldDto> fieldEntityResult = csvLineToTemplateField(csvTemplateRequest.getOrganisationId(), dataMode, templateCsvLine);
+                Either<ProblemDetail, ReportTemplateFieldDto> fieldEntityResult = csvLineToTemplateField(csvTemplateRequest.getOrganisationId(), reportTemplateType, dataMode, templateCsvLine);
                 if (fieldEntityResult.isLeft()) {
                     results.add(Either.left(atRow(fieldEntityResult.getLeft(), rowNumber)));
                     break outerLoop;
@@ -202,25 +203,32 @@ public class CsvReportTemplateService {
             return ReportTemplateResponseDto.builder().error(Optional.of(atRow(accountingRegime.getLeft(), parsedTemplate.rowNumber()))).build();
         }
 
-        ReportTemplateEntity entity = existingTemplateO.map(existingTemplate -> {
-                    List<ReportEntity> byReportTemplateId = reportingRepository.findByReportTemplateId(existingTemplate.getId());
-                    ReportTemplateEntity newEntity;
-                    if(byReportTemplateId.isEmpty()) {
-                        newEntity = reportTemplateMapper.toEntity(dto, existingTemplate);
-                    } else {
-                        newEntity = reportTemplateMapper.toEntity(dto, ReportTemplateEntity.builder().ver(existingTemplate.getVer() + 1).build());
-                    }
-                    return newEntity;
-                })
-                .orElseGet(() -> reportTemplateMapper.toEntity(dto, null));
+        boolean updateInPlace = existingTemplateO
+                .map(existingTemplate -> reportingRepository.findByReportTemplateId(existingTemplate.getId()).isEmpty())
+                .orElse(false);
+        // Same report type rules as the template API. An in-place update merges into the managed template, so it is checked
+        // on a detached copy first: a rejected template must not be flushed with the rest of the import
+        ReportTemplateEntity entity = updateInPlace ? reportTemplateMapper.toEntity(dto, null)
+                : existingTemplateO
+                        .map(existingTemplate -> reportTemplateMapper.toEntity(dto, ReportTemplateEntity.builder().ver(existingTemplate.getVer() + 1).build()))
+                        .orElseGet(() -> reportTemplateMapper.toEntity(dto, null));
+        Either<ProblemDetail, Void> reportTypeValidated = reportTemplateTypeValidator.validateReportTemplateType(entity);
+        if (reportTypeValidated.isLeft()) {
+            return ReportTemplateResponseDto.builder().error(Optional.of(atRow(reportTypeValidated.getLeft(), parsedTemplate.rowNumber()))).build();
+        }
+        if (updateInPlace) {
+            entity = reportTemplateMapper.toEntity(dto, existingTemplateO.get());
+        }
         entity = reportTemplateRepository.saveAndFlush(entity);
         return reportTemplateMapper.toResponseDto(entity);
     }
 
-    private Either<ProblemDetail, ReportTemplateFieldDto> csvLineToTemplateField(String organisationId, DataMode dataMode, TemplateCsvLine templateCsvLine) {
+    private Either<ProblemDetail, ReportTemplateFieldDto> csvLineToTemplateField(String organisationId, ReportTemplateType reportTemplateType, DataMode dataMode, TemplateCsvLine templateCsvLine) {
         ReportTemplateFieldDto fieldEntity = new ReportTemplateFieldDto();
         fieldEntity.setFieldName(templateCsvLine.getFieldName());
-        // Date Range and Sign only drive Automatic generation, so a Manual template ignores them, as the template builder does
+        // Date Range and Sign only drive Automatic generation, so a Manual template ignores them, as the template builder does.
+        // The builder still stores its per-type default Date Range, which the report type validation on later edits relies on.
+        fieldEntity.setDateRange(defaultDateRange(reportTemplateType));
         if (dataMode == DataMode.SYSTEM) {
             if (isBlank(templateCsvLine.getDateRange())) {
                 return Either.left(csvError("Date Range is required for " + DataMode.SYSTEM.getCsvLabel() + " templates" + OPTIONS_ARE + dateRangeOptions()));
@@ -255,6 +263,12 @@ public class CsvReportTemplateService {
         }
         fieldEntity.setAccounts(mappendAccountTypes.stream().map(coa -> coa.getId().getCustomerCode()).collect(Collectors.toSet()));
         return Either.right(fieldEntity);
+    }
+
+    private static ReportFieldDateRange defaultDateRange(ReportTemplateType reportTemplateType) {
+        return reportTemplateType == ReportTemplateType.INCOME_STATEMENT
+                ? ReportFieldDateRange.ACCUMULATED_YEAR_TO_PERIOD_END
+                : ReportFieldDateRange.ACCUMULATED_START_TO_PERIOD_END;
     }
 
     private static boolean isBlank(String value) {
