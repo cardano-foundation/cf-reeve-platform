@@ -33,6 +33,7 @@ import org.cardanofoundation.lob.app.funding.domain.csv.ProjectMilestoneCsvLine;
 import org.cardanofoundation.lob.app.funding.domain.entity.FundingEventEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
+import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.BulkImportRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.EventMilestoneAllocationRequest;
@@ -51,6 +52,7 @@ import org.cardanofoundation.lob.app.funding.domain.view.FundingRowWarning;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
 import org.cardanofoundation.lob.app.funding.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
+import org.cardanofoundation.lob.app.funding.repository.EventMilestoneAllocationRepository;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 import org.cardanofoundation.lob.app.funding.util.FundingValidations;
@@ -125,6 +127,7 @@ public class FundingBulkImportService {
     private final SpendingEventService spendingEventService;
     private final OrganisationPublicApiIF organisationPublicApi;
     private final FundingBulkImportTransactionRunner transactionRunner;
+    private final EventMilestoneAllocationRepository allocationRepository;
 
     public FundingBulkImportResult importFiles(BulkImportRequest request) {
         if (organisationPublicApi.findByOrganisationId(request.getOrganisationId()).isEmpty()) {
@@ -239,6 +242,7 @@ public class FundingBulkImportService {
         LinkedHashMap<String, List<Integer>> groups = groupByKey(lines, ProjectMilestoneCsvLine::getProjectTitle);
 
         List<FundingRowError> errors = new ArrayList<>();
+        List<FundingRowWarning> warnings = new ArrayList<>();
         int succeeded = 0;
         int projectsCreated = 0;
         int projectsUpdated = 0;
@@ -248,6 +252,7 @@ public class FundingBulkImportService {
         for (List<Integer> idxs : groups.values()) {
             ProjectMilestoneGroupOutcome outcome = processGroupAtomically(organisationId, lines, idxs, resolvedProjectIds);
             errors.addAll(outcome.errors());
+            warnings.addAll(outcome.warnings());
             succeeded += outcome.succeeded();
             projectsCreated += outcome.projectsCreated();
             projectsUpdated += outcome.projectsUpdated();
@@ -261,6 +266,7 @@ public class FundingBulkImportService {
                         .fileType(FundingCsvFileType.PROJECTS_MILESTONES)
                         .rowsSucceeded(succeeded)
                         .rowErrors(errors)
+                        .rowWarnings(warnings)
                         .build(),
                 projectsCreated, projectsUpdated, milestonesCreated, milestonesUpdated);
     }
@@ -301,7 +307,7 @@ public class FundingBulkImportService {
             List<FundingRowError> annotatedErrors = outcome.errors().stream()
                     .map(error -> withRollbackNote(error, rootProjectTitle))
                     .toList();
-            return new ProjectMilestoneGroupOutcome(annotatedErrors, 0, 0, 0, 0, 0);
+            return new ProjectMilestoneGroupOutcome(annotatedErrors, List.of(), 0, 0, 0, 0, 0);
         }
         return outcome;
     }
@@ -330,16 +336,22 @@ public class FundingBulkImportService {
         }
         // The root's own columns may be on any row of the group, not necessarily the first — e.g. a
         // sub-project row could come first if the file isn't ordered "root row before its subs".
-        ProjectMilestoneCsvLine rootLine = idxs.stream().map(lines::get)
-                .filter(ProjectMilestoneCsvLine::hasRootProjectData)
+        int rootIdx = idxs.stream()
+                .filter(idx -> lines.get(idx).hasRootProjectData())
                 .findFirst()
-                .orElseGet(() -> lines.get(idxs.get(0)));
+                .orElseGet(() -> idxs.get(0));
+        ProjectMilestoneCsvLine rootLine = lines.get(rootIdx);
 
         Set<String> changedMilestoneIds = new LinkedHashSet<>();
         Either<ProblemDetail, UpsertOutcome<ProjectEntity>> rootE = upsertRootProject(organisationId, rootLine, changedMilestoneIds);
         if (rootE.isLeft()) {
             return groupFailure(idxs, rootE.getLeft());
         }
+        // Which row's change put each milestone in changedMilestoneIds, for the warnings reported once its
+        // events are flagged. The root only adds milestones there on a currency change (applyRootFields).
+        Map<String, EventImpact> impactByMilestoneId = new LinkedHashMap<>();
+        EventImpact currencyImpact = new EventImpact(rootIdx + 1, "Changing the currency");
+        changedMilestoneIds.forEach(milestoneId -> impactByMilestoneId.put(milestoneId, currencyImpact));
         ProjectEntity root = rootE.get().entity();
         resolvedProjectIds.put(rootLine.getProjectTitle(), root.getId());
 
@@ -355,7 +367,13 @@ public class FundingBulkImportService {
         Map<String, ProjectEntity> subProjectsInGroup = new HashMap<>();
 
         for (int idx : idxs) {
+            int changedBefore = changedMilestoneIds.size();
             RowOutcome row = processGroupRow(root, idx, lines.get(idx), resolvedProjectIds, subProjectsInGroup, changedMilestoneIds);
+            // A row updates at most one milestone, and its currency always already matches the root's
+            // (cascaded above), so anything this row added is its milestone's amount reduced below what
+            // is allocated to it (see MilestoneService#invalidatesEvents).
+            EventImpact shrinkImpact = new EventImpact(idx + 1, "Reducing the amount of " + lines.get(idx).getMilestoneTitle());
+            changedMilestoneIds.stream().skip(changedBefore).forEach(milestoneId -> impactByMilestoneId.put(milestoneId, shrinkImpact));
             if (row.error() != null) {
                 errors.add(row.error());
             }
@@ -369,29 +387,72 @@ public class FundingBulkImportService {
             milestonesUpdated += row.milestonesUpdated();
         }
 
-        // Every row in the group has now been applied — validate the group's final, whole-tree
-        // structural consistency exactly once, the same way ProjectTreeUpdateService does for the JSON
-        // endpoint, since updateProjectEntity above deferred it for exactly this reason. A failure here
-        // rolls the whole group back via the existing all-or-nothing group transaction (see
-        // processGroupAtomically), same as any other row error.
+        List<FundingRowWarning> warnings = List.of();
         if (errors.isEmpty()) {
-            Optional<ProblemDetail> coverage = projectTreeUpdateService.validateWholeTreeCoverage(touchedProjectIds);
-            if (coverage.isPresent()) {
-                errors.add(rowError(idxs.get(0) + 1, coverage.get()));
+            Either<FundingRowError, List<FundingRowWarning>> finished = validateAndFlagGroup(
+                    idxs.get(0) + 1, touchedProjectIds, changedMilestoneIds, impactByMilestoneId);
+            if (finished.isLeft()) {
+                errors.add(finished.getLeft());
+            } else {
+                warnings = finished.get();
             }
         }
 
-        // Flag the events of every milestone shrunk or moved to another currency anywhere in this group
-        // together, in one call, only once the whole group has been accepted — see
-        // ProjectTreeUpdateService#flagEventsOfChangedMilestones.
-        if (errors.isEmpty()) {
-            Either<ProblemDetail, List<FundingEventEntity>> flagged = projectTreeUpdateService.flagEventsOfChangedMilestones(changedMilestoneIds);
-            if (flagged.isLeft()) {
-                errors.add(rowError(idxs.get(0) + 1, flagged.getLeft()));
-            }
-        }
+        return new ProjectMilestoneGroupOutcome(errors, warnings, succeeded, projectsCreated, projectsUpdated, milestonesCreated, milestonesUpdated);
+    }
 
-        return new ProjectMilestoneGroupOutcome(errors, succeeded, projectsCreated, projectsUpdated, milestonesCreated, milestonesUpdated);
+    /**
+     * Runs once every row of an error-free group has been applied. First validates the group's final,
+     * whole-tree structural consistency exactly once, the same way ProjectTreeUpdateService does for the
+     * JSON endpoint, since updateProjectEntity deferred it for exactly this reason. Then flags the events
+     * of every milestone shrunk or moved to another currency anywhere in the group together, in one call
+     * (see ProjectTreeUpdateService#flagEventsOfChangedMilestones), and returns the resulting warnings.
+     * A failure is reported against the group's first row and rolls the whole group back via the
+     * all-or-nothing group transaction (see processGroupAtomically), same as any other row error.
+     */
+    private Either<FundingRowError, List<FundingRowWarning>> validateAndFlagGroup(int firstRowNumber, Set<String> touchedProjectIds,
+            Set<String> changedMilestoneIds, Map<String, EventImpact> impactByMilestoneId) {
+        Optional<ProblemDetail> coverage = projectTreeUpdateService.validateWholeTreeCoverage(touchedProjectIds);
+        if (coverage.isPresent()) {
+            return Either.left(rowError(firstRowNumber, coverage.get()));
+        }
+        // Read before flagging: only events this import moves from DRAFT to ERROR are worth a warning,
+        // same as the UI — one already ERROR was blocked before and stays so.
+        Set<String> draftEventIds = changedMilestoneIds.isEmpty() ? Set.of()
+                : Set.copyOf(allocationRepository.findEventIdsByMilestoneIdInAndEventStatus(changedMilestoneIds, EventStatus.DRAFT));
+        Either<ProblemDetail, List<FundingEventEntity>> flagged = projectTreeUpdateService.flagEventsOfChangedMilestones(changedMilestoneIds);
+        if (flagged.isLeft()) {
+            return Either.left(rowError(firstRowNumber, flagged.getLeft()));
+        }
+        return Either.right(eventImpactWarnings(impactByMilestoneId, flagged.get().stream()
+                .filter(event -> draftEventIds.contains(event.getId()))
+                .toList()));
+    }
+
+    /**
+     * The CSV counterpart of the UI's save-impact warning: one warning per row whose change (a
+     * milestone's amount reduced below its allocations, or the root's currency changed) left draft
+     * events allocated to it flagged {@code ERROR}, with the UI's wording. An event hit by changes on
+     * several rows is counted under each of them, same as the UI.
+     */
+    private static List<FundingRowWarning> eventImpactWarnings(Map<String, EventImpact> impactByMilestoneId, List<FundingEventEntity> blockedEvents) {
+        Map<EventImpact, Set<String>> milestoneIdsByImpact = new LinkedHashMap<>();
+        impactByMilestoneId.forEach((milestoneId, impact) ->
+                milestoneIdsByImpact.computeIfAbsent(impact, k -> new LinkedHashSet<>()).add(milestoneId));
+
+        List<FundingRowWarning> warnings = new ArrayList<>();
+        milestoneIdsByImpact.forEach((impact, milestoneIds) -> {
+            long count = blockedEvents.stream()
+                    .filter(event -> event.getMilestoneAllocations().stream()
+                            .anyMatch(allocation -> milestoneIds.contains(allocation.getId().getMilestoneId())))
+                    .count();
+            if (count > 0) {
+                warnings.add(rowWarning(impact.rowNumber(), "%s marks %d already-allocated draft event(s) as blocked. They will need to be corrected before they can be published."
+                        .formatted(impact.change(), count)));
+            }
+        });
+        warnings.sort(Comparator.comparingInt(FundingRowWarning::getRowNumber));
+        return warnings;
     }
 
     /**
@@ -453,7 +514,7 @@ public class FundingBulkImportService {
 
     private static ProjectMilestoneGroupOutcome groupFailure(List<Integer> idxs, ProblemDetail problem) {
         List<FundingRowError> errors = idxs.stream().map(idx -> rowError(idx + 1, problem)).toList();
-        return new ProjectMilestoneGroupOutcome(errors, 0, 0, 0, 0, 0);
+        return new ProjectMilestoneGroupOutcome(errors, List.of(), 0, 0, 0, 0, 0);
     }
 
     /**
@@ -1391,8 +1452,12 @@ public class FundingBulkImportService {
             int milestonesCreated, int milestonesUpdated) {
     }
 
-    private record ProjectMilestoneGroupOutcome(List<FundingRowError> errors, int succeeded, int projectsCreated,
-            int projectsUpdated, int milestonesCreated, int milestonesUpdated) {
+    private record ProjectMilestoneGroupOutcome(List<FundingRowError> errors, List<FundingRowWarning> warnings, int succeeded,
+            int projectsCreated, int projectsUpdated, int milestonesCreated, int milestonesUpdated) {
+    }
+
+    /** A Projects+Milestones row's change that invalidates events allocated to the milestones it touched — see {@link #eventImpactWarnings}. */
+    private record EventImpact(int rowNumber, String change) {
     }
 
     /** Outcome of upserting a single Projects+Milestones row's sub-project and/or milestone. */
