@@ -95,10 +95,10 @@ public class ProjectService {
             rootIds = projectRepository.findRootProjectIdsByStructureFilter(
                     organisationId, search, target.name(), filter.getMinAmount(), filter.getMaxAmount());
         }
+        List<String> currencyFilter = currencies.isEmpty() ? null : currencies;
         Page<ProjectEntity> roots = rootIds != null && rootIds.isEmpty()
                 ? new PageImpl<>(List.of(), pageable, 0)
-                : projectRepository.findRootsByOrganisationIdAndFilter(
-                        organisationId, rootIds, currencies.isEmpty() ? null : currencies, pageable);
+                : projectRepository.findRootsByOrganisationIdAndFilter(organisationId, rootIds, currencyFilter, pageable);
 
         List<ProjectEntity> projects = new ArrayList<>(roots.getContent());
         List<String> levelIds = roots.getContent().stream().map(ProjectEntity::getId).toList();
