@@ -73,9 +73,9 @@ public class ProjectService {
             return PagedResponse.error(invalidFilter.get());
         }
         String search = blankToNull(filter.getSearch());
-        List<String> currencies = lowerCaseOrNull(filter.getCurrencies());
+        List<String> currencies = lowerCaseCurrencies(filter.getCurrencies());
         boolean structureFiltered = search != null || filter.getMinAmount() != null || filter.getMaxAmount() != null;
-        if (!structureFiltered && currencies == null) {
+        if (!structureFiltered && currencies.isEmpty()) {
             // No filters: unchanged flat listing of every project (roots and sub-projects) of the organisation.
             return PagedResponse.of(projectRepository.findByOrganisationId(organisationId, pageable), this::toView);
         }
@@ -97,7 +97,8 @@ public class ProjectService {
         }
         Page<ProjectEntity> roots = rootIds != null && rootIds.isEmpty()
                 ? new PageImpl<>(List.of(), pageable, 0)
-                : projectRepository.findRootsByOrganisationIdAndFilter(organisationId, rootIds, currencies, pageable);
+                : projectRepository.findRootsByOrganisationIdAndFilter(
+                        organisationId, rootIds, currencies.isEmpty() ? null : currencies, pageable);
 
         List<ProjectEntity> projects = new ArrayList<>(roots.getContent());
         List<String> levelIds = roots.getContent().stream().map(ProjectEntity::getId).toList();
@@ -140,12 +141,12 @@ public class ProjectService {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
-    private static List<String> lowerCaseOrNull(List<String> values) {
+    /** Trimmed, lower-cased non-blank currency codes; empty when the currency filter is off. */
+    private static List<String> lowerCaseCurrencies(List<String> values) {
         if (values == null) {
-            return null;
+            return List.of();
         }
-        List<String> lowered = values.stream().filter(v -> v != null && !v.isBlank()).map(v -> v.trim().toLowerCase()).toList();
-        return lowered.isEmpty() ? null : lowered;
+        return values.stream().filter(v -> v != null && !v.isBlank()).map(v -> v.trim().toLowerCase()).toList();
     }
 
     public ProjectView getProject(String projectId) {
