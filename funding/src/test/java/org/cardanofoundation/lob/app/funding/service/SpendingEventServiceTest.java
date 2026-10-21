@@ -130,11 +130,35 @@ class SpendingEventServiceTest {
     @Test
     void findByOrganisationIdAndFilter_delegatesToRepository() {
         var page = new PageImpl<>(List.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT)));
-        when(fundingEventRepository.findByOrganisationIdAndFilter("org1", EventStatus.DRAFT, EventType.SPENDING, PAGEABLE))
+        when(fundingEventRepository.findByOrganisationIdAndFilter("org1",
+                List.of(EventStatus.DRAFT, EventStatus.ERROR), List.of(EventType.SPENDING), "Edu", "USD",
+                LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31), new BigDecimal("1"), new BigDecimal("2"), PAGEABLE))
                 .thenReturn(page);
 
-        assertThat(spendingEventService.findByOrganisationIdAndFilter(
-                "org1", Optional.of(EventStatus.DRAFT), Optional.of(EventType.SPENDING), PAGEABLE)).isEqualTo(page);
+        SpendingEventFilterRequest filter = SpendingEventFilterRequest.builder()
+                .statuses(List.of(EventStatus.DRAFT, EventStatus.ERROR))
+                .eventTypes(List.of(EventType.SPENDING))
+                .projectTitle(" Edu ")
+                .currency("USD")
+                .dateFrom(LocalDate.of(2026, 1, 1))
+                .dateTo(LocalDate.of(2026, 1, 31))
+                .minAmount(new BigDecimal("1"))
+                .maxAmount(new BigDecimal("2"))
+                .build();
+
+        assertThat(spendingEventService.findByOrganisationIdAndFilter("org1", filter, PAGEABLE)).isEqualTo(page);
+    }
+
+    @Test
+    void findByOrganisationIdAndFilter_passesNulls_whenFiltersEmptyOrBlank() {
+        var page = new PageImpl<FundingEventEntity>(List.of());
+        when(fundingEventRepository.findByOrganisationIdAndFilter("org1", null, null, null, null, null, null, null, null, PAGEABLE))
+                .thenReturn(page);
+
+        SpendingEventFilterRequest filter = SpendingEventFilterRequest.builder()
+                .statuses(List.of()).eventTypes(List.of()).projectTitle("  ").currency("").build();
+
+        assertThat(spendingEventService.findByOrganisationIdAndFilter("org1", filter, PAGEABLE)).isEqualTo(page);
     }
 
     @Test
@@ -1496,7 +1520,7 @@ class SpendingEventServiceTest {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
         PagedResponse<SpendingEventView> result = spendingEventService.listEvents(
-                "org1", Optional.empty(), Optional.empty(), PAGEABLE);
+                "org1", new SpendingEventFilterRequest(), PAGEABLE);
 
         assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
     }
@@ -1507,7 +1531,7 @@ class SpendingEventServiceTest {
         when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.empty());
 
         PagedResponse<SpendingEventView> result = spendingEventService.listEvents(
-                "org1", Optional.empty(), Optional.empty(), PAGEABLE);
+                "org1", new SpendingEventFilterRequest(), PAGEABLE);
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.ORGANISATION_NOT_FOUND);
     }
@@ -1516,15 +1540,69 @@ class SpendingEventServiceTest {
     void listEvents_returnsPage_whenOrganisationExists() {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
         when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
-        when(fundingEventRepository.findByOrganisationIdAndFilter("org1", null, null, PAGEABLE))
+        when(fundingEventRepository.findByOrganisationIdAndFilter("org1", null, null, null, null, null, null, null, null, PAGEABLE))
                 .thenReturn(new PageImpl<>(List.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT))));
         when(milestoneAllocationRepository.findById_EventId("e1")).thenReturn(List.of());
 
         PagedResponse<SpendingEventView> result = spendingEventService.listEvents(
-                "org1", Optional.empty(), Optional.empty(), PAGEABLE);
+                "org1", new SpendingEventFilterRequest(), PAGEABLE);
 
         assertThat(result.getError()).isEmpty();
         assertThat(result.getContent()).hasSize(1);
+    }
+
+    @Test
+    void listEvents_returns400_whenDateFromAfterDateTo() {
+        assertInvalidFilter(SpendingEventFilterRequest.builder()
+                .dateFrom(LocalDate.of(2026, 2, 1)).dateTo(LocalDate.of(2026, 1, 31)).build(),
+                "Event date 'from' (2026-02-01) must not be after 'to' (2026-01-31).");
+    }
+
+    @Test
+    void listEvents_returns400_whenMinAmountGreaterThanMaxAmount() {
+        assertInvalidFilter(SpendingEventFilterRequest.builder()
+                .minAmount(new BigDecimal("500")).maxAmount(new BigDecimal("100")).build(),
+                "Minimum amount (500) must not be greater than maximum amount (100).");
+    }
+
+    @Test
+    void listEvents_returns400_whenMinAmountNegative() {
+        assertInvalidFilter(SpendingEventFilterRequest.builder().minAmount(new BigDecimal("-1")).build(),
+                "Amount filters must not be negative.");
+    }
+
+    @Test
+    void listEvents_returns400_whenMaxAmountNegative() {
+        assertInvalidFilter(SpendingEventFilterRequest.builder().maxAmount(new BigDecimal("-0.01")).build(),
+                "Amount filters must not be negative.");
+    }
+
+    @Test
+    void listEvents_acceptsSingleDayDateRangeAndEqualAmounts() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
+        LocalDate day = LocalDate.of(2026, 1, 15);
+        BigDecimal amount = new BigDecimal("100");
+        when(fundingEventRepository.findByOrganisationIdAndFilter("org1", null, null, null, null, day, day, amount, amount, PAGEABLE))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        PagedResponse<SpendingEventView> result = spendingEventService.listEvents("org1",
+                SpendingEventFilterRequest.builder().dateFrom(day).dateTo(day).minAmount(amount).maxAmount(amount).build(), PAGEABLE);
+
+        assertThat(result.getError()).isEmpty();
+    }
+
+    private void assertInvalidFilter(SpendingEventFilterRequest filter, String expectedDetail) {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
+
+        PagedResponse<SpendingEventView> result = spendingEventService.listEvents("org1", filter, PAGEABLE);
+
+        ProblemDetail problem = result.getError().orElseThrow();
+        assertThat(problem.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
+        assertThat(problem.getTitle()).isEqualTo(ErrorTitleConstants.EVENT_FILTER_INVALID);
+        assertThat(problem.getDetail()).isEqualTo(expectedDetail);
+        verify(fundingEventRepository, never()).findByOrganisationIdAndFilter(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test

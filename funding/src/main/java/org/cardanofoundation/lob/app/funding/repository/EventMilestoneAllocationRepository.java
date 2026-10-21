@@ -31,6 +31,13 @@ public interface EventMilestoneAllocationRepository extends JpaRepository<EventM
             """)
     List<String> findEventIdsByMilestoneIdIn(@Param("milestoneIds") Collection<String> milestoneIds);
 
+    /** Same scalar projection as {@link #findEventIdsByMilestoneIdIn}, limited to events in the given status. */
+    @Query("""
+            SELECT DISTINCT a.id.eventId FROM funding.EventMilestoneAllocationEntity a
+            WHERE a.id.milestoneId IN :milestoneIds AND a.event.status = :status
+            """)
+    List<String> findEventIdsByMilestoneIdInAndEventStatus(@Param("milestoneIds") Collection<String> milestoneIds, @Param("status") EventStatus status);
+
     boolean existsByMilestoneIdAndEventStatus(String milestoneId, EventStatus status);
 
     boolean existsByMilestoneProjectIdAndEventStatus(String projectId, EventStatus status);
