@@ -65,6 +65,11 @@ public class EventProjectAllocationEntity {
     @Column(name = "project_title")
     private String projectTitle;
 
+    /** The root project's permanent, human-readable identifier at publish time (LOB-2384). */
+    @Nullable
+    @Column(name = "pro_id")
+    private String proId;
+
     /** Set only when the allocation targets a sub-project; the sub-project's user-defined id. */
     @Nullable
     @Column(name = "sub_project_id")
@@ -74,6 +79,11 @@ public class EventProjectAllocationEntity {
     @Nullable
     @Column(name = "sub_project_title")
     private String subProjectTitle;
+
+    /** The sub-project's permanent, human-readable identifier at publish time (LOB-2384); set only alongside {@link #subProjectId}. */
+    @Nullable
+    @Column(name = "sub_project_pro_id")
+    private String subProjectProId;
 
     @Builder.Default
     @OneToMany(mappedBy = "allocation", cascade = CascadeType.ALL, orphanRemoval = true)

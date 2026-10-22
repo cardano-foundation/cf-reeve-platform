@@ -110,7 +110,7 @@ class FundingCsvTypeDetectorTest {
     void missingHeadersIsEmpty_whenFileMatchesTemplateExactly() {
         String header = "Event Type;Funding ID;Funding Hash;Funding Entity;Currency RCY;Event Date;"
                 + "Category;Vendor;Amount FCY;Currency FCY;FX Rate;Amount RCY;Hash;Notes;"
-                + "Project Title;Sub Project Title;Milestone Title;Allocated Amount\n";
+                + "Project Title;Project ID;Sub Project Title;Sub Project ID;Milestone Title;Milestone ID;Allocated Amount\n";
 
         Set<String> missing = detector.missingHeaders(file(header), FundingCsvFileType.EVENTS);
 
@@ -123,7 +123,7 @@ class FundingCsvTypeDetectorTest {
         // header row, not just blank on the data rows.
         String header = "Event Type;Funding ID;Funding Hash;Funding Entity;Currency RCY;Event Date;"
                 + "Category;Vendor;Currency FCY;FX Rate;Amount RCY;Hash;Notes;"
-                + "Project Title;Sub Project Title;Milestone Title;Allocated Amount\n";
+                + "Project Title;Project ID;Sub Project Title;Sub Project ID;Milestone Title;Milestone ID;Allocated Amount\n";
 
         Set<String> missing = detector.missingHeaders(file(header), FundingCsvFileType.EVENTS);
 
@@ -132,12 +132,25 @@ class FundingCsvTypeDetectorTest {
 
     @Test
     void missingHeadersNamesEveryOmittedColumn_forProjectsMilestonesTemplate() {
-        String header = "Project Title;Total Amount;Currency\n";
+        String header = "Project Title;Project ID;Total Amount;Currency\n";
 
         Set<String> missing = detector.missingHeaders(file(header), FundingCsvFileType.PROJECTS_MILESTONES);
 
         assertThat(missing).containsExactlyInAnyOrder(
-                "Sub Project Title", "Sub Total Amount", "Milestone Title", "Milestone Amount", "Milestone Date");
+                "Sub Project Title", "Sub Project ID", "Sub Total Amount",
+                "Milestone Title", "Milestone ID", "Milestone Amount", "Milestone Date");
+    }
+
+    @Test
+    void missingHeadersNamesTheOmittedIdColumns_whenAbsentFromHeaderRow() {
+        // The "* ID" columns (LOB-2384) are ordinary required headers like any other — this import
+        // hasn't shipped yet, so there's no older-template compatibility to preserve for them.
+        String header = "Project Title;Total Amount;Currency;"
+                + "Sub Project Title;Sub Total Amount;Milestone Title;Milestone Amount;Milestone Date\n";
+
+        Set<String> missing = detector.missingHeaders(file(header), FundingCsvFileType.PROJECTS_MILESTONES);
+
+        assertThat(missing).containsExactlyInAnyOrder("Project ID", "Sub Project ID", "Milestone ID");
     }
 
 }
