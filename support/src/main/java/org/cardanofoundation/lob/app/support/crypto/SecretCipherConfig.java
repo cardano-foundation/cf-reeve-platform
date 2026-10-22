@@ -1,25 +1,29 @@
 package org.cardanofoundation.lob.app.support.crypto;
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Imported by every module config that needs to encrypt or decrypt stored secrets.
+ * Registers only the {@link SecretCipherPairCheck} startup canary.
  * <p>
- * Both the organisation tier (which encrypts) and the netsuite tier (which decrypts) need the
- * same key, so in a merged deployment more than one module config imports this. Spring dedupes
- * the imported configuration class; {@link ConditionalOnMissingBean} guards the remaining case
- * where an application declares its own {@link SecretCipher}.
+ * This configuration deliberately provides NO key beans: the encryptor belongs to the
+ * organisation module ({@code OrganisationCryptoConfig}, gated on {@code lob.organisation.enabled})
+ * and the decryptor to the netsuite module ({@code NetsuiteCryptoConfig}, gated on
+ * {@code lob.netsuite.enabled}). Since nothing injects a bean from here, this class stays
+ * registered only because BOTH of those configs {@code @Import} it — Spring dedupes the double
+ * import, and either one alone keeps the check registered in the merged shape. Dropping both is
+ * caught by the merged-shape context test in the netsuite module, where a mismatched key pair
+ * must fail startup. (A single surviving import is sufficient by construction: the check only
+ * ever acts in contexts where both crypto configs are active.)
  */
 @Configuration
 public class SecretCipherConfig {
 
     @Bean
-    @ConditionalOnMissingBean(SecretCipher.class)
-    public SecretCipher secretCipher(@Value("${lob.security.config-encryption.key:}") String base64Key) {
-        return new AesGcmSecretCipher(base64Key);
+    public SecretCipherPairCheck secretCipherPairCheck(ObjectProvider<SecretEncryptor> encryptorProvider,
+                                                       ObjectProvider<SecretDecryptor> decryptorProvider) {
+        return new SecretCipherPairCheck(encryptorProvider, decryptorProvider);
     }
 
 }
