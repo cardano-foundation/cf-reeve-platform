@@ -44,7 +44,10 @@ public class NetSuiteConfigEntity {
     @Column(name = "certificate_id", nullable = false)
     private String certificateId;
 
-    /** {@code v1:}-prefixed AES-GCM envelope. Excluded from {@link #toString()}. */
+    /**
+     * Hybrid RSA+AES-GCM envelope (Base64), decryptable only on the netsuite tier.
+     * Excluded from {@link #toString()}.
+     */
     @Column(name = "private_key_encrypted", nullable = false)
     @ToString.Exclude
     private String privateKeyEncrypted;

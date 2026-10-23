@@ -21,7 +21,7 @@ import io.vavr.control.Either;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.client.NetSuiteClient;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetSuiteConfigEntity;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.repository.NetSuiteConfigRepository;
-import org.cardanofoundation.lob.app.support.crypto.SecretCipher;
+import org.cardanofoundation.lob.app.support.crypto.SecretDecryptor;
 
 /**
  * Resolves and caches one {@link NetSuiteClient} per organisation. Each cached client keeps its
@@ -38,7 +38,7 @@ public class NetSuiteClientRegistry {
     public static final String CONFIGURATION_UNREADABLE = "NETSUITE_CONFIGURATION_UNREADABLE";
 
     private final NetSuiteConfigRepository netSuiteConfigRepository;
-    private final SecretCipher secretCipher;
+    private final SecretDecryptor secretDecryptor;
     private final ObjectMapper objectMapper;
     private final RestClient restClient;
     private final Integer recordsPerCall;
@@ -90,14 +90,15 @@ public class NetSuiteClientRegistry {
 
         String pem;
         try {
-            pem = secretCipher.decrypt(config.getPrivateKeyEncrypted());
+            pem = secretDecryptor.decrypt(config.getPrivateKeyEncrypted(), organisationId);
         } catch (RuntimeException e) {
             log.error("Cannot decrypt NetSuite private key for organisation {}: {}",
                     organisationId, e.getMessage());
 
             return Either.left(problem(HttpStatus.INTERNAL_SERVER_ERROR, CONFIGURATION_UNREADABLE,
-                    "Stored NetSuite credentials for organisation %s cannot be decrypted. The configuration encryption key may have changed."
-                            .formatted(organisationId)));
+                    ("Stored NetSuite credentials for organisation %s cannot be decrypted. Check the "
+                            + "configuration encryption key pair, or re-enter the NetSuite configuration "
+                            + "including the private key.").formatted(organisationId)));
         }
 
         NetSuiteClient client = new NetSuiteClient(objectMapper, restClient,

@@ -47,8 +47,9 @@ public class NetSuiteConfigUpsertedEvent {
     private String certificateId;
 
     /**
-     * Nullable {@code v1:}-prefixed envelope. Excluded from {@link #toString()} because the
-     * Kafka bridge in cf-reeve-application logs whole events at INFO.
+     * Nullable hybrid RSA+AES-GCM envelope (encrypted with the public key; only the netsuite
+     * tier can decrypt it). Excluded from {@link #toString()} because the Kafka bridge in
+     * cf-reeve-application logs whole events at INFO.
      */
     @ToString.Exclude
     private String privateKeyEncrypted;
