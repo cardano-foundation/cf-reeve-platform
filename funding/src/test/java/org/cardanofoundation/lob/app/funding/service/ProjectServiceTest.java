@@ -33,8 +33,10 @@ import org.cardanofoundation.lob.app.funding.domain.entity.FundingEventEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
+import org.cardanofoundation.lob.app.funding.domain.enums.ProjectAmountTarget;
 import org.cardanofoundation.lob.app.funding.domain.enums.ProjectLockStatus;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.request.ProjectFilterRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectTreeNodeRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.CascadeDeletionView;
@@ -104,7 +106,7 @@ class ProjectServiceTest {
     void listProjects_unauthorized() {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
-        PagedResponse<ProjectView> result = projectService.listProjects("org1", PAGEABLE);
+        PagedResponse<ProjectView> result = projectService.listProjects("org1", new ProjectFilterRequest(), PAGEABLE);
 
         assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
     }
@@ -113,7 +115,7 @@ class ProjectServiceTest {
     void listProjects_organisationNotFound() {
         when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.empty());
 
-        PagedResponse<ProjectView> result = projectService.listProjects("org1", PAGEABLE);
+        PagedResponse<ProjectView> result = projectService.listProjects("org1", new ProjectFilterRequest(), PAGEABLE);
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo("ORGANISATION_NOT_FOUND");
     }
@@ -123,10 +125,82 @@ class ProjectServiceTest {
         when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
         when(projectRepository.findByOrganisationId("org1", PAGEABLE)).thenReturn(new PageImpl<>(List.of(projectEntity())));
 
-        PagedResponse<ProjectView> result = projectService.listProjects("org1", PAGEABLE);
+        PagedResponse<ProjectView> result = projectService.listProjects("org1", new ProjectFilterRequest(), PAGEABLE);
 
         assertThat(result.getError()).isEmpty();
         assertThat(result.getContent()).hasSize(1);
+    }
+
+    @Test
+    void listProjects_blankFilters_keepUnfilteredListing() {
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
+        when(projectRepository.findByOrganisationId("org1", PAGEABLE)).thenReturn(new PageImpl<>(List.of(projectEntity())));
+
+        PagedResponse<ProjectView> result = projectService.listProjects("org1",
+                ProjectFilterRequest.builder().search("  ").currencies(List.of(" ")).amountTarget(ProjectAmountTarget.SPENT).build(), PAGEABLE);
+
+        assertThat(result.getContent()).hasSize(1);
+        verify(projectRepository, never()).findRootsByOrganisationIdAndFilter(any(), any(), any(), any());
+    }
+
+    @Test
+    void listProjects_currencyOnly_filtersRootsWithoutStructureQuery() {
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
+        when(projectRepository.findRootsByOrganisationIdAndFilter("org1", null, List.of("usd"), PAGEABLE))
+                .thenReturn(new PageImpl<>(List.of(projectEntity()), PAGEABLE, 1));
+
+        PagedResponse<ProjectView> result = projectService.listProjects("org1",
+                ProjectFilterRequest.builder().currencies(List.of(" USD ")).build(), PAGEABLE);
+
+        assertThat(result.getContent()).extracting(ProjectView::getProjectId).containsExactly("p1");
+        assertThat(result.getTotal()).isEqualTo(1);
+        verify(projectRepository, never()).findRootProjectIdsByStructureFilter(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void listProjects_structureFilter_defaultsTargetToBudgeted_andSkipsPagedQueryWhenNothingMatches() {
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
+        when(projectRepository.findRootProjectIdsByStructureFilter("org1", "edu", "BUDGETED", new BigDecimal("1"), null))
+                .thenReturn(List.of());
+
+        PagedResponse<ProjectView> result = projectService.listProjects("org1",
+                ProjectFilterRequest.builder().search(" edu ").minAmount(new BigDecimal("1")).build(), PAGEABLE);
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getContent()).isEmpty();
+        assertThat(result.getTotal()).isZero();
+        verify(projectRepository, never()).findRootsByOrganisationIdAndFilter(any(), any(), any(), any());
+    }
+
+    @Test
+    void listProjects_returns400_whenMinAmountGreaterThanMaxAmount() {
+        assertInvalidFilter(ProjectFilterRequest.builder().minAmount(new BigDecimal("500")).maxAmount(new BigDecimal("100")).build(),
+                "Minimum amount (500) must not be greater than maximum amount (100).");
+    }
+
+    @Test
+    void listProjects_returns400_whenMinAmountNegative() {
+        assertInvalidFilter(ProjectFilterRequest.builder().minAmount(new BigDecimal("-1")).build(),
+                "Amount filters must not be negative.");
+    }
+
+    @Test
+    void listProjects_returns400_whenMaxAmountNegative() {
+        assertInvalidFilter(ProjectFilterRequest.builder().maxAmount(new BigDecimal("-0.01")).build(),
+                "Amount filters must not be negative.");
+    }
+
+    private void assertInvalidFilter(ProjectFilterRequest filter, String expectedDetail) {
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
+
+        PagedResponse<ProjectView> result = projectService.listProjects("org1", filter, PAGEABLE);
+
+        ProblemDetail problem = result.getError().orElseThrow();
+        assertThat(problem.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
+        assertThat(problem.getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_FILTER_INVALID);
+        assertThat(problem.getDetail()).isEqualTo(expectedDetail);
+        verify(projectRepository, never()).findRootProjectIdsByStructureFilter(any(), any(), any(), any(), any());
+        verify(projectRepository, never()).findByOrganisationId(any(), any(Pageable.class));
     }
 
     // --- getProject ---

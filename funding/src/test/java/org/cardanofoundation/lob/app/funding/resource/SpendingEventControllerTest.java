@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -15,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -26,6 +28,7 @@ import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventBulkPublishRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventFilterRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.OrphanEventsCleanupView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventBulkPublishView;
@@ -57,10 +60,10 @@ class SpendingEventControllerTest {
 
     @Test
     void listEvents_returns200() {
-        when(spendingEventService.listEvents(eq("org1"), any(), any(), eq(PAGEABLE)))
+        when(spendingEventService.listEvents(eq("org1"), any(), eq(PAGEABLE)))
                 .thenReturn(PagedResponse.<SpendingEventView>builder().content(List.of(eventView())).total(1).build());
 
-        ResponseEntity<?> response = spendingEventController.listEvents("org1", Optional.empty(), Optional.empty(), PAGEABLE);
+        ResponseEntity<?> response = spendingEventController.listEvents("org1", null, null, null, null, null, null, null, null, PAGEABLE);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((PagedResponse<?>) response.getBody()).getContent()).hasSize(1);
@@ -68,12 +71,44 @@ class SpendingEventControllerTest {
 
     @Test
     void listEvents_propagatesErrorStatus() {
-        when(spendingEventService.listEvents(eq("org1"), any(), any(), eq(PAGEABLE)))
+        when(spendingEventService.listEvents(eq("org1"), any(), eq(PAGEABLE)))
                 .thenReturn(PagedResponse.error(problem(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED")));
 
-        ResponseEntity<?> response = spendingEventController.listEvents("org1", Optional.empty(), Optional.empty(), PAGEABLE);
+        ResponseEntity<?> response = spendingEventController.listEvents("org1", null, null, null, null, null, null, null, null, PAGEABLE);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void listEvents_mapsQueryParamsIntoFilter() {
+        ArgumentCaptor<SpendingEventFilterRequest> filterCaptor = ArgumentCaptor.forClass(SpendingEventFilterRequest.class);
+        when(spendingEventService.listEvents(eq("org1"), filterCaptor.capture(), eq(PAGEABLE)))
+                .thenReturn(PagedResponse.<SpendingEventView>builder().content(List.of()).build());
+
+        spendingEventController.listEvents("org1", List.of(EventStatus.DRAFT, EventStatus.ERROR), List.of(EventType.FUNDING),
+                "Edu", "USD", LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31),
+                new BigDecimal("10"), new BigDecimal("500"), PAGEABLE);
+
+        SpendingEventFilterRequest filter = filterCaptor.getValue();
+        assertThat(filter.getStatuses()).containsExactly(EventStatus.DRAFT, EventStatus.ERROR);
+        assertThat(filter.getEventTypes()).containsExactly(EventType.FUNDING);
+        assertThat(filter.getProjectTitle()).isEqualTo("Edu");
+        assertThat(filter.getCurrency()).isEqualTo("USD");
+        assertThat(filter.getDateFrom()).isEqualTo(LocalDate.of(2026, 1, 1));
+        assertThat(filter.getDateTo()).isEqualTo(LocalDate.of(2026, 12, 31));
+        assertThat(filter.getMinAmount()).isEqualByComparingTo("10");
+        assertThat(filter.getMaxAmount()).isEqualByComparingTo("500");
+    }
+
+    @Test
+    void listEvents_returns400_whenFilterInvalid() {
+        when(spendingEventService.listEvents(eq("org1"), any(), eq(PAGEABLE)))
+                .thenReturn(PagedResponse.error(problem(HttpStatus.BAD_REQUEST, "EVENT_FILTER_INVALID")));
+
+        ResponseEntity<?> response = spendingEventController.listEvents("org1", null, null, null, null,
+                LocalDate.of(2026, 2, 1), LocalDate.of(2026, 1, 1), null, null, PAGEABLE);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     @Test
