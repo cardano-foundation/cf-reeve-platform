@@ -197,8 +197,8 @@ class ProjectTreeUpdateE2ETest {
 
         // What the UI actually does next: open each ERROR event. Its allocation to the deleted Milestone
         // B1 is still there, dangling — building the view for it must not blow up.
-        SpendingEventView fundingView = spendingEventService.getEvent(funding.getEventId());
-        SpendingEventView spendingView = spendingEventService.getEvent(spending.getEventId());
+        SpendingEventView fundingView = spendingEventService.getEvent(funding.getEventId(), ORG_ID);
+        SpendingEventView spendingView = spendingEventService.getEvent(spending.getEventId(), ORG_ID);
         assertThat(fundingView.getError()).isEmpty();
         assertThat(spendingView.getError()).isEmpty();
 
@@ -403,7 +403,7 @@ class ProjectTreeUpdateE2ETest {
         assertThat(projectRepository.findById(rootId).orElseThrow().getTotalAmount()).isEqualByComparingTo("80000.00");
         assertThat(fundingEventRepository.findById(funding.getEventId()).orElseThrow().getStatus()).isEqualTo(EventStatus.DRAFT);
         assertThat(allocationRepository.findById_EventId(funding.getEventId())).hasSize(1);
-        assertThat(spendingEventService.getEvent(funding.getEventId()).getOrphanedAllocations()).isEmpty();
+        assertThat(spendingEventService.getEvent(funding.getEventId(), ORG_ID).getOrphanedAllocations()).isEmpty();
     }
 
     // ---- shrink / currency change: the event is flagged ERROR even when it also allocates to another project ----

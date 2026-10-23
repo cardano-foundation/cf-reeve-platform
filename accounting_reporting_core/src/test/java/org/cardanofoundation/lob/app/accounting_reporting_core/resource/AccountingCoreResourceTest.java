@@ -43,7 +43,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Ba
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchsDetailView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionItemsProcessRejectView;
-import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionProcessView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
@@ -77,7 +76,7 @@ class AccountingCoreResourceTest {
 
         when(accountingCorePresentationViewService.allTransactions(body)).thenReturn(List.of());
 
-        ResponseEntity<List<TransactionView>> listResponseEntity = accountingCoreResource.listAllAction(body);
+        ResponseEntity<?> listResponseEntity = accountingCoreResource.listAllAction(body);
         assertTrue(listResponseEntity.getStatusCode().is2xxSuccessful());
         assertNotNull(listResponseEntity.getBody());
     }
@@ -85,9 +84,11 @@ class AccountingCoreResourceTest {
     @Test
     void transactionDetailSpecific_error() {
         String id = "1234567890";
-        when(accountingCorePresentationViewService.transactionDetailSpecific(id)).thenReturn(Optional.empty());
+        String orgId = "org123";
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(true);
+        when(accountingCorePresentationViewService.transactionDetailSpecific(id, orgId)).thenReturn(Optional.empty());
 
-        ResponseEntity<?> responseEntity = accountingCoreResource.transactionDetailSpecific(id);
+        ResponseEntity<?> responseEntity = accountingCoreResource.transactionDetailSpecific(id, orgId);
         assertTrue(responseEntity.getStatusCode().is4xxClientError());
         assertNotNull(responseEntity.getBody());
     }
@@ -95,11 +96,24 @@ class AccountingCoreResourceTest {
     @Test
     void transactionDetailSpecific_success() {
         String id = "1234567890";
+        String orgId = "org123";
         TransactionView transactionView = mock(TransactionView.class);
-        when(accountingCorePresentationViewService.transactionDetailSpecific(id)).thenReturn(Optional.of(transactionView));
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(true);
+        when(accountingCorePresentationViewService.transactionDetailSpecific(id, orgId)).thenReturn(Optional.of(transactionView));
 
-        ResponseEntity<?> responseEntity = accountingCoreResource.transactionDetailSpecific(id);
+        ResponseEntity<?> responseEntity = accountingCoreResource.transactionDetailSpecific(id, orgId);
         assertTrue(responseEntity.getStatusCode().is2xxSuccessful());
+        assertNotNull(responseEntity.getBody());
+    }
+
+    @Test
+    void transactionDetailSpecific_noAccess() {
+        String id = "1234567890";
+        String orgId = "org123";
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(false);
+
+        ResponseEntity<?> responseEntity = accountingCoreResource.transactionDetailSpecific(id, orgId);
+        assertTrue(responseEntity.getStatusCode().is4xxClientError());
         assertNotNull(responseEntity.getBody());
     }
 
@@ -128,7 +142,7 @@ class AccountingCoreResourceTest {
         TransactionsRequest request = mock(TransactionsRequest.class);
         when(accountingCorePresentationViewService.approveTransactions(request)).thenReturn(List.of());
 
-        ResponseEntity<List<TransactionProcessView>> listResponseEntity = accountingCoreResource.approveTransactions(request);
+        ResponseEntity<?> listResponseEntity = accountingCoreResource.approveTransactions(request);
 
         assertTrue(listResponseEntity.getStatusCode().is2xxSuccessful());
         assertNotNull(listResponseEntity.getBody());
@@ -139,7 +153,7 @@ class AccountingCoreResourceTest {
         TransactionsRequest request = mock(TransactionsRequest.class);
         when(accountingCorePresentationViewService.approveTransactionsPublish(request)).thenReturn(List.of());
 
-        ResponseEntity<List<TransactionProcessView>> listResponseEntity = accountingCoreResource.approveTransactionsPublish(request);
+        ResponseEntity<?> listResponseEntity = accountingCoreResource.approveTransactionsPublish(request);
 
         assertTrue(listResponseEntity.getStatusCode().is2xxSuccessful());
         assertNotNull(listResponseEntity.getBody());
@@ -151,7 +165,7 @@ class AccountingCoreResourceTest {
         TransactionItemsProcessRejectView transactionItemsProcessRejectView = mock(TransactionItemsProcessRejectView.class);
         when(accountingCorePresentationViewService.rejectTransactionItems(request)).thenReturn(transactionItemsProcessRejectView);
 
-        ResponseEntity<TransactionItemsProcessRejectView> response = accountingCoreResource.rejectTransactionItems(request);
+        ResponseEntity<?> response = accountingCoreResource.rejectTransactionItems(request);
 
         assertTrue(response.getStatusCode().is2xxSuccessful());
         assertNotNull(response.getBody());
@@ -171,22 +185,60 @@ class AccountingCoreResourceTest {
     }
 
     @Test
+    void listAllBatches_invalidSort() {
+        BatchSearchRequest body = mock(BatchSearchRequest.class);
+        Pageable pageable = Pageable.ofSize(10).withPage(0);
+        org.springframework.http.ProblemDetail problem = org.springframework.http.ProblemDetail.forStatus(org.springframework.http.HttpStatus.BAD_REQUEST);
+        when(jpaSortFieldValidator.convertPageable(pageable, Map.of(), TransactionBatchEntity.class)).thenReturn(Either.left(problem));
+
+        ResponseEntity<?> listResponseEntity = accountingCoreResource.listAllBatches(body, pageable);
+        assertTrue(listResponseEntity.getStatusCode().is4xxClientError());
+        verify(accountingCorePresentationViewService, org.mockito.Mockito.never()).listAllBatch(any(), any());
+    }
+
+    @Test
+    void listAllBatches_serviceError() {
+        BatchSearchRequest body = mock(BatchSearchRequest.class);
+        Pageable pageable = Pageable.ofSize(10).withPage(0);
+        org.springframework.http.ProblemDetail problem = org.springframework.http.ProblemDetail.forStatus(org.springframework.http.HttpStatus.BAD_REQUEST);
+        when(jpaSortFieldValidator.convertPageable(pageable, Map.of(), TransactionBatchEntity.class)).thenReturn(Either.right(pageable));
+        when(accountingCorePresentationViewService.listAllBatch(body, pageable)).thenReturn(Either.left(problem));
+
+        ResponseEntity<?> listResponseEntity = accountingCoreResource.listAllBatches(body, pageable);
+        assertTrue(listResponseEntity.getStatusCode().is4xxClientError());
+    }
+
+    @Test
     void batchReprocess_test() {
         BatchReprocessView batchReprocessView = mock(BatchReprocessView.class);
+        String orgId = "org123";
 
-        when(accountingCorePresentationViewService.scheduleReIngestionForFailed("123")).thenReturn(batchReprocessView);
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(true);
+        when(accountingCorePresentationViewService.scheduleReIngestionForFailed("123", orgId)).thenReturn(batchReprocessView);
 
-        ResponseEntity<BatchReprocessView> batchReprocessViewResponseEntity = accountingCoreResource.batchReprocess("123");
+        ResponseEntity<BatchReprocessView> batchReprocessViewResponseEntity = accountingCoreResource.batchReprocess("123", orgId);
         assertTrue(batchReprocessViewResponseEntity.getStatusCode().is2xxSuccessful());
         assertNotNull(batchReprocessViewResponseEntity.getBody());
     }
 
     @Test
+    void batchReprocess_noAccess() {
+        String orgId = "org123";
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(false);
+
+        ResponseEntity<BatchReprocessView> responseEntity = accountingCoreResource.batchReprocess("123", orgId);
+        assertTrue(responseEntity.getStatusCode().is4xxClientError());
+        assertNotNull(responseEntity.getBody());
+    }
+
+    @Test
     void batchesDetailTest_error() {
         Pageable createdBy = Pageable.unpaged(Sort.by(Sort.Direction.DESC, "createdBy"));
+        String orgId = "org123";
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(true);
         when(accountingCorePresentationViewService.batchDetail(eq("123"), eq(List.of()), eq(createdBy), any(BatchFilterRequest.class))).thenReturn(Either.right(Optional.empty()));
 
-        ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", List.of(), createdBy);
+        ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", List.of(), orgId, createdBy);
         assertTrue(responseEntity.getStatusCode().is4xxClientError());
         assertNotNull(responseEntity.getBody());
     }
@@ -195,11 +247,77 @@ class AccountingCoreResourceTest {
     void batchesDetailTest_success() {
         BatchView mock = mock(BatchView.class);
         Pageable createdBy = Pageable.unpaged(Sort.by(Sort.Direction.DESC, "createdBy"));
+        String orgId = "org123";
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(true);
         when(accountingCorePresentationViewService.batchDetail(eq("123"), eq(List.of()), eq(createdBy), any(BatchFilterRequest.class))).thenReturn(Either.right(Optional.of(mock)));
 
-        ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", List.of(), createdBy);
+        ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", List.of(), orgId, createdBy);
         assertTrue(responseEntity.getStatusCode().is2xxSuccessful());
         assertNotNull(responseEntity.getBody());
+    }
+
+    @Test
+    void batchesDetailTest_noAccess() {
+        Pageable createdBy = Pageable.unpaged(Sort.by(Sort.Direction.DESC, "createdBy"));
+        String orgId = "org123";
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(false);
+
+        ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", List.of(), orgId, createdBy);
+        assertTrue(responseEntity.getStatusCode().is4xxClientError());
+        assertNotNull(responseEntity.getBody());
+    }
+
+    @Test
+    void batchesDetailTest_invalidDateRange() {
+        BatchFilterRequest batchFilterRequest = new BatchFilterRequest();
+        batchFilterRequest.setOrganisationId("org123");
+        batchFilterRequest.setDateFrom(java.time.LocalDate.of(2024, 2, 1));
+        batchFilterRequest.setDateTo(java.time.LocalDate.of(2024, 1, 1));
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+
+        ResponseEntity<?> responseEntity = accountingCoreResource.batchesDetail("123", List.of(), batchFilterRequest, null);
+
+        assertTrue(responseEntity.getStatusCode().is4xxClientError());
+        assertNotNull(responseEntity.getBody());
+    }
+
+    @Test
+    void extractionTrigger_orgNotFound() {
+        org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionRequest request =
+                mock(org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionRequest.class);
+        when(request.getOrganisationId()).thenReturn("org1");
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.empty());
+
+        ResponseEntity<?> responseEntity = accountingCoreResource.extractionTrigger(request);
+
+        assertTrue(responseEntity.getStatusCode().is4xxClientError());
+    }
+
+    @Test
+    void extractionTrigger_noAccess() {
+        org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionRequest request =
+                mock(org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionRequest.class);
+        when(request.getOrganisationId()).thenReturn("org1");
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        ResponseEntity<?> responseEntity = accountingCoreResource.extractionTrigger(request);
+
+        assertTrue(responseEntity.getStatusCode().is4xxClientError());
+        verify(organisationPublicApi, org.mockito.Mockito.never()).findByOrganisationId(any());
+    }
+
+    @Test
+    void uploadFile_noAccess() {
+        org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionRequest request =
+                mock(org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionRequest.class);
+        when(request.getOrganisationId()).thenReturn("org1");
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        ResponseEntity<?> responseEntity = accountingCoreResource.uploadFile(request);
+
+        assertTrue(responseEntity.getStatusCode().is4xxClientError());
+        verify(organisationPublicApi, org.mockito.Mockito.never()).findByOrganisationId(any());
     }
 
     @Test

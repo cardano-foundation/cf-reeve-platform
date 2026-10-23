@@ -736,7 +736,7 @@ public class FundingBulkImportService {
                 .currency(currency)
                 .milestoneDate(date)
                 .build();
-        MilestoneView view = milestoneService.createMilestone(project.getId(), request, line.getMilestoneId());
+        MilestoneView view = milestoneService.createMilestone(project.getId(), project.getOrganisationId(), request, line.getMilestoneId());
         Optional<ProblemDetail> error = view.getError();
         if (error.isPresent()) {
             return Either.left(withMissingIdHint(error.get(), line.getMilestoneId(),
