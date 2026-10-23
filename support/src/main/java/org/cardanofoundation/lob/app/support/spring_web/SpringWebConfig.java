@@ -1,17 +1,24 @@
 package org.cardanofoundation.lob.app.support.spring_web;
 
+import java.util.Arrays;
+import java.util.List;
+
 import jakarta.annotation.PostConstruct;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.CorsFilter;
 import org.springframework.web.multipart.MultipartResolver;
 import org.springframework.web.multipart.support.StandardServletMultipartResolver;
-import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -19,9 +26,6 @@ import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
-import io.swagger.v3.oas.models.security.OAuthFlow;
-import io.swagger.v3.oas.models.security.OAuthFlows;
-import io.swagger.v3.oas.models.security.Scopes;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 
@@ -34,10 +38,8 @@ public class SpringWebConfig {
     @Value("${lob.cors.allowed.origins:http://localhost:3000}")
     private String allowedOrigins;
 
-    @Value("${keycloak.token-url}")
-    private String tokenUrl;
-    @Value("${keycloak.authorization-url}")
-    private String authorizationUrl;
+    @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri:http://localhost:8080/realms/reeve-master}")
+    private String issuerUri;
 
     private final OrganisationCheckInterceptor organisationCheckInterceptor;
 
@@ -52,23 +54,31 @@ public class SpringWebConfig {
     }
 
     @Bean
-    public WebMvcConfigurer corsConfigurer() {
-        return new WebMvcConfigurer() {
+    public FilterRegistrationBean<CorsFilter> corsFilterRegistration() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .toList());
+        configuration.setAllowedMethods(List.of("GET", "HEAD", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setAllowCredentials(true);
 
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/**", configuration);
+
+        FilterRegistrationBean<CorsFilter> registration = new FilterRegistrationBean<>(new CorsFilter(source));
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
+        registration.setAsyncSupported(true);
+        return registration;
+    }
+
+    @Bean
+    public WebMvcConfigurer webMvcConfigurer() {
+        return new WebMvcConfigurer() {
             @Override
             public void addInterceptors(InterceptorRegistry registry) {
                 registry.addInterceptor(organisationCheckInterceptor);
             }
-
-            @Override
-            public void addCorsMappings(CorsRegistry registry) {
-                registry.addMapping("/api/**")
-                        .allowedOrigins(allowedOrigins.split(","))
-                        .allowedMethods("GET", "HEAD", "POST") // expose only GET, HEAD, POST
-                        .allowedHeaders("*")
-                        .allowCredentials(true);
-            }
-
         };
     }
 
@@ -76,17 +86,11 @@ public class SpringWebConfig {
     public OpenAPI openAPI() {
         return new OpenAPI()
                 .components(new Components()
-                        .addSecuritySchemes("keycloakAuth", new SecurityScheme()
-                                .name("keycloak")
-                                .type(SecurityScheme.Type.OAUTH2)
-                                .bearerFormat("JWT")
-                                .scheme("bearer")
-                                .flows(new OAuthFlows()
-                                        .authorizationCode(new OAuthFlow()
-                                                .authorizationUrl(authorizationUrl)
-                                                .tokenUrl(tokenUrl)
-                                                .scopes(new Scopes().addString("openid", "openid"))))))
-                .addSecurityItem(new SecurityRequirement().addList("keycloakAuth"))
+                        .addSecuritySchemes("oidcAuth", new SecurityScheme()
+                                .name("oidc")
+                                .type(SecurityScheme.Type.OPENIDCONNECT)
+                                .openIdConnectUrl(issuerUri + "/.well-known/openid-configuration")))
+                .addSecurityItem(new SecurityRequirement().addList("oidcAuth"))
                 .info(new Info().title("Reeve Service")
                         .license(new License().name("Apache License 2.0")
                         .url("https://github.com/cardano-foundation/cf-reeve-platform/blob/main/LICENSE")));
