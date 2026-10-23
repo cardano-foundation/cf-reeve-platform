@@ -32,6 +32,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.cardanofoundation.lob.app.organisation.domain.request.AccountingRegimeUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.AccountingRegimeView;
 import org.cardanofoundation.lob.app.organisation.service.AccountingRegimeService;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
+import org.cardanofoundation.lob.app.support.security.OrgAccessDenied;
 
 @RestController
 @RequestMapping("/api/v1/organisations")
@@ -41,6 +43,7 @@ import org.cardanofoundation.lob.app.organisation.service.AccountingRegimeServic
 public class AccountingRegimeController {
 
     private final AccountingRegimeService accountingRegimeService;
+    private final KeycloakSecurityHelper keycloakSecurityHelper;
 
     @Operation(description = "Get all approved accounting regimes for an organisation", responses = {
             @ApiResponse(content =
@@ -50,6 +53,9 @@ public class AccountingRegimeController {
     @GetMapping(value = "/{orgId}/accounting-regimes", produces = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<List<AccountingRegimeView>> getAllAccountingRegimes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         return ResponseEntity.ok(accountingRegimeService.getAllAccountingRegimes(orgId));
     }
 
@@ -61,6 +67,9 @@ public class AccountingRegimeController {
     @PostMapping(value = "/{orgId}/accounting-regimes", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<AccountingRegimeView> insertAccountingRegime(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody AccountingRegimeUpdate accountingRegimeUpdate) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         AccountingRegimeView view = accountingRegimeService.insertAccountingRegime(orgId, accountingRegimeUpdate, false);
         return view.getError().map(error -> ResponseEntity.status(error.getStatus()).body(view))
                 .orElse(ResponseEntity.ok(view));
@@ -74,6 +83,9 @@ public class AccountingRegimeController {
     @PutMapping(value = "/{orgId}/accounting-regimes", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<AccountingRegimeView> updateAccountingRegime(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody AccountingRegimeUpdate accountingRegimeUpdate) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         AccountingRegimeView view = accountingRegimeService.updateAccountingRegime(orgId, accountingRegimeUpdate);
         return view.getError().map(error -> ResponseEntity.status(error.getStatus()).body(view))
                 .orElse(ResponseEntity.ok(view));
@@ -87,6 +99,9 @@ public class AccountingRegimeController {
     @PostMapping(value = "/{orgId}/accounting-regimes", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<Object> insertAccountingRegimesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam(value = "file") MultipartFile file) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         return accountingRegimeService.insertViaCsv(orgId, file).fold(
                 problem -> ResponseEntity.status(HttpStatus.BAD_REQUEST.value()).body(problem),
                 ResponseEntity::ok

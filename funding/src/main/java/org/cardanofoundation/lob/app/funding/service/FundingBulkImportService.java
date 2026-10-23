@@ -59,6 +59,7 @@ import org.cardanofoundation.lob.app.funding.util.FundingValidations;
 import org.cardanofoundation.lob.app.funding.util.Problems;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 /**
  * Bulk CSV import for the funding module. Accepts up to two files (Projects+Milestones, Events —
@@ -128,8 +129,13 @@ public class FundingBulkImportService {
     private final OrganisationPublicApiIF organisationPublicApi;
     private final FundingBulkImportTransactionRunner transactionRunner;
     private final EventMilestoneAllocationRepository allocationRepository;
+    private final KeycloakSecurityHelper keycloakSecurityHelper;
 
     public FundingBulkImportResult importFiles(BulkImportRequest request) {
+        // Multipart requests bypass OrganisationCheckInterceptor, so the org access check happens here.
+        if (!keycloakSecurityHelper.canUserAccessOrg(request.getOrganisationId())) {
+            return FundingBulkImportResult.error(Problems.unauthorized());
+        }
         if (organisationPublicApi.findByOrganisationId(request.getOrganisationId()).isEmpty()) {
             return FundingBulkImportResult.error(Problems.organisationNotFound(request.getOrganisationId()));
         }

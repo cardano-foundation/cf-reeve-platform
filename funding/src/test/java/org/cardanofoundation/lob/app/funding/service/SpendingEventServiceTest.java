@@ -1609,12 +1609,23 @@ class SpendingEventServiceTest {
 
     @Test
     void listEventsByProject_returns404_whenProjectNotFound() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.empty());
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(List.of());
 
         PagedResponse<SpendingEventView> result = spendingEventService.listEventsByProject(
-                "p1", Optional.empty(), Optional.empty(), PAGEABLE);
+                "p1", "org1", Optional.empty(), Optional.empty(), PAGEABLE);
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
+    }
+
+    @Test
+    void listEventsByProject_returns401_whenUserCannotAccessOrg() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        PagedResponse<SpendingEventView> result = spendingEventService.listEventsByProject(
+                "p1", "org1", Optional.empty(), Optional.empty(), PAGEABLE);
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(projectRepository, never()).findByIdAndOrganisationId(any(), any());
     }
 
     @Test

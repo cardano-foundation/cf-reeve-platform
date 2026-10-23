@@ -113,10 +113,10 @@ class SpendingEventControllerTest {
 
     @Test
     void listEventsByProject_returns200() {
-        when(spendingEventService.listEventsByProject(eq("p1"), any(), any(), eq(PAGEABLE)))
+        when(spendingEventService.listEventsByProject(eq("p1"), eq("org1"), any(), any(), eq(PAGEABLE)))
                 .thenReturn(PagedResponse.<SpendingEventView>builder().content(List.of(eventView())).total(1).build());
 
-        ResponseEntity<?> response = spendingEventController.listEventsByProject("p1", Optional.empty(), Optional.empty(), PAGEABLE);
+        ResponseEntity<?> response = spendingEventController.listEventsByProject("p1", "org1", Optional.empty(), Optional.empty(), PAGEABLE);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((PagedResponse<?>) response.getBody()).getContent()).hasSize(1);

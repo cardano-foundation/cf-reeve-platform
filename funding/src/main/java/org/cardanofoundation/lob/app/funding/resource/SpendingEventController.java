@@ -105,10 +105,11 @@ public class SpendingEventController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<PagedResponse<SpendingEventView>> listEventsByProject(
             @PathVariable String projectId,
+            @RequestParam String organisationId,
             @RequestParam(required = false) Optional<EventStatus> status,
             @RequestParam(required = false) Optional<EventType> eventType,
             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-        return Responses.respond(spendingEventService.listEventsByProject(projectId, status, eventType, pageable), HttpStatus.OK);
+        return Responses.respond(spendingEventService.listEventsByProject(projectId, organisationId, status, eventType, pageable), HttpStatus.OK);
     }
 
     @Operation(summary = "List the available event types", responses = {

@@ -102,14 +102,13 @@ public class SpendingEventService {
         return amount != null && amount.signum() < 0;
     }
 
-    public PagedResponse<SpendingEventView> listEventsByProject(String projectId, Optional<EventStatus> status,
+    public PagedResponse<SpendingEventView> listEventsByProject(String projectId, String organisationId, Optional<EventStatus> status,
             Optional<EventType> eventType, Pageable pageable) {
-        Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
-        if (projectM.isEmpty()) {
-            return PagedResponse.error(Problems.notFound("Project not found: " + projectId, ErrorTitleConstants.PROJECT_NOT_FOUND));
-        }
-        if (!keycloakSecurityHelper.canUserAccessOrg(projectM.get().getOrganisationId())) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
             return PagedResponse.error(Problems.unauthorized());
+        }
+        if (projectRepository.findByIdAndOrganisationId(projectId, organisationId).isEmpty()) {
+            return PagedResponse.error(Problems.notFound("Project not found: " + projectId, ErrorTitleConstants.PROJECT_NOT_FOUND));
         }
         return PagedResponse.of(findByProjectIdAndFilter(projectId, status, eventType, pageable), this::toView);
     }

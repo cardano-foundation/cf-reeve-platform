@@ -63,6 +63,7 @@ import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
 class FundingBulkImportServiceTest {
@@ -91,6 +92,8 @@ class FundingBulkImportServiceTest {
     private OrganisationPublicApiIF organisationPublicApi;
     @Mock
     private EventMilestoneAllocationRepository allocationRepository;
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
 
     private FundingBulkImportService bulkImportService;
 
@@ -102,7 +105,9 @@ class FundingBulkImportServiceTest {
         // behavior is integration-test territory.
         bulkImportService = new FundingBulkImportService(projectMilestoneCsvParser, eventCsvParser,
                 csvTypeDetector, projectRepository, projectService, projectTreeUpdateService, projectStructureService,
-                milestoneService, spendingEventService, organisationPublicApi, new FundingBulkImportTransactionRunner(), allocationRepository);
+                milestoneService, spendingEventService, organisationPublicApi, new FundingBulkImportTransactionRunner(), allocationRepository,
+                keycloakSecurityHelper);
+        lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
         // Flagging the events of changed milestones succeeds (and finds nothing) unless a test says otherwise.
         lenient().when(projectTreeUpdateService.flagEventsOfChangedMilestones(any())).thenReturn(Either.right(List.of()));
         lenient().when(organisationPublicApi.findByOrganisationId(ORG_ID)).thenReturn(Optional.of(new Organisation()));
@@ -151,6 +156,18 @@ class FundingBulkImportServiceTest {
     // -------------------------------------------------------------------------
     // Request-level validation
     // -------------------------------------------------------------------------
+
+    @Test
+    void userCannotAccessOrg_returnsUnauthorizedRequestLevelError() {
+        when(keycloakSecurityHelper.canUserAccessOrg(ORG_ID)).thenReturn(false);
+        BulkImportRequest request = BulkImportRequest.builder().organisationId(ORG_ID)
+                .files(List.of(file("x.csv"))).build();
+
+        FundingBulkImportResult result = bulkImportService.importFiles(request);
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verifyNoInteractions(projectMilestoneCsvParser, eventCsvParser, projectService, spendingEventService);
+    }
 
     @Test
     void organisationNotFound_returnsRequestLevelError() {
