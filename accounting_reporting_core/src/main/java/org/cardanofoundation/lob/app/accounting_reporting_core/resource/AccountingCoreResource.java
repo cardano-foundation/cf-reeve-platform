@@ -94,6 +94,8 @@ public class AccountingCoreResource {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();
         }
+        // The path orgId is the one that was checked, so it overrides whatever the body carries
+        batchFilterRequest.setOrganisationId(orgId);
         Optional<ResponseEntity<ProblemDetail>> issueO = validateDateRange(batchFilterRequest);
         if (issueO.isPresent()) return ResponseEntity.status(BAD_REQUEST.value()).body(outputStream -> {
             ObjectNode response = objectMapper.createObjectNode();
@@ -103,7 +105,7 @@ public class AccountingCoreResource {
             outputStream.write(objectMapper.writeValueAsBytes(response));
         });
 
-        StreamingResponseBody responseBody = outputStream -> accountingCorePresentationService.downloadCsvTransactions(orgId,batchId, txStatus, batchFilterRequest, outputStream);
+        StreamingResponseBody responseBody = outputStream -> accountingCorePresentationService.downloadCsvTransactions(batchId, txStatus, batchFilterRequest, outputStream);
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=\"transactions_%s.csv\"".formatted(orgId))
                 .contentType(MediaType.TEXT_PLAIN)

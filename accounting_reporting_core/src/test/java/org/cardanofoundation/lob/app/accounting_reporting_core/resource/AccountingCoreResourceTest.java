@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -367,11 +368,15 @@ class AccountingCoreResourceTest {
         when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(true);
 
         // Call the method
+        // Body carries a different org id; the checked path orgId must win
+        BatchFilterRequest batchFilterRequest = new BatchFilterRequest();
+        batchFilterRequest.setOrganisationId("otherOrg");
+
         ResponseEntity<StreamingResponseBody> response = accountingCoreResource.downloadTransactionsCsv(
                 orgId,
                 "123",
                 List.of(),
-                null
+                batchFilterRequest
         );
 
         // Verify response
@@ -393,7 +398,7 @@ class AccountingCoreResourceTest {
 
         // Verify the service was called
         verify(accountingCorePresentationViewService)
-                .downloadCsvTransactions(eq(orgId), eq("123"), eq(List.of()), eq(null), any());
+                .downloadCsvTransactions(eq("123"), eq(List.of()), argThat(filter -> orgId.equals(filter.getOrganisationId())), any());
     }
 
 

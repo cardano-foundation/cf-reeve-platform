@@ -15,8 +15,6 @@ import java.time.Month;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import jakarta.validation.Valid;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -416,6 +414,7 @@ public class AccountingCorePresentationViewService {
         } else {
             return accountingCoreTransactionRepository.findAllByBatchId(
                     Optional.ofNullable(transactionBatchEntity).map(TransactionBatchEntity::getId).orElse(null),
+                    batchFilterRequest.getOrganisationId(),
                     status,
                     batchFilterRequest.getInternalTransactionNumber(),
                     batchFilterRequest.getTransactionTypes(),
@@ -1005,7 +1004,7 @@ public class AccountingCorePresentationViewService {
         return transactionBatchEntity.getDetails().map(ErrorUtils::normalisedBag).orElseGet(Map::of);
     }
 
-    public void downloadCsvTransactions(@Valid String orgId, String batchId, List<TransactionProcessingStatus> txStatus, BatchFilterRequest batchFilterRequest, OutputStream outputStream) {
+    public void downloadCsvTransactions(String batchId, List<TransactionProcessingStatus> txStatus, BatchFilterRequest batchFilterRequest, OutputStream outputStream) {
         TransactionBatchEntity transactionBatchEntity = transactionBatchRepositoryGateway.findById(Optional.ofNullable(batchId).orElse("")).orElse(null);
         Page<TransactionEntity> transactions = this.getTransaction(
                 transactionBatchEntity, txStatus, Pageable.unpaged(),
@@ -1080,7 +1079,7 @@ public class AccountingCorePresentationViewService {
             }
             csvWriter.flush();
         } catch (Exception e) {
-            log.error("Error while writing transactions to CSV for orgId {}: {}", orgId, e.getMessage(), e);
+            log.error("Error while writing transactions to CSV for orgId {}: {}", batchFilterRequest.getOrganisationId(), e.getMessage(), e);
         }
     }
 

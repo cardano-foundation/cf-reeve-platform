@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -286,6 +287,14 @@ class AccountingCorePresentationViewServiceTest {
 
     }
 
+    private static final String ORG_ID = "org123";
+
+    private static BatchFilterRequest orgFilter() {
+        BatchFilterRequest batchFilterRequest = new BatchFilterRequest();
+        batchFilterRequest.setOrganisationId(ORG_ID);
+        return batchFilterRequest;
+    }
+
     @Test
     void downloadCsvTransaction_emptyData() {
 
@@ -293,8 +302,8 @@ class AccountingCorePresentationViewServiceTest {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
 
-        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged())).thenReturn(Page.empty());
-        accountingCorePresentationViewService.downloadCsvTransactions("org123", null, null, null,outputStream);
+        when(accountingCoreTransactionRepository.findAllByBatchId(isNull(), eq(ORG_ID), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(Page.empty());
+        accountingCorePresentationViewService.downloadCsvTransactions(null, null, orgFilter(), outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] lines = csv.split("\n");
@@ -323,10 +332,10 @@ class AccountingCorePresentationViewServiceTest {
         when(itemEntity.getProject()).thenReturn(Optional.empty());
         when(itemEntity.getDocument()).thenReturn(Optional.empty());
 
-        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(transactionEntity)));
+        when(accountingCoreTransactionRepository.findAllByBatchId(isNull(), eq(ORG_ID), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(new PageImpl<>(List.of(transactionEntity)));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        accountingCorePresentationViewService.downloadCsvTransactions("org123", null, null, null,outputStream);
+        accountingCorePresentationViewService.downloadCsvTransactions(null, null, orgFilter(), outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] lines = csv.split("\n");
@@ -371,11 +380,11 @@ class AccountingCorePresentationViewServiceTest {
 
         when(projectRepository.findById(new org.cardanofoundation.lob.app.organisation.domain.entity.Project.Id("ORG01", "PROJ01")))
                 .thenReturn(Optional.of(orgProject));
-        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged()))
+        when(accountingCoreTransactionRepository.findAllByBatchId(isNull(), eq(ORG_ID), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transactionEntity)));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        accountingCorePresentationViewService.downloadCsvTransactions("ORG01", null, null, null, outputStream);
+        accountingCorePresentationViewService.downloadCsvTransactions(null, null, orgFilter(), outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] lines = csv.split("\n");
@@ -421,11 +430,11 @@ class AccountingCorePresentationViewServiceTest {
 
         when(costCenterRepository.findById(new org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter.Id("ORG01", "CC01")))
                 .thenReturn(Optional.of(orgCostCenter));
-        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged()))
+        when(accountingCoreTransactionRepository.findAllByBatchId(isNull(), eq(ORG_ID), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transactionEntity)));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        accountingCorePresentationViewService.downloadCsvTransactions("ORG01", null, null, null, outputStream);
+        accountingCorePresentationViewService.downloadCsvTransactions(null, null, orgFilter(), outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] lines = csv.split("\n");
@@ -471,11 +480,11 @@ class AccountingCorePresentationViewServiceTest {
 
         when(projectRepository.findById(new org.cardanofoundation.lob.app.organisation.domain.entity.Project.Id("ORG01", "PROJ02")))
                 .thenReturn(Optional.of(orgProject));
-        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged()))
+        when(accountingCoreTransactionRepository.findAllByBatchId(isNull(), eq(ORG_ID), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transactionEntity)));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        accountingCorePresentationViewService.downloadCsvTransactions("ORG01", null, null, null, outputStream);
+        accountingCorePresentationViewService.downloadCsvTransactions(null, null, orgFilter(), outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] lines = csv.split("\n");
@@ -520,11 +529,11 @@ class AccountingCorePresentationViewServiceTest {
         when(itemEntity.getProject()).thenReturn(Optional.empty());
         when(itemEntity.getDocument()).thenReturn(Optional.empty());
 
-        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged()))
+        when(accountingCoreTransactionRepository.findAllByBatchId(isNull(), eq(ORG_ID), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transactionEntity)));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        accountingCorePresentationViewService.downloadCsvTransactions("org123", null, null, null, outputStream);
+        accountingCorePresentationViewService.downloadCsvTransactions(null, null, orgFilter(), outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] columns = csv.split("\n")[1].split(",", -1);
@@ -552,11 +561,11 @@ class AccountingCorePresentationViewServiceTest {
         when(itemEntity.getProject()).thenReturn(Optional.empty());
         when(itemEntity.getDocument()).thenReturn(Optional.empty());
 
-        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged()))
+        when(accountingCoreTransactionRepository.findAllByBatchId(isNull(), eq(ORG_ID), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transactionEntity)));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        accountingCorePresentationViewService.downloadCsvTransactions("org123", null, null, null, outputStream);
+        accountingCorePresentationViewService.downloadCsvTransactions(null, null, orgFilter(), outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] columns = csv.split("\n")[1].split(",", -1);

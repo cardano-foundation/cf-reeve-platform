@@ -263,7 +263,7 @@ class AccountingCorePresentationConverterTest {
         BatchFilterRequest batchFilterRequest = new BatchFilterRequest();
         batchFilterRequest.setOrganisationId("123");
         when(transactionBatchRepositoryGateway.findByIdAndOrganisationId(batchId, "123")).thenReturn(List.of(transactionBatchEntity));
-        when(transactionRepository.findAllByBatchId(batchId, null, null, null, null, null, null, null, null, null, null, null, null, LocalDate.of(1970, 1, 1).atStartOfDay(), LocalDate.now().atStartOfDay(), null, null, null, null, null, null, null, null, null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(transaction1, transaction2)));
+        when(transactionRepository.findAllByBatchId(batchId, "123", null, null, null, null, null, null, null, null, null, null, null, null, LocalDate.of(1970, 1, 1).atStartOfDay(), LocalDate.now().atStartOfDay(), null, null, null, null, null, null, null, null, null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(transaction1, transaction2)));
 
         Either<ProblemDetail, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail(batchId, null, Pageable.unpaged(), batchFilterRequest);
         assertTrue(resultE.isRight());
@@ -361,7 +361,7 @@ class AccountingCorePresentationConverterTest {
         transactionBatchEntity.setTransactions(txSet);
 
         when(transactionBatchRepositoryGateway.findByIdAndOrganisationId(eq(batchId), any())).thenReturn(List.of(transactionBatchEntity));
-        when(transactionRepository.findAllByBatchId(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(transactionRepository.findAllByBatchId(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transaction1, transaction2), sortedPageable, 2));
 
         Either<ProblemDetail, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail(batchId, null, sortedPageable, new BatchFilterRequest());
@@ -401,7 +401,7 @@ class AccountingCorePresentationConverterTest {
 
         List<TransactionProcessingStatus> txStatus = List.of(TransactionProcessingStatus.PUBLISH);
         when(transactionBatchRepositoryGateway.findByIdAndOrganisationId(eq(batchId), any())).thenReturn(List.of(transactionBatchEntity));
-        when(transactionRepository.findAllByBatchId(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(transactionRepository.findAllByBatchId(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transaction1)));
 
         Either<ProblemDetail, Optional<BatchView>> resultE = accountingCorePresentationConverter.batchDetail(batchId, txStatus, Pageable.unpaged(), new BatchFilterRequest());
