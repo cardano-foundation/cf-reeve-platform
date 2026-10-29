@@ -691,6 +691,9 @@ public class SpendingEventController {
         return Responses.respond(spendingEventService.updateEvent(eventId, request), HttpStatus.OK);
     }
 
+    /**
+     * @deprecated use {@link #publishEvents} with a one-item eventIds list; kept until the frontend has switched over.
+     */
     @Operation(summary = "Publish an event to the blockchain",
             description = "Deprecated: use POST /events/publish with a one-item eventIds list instead. "
                     + "This endpoint will be removed once the frontend has switched over.",
