@@ -1,6 +1,8 @@
 package org.cardanofoundation.lob.app.funding.resource;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -12,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -19,6 +22,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.funding.domain.enums.ProjectAmountTarget;
+import org.cardanofoundation.lob.app.funding.domain.request.ProjectFilterRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.CascadeDeletionView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
@@ -57,9 +62,9 @@ class ProjectControllerTest {
     @Test
     void listProjects_returns200_withContent() {
         PagedResponse<ProjectView> paged = PagedResponse.<ProjectView>builder().content(List.of(projectView())).total(1).build();
-        when(projectService.listProjects("org1", PAGEABLE)).thenReturn(paged);
+        when(projectService.listProjects(eq("org1"), any(), eq(PAGEABLE))).thenReturn(paged);
 
-        ResponseEntity<?> response = projectController.listProjects("org1", PAGEABLE);
+        ResponseEntity<?> response = projectController.listProjects("org1", null, null, null, null, null, PAGEABLE);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((PagedResponse<?>) response.getBody()).getContent()).hasSize(1);
@@ -67,13 +72,41 @@ class ProjectControllerTest {
 
     @Test
     void listProjects_propagatesErrorStatus() {
-        when(projectService.listProjects("org1", PAGEABLE))
+        when(projectService.listProjects(eq("org1"), any(), eq(PAGEABLE)))
                 .thenReturn(PagedResponse.error(problem(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED")));
 
-        ResponseEntity<?> response = projectController.listProjects("org1", PAGEABLE);
+        ResponseEntity<?> response = projectController.listProjects("org1", null, null, null, null, null, PAGEABLE);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(((PagedResponse<?>) response.getBody()).getError()).isPresent();
+    }
+
+    @Test
+    void listProjects_mapsQueryParamsIntoFilter() {
+        ArgumentCaptor<ProjectFilterRequest> filterCaptor = ArgumentCaptor.forClass(ProjectFilterRequest.class);
+        when(projectService.listProjects(eq("org1"), filterCaptor.capture(), eq(PAGEABLE)))
+                .thenReturn(PagedResponse.<ProjectView>builder().content(List.of()).build());
+
+        projectController.listProjects("org1", "Edu", List.of("USD", "EUR"), ProjectAmountTarget.SPENT,
+                new BigDecimal("10"), new BigDecimal("500"), PAGEABLE);
+
+        ProjectFilterRequest filter = filterCaptor.getValue();
+        assertThat(filter.getSearch()).isEqualTo("Edu");
+        assertThat(filter.getCurrencies()).containsExactly("USD", "EUR");
+        assertThat(filter.getAmountTarget()).isEqualTo(ProjectAmountTarget.SPENT);
+        assertThat(filter.getMinAmount()).isEqualByComparingTo("10");
+        assertThat(filter.getMaxAmount()).isEqualByComparingTo("500");
+    }
+
+    @Test
+    void listProjects_returns400_whenFilterInvalid() {
+        when(projectService.listProjects(eq("org1"), any(), eq(PAGEABLE)))
+                .thenReturn(PagedResponse.error(problem(HttpStatus.BAD_REQUEST, ErrorTitleConstants.PROJECT_FILTER_INVALID)));
+
+        ResponseEntity<?> response = projectController.listProjects("org1", null, null, null,
+                new BigDecimal("500"), new BigDecimal("100"), PAGEABLE);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     // --- getProject ---
@@ -81,9 +114,9 @@ class ProjectControllerTest {
     @Test
     void getProject_returns200_withView() {
         ProjectView view = projectView();
-        when(projectService.getProject("p1")).thenReturn(view);
+        when(projectService.getProject("p1", "org1")).thenReturn(view);
 
-        ResponseEntity<?> response = projectController.getProject("p1");
+        ResponseEntity<?> response = projectController.getProject("p1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo(view);
@@ -91,10 +124,10 @@ class ProjectControllerTest {
 
     @Test
     void getProject_returns404_withProblem() {
-        when(projectService.getProject("p1"))
+        when(projectService.getProject("p1", "org1"))
                 .thenReturn(ProjectView.error(problem(HttpStatus.NOT_FOUND, ErrorTitleConstants.PROJECT_NOT_FOUND)));
 
-        ResponseEntity<?> response = projectController.getProject("p1");
+        ResponseEntity<?> response = projectController.getProject("p1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(((ProjectView) response.getBody()).getError().orElseThrow().getTitle())
@@ -131,9 +164,9 @@ class ProjectControllerTest {
     @Test
     void listSubProjects_returns200() {
         PagedResponse<ProjectView> paged = PagedResponse.<ProjectView>builder().content(List.of(projectView())).total(1).build();
-        when(projectService.listSubProjects("p1", PAGEABLE)).thenReturn(paged);
+        when(projectService.listSubProjects("p1", "org1", PAGEABLE)).thenReturn(paged);
 
-        ResponseEntity<?> response = projectController.listSubProjects("p1", PAGEABLE);
+        ResponseEntity<?> response = projectController.listSubProjects("p1", "org1", PAGEABLE);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((PagedResponse<?>) response.getBody()).getContent()).hasSize(1);
@@ -198,9 +231,9 @@ class ProjectControllerTest {
     @Test
     void delete_returns200_withAffectedEvents_whenNoError() {
         CascadeDeletionView view = CascadeDeletionView.success(List.of());
-        when(projectService.deleteProject("p1")).thenReturn(view);
+        when(projectService.deleteProject("p1", "org1")).thenReturn(view);
 
-        ResponseEntity<?> response = projectController.deleteProject("p1");
+        ResponseEntity<?> response = projectController.deleteProject("p1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo(view);
@@ -209,9 +242,9 @@ class ProjectControllerTest {
     @Test
     void delete_returns404_withProblem() {
         ProblemDetail p = problem(HttpStatus.NOT_FOUND, ErrorTitleConstants.PROJECT_NOT_FOUND);
-        when(projectService.deleteProject("p1")).thenReturn(CascadeDeletionView.error(p));
+        when(projectService.deleteProject("p1", "org1")).thenReturn(CascadeDeletionView.error(p));
 
-        ResponseEntity<?> response = projectController.deleteProject("p1");
+        ResponseEntity<?> response = projectController.deleteProject("p1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(((CascadeDeletionView) response.getBody()).getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);

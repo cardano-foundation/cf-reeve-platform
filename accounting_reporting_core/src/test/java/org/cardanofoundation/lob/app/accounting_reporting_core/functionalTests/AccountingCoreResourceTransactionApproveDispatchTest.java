@@ -26,6 +26,7 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
 
         given()
                 .contentType("application/json")
+                .queryParam("organisationId", "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
                 .when()
                 .get("/api/v1/transactions/PublishTx")
                 .then()
@@ -55,6 +56,7 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
         ;
         given()
                 .contentType("application/json")
+                .queryParam("organisationId", "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
                 .when()
                 .get("/api/v1/transactions/PublishTx")
                 .then()
@@ -68,6 +70,7 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
 
         given()
                 .contentType("application/json")
+                .queryParam("organisationId", "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
                 .when()
                 .get("/api/v1/transactions/PublishTx")
                 .then()
@@ -97,6 +100,7 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
 
         given()
                 .contentType("application/json")
+                .queryParam("organisationId", "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
                 .when()
                 .get("/api/v1/transactions/PublishTx")
                 .then()
@@ -111,6 +115,7 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
 
         given()
                 .contentType("application/json")
+                .queryParam("organisationId", "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
                 .when()
                 .get("/api/v1/transactions/PublishTx")
                 .then()
@@ -139,6 +144,7 @@ class AccountingCoreResourceTransactionApproveDispatchTest extends WebBaseIntegr
         ;
         given()
                 .contentType("application/json")
+                .queryParam("organisationId", "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
                 .when()
                 .get("/api/v1/transactions/PublishTx")
                 .then()

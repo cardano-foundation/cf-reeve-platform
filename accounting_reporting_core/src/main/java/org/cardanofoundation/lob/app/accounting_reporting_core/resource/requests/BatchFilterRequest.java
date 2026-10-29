@@ -12,12 +12,13 @@ import lombok.Setter;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
+import org.cardanofoundation.lob.app.support.spring_web.BaseRequest;
 
 @Getter
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class BatchFilterRequest {
+public class BatchFilterRequest extends BaseRequest {
 
     @Schema(description = "Search of a specific internal transaction number.")
     private String internalTransactionNumber;
