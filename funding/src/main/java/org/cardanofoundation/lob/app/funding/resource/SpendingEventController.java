@@ -709,6 +709,7 @@ public class SpendingEventController {
     @PostMapping(value = "/events/{eventId}/publish", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     @Deprecated(forRemoval = true)
+    @SuppressWarnings("java:S1133") // can't remove yet: frontend still calls this endpoint
     public ResponseEntity<SpendingEventView> publishEvent(@PathVariable String eventId, @RequestParam String organisationId) {
         return Responses.respond(spendingEventService.publishEvent(eventId, organisationId), HttpStatus.OK);
     }
