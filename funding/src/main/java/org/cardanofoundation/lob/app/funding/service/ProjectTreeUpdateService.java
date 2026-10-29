@@ -80,14 +80,14 @@ public class ProjectTreeUpdateService {
 
     @Transactional
     public ProjectView updateWithMilestones(String projectId, ProjectWithMilestonesCreateRequest request) {
-        Optional<ProjectEntity> rootM = projectRepository.findById(projectId);
+        if (!keycloakSecurityHelper.canUserAccessOrg(request.getOrganisationId())) {
+            return ProjectView.error(Problems.unauthorized());
+        }
+        Optional<ProjectEntity> rootM = projectRepository.findByIdAndOrganisationId(projectId, request.getOrganisationId()).stream().findFirst();
         if (rootM.isEmpty()) {
             return ProjectView.error(Problems.projectNotFound(projectId));
         }
         ProjectEntity root = rootM.get();
-        if (!keycloakSecurityHelper.canUserAccessOrg(root.getOrganisationId())) {
-            return ProjectView.error(Problems.unauthorized());
-        }
         if (root.getParentProject() != null) {
             return ProjectView.error(Problems.badRequest(
                     "PUT /projects/{projectId} only updates a root project's whole structure; %s is a sub-project"

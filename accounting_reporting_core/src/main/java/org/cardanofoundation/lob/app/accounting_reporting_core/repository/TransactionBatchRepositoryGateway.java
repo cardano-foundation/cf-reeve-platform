@@ -34,6 +34,10 @@ public class TransactionBatchRepositoryGateway {
         return transactionBatchRepository.findById(batchId);
     }
 
+    public List<TransactionBatchEntity> findByIdAndOrganisationId(String batchId, String organisationId) {
+        return transactionBatchRepository.findByIdAndFilteringParametersOrganisationId(batchId, organisationId);
+    }
+
     // TODO: Pagination need to be implemented
     public List<TransactionBatchEntity> findByOrganisationId(String organisationId) {
         return transactionBatchRepository

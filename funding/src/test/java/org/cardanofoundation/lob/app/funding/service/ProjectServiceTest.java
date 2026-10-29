@@ -207,28 +207,28 @@ class ProjectServiceTest {
 
     @Test
     void getProject_notFound() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.empty());
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(List.of());
 
-        ProjectView result = projectService.getProject("p1");
+        ProjectView result = projectService.getProject("p1", "org1");
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
     }
 
     @Test
     void getProject_unauthorized() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
-        ProjectView result = projectService.getProject("p1");
+        ProjectView result = projectService.getProject("p1", "org1");
 
         assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(projectRepository, never()).findByIdAndOrganisationId(any(), any());
     }
 
     @Test
     void getProject_success() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(List.of(projectEntity()));
 
-        ProjectView result = projectService.getProject("p1");
+        ProjectView result = projectService.getProject("p1", "org1");
 
         assertThat(result.getError()).isEmpty();
         assertThat(result.getProjectId()).isEqualTo("p1");
@@ -236,14 +236,14 @@ class ProjectServiceTest {
 
     @Test
     void getProject_includesAssociatedEvents() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(List.of(projectEntity()));
         FundingEventEntity event = FundingEventEntity.builder().id("e1").organisationId("org1").build();
         SpendingEventView eventView = SpendingEventView.builder().eventId("e1").build();
         when(spendingEventService.findByProjectIdAndFilter(eq("p1"), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(event)));
         when(spendingEventService.toView(event)).thenReturn(eventView);
 
-        ProjectView result = projectService.getProject("p1");
+        ProjectView result = projectService.getProject("p1", "org1");
 
         assertThat(result.getError()).isEmpty();
         assertThat(result.getEvents()).hasSize(1);
@@ -306,6 +306,16 @@ class ProjectServiceTest {
     }
 
     // --- createWithMilestones ---
+
+    @Test
+    void createWithMilestones_returns401_whenUserCannotAccessOrg() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        ProjectView result = projectService.createWithMilestones(createRequest());
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
 
     @Test
     void create_conflict_whenFundingIdAlreadyUsed() {
@@ -538,6 +548,21 @@ class ProjectServiceTest {
     }
 
     @Test
+    void create_asSubProject_returns400_whenParentBelongsToDifferentOrg() {
+        ProjectEntity parent = ProjectEntity.builder().id("parent1").organisationId("otherOrg")
+                .totalAmount(new BigDecimal("200000.00")).currency("USD").build();
+        when(projectRepository.findById("parent1")).thenReturn(Optional.of(parent));
+
+        ProjectView result = projectService.createWithMilestones(ProjectWithMilestonesCreateRequest.builder()
+                .organisationId("org1").externalProjectId("WP-1").projectTitle("WP")
+                .totalAmount(new BigDecimal("100000.00")).currency("USD").parentProjectId("parent1")
+                .build());
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PARENT_PROJECT_ORG_MISMATCH);
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void create_asSubProject_returns400_whenParentHasMilestones() {
         ProjectEntity parent = ProjectEntity.builder().id("parent1").organisationId("org1")
                 .totalAmount(new BigDecimal("200000.00")).currency("USD").build();
@@ -678,33 +703,33 @@ class ProjectServiceTest {
 
     @Test
     void delete_notFound() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.empty());
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(List.of());
 
-        CascadeDeletionView result = projectService.deleteProject("p1");
+        CascadeDeletionView result = projectService.deleteProject("p1", "org1");
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
     }
 
     @Test
     void delete_returns401_whenUserCannotAccessOrg() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
-        CascadeDeletionView result = projectService.deleteProject("p1");
+        CascadeDeletionView result = projectService.deleteProject("p1", "org1");
 
         assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
         verify(cascadeDeleteService, never()).deleteProjectSubtree(any());
+        verify(projectRepository, never()).findByIdAndOrganisationId(any(), any());
     }
 
     @Test
     void delete_propagatesConflict_fromCascade() {
         ProjectEntity project = projectEntity();
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(List.of(project));
         ProblemDetail conflict = ProblemDetail.forStatus(HttpStatus.CONFLICT);
         conflict.setTitle(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
         when(cascadeDeleteService.deleteProjectSubtree(project)).thenReturn(Either.left(conflict));
 
-        CascadeDeletionView result = projectService.deleteProject("p1");
+        CascadeDeletionView result = projectService.deleteProject("p1", "org1");
 
         assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.CONFLICT.value());
     }
@@ -712,10 +737,10 @@ class ProjectServiceTest {
     @Test
     void delete_delegatesToCascade_whenAuthorised() {
         ProjectEntity project = projectEntity();
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(project));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(List.of(project));
         when(cascadeDeleteService.deleteProjectSubtree(project)).thenReturn(Either.right(List.of()));
 
-        CascadeDeletionView result = projectService.deleteProject("p1");
+        CascadeDeletionView result = projectService.deleteProject("p1", "org1");
 
         assertThat(result.getError()).isEmpty();
         assertThat(result.getAffectedEvents()).isEmpty();
@@ -726,31 +751,31 @@ class ProjectServiceTest {
 
     @Test
     void listSubProjects_returns404_whenParentNotFound() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.empty());
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(List.of());
 
-        PagedResponse<ProjectView> result = projectService.listSubProjects("p1", PAGEABLE);
+        PagedResponse<ProjectView> result = projectService.listSubProjects("p1", "org1", PAGEABLE);
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
     }
 
     @Test
     void listSubProjects_returns401_whenUserCannotAccessOrg() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
-        PagedResponse<ProjectView> result = projectService.listSubProjects("p1", PAGEABLE);
+        PagedResponse<ProjectView> result = projectService.listSubProjects("p1", "org1", PAGEABLE);
 
         assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
         verify(projectRepository, never()).findByParentProjectId("p1", PAGEABLE);
+        verify(projectRepository, never()).findByIdAndOrganisationId(any(), any());
     }
 
     @Test
     void listSubProjects_returnsPage_whenAuthorised() {
-        when(projectRepository.findById("p1")).thenReturn(Optional.of(projectEntity()));
+        when(projectRepository.findByIdAndOrganisationId("p1", "org1")).thenReturn(List.of(projectEntity()));
         when(projectRepository.findByParentProjectId("p1", PAGEABLE))
                 .thenReturn(new PageImpl<>(List.of(projectEntity())));
 
-        PagedResponse<ProjectView> result = projectService.listSubProjects("p1", PAGEABLE);
+        PagedResponse<ProjectView> result = projectService.listSubProjects("p1", "org1", PAGEABLE);
 
         assertThat(result.getError()).isEmpty();
         assertThat(result.getContent()).hasSize(1);

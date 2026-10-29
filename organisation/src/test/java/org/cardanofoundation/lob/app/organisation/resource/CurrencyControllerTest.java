@@ -3,7 +3,10 @@ package org.cardanofoundation.lob.app.organisation.resource;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -20,21 +23,30 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.organisation.domain.request.CurrencyUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.CurrencyView;
 import org.cardanofoundation.lob.app.organisation.service.CurrencyService;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
 class CurrencyControllerTest {
 
     @Mock
     private CurrencyService currencyService;
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
 
     @InjectMocks
     private CurrencyController currencyController;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
+    }
 
     @Test
     void getAllCurrencies() {
@@ -52,7 +64,7 @@ class CurrencyControllerTest {
     void getCurrency_notFound() {
         when(currencyService.getCurrency("org123", "USD")).thenReturn(Optional.empty());
 
-        ResponseEntity<CurrencyView> response = currencyController.getCurrency("org123", "USD");
+        ResponseEntity<?> response = currencyController.getCurrency("org123", "USD");
         assertEquals(404, response.getStatusCode().value());
     }
 
@@ -61,7 +73,7 @@ class CurrencyControllerTest {
         CurrencyView view = mock(CurrencyView.class);
         when(currencyService.getCurrency("org123", "USD")).thenReturn(Optional.of(view));
 
-        ResponseEntity<CurrencyView> response = currencyController.getCurrency("org123", "USD");
+        ResponseEntity<?> response = currencyController.getCurrency("org123", "USD");
         assertTrue(response.getStatusCode().is2xxSuccessful());
         assertNotNull(response.getBody());
         assertEquals(view, response.getBody());
@@ -73,7 +85,7 @@ class CurrencyControllerTest {
         CurrencyUpdate update = mock(CurrencyUpdate.class);
 
         when(currencyService.insertCurrency("org123", update, false)).thenReturn(view);
-        ResponseEntity<CurrencyView> response = currencyController.insertCurrency("org123", update);
+        ResponseEntity<?> response = currencyController.insertCurrency("org123", update);
 
         assertTrue(response.getStatusCode().is2xxSuccessful());
         assertNotNull(response.getBody());
@@ -86,7 +98,7 @@ class CurrencyControllerTest {
         CurrencyUpdate update = mock(CurrencyUpdate.class);
 
         when(currencyService.updateCurrency("org123", update)).thenReturn(view);
-        ResponseEntity<CurrencyView> response = currencyController.updateCurrency("org123", update);
+        ResponseEntity<?> response = currencyController.updateCurrency("org123", update);
 
         assertTrue(response.getStatusCode().is2xxSuccessful());
         assertNotNull(response.getBody());
@@ -117,5 +129,68 @@ class CurrencyControllerTest {
         assertEquals(400, response.getStatusCode().value());
         assertNotNull(response.getBody());
         assertEquals(either.getLeft(), response.getBody());
+    }
+
+    @Test
+    void getAllCurrencies_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<?> response = currencyController.getAllCurrencies("org123", null, null, Pageable.unpaged());
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(currencyService);
+    }
+
+    @Test
+    void getCurrency_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<?> response = currencyController.getCurrency("org123", "USD");
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(currencyService);
+    }
+
+    @Test
+    void insertCurrency_noOrgAccess() {
+        CurrencyUpdate update = mock(CurrencyUpdate.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<?> response = currencyController.insertCurrency("org123", update);
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(currencyService);
+    }
+
+    @Test
+    void updateCurrency_noOrgAccess() {
+        CurrencyUpdate update = mock(CurrencyUpdate.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<?> response = currencyController.updateCurrency("org123", update);
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(currencyService);
+    }
+
+    @Test
+    void insertCurrenciesCsv_noOrgAccess() {
+        MultipartFile file = mock(MultipartFile.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<?> response = currencyController.insertCurrenciesCsv("org123", file);
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(currencyService);
+    }
+
+    @Test
+    void downloadCurrenciesCsv_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<?> response = currencyController.downloadCurrenciesCsv("org123", null, null);
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(currencyService);
     }
 }

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -33,6 +34,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.JpaSort;
 
+import io.vavr.control.Either;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -67,12 +69,15 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Reconc
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepositoryGateway;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionReconcilationRepository;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.BatchFilterRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterSource;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterStatusRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRejectionCodeRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationStatisticRequest;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.TransactionItemsRejectionRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response.FilteringOptionsListResponse;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchReprocessView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReconciliationResponseView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReconciliationStatisticView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionReconciliationTransactionsView;
@@ -81,6 +86,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ProjectRepository;
+import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 
 @ExtendWith(MockitoExtension.class)
 class AccountingCorePresentationViewServiceTest {
@@ -105,6 +111,8 @@ class AccountingCorePresentationViewServiceTest {
     private CostCenterRepository costCenterRepository;
     @Mock
     private ProjectRepository projectRepository;
+    @Mock
+    private JpaSortFieldValidator jpaSortFieldValidator;
 
     @InjectMocks
     private AccountingCorePresentationViewService accountingCorePresentationViewService;
@@ -279,6 +287,14 @@ class AccountingCorePresentationViewServiceTest {
 
     }
 
+    private static final String ORG_ID = "org123";
+
+    private static BatchFilterRequest orgFilter() {
+        BatchFilterRequest batchFilterRequest = new BatchFilterRequest();
+        batchFilterRequest.setOrganisationId(ORG_ID);
+        return batchFilterRequest;
+    }
+
     @Test
     void downloadCsvTransaction_emptyData() {
 
@@ -286,8 +302,8 @@ class AccountingCorePresentationViewServiceTest {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
 
-        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged())).thenReturn(Page.empty());
-        accountingCorePresentationViewService.downloadCsvTransactions("org123", null, null, null,outputStream);
+        when(accountingCoreTransactionRepository.findAllByBatchId(isNull(), eq(ORG_ID), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(Page.empty());
+        accountingCorePresentationViewService.downloadCsvTransactions(null, null, orgFilter(), outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] lines = csv.split("\n");
@@ -316,10 +332,10 @@ class AccountingCorePresentationViewServiceTest {
         when(itemEntity.getProject()).thenReturn(Optional.empty());
         when(itemEntity.getDocument()).thenReturn(Optional.empty());
 
-        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(transactionEntity)));
+        when(accountingCoreTransactionRepository.findAllByBatchId(isNull(), eq(ORG_ID), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(new PageImpl<>(List.of(transactionEntity)));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        accountingCorePresentationViewService.downloadCsvTransactions("org123", null, null, null,outputStream);
+        accountingCorePresentationViewService.downloadCsvTransactions(null, null, orgFilter(), outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] lines = csv.split("\n");
@@ -364,11 +380,11 @@ class AccountingCorePresentationViewServiceTest {
 
         when(projectRepository.findById(new org.cardanofoundation.lob.app.organisation.domain.entity.Project.Id("ORG01", "PROJ01")))
                 .thenReturn(Optional.of(orgProject));
-        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged()))
+        when(accountingCoreTransactionRepository.findAllByBatchId(isNull(), eq(ORG_ID), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transactionEntity)));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        accountingCorePresentationViewService.downloadCsvTransactions("ORG01", null, null, null, outputStream);
+        accountingCorePresentationViewService.downloadCsvTransactions(null, null, orgFilter(), outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] lines = csv.split("\n");
@@ -414,11 +430,11 @@ class AccountingCorePresentationViewServiceTest {
 
         when(costCenterRepository.findById(new org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter.Id("ORG01", "CC01")))
                 .thenReturn(Optional.of(orgCostCenter));
-        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged()))
+        when(accountingCoreTransactionRepository.findAllByBatchId(isNull(), eq(ORG_ID), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transactionEntity)));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        accountingCorePresentationViewService.downloadCsvTransactions("ORG01", null, null, null, outputStream);
+        accountingCorePresentationViewService.downloadCsvTransactions(null, null, orgFilter(), outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] lines = csv.split("\n");
@@ -464,11 +480,11 @@ class AccountingCorePresentationViewServiceTest {
 
         when(projectRepository.findById(new org.cardanofoundation.lob.app.organisation.domain.entity.Project.Id("ORG01", "PROJ02")))
                 .thenReturn(Optional.of(orgProject));
-        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged()))
+        when(accountingCoreTransactionRepository.findAllByBatchId(isNull(), eq(ORG_ID), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transactionEntity)));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        accountingCorePresentationViewService.downloadCsvTransactions("ORG01", null, null, null, outputStream);
+        accountingCorePresentationViewService.downloadCsvTransactions(null, null, orgFilter(), outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] lines = csv.split("\n");
@@ -513,11 +529,11 @@ class AccountingCorePresentationViewServiceTest {
         when(itemEntity.getProject()).thenReturn(Optional.empty());
         when(itemEntity.getDocument()).thenReturn(Optional.empty());
 
-        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged()))
+        when(accountingCoreTransactionRepository.findAllByBatchId(isNull(), eq(ORG_ID), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transactionEntity)));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        accountingCorePresentationViewService.downloadCsvTransactions("org123", null, null, null, outputStream);
+        accountingCorePresentationViewService.downloadCsvTransactions(null, null, orgFilter(), outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] columns = csv.split("\n")[1].split(",", -1);
@@ -545,11 +561,11 @@ class AccountingCorePresentationViewServiceTest {
         when(itemEntity.getProject()).thenReturn(Optional.empty());
         when(itemEntity.getDocument()).thenReturn(Optional.empty());
 
-        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged()))
+        when(accountingCoreTransactionRepository.findAllByBatchId(isNull(), eq(ORG_ID), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transactionEntity)));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        accountingCorePresentationViewService.downloadCsvTransactions("org123", null, null, null, outputStream);
+        accountingCorePresentationViewService.downloadCsvTransactions(null, null, orgFilter(), outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] columns = csv.split("\n")[1].split(",", -1);
@@ -1692,5 +1708,68 @@ class AccountingCorePresentationViewServiceTest {
         TransactionReconciliationTransactionsView view = result.getTransactions().iterator().next();
         assertTrue(view.getSourceDiff().isEmpty());
         assertEquals(Set.of(ReconciliationRejectionCodeRequest.MISSING_IN_ERP), view.getReconciliationRejectionCode());
+    }
+
+    @Test
+    void transactionDetailSpecific_notFound_whenTransactionDoesNotBelongToOrganisation() {
+        when(transactionRepositoryGateway.findByIdAndOrganisationId("tx-1", "org-1")).thenReturn(Set.of());
+
+        Optional<org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionView> result =
+                accountingCorePresentationViewService.transactionDetailSpecific("tx-1", "org-1");
+
+        assertTrue(result.isEmpty());
+        verify(transactionRepositoryGateway).findByIdAndOrganisationId("tx-1", "org-1");
+    }
+
+    @Test
+    void rejectTransactionItems_notFound_whenTransactionDoesNotBelongToOrganisation() {
+        TransactionItemsRejectionRequest request = mock(TransactionItemsRejectionRequest.class);
+        when(request.getTransactionId()).thenReturn("tx-1");
+        when(request.getOrganisationId()).thenReturn("org-1");
+        when(transactionRepositoryGateway.findByIdAndOrganisationId("tx-1", "org-1")).thenReturn(Set.of());
+
+        var result = accountingCorePresentationViewService.rejectTransactionItems(request);
+
+        assertTrue(result.getError().isPresent());
+        assertEquals("tx-1", result.getTransactionId());
+        verify(transactionRepositoryGateway).findByIdAndOrganisationId("tx-1", "org-1");
+        verify(transactionRepositoryGateway, org.mockito.Mockito.never()).rejectTransactionItems(any(), any());
+    }
+
+    @Test
+    void scheduleReIngestionForFailed_delegatesToAccountingCoreServiceWithOrganisationId() {
+        when(accountingCoreService.scheduleReIngestionForFailed("batch-1", "org-1")).thenReturn(Either.right(null));
+
+        BatchReprocessView result = accountingCorePresentationViewService.scheduleReIngestionForFailed("batch-1", "org-1");
+
+        assertFalse(result.getError().isPresent());
+        verify(accountingCoreService).scheduleReIngestionForFailed("batch-1", "org-1");
+    }
+
+    @Test
+    void scheduleReIngestionForFailed_returnsFail_whenAccountingCoreServiceReturnsProblem() {
+        org.springframework.http.ProblemDetail problem = org.springframework.http.ProblemDetail.forStatus(org.springframework.http.HttpStatus.NOT_FOUND);
+        when(accountingCoreService.scheduleReIngestionForFailed("batch-1", "org-1")).thenReturn(Either.left(problem));
+
+        BatchReprocessView result = accountingCorePresentationViewService.scheduleReIngestionForFailed("batch-1", "org-1");
+
+        assertTrue(result.getError().isPresent());
+        assertEquals(problem, result.getError().get());
+    }
+
+    @Test
+    void batchDetail_notFound_whenBatchDoesNotBelongToOrganisation() {
+        BatchFilterRequest batchFilterRequest = new BatchFilterRequest();
+        batchFilterRequest.setOrganisationId("org-1");
+        when(jpaSortFieldValidator.convertPageable(any(Pageable.class), any(), eq(TransactionEntity.class)))
+                .thenReturn(Either.right(Pageable.unpaged()));
+        when(transactionBatchRepositoryGateway.findByIdAndOrganisationId("batch-1", "org-1")).thenReturn(List.of());
+
+        var result = accountingCorePresentationViewService.batchDetail("batch-1", null, Pageable.unpaged(), batchFilterRequest);
+
+        assertTrue(result.isRight());
+        assertTrue(result.get().isEmpty());
+        verify(transactionBatchRepositoryGateway).findByIdAndOrganisationId("batch-1", "org-1");
+        verifyNoInteractions(accountingCoreTransactionRepository);
     }
 }

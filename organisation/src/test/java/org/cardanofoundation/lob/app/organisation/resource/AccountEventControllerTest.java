@@ -22,6 +22,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.EventCodeUpdate
 import org.cardanofoundation.lob.app.organisation.domain.view.AccountEventView;
 import org.cardanofoundation.lob.app.organisation.service.AccountEventService;
 import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 class AccountEventControllerTest {
 
@@ -31,6 +32,9 @@ class AccountEventControllerTest {
     @Mock
     private OrganisationService organisationService;
 
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
+
     @InjectMocks
     private AccountEventController controller;
 
@@ -39,6 +43,7 @@ class AccountEventControllerTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
+        lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
     }
 
     @Test
@@ -125,6 +130,58 @@ class AccountEventControllerTest {
 
         assertThat(response.getStatusCode().value()).isEqualTo(400);
         assertThat(response.getBody()).isEqualTo(view);
+    }
+
+    @Test
+    void getReferenceCodes_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(false);
+
+        ResponseEntity<?> response = controller.getReferenceCodes(orgId, null, null, null, null, null, Pageable.unpaged());
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        verifyNoInteractions(accountEventService);
+    }
+
+    @Test
+    void downloadEventCodesCsv_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(false);
+
+        ResponseEntity<?> response = controller.downloadEventCodesCsv(orgId, null, null, null, null, null);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        verifyNoInteractions(accountEventService);
+    }
+
+    @Test
+    void insertReferenceCode_noOrgAccess() {
+        EventCodeUpdate update = new EventCodeUpdate();
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(false);
+
+        ResponseEntity<?> response = controller.insertReferenceCode(orgId, update);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        verifyNoInteractions(accountEventService);
+    }
+
+    @Test
+    void insertReferenceCodeByCsv_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(false);
+
+        ResponseEntity<?> response = controller.insertReferenceCodeByCsv(orgId, null);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        verifyNoInteractions(accountEventService);
+    }
+
+    @Test
+    void updateReferenceCode_noOrgAccess() {
+        EventCodeUpdate update = new EventCodeUpdate();
+        when(keycloakSecurityHelper.canUserAccessOrg(orgId)).thenReturn(false);
+
+        ResponseEntity<?> response = controller.updateReferenceCode(orgId, update);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        verifyNoInteractions(accountEventService);
     }
 
 }
