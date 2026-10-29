@@ -23,14 +23,29 @@ class ProjectChildSequenceService {
     private final FundingProjectRepository projectRepository;
 
     /**
+     * What kind of child is being created. The letter goes into its proId so a sub-project and a milestone
+     * of the same parent can never be mistaken for each other ({@code PRJ-A-S1} vs {@code PRJ-A-M1}).
+     */
+    enum ChildKind {
+        SUB_PROJECT("S"),
+        MILESTONE("M");
+
+        private final String letter;
+
+        ChildKind(String letter) {
+            this.letter = letter;
+        }
+    }
+
+    /**
      * Atomically increments {@code parent}'s {@code nextChildSequence} and returns the new child's
-     * proId, {@code "<parent proId>-<n>"}. Locks {@code parent}'s row for the duration of the caller's
+     * proId, {@code "<parent proId>-<S|M><n>"} (see {@link ChildKind}). The counter is shared by both kinds. Locks {@code parent}'s row for the duration of the caller's
      * transaction (see {@link FundingProjectRepository#findWithLockById}) so two children created for
      * the same parent at nearly the same instant can never be assigned the same number — the second
      * caller blocks until the first commits (or rolls back) rather than racing.
      */
     @Transactional(propagation = Propagation.MANDATORY)
-    String nextChildProId(ProjectEntity parent) {
+    String nextChildProId(ProjectEntity parent, ChildKind kind) {
         ProjectEntity locked = projectRepository.findWithLockById(parent.getId()).orElseThrow(() ->
                 new IllegalStateException("Project disappeared mid-transaction: " + parent.getId()));
         int next = locked.getNextChildSequence() + 1;
@@ -40,7 +55,7 @@ class ProjectChildSequenceService {
         // than locked when parent is a brand-new row already in this same persistence context — keep
         // it in sync so the caller's subsequent use of parent.getNextChildSequence() (if any) is correct.
         parent.setNextChildSequence(next);
-        return locked.getProId() + "-" + next;
+        return locked.getProId() + "-" + kind.letter + next;
     }
 
 }

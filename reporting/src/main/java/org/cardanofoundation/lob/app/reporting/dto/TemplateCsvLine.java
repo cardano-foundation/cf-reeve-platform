@@ -39,10 +39,10 @@ public class TemplateCsvLine {
     private String parent = "";
     @CsvBindByName(column = "Accounts")
     private  String accounts = "";
+    // Date Range and Sign only drive Automatic generation; required for Automatic templates in CsvReportTemplateService
     @CsvBindByName(column = "Date Range")
     private String dateRange = "";
     @CsvBindByName(column = "Sign")
-    @NotNull(message = "Sign is required. Options are: Positive, Negative")
-    private String sign;
+    private String sign = "";
 
 }

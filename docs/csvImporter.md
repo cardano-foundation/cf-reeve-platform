@@ -121,7 +121,7 @@ The following columns are needed:
 - `Name`: Name of the report template (e.g. `Balance Sheet Template`)
 - `Report Type`: Type of the report template. Possible values are: `Balance sheet`, `Income statement`, `Custom`
 - `Generation Method`: How the report is generated. Possible values are: `Automatic`, `Manual`
-- `Accounting Regime`: Accounting regime disclosure (e.g. `IFRS`)
+- `Accounting Regime`: The label of one of the organisation's active accounting regimes, or `Not applicable` (e.g. `IFRS`). Matching ignores case. Any other value fails the template, except when updating an existing template whose regime is unchanged
 - `Active`: Whether the template is available for use in reports. Possible values are: `true`, `false`
 - `Description`: Free text description of the template (optional)
 - `Field Name`: Name of the field (e.g. `TOTAL_ASSETS`)

@@ -45,7 +45,7 @@ public class MilestoneEntity extends CommonEntity implements Persistable<String>
     /**
      * Permanent, human-readable identifier — set once at creation and never updated afterward,
      * regardless of later title changes. Through the JSON API and the event-allocation flow it is
-     * always system-assigned as {@code project.proId + "-" + n} (never user-suppliable there — a
+     * always system-assigned as {@code project.proId + "-M" + n} (never user-suppliable there — a
      * milestone has no equivalent natural external code, unlike a root project). CSV bulk-import is the
      * one exception: it requires the caller to supply the value (see
      * {@code MilestoneService#create(String, MilestoneCreateRequest, String)}). Pre-existing milestones
@@ -54,6 +54,15 @@ public class MilestoneEntity extends CommonEntity implements Persistable<String>
     @NotBlank
     @Column(name = "pro_id", nullable = false)
     private String proId;
+
+    /**
+     * Free-text description of the milestone's scope/deliverable — part of the locked/editable field
+     * set alongside {@link #milestoneAmount} and {@link #milestoneDate}: read-only once a published
+     * event allocates to this milestone (see {@code MilestoneService#update}; LOB-2365).
+     */
+    @Nullable
+    @Column(name = "description")
+    private String description;
 
     @NotNull
     @Column(name = "milestone_amount", nullable = false)

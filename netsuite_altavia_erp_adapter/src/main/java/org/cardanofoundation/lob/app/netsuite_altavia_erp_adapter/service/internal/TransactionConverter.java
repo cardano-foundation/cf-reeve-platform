@@ -3,6 +3,9 @@ package org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.service.inter
 import static java.util.stream.Collectors.groupingBy;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Counterparty.Type.VENDOR;
 import static org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.FatalError.Code.ADAPTER_ERROR;
+import static org.cardanofoundation.lob.app.accounting_reporting_core.utils.ErrorUtils.BAG_CODE;
+import static org.cardanofoundation.lob.app.accounting_reporting_core.utils.ErrorUtils.BAG_ERROR;
+import static org.cardanofoundation.lob.app.accounting_reporting_core.utils.ErrorUtils.BAG_MESSAGE;
 import static org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.FieldType.*;
 import static org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.CodeMappingType.ORGANISATION;
 import static org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.util.MoreString.normaliseString;
@@ -120,14 +123,13 @@ public class TransactionConverter {
                 log.error("Both debit and credit amounts are non-zero for transaction: {}", txId);
 
 
+                String message = "Both debit and credit amounts are non-zero for transaction: " + txLine.transactionNumber();
                 Map<String, Object> bag = Map.of(
-                        Constants.NETSUITE_BAG_TECHNICAL_ERROR_MESSAGE, Map.of(
-                                "error", Map.of(
-                                        "code", "NETSUITE_BAG_TECHNICAL_ERROR_MESSAGE",
-                                        "Message", "Both amounts are non-zero"
-                                )
+                        BAG_ERROR, Map.of(
+                                BAG_CODE, "TRANSACTIONS_VALIDATION_ERROR",
+                                BAG_MESSAGE, message
                         ),
-                        "mesasage", "Both debit and credit amounts are non-zero for transaction: {}",
+                        Constants.NETSUITE_BAG_TECHNICAL_ERROR_MESSAGE, message,
                         Constants.NETSUITE_BAG_ORGANISATION_ID, organisationId
                 );
 
@@ -183,7 +185,7 @@ public class TransactionConverter {
             String message = c.getMessage() != null ? c.getMessage() : "null";
             Object invalidValue = c.getInvalidValue() != null ? c.getInvalidValue() : "null"; // can be null, but that's OK in a Map
 
-            return Map.of("propertyPath", propertyPath, "message", message, "invalidValue", invalidValue);
+            return Map.of("propertyPath", propertyPath, BAG_MESSAGE, message, "invalidValue", invalidValue);
         }).toList();
     }
 
@@ -314,7 +316,12 @@ public class TransactionConverter {
         Optional<String> organisationIdM = codesMappingService.getCodeMapping(netsuiteInstanceId, txLine.subsidiary(), ORGANISATION);
 
         if (organisationIdM.isEmpty()) {
-            Map<String, Object> bag = Map.<String, Object>of("netsuiteInstanceId", netsuiteInstanceId, "subsidiary", txLine.subsidiary());
+            String message = "Organisation not imported: no organisation mapping for NetSuite subsidiary " + txLine.subsidiary();
+            Map<String, Object> bag = Map.<String, Object>of(
+                    BAG_ERROR, Map.of(BAG_CODE, "ORGANISATION_NOT_IMPORTED", BAG_MESSAGE, message),
+                    Constants.NETSUITE_BAG_TECHNICAL_ERROR_MESSAGE, message,
+                    "netsuiteInstanceId", netsuiteInstanceId,
+                    "subsidiary", txLine.subsidiary());
 
             return Either.left(new FatalError(ADAPTER_ERROR, "ORGANISATION_NOT_IMPORTED", bag));
         }

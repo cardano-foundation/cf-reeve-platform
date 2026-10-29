@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.funding.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -18,6 +19,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import io.vavr.control.Either;
 import org.mockito.Mock;
@@ -27,11 +29,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.funding.domain.entity.*;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
 import org.cardanofoundation.lob.app.funding.domain.request.*;
+import org.cardanofoundation.lob.app.funding.domain.view.OrphanEventsCleanupView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
+import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventBulkPublishView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventPublishView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.repository.*;
@@ -58,6 +63,8 @@ class SpendingEventServiceTest {
     private OrganisationPublicApiIF organisationPublicApi;
     @Mock
     private FundingCascadeDeleteService cascadeDeleteService;
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     private SpendingEventService spendingEventService;
 
@@ -74,7 +81,7 @@ class SpendingEventServiceTest {
         ProjectStructureService projectStructureService = new ProjectStructureService(projectRepository, milestoneService, childSequenceService);
         spendingEventService = new SpendingEventService(fundingEventRepository, projectRepository,
                 milestoneAllocationRepository, milestoneService, projectStructureService,
-                keycloakSecurityHelper, organisationPublicApi);
+                keycloakSecurityHelper, organisationPublicApi, transactionManager);
         // Currency codes referenced by these tests (USD, EUR, ...) are registered/active in the org's
         // currency table by default; tests exercising the rejection path override this per code.
         Currency activeCurrency = new Currency(new Currency.Id("org1", "x"), "ISO_4217:x", true);
@@ -123,11 +130,35 @@ class SpendingEventServiceTest {
     @Test
     void findByOrganisationIdAndFilter_delegatesToRepository() {
         var page = new PageImpl<>(List.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT)));
-        when(fundingEventRepository.findByOrganisationIdAndFilter("org1", EventStatus.DRAFT, EventType.SPENDING, PAGEABLE))
+        when(fundingEventRepository.findByOrganisationIdAndFilter("org1",
+                List.of(EventStatus.DRAFT, EventStatus.ERROR), List.of(EventType.SPENDING), "Edu", "USD",
+                LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31), new BigDecimal("1"), new BigDecimal("2"), PAGEABLE))
                 .thenReturn(page);
 
-        assertThat(spendingEventService.findByOrganisationIdAndFilter(
-                "org1", Optional.of(EventStatus.DRAFT), Optional.of(EventType.SPENDING), PAGEABLE)).isEqualTo(page);
+        SpendingEventFilterRequest filter = SpendingEventFilterRequest.builder()
+                .statuses(List.of(EventStatus.DRAFT, EventStatus.ERROR))
+                .eventTypes(List.of(EventType.SPENDING))
+                .projectTitle(" Edu ")
+                .currency("USD")
+                .dateFrom(LocalDate.of(2026, 1, 1))
+                .dateTo(LocalDate.of(2026, 1, 31))
+                .minAmount(new BigDecimal("1"))
+                .maxAmount(new BigDecimal("2"))
+                .build();
+
+        assertThat(spendingEventService.findByOrganisationIdAndFilter("org1", filter, PAGEABLE)).isEqualTo(page);
+    }
+
+    @Test
+    void findByOrganisationIdAndFilter_passesNulls_whenFiltersEmptyOrBlank() {
+        var page = new PageImpl<FundingEventEntity>(List.of());
+        when(fundingEventRepository.findByOrganisationIdAndFilter("org1", null, null, null, null, null, null, null, null, PAGEABLE))
+                .thenReturn(page);
+
+        SpendingEventFilterRequest filter = SpendingEventFilterRequest.builder()
+                .statuses(List.of()).eventTypes(List.of()).projectTitle("  ").currency("").build();
+
+        assertThat(spendingEventService.findByOrganisationIdAndFilter("org1", filter, PAGEABLE)).isEqualTo(page);
     }
 
     @Test
@@ -221,7 +252,7 @@ class SpendingEventServiceTest {
         when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 
         SpendingEventCreateRequest request = fundingRequest(EventProjectAllocationRequest.builder()
-                .externalProjectId("PROJ-NEW").projectTitle("New Project").fundingId("GRANT-2025-001")
+                .externalProjectId("PROJ-NEW").projectTitle("New Project").proId("New Project").fundingId("GRANT-2025-001")
                 .totalAmount(new BigDecimal("100000.00")).currency("USD")
                 .milestones(List.of(EventMilestoneAllocationRequest.builder()
                         .milestone(MilestoneCreateRequest.builder().milestoneTitle("New MS")
@@ -233,6 +264,24 @@ class SpendingEventServiceTest {
 
         assertThat(result.isRight()).isTrue();
         verify(milestoneRepository).saveAndFlush(any());
+    }
+
+    @Test
+    void create_rejectsNewRootProject_whenProIdMissing() {
+        SpendingEventCreateRequest request = fundingRequest(EventProjectAllocationRequest.builder()
+                .externalProjectId("PROJ-NEW").projectTitle("New Project Without ProId").fundingId("GRANT-2025-001")
+                .totalAmount(new BigDecimal("100000.00")).currency("USD")
+                .milestones(List.of(EventMilestoneAllocationRequest.builder()
+                        .milestone(MilestoneCreateRequest.builder().milestoneTitle("New MS")
+                                .milestoneAmount(new BigDecimal("60000.00")).currency("USD").milestoneDate(FUTURE_DATE).build())
+                        .allocatedAmount(ALLOCATED).build()))
+                .build());
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_FIELDS_REQUIRED);
+        verify(projectRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -780,8 +829,8 @@ class SpendingEventServiceTest {
         ProjectEntity root = projectEntity(); // id "p1", total 200000
         // The sub-project is created on the fly with an auto-assigned proId (see @BeforeEach's generic
         // findWithLockById stub, which always returns proId "parent") — the deterministic id is derived
-        // from that proId ("parent-1"), never from the title "Work Package 1".
-        String subProId = "parent-1";
+        // from that proId ("parent-S1"), never from the title "Work Package 1".
+        String subProId = "parent-S1";
         String subId = ProjectEntity.subId("p1", subProId);
         when(projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull("org1", "Project AB")).thenReturn(Optional.of(root));
         when(milestoneRepository.existsByProjectId("p1")).thenReturn(false);
@@ -994,6 +1043,43 @@ class SpendingEventServiceTest {
     }
 
     @Test
+    void update_clearsErrorStatusBackToDraft_onSuccess() {
+        // LOB-2365: an ERROR event (structural edit made its allocation no longer fit) is exactly what a
+        // successful update fixes — every allocation is re-validated against the milestone's *current*
+        // amount, so reaching a successful save means the event fits again and the flag can come off.
+        FundingEventEntity existing = eventEntity(EventType.FUNDING, EventStatus.ERROR);
+        stubExistingProjectAndMilestone("MS-1");
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(existing));
+        when(fundingEventRepository.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.update("e1",
+                fundingRequest(fundingMilestone("MS-1", ALLOCATED)));
+
+        assertThat(result.isRight()).isTrue();
+        assertThat(result.get().getStatus()).isEqualTo(EventStatus.DRAFT);
+    }
+
+    @Test
+    void update_leavesErrorEventUnpersisted_whenTheAttemptedFixStillDoesNotValidate() {
+        // The ERROR -> DRAFT reset happens up front, before the allocation is re-validated — this
+        // confirms a still-broken fix attempt never reaches saveAndFlush at all (the in-memory status
+        // flip is discarded along with everything else via updateEvent's rollbackAndError in the real,
+        // transactional call path; at the unit level, not calling saveAndFlush is what we can assert).
+        FundingEventEntity existing = eventEntity(EventType.FUNDING, EventStatus.ERROR);
+        stubExistingProjectAndMilestone("MS-1"); // milestone amount 50000
+        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(existing));
+
+        SpendingEventCreateRequest request = fundingRequest(fundingMilestone("MS-1", new BigDecimal("60000.00")));
+        request.setAmountRcy(new BigDecimal("60000.00"));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.update("e1", request);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.MILESTONE_OVERFUNDED);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void update_returnsLeft_whenOrganisationMismatch() {
         // The body claims a different organisation than the event's — must not re-target its projects.
         when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.FUNDING, EventStatus.DRAFT)));
@@ -1035,7 +1121,7 @@ class SpendingEventServiceTest {
     @Test
     void publish_setsStatusAndDispatchApproved() {
         FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(event));
+        when(fundingEventRepository.findByIdForUpdate("e1")).thenReturn(Optional.of(event));
         when(fundingEventRepository.saveAndFlush(event)).thenReturn(event);
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.publish("e1");
@@ -1046,10 +1132,191 @@ class SpendingEventServiceTest {
     }
 
     @Test
+    void publish_revertedFailedDraft_isPublishedAgainAndQueuedForDispatch() {
+        // LOB-2380: a draft reverted after a failed on-chain publish still carries FAILED; publishing it again
+        // must reset it so the publish job picks it up
+        FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.DRAFT);
+        event.setLedgerDispatchStatus(LedgerDispatchStatus.FAILED);
+        event.setLastFailureMessage("Cardano node timeout");
+        when(fundingEventRepository.findByIdForUpdate("e1")).thenReturn(Optional.of(event));
+        when(fundingEventRepository.saveAndFlush(event)).thenReturn(event);
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.publish("e1");
+
+        assertThat(result.isRight()).isTrue();
+        assertThat(event.getStatus()).isEqualTo(EventStatus.PUBLISHED);
+        assertThat(event.isLedgerDispatchApproved()).isTrue();
+        assertThat(event.getLedgerDispatchStatus()).isEqualTo(LedgerDispatchStatus.NOT_DISPATCHED);
+        // kept until a later attempt reaches the chain
+        assertThat(event.getLastFailureMessage()).isEqualTo("Cardano node timeout");
+    }
+
+    @Test
     void publish_returnsLeft_whenAlreadyPublished() {
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.PUBLISHED)));
+        when(fundingEventRepository.findByIdForUpdate("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.PUBLISHED)));
 
         assertThat(spendingEventService.publish("e1").getLeft().getTitle()).isEqualTo("SPENDING_EVENT_ALREADY_PUBLISHED");
+    }
+
+    @Test
+    void publish_returnsLeft_whenInErrorState() {
+        // LOB-2365: an ERROR event no longer fits the current project/milestone structure — publishing
+        // it as-is would push a mismatched allocation on-chain, so it must be corrected via update()
+        // first (which clears it back to DRAFT) before it can ever be published.
+        FundingEventEntity event = eventEntity(EventType.SPENDING, EventStatus.ERROR);
+        when(fundingEventRepository.findByIdForUpdate("e1")).thenReturn(Optional.of(event));
+
+        Either<ProblemDetail, FundingEventEntity> result = spendingEventService.publish("e1");
+
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_HAS_ERROR);
+        assertThat(event.getStatus()).isEqualTo(EventStatus.ERROR); // untouched
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    // --- bulk publish (LOB-2391) ---
+
+    @Test
+    void publishEvents_publishesAll_whenAllPublishable() {
+        stubOrgAccess();
+        FundingEventEntity e1 = eventEntity("e1", "org1", EventStatus.DRAFT);
+        FundingEventEntity e2 = eventEntity("e2", "org1", EventStatus.DRAFT);
+        stubLockedFind(e1, e2);
+
+        SpendingEventBulkPublishView view = spendingEventService.publishEvents("org1", List.of("e1", "e2"));
+
+        assertThat(view.getError()).isEmpty();
+        assertThat(view.getResults()).extracting(SpendingEventBulkPublishView.Result::getEventId,
+                        SpendingEventBulkPublishView.Result::getOutcome)
+                .containsExactly(tuple("e1", SpendingEventBulkPublishView.Outcome.PUBLISHED),
+                        tuple("e2", SpendingEventBulkPublishView.Outcome.PUBLISHED));
+        assertThat(view.getResults()).allSatisfy(r -> assertThat(r.getError()).isEmpty());
+        assertThat(List.of(e1, e2)).allSatisfy(e -> {
+            assertThat(e.getStatus()).isEqualTo(EventStatus.PUBLISHED);
+            assertThat(e.isLedgerDispatchApproved()).isTrue();
+        });
+    }
+
+    @Test
+    void publishEvents_skipsUnpublishable_andPublishesTheRest() {
+        stubOrgAccess();
+        FundingEventEntity draft = eventEntity("e-draft", "org1", EventStatus.DRAFT);
+        FundingEventEntity published = eventEntity("e-published", "org1", EventStatus.PUBLISHED);
+        FundingEventEntity error = eventEntity("e-error", "org1", EventStatus.ERROR);
+        stubLockedFind(draft, published, error);
+        when(fundingEventRepository.findByIdForUpdate("e-missing")).thenReturn(Optional.empty());
+
+        SpendingEventBulkPublishView view = spendingEventService.publishEvents("org1",
+                List.of("e-published", "e-draft", "e-missing", "e-error"));
+
+        // Results come back in request order, each skip carrying the problem single publish returns.
+        assertThat(view.getResults()).extracting(SpendingEventBulkPublishView.Result::getEventId,
+                        SpendingEventBulkPublishView.Result::getOutcome,
+                        r -> r.getError().map(ProblemDetail::getTitle).orElse(null))
+                .containsExactly(
+                        tuple("e-published", SpendingEventBulkPublishView.Outcome.SKIPPED, ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED),
+                        tuple("e-draft", SpendingEventBulkPublishView.Outcome.PUBLISHED, null),
+                        tuple("e-missing", SpendingEventBulkPublishView.Outcome.SKIPPED, ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND),
+                        tuple("e-error", SpendingEventBulkPublishView.Outcome.SKIPPED, ErrorTitleConstants.SPENDING_EVENT_HAS_ERROR));
+        assertThat(draft.getStatus()).isEqualTo(EventStatus.PUBLISHED);
+        assertThat(error.getStatus()).isEqualTo(EventStatus.ERROR);
+        verify(fundingEventRepository).saveAndFlush(draft);
+        verify(fundingEventRepository, times(1)).saveAndFlush(any());
+    }
+
+    @Test
+    void publishEvents_duplicateIds_publishOnce_andReportOnce() {
+        stubOrgAccess();
+        FundingEventEntity e1 = eventEntity("e1", "org1", EventStatus.DRAFT);
+        stubLockedFind(e1);
+
+        SpendingEventBulkPublishView view = spendingEventService.publishEvents("org1", List.of("e1", "e1", "e1"));
+
+        assertThat(view.getResults()).singleElement().satisfies(r -> {
+            assertThat(r.getEventId()).isEqualTo("e1");
+            assertThat(r.getOutcome()).isEqualTo(SpendingEventBulkPublishView.Outcome.PUBLISHED);
+        });
+        verify(fundingEventRepository, times(1)).findByIdForUpdate("e1");
+        verify(fundingEventRepository, times(1)).saveAndFlush(e1);
+    }
+
+    @Test
+    void publishEvents_skipsEventOfAnotherOrganisation_asNotFound() {
+        stubOrgAccess();
+        FundingEventEntity foreign = eventEntity("e-foreign", "org2", EventStatus.DRAFT);
+        stubLockedFind(foreign);
+
+        SpendingEventBulkPublishView view = spendingEventService.publishEvents("org1", List.of("e-foreign"));
+
+        assertThat(view.getResults()).singleElement().satisfies(r -> {
+            assertThat(r.getOutcome()).isEqualTo(SpendingEventBulkPublishView.Outcome.SKIPPED);
+            assertThat(r.getFundingId()).isNull(); // nothing about the foreign event is revealed
+            assertThat(r.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
+        });
+        assertThat(foreign.getStatus()).isEqualTo(EventStatus.DRAFT);
+        verify(fundingEventRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void publishEvents_unexpectedFailureOnOneEvent_rollsBackOnlyThatEvent_andContinues() {
+        stubOrgAccess();
+        FundingEventEntity e1 = eventEntity("e1", "org1", EventStatus.DRAFT);
+        FundingEventEntity e3 = eventEntity("e3", "org1", EventStatus.DRAFT);
+        stubLockedFind(e1, e3);
+        when(fundingEventRepository.findByIdForUpdate("e2")).thenThrow(new IllegalStateException("db down"));
+
+        SpendingEventBulkPublishView view = spendingEventService.publishEvents("org1", List.of("e1", "e2", "e3"));
+
+        assertThat(view.getResults()).extracting(SpendingEventBulkPublishView.Result::getEventId,
+                        SpendingEventBulkPublishView.Result::getOutcome,
+                        r -> r.getError().map(ProblemDetail::getTitle).orElse(null))
+                .containsExactly(
+                        tuple("e1", SpendingEventBulkPublishView.Outcome.PUBLISHED, null),
+                        tuple("e2", SpendingEventBulkPublishView.Outcome.SKIPPED, ErrorTitleConstants.SPENDING_EVENT_PUBLISH_FAILED),
+                        tuple("e3", SpendingEventBulkPublishView.Outcome.PUBLISHED, null));
+        // One transaction per event: e1 and e3 commit, only e2's is rolled back.
+        verify(transactionManager, times(3)).getTransaction(any());
+        verify(transactionManager, times(2)).commit(any());
+        verify(transactionManager, times(1)).rollback(any());
+    }
+
+    @Test
+    void publishEvents_returns401_whenUserCannotAccessOrg() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        SpendingEventBulkPublishView view = spendingEventService.publishEvents("org1", List.of("e1"));
+
+        assertThat(view.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(fundingEventRepository, never()).findByIdForUpdate(any());
+    }
+
+    @Test
+    void publishEvents_returns400_whenOrganisationNotFound() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.empty());
+
+        SpendingEventBulkPublishView view = spendingEventService.publishEvents("org1", List.of("e1"));
+
+        assertThat(view.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.ORGANISATION_NOT_FOUND);
+        verify(fundingEventRepository, never()).findByIdForUpdate(any());
+    }
+
+    private void stubOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
+    }
+
+    private void stubLockedFind(FundingEventEntity... events) {
+        for (FundingEventEntity event : events) {
+            when(fundingEventRepository.findByIdForUpdate(event.getId())).thenReturn(Optional.of(event));
+        }
+        lenient().when(fundingEventRepository.saveAndFlush(any(FundingEventEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+    }
+
+    private FundingEventEntity eventEntity(String id, String organisationId, EventStatus status) {
+        FundingEventEntity event = eventEntity(EventType.SPENDING, status);
+        event.setId(id);
+        event.setOrganisationId(organisationId);
+        return event;
     }
 
     @Test
@@ -1088,6 +1355,21 @@ class SpendingEventServiceTest {
         assertThat(view.getProjectAllocations()).hasSize(1);
         var mv = view.getProjectAllocations().get(0).getMilestoneAllocations().get(0);
         assertThat(mv.getAllocatedAmount()).isEqualByComparingTo(ALLOCATED);
+    }
+
+    @Test
+    void toView_exposesLastFailure() {
+        FundingEventEntity event = spendingEventEntity();
+        LocalDateTime failedAt = LocalDateTime.of(2026, 10, 5, 12, 0);
+        event.setLedgerDispatchStatus(LedgerDispatchStatus.FAILED);
+        event.setLastFailureMessage("Cardano node timeout");
+        event.setLastFailureAt(failedAt);
+
+        SpendingEventView view = spendingEventService.toView(event);
+
+        assertThat(view.getLedgerDispatchStatus()).isEqualTo(LedgerDispatchStatus.FAILED);
+        assertThat(view.getLastFailureMessage()).isEqualTo("Cardano node timeout");
+        assertThat(view.getLastFailureAt()).isEqualTo(failedAt);
     }
 
     // --- toView: overspend detection (the hard budget cap was removed; overspend is surfaced instead) ---
@@ -1238,7 +1520,7 @@ class SpendingEventServiceTest {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
         PagedResponse<SpendingEventView> result = spendingEventService.listEvents(
-                "org1", Optional.empty(), Optional.empty(), PAGEABLE);
+                "org1", new SpendingEventFilterRequest(), PAGEABLE);
 
         assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
     }
@@ -1249,7 +1531,7 @@ class SpendingEventServiceTest {
         when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.empty());
 
         PagedResponse<SpendingEventView> result = spendingEventService.listEvents(
-                "org1", Optional.empty(), Optional.empty(), PAGEABLE);
+                "org1", new SpendingEventFilterRequest(), PAGEABLE);
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.ORGANISATION_NOT_FOUND);
     }
@@ -1258,15 +1540,69 @@ class SpendingEventServiceTest {
     void listEvents_returnsPage_whenOrganisationExists() {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
         when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
-        when(fundingEventRepository.findByOrganisationIdAndFilter("org1", null, null, PAGEABLE))
+        when(fundingEventRepository.findByOrganisationIdAndFilter("org1", null, null, null, null, null, null, null, null, PAGEABLE))
                 .thenReturn(new PageImpl<>(List.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT))));
         when(milestoneAllocationRepository.findById_EventId("e1")).thenReturn(List.of());
 
         PagedResponse<SpendingEventView> result = spendingEventService.listEvents(
-                "org1", Optional.empty(), Optional.empty(), PAGEABLE);
+                "org1", new SpendingEventFilterRequest(), PAGEABLE);
 
         assertThat(result.getError()).isEmpty();
         assertThat(result.getContent()).hasSize(1);
+    }
+
+    @Test
+    void listEvents_returns400_whenDateFromAfterDateTo() {
+        assertInvalidFilter(SpendingEventFilterRequest.builder()
+                .dateFrom(LocalDate.of(2026, 2, 1)).dateTo(LocalDate.of(2026, 1, 31)).build(),
+                "Event date 'from' (2026-02-01) must not be after 'to' (2026-01-31).");
+    }
+
+    @Test
+    void listEvents_returns400_whenMinAmountGreaterThanMaxAmount() {
+        assertInvalidFilter(SpendingEventFilterRequest.builder()
+                .minAmount(new BigDecimal("500")).maxAmount(new BigDecimal("100")).build(),
+                "Minimum amount (500) must not be greater than maximum amount (100).");
+    }
+
+    @Test
+    void listEvents_returns400_whenMinAmountNegative() {
+        assertInvalidFilter(SpendingEventFilterRequest.builder().minAmount(new BigDecimal("-1")).build(),
+                "Amount filters must not be negative.");
+    }
+
+    @Test
+    void listEvents_returns400_whenMaxAmountNegative() {
+        assertInvalidFilter(SpendingEventFilterRequest.builder().maxAmount(new BigDecimal("-0.01")).build(),
+                "Amount filters must not be negative.");
+    }
+
+    @Test
+    void listEvents_acceptsSingleDayDateRangeAndEqualAmounts() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
+        LocalDate day = LocalDate.of(2026, 1, 15);
+        BigDecimal amount = new BigDecimal("100");
+        when(fundingEventRepository.findByOrganisationIdAndFilter("org1", null, null, null, null, day, day, amount, amount, PAGEABLE))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        PagedResponse<SpendingEventView> result = spendingEventService.listEvents("org1",
+                SpendingEventFilterRequest.builder().dateFrom(day).dateTo(day).minAmount(amount).maxAmount(amount).build(), PAGEABLE);
+
+        assertThat(result.getError()).isEmpty();
+    }
+
+    private void assertInvalidFilter(SpendingEventFilterRequest filter, String expectedDetail) {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
+
+        PagedResponse<SpendingEventView> result = spendingEventService.listEvents("org1", filter, PAGEABLE);
+
+        ProblemDetail problem = result.getError().orElseThrow();
+        assertThat(problem.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
+        assertThat(problem.getTitle()).isEqualTo(ErrorTitleConstants.EVENT_FILTER_INVALID);
+        assertThat(problem.getDetail()).isEqualTo(expectedDetail);
+        verify(fundingEventRepository, never()).findByOrganisationIdAndFilter(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -1347,7 +1683,7 @@ class SpendingEventServiceTest {
 
     @Test
     void publishEvent_returns401_whenUserCannotAccessOrg() {
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT)));
+        when(fundingEventRepository.findByIdForUpdate("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT)));
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
         assertThat(spendingEventService.publishEvent("e1").getError().orElseThrow().getStatus())
@@ -1373,6 +1709,57 @@ class SpendingEventServiceTest {
 
         assertThat(spendingEventService.deleteEvent("e1")).isEmpty();
         verify(fundingEventRepository).delete(event);
+    }
+
+    // --- deleteOrphanedErrorEvents (LOB-2365 follow-up) ---
+
+    @Test
+    void deleteOrphanedErrorEvents_returns401_whenUserCannotAccessOrg() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        OrphanEventsCleanupView result = spendingEventService.deleteOrphanedErrorEvents("org1");
+
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        verify(fundingEventRepository, never()).deleteAll(any());
+    }
+
+    @Test
+    void deleteOrphanedErrorEvents_returns400_whenOrganisationNotFound() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.empty());
+
+        OrphanEventsCleanupView result = spendingEventService.deleteOrphanedErrorEvents("org1");
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.ORGANISATION_NOT_FOUND);
+        verify(fundingEventRepository, never()).deleteAll(any());
+    }
+
+    @Test
+    void deleteOrphanedErrorEvents_deletesOnlyFullyUnallocatedErrorEvents() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
+        FundingEventEntity orphan = eventEntity(EventType.FUNDING, EventStatus.ERROR);
+        when(fundingEventRepository.findOrphanedEvents("org1", EventStatus.ERROR)).thenReturn(List.of(orphan));
+
+        OrphanEventsCleanupView result = spendingEventService.deleteOrphanedErrorEvents("org1");
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getDeletedEvents()).extracting("eventId", "fundingId")
+                .containsExactly(tuple("e1", "GRANT-2025-001"));
+        verify(fundingEventRepository).deleteAll(List.of(orphan));
+    }
+
+    @Test
+    void deleteOrphanedErrorEvents_noOp_whenNoneMatch() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(organisationPublicApi.findByOrganisationId("org1")).thenReturn(Optional.of(mock(Organisation.class)));
+        when(fundingEventRepository.findOrphanedEvents("org1", EventStatus.ERROR)).thenReturn(List.of());
+
+        OrphanEventsCleanupView result = spendingEventService.deleteOrphanedErrorEvents("org1");
+
+        assertThat(result.getError()).isEmpty();
+        assertThat(result.getDeletedEvents()).isEmpty();
+        verify(fundingEventRepository).deleteAll(List.of());
     }
 
     // --- helpers ---

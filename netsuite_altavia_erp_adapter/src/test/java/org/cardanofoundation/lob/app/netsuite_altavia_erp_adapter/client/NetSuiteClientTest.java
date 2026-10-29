@@ -144,4 +144,40 @@ class NetSuiteClientTest {
                         .contains("Error calling NetSuite API"));
     }
 
+
+    @Test
+    void describeErrorResponseExtractsCodeAndMessageFromAnErrorObject() {
+        String body = "{\"error\":{\"code\":\"INVALID_LOGIN_ATTEMPT\",\"message\":\"Invalid login attempt.\"}}";
+
+        assertThat(clientWith(pem).describeErrorResponse(401, body))
+                .isEqualTo("NetSuite API error (HTTP 401): INVALID_LOGIN_ATTEMPT - Invalid login attempt.");
+    }
+
+    @Test
+    void describeErrorResponseJoinsEveryEntryOfAnErrorDetailsArray() {
+        String body = "{\"title\":\"Bad Request\",\"status\":400,\"o:errorDetails\":["
+                + "{\"detail\":\"Invalid date.\",\"o:errorCode\":\"INVALID_PARAMETER\"},"
+                + "{\"detail\":\"Missing subsidiary.\"}]}";
+
+        assertThat(clientWith(pem).describeErrorResponse(400, body))
+                .isEqualTo("NetSuite API error (HTTP 400): INVALID_PARAMETER - Invalid date.; Missing subsidiary.");
+    }
+
+    @Test
+    void describeErrorResponseFallsBackToTheTitle() {
+        assertThat(clientWith(pem).describeErrorResponse(403, "{\"title\":\"Forbidden\"}"))
+                .isEqualTo("NetSuite API error (HTTP 403): Forbidden");
+    }
+
+    @Test
+    void describeErrorResponseKeepsNonJsonBodiesAsText() {
+        assertThat(clientWith(pem).describeErrorResponse(502, "Bad Gateway"))
+                .isEqualTo("NetSuite API error (HTTP 502): Bad Gateway");
+    }
+
+    @Test
+    void describeErrorResponseHandlesAnEmptyBody() {
+        assertThat(clientWith(pem).describeErrorResponse(500, null))
+                .isEqualTo("NetSuite API error (HTTP 500): empty response");
+    }
 }

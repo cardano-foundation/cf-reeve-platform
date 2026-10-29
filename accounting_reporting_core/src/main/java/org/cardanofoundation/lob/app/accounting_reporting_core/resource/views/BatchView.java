@@ -51,6 +51,7 @@ public class BatchView {
     @ArraySchema(arraySchema = @Schema(implementation = TransactionView.class))
     private List<TransactionView> transactions = new ArrayList<>();
 
+    @Schema(description = "Failure details of a FAILED batch, always {error: {code, message}, message, detail, technicalErrorMessage} with plain-string values; empty otherwise")
     private Map<String, Object> details;
 
     private Long totalTransactionsCount;

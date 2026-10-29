@@ -26,6 +26,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.repository.FundingProjectRepository;
+import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
 
 @ExtendWith(MockitoExtension.class)
 class ProjectStructureServiceTest {
@@ -61,7 +62,7 @@ class ProjectStructureServiceTest {
 
     @ParameterizedTest(name = "sub-project currency \"{0}\" resolves to \"{1}\"")
     @CsvSource(nullValues = "NULL", value = {
-            "EUR,  EUR",
+            "USD,  USD",
             "NULL, USD",
             "'  ', USD",
     })
@@ -77,6 +78,20 @@ class ProjectStructureServiceTest {
     }
 
     @Test
+    void rejected_whenCurrencyDiffersFromParent() {
+        ProjectEntity parent = root("USD");
+
+        Either<ProblemDetail, ProjectEntity> result = projectStructureService.createSubProject(
+                parent, "Sub One", null, new BigDecimal("40000.00"), "EUR");
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.CURRENCY_PARENT_MISMATCH);
+        assertThat(result.getLeft().getDetail())
+                .isEqualTo("Currency EUR of sub-project 'Sub One' does not match the currency USD of project 'Root'");
+        verify(projectRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void whenCreated_isDeterministicSubIdOfParentProId_notTitle() {
         ProjectEntity parent = root("USD");
         when(projectRepository.findWithLockById(parent.getId())).thenReturn(Optional.of(parent));
@@ -84,10 +99,10 @@ class ProjectStructureServiceTest {
         Either<ProblemDetail, ProjectEntity> result = projectStructureService.createSubProject(
                 parent, "Sub One", null, new BigDecimal("40000.00"), null);
 
-        // The auto-assigned proId ("Root-1"), not the title ("Sub One"), is what the id is derived
+        // The auto-assigned proId ("Root-S1"), not the title ("Sub One"), is what the id is derived
         // from — a later title rename must not leave the id stale.
-        assertThat(result.get().getProId()).isEqualTo("Root-1");
-        assertThat(result.get().getId()).isEqualTo(ProjectEntity.subId(parent.getId(), "Root-1"));
+        assertThat(result.get().getProId()).isEqualTo("Root-S1");
+        assertThat(result.get().getId()).isEqualTo(ProjectEntity.subId(parent.getId(), "Root-S1"));
         assertThat(result.get().getParentProject()).isEqualTo(parent);
     }
 
@@ -114,7 +129,7 @@ class ProjectStructureServiceTest {
         Either<ProblemDetail, ProjectEntity> second = projectStructureService.createSubProject(
                 parent, "Sub Two", null, new BigDecimal("30000.00"), null);
 
-        assertThat(first.get().getProId()).isEqualTo("Root-1");
-        assertThat(second.get().getProId()).isEqualTo("Root-2");
+        assertThat(first.get().getProId()).isEqualTo("Root-S1");
+        assertThat(second.get().getProId()).isEqualTo("Root-S2");
     }
 }

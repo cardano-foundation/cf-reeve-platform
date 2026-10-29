@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import javax.annotation.Nullable;
+
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +41,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.vavr.control.Either;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.ErrorUtils;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.client.responses.TokenReponse;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.core.TransactionDataSearchResult;
 
@@ -192,7 +195,7 @@ public class NetSuiteClient {
             return Either.right(null);
         } else {
             log.error("Netsuite response error...customerCode:{}, message:{}", response.getStatusCode().value(), response.getBody());
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.valueOf(response.getStatusCode().value()), response.getBody());
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.valueOf(response.getStatusCode().value()), describeErrorResponse(response.getStatusCode().value(), response.getBody()));
             problem.setTitle(NETSUITE_API_ERROR);
             return Either.left(problem);
         }
@@ -248,9 +251,23 @@ public class NetSuiteClient {
             return Either.right(Optional.empty());
         }
 
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.valueOf(response.getStatusCode().value()), response.getBody());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.valueOf(response.getStatusCode().value()), describeErrorResponse(response.getStatusCode().value(), response.getBody()));
         problem.setTitle(NETSUITE_API_ERROR);
         return Either.left(problem);
+    }
+
+    /**
+     * Turns a NetSuite error response into plain text. The raw body is JSON - either
+     * {"error":{"code","message"}} or {"title", "o:errorDetails":[{"detail","o:errorCode"}]} - and
+     * must not end up verbatim in the batch failure details, which are shown to the user.
+     */
+    String describeErrorResponse(int statusCode, @Nullable String body) {
+        String prefix = "NetSuite API error (HTTP %d)".formatted(statusCode);
+        if (body == null || body.isBlank()) {
+            return prefix + ": empty response";
+        }
+
+        return prefix + ": " + ErrorUtils.jsonErrorMessage(body).orElse(body);
     }
 
     private ResponseEntity<String> callForTransactionLinesData(LocalDate from, LocalDate to, Optional<Integer> start) {
