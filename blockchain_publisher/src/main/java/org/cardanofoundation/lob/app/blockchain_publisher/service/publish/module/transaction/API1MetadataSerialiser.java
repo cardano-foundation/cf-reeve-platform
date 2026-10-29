@@ -1,9 +1,7 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction;
 
-import java.math.BigInteger;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.format.DateTimeFormatter;
 import java.util.Set;
 
 import lombok.RequiredArgsConstructor;
@@ -14,6 +12,7 @@ import org.springframework.stereotype.Service;
 import com.bloxbean.cardano.client.metadata.MetadataBuilder;
 import com.bloxbean.cardano.client.metadata.MetadataMap;
 
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.L1MetadataSections;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.*;
 import org.cardanofoundation.lob.app.support.calc.BigDecimals;
 
@@ -52,15 +51,7 @@ public class API1MetadataSerialiser {
     }
 
     private MetadataMap createMetadataSection(long creationSlot) {
-        val metadataMap = MetadataBuilder.createMap();
-
-        val now = Instant.now(clock);
-
-        metadataMap.put("creation_slot", BigInteger.valueOf(creationSlot));
-        metadataMap.put("timestamp", DateTimeFormatter.ISO_INSTANT.format(now));
-        metadataMap.put("version", VERSION);
-
-        return metadataMap;
+        return L1MetadataSections.metadataSection(creationSlot, Instant.now(clock), VERSION);
     }
 
     private static MetadataMap serialise(TransactionEntity transaction,
@@ -176,15 +167,12 @@ public class API1MetadataSerialiser {
     }
 
     private static MetadataMap serialise(Organisation org) {
-        val metadataMap = MetadataBuilder.createMap();
-
-        metadataMap.put("id", org.getId());
-        metadataMap.put("name", org.getName());
-        metadataMap.put("tax_id_number", org.getTaxIdNumber());
-        metadataMap.put("currency_id", org.getCurrencyId());
-        metadataMap.put("country_code", org.getCountryCode());
-
-        return metadataMap;
+        return L1MetadataSections.orgSection(
+                org.getId(),
+                org.getName(),
+                org.getTaxIdNumber(),
+                org.getCurrencyId(),
+                org.getCountryCode());
     }
 
 }

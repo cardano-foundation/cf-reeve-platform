@@ -29,8 +29,8 @@ All metadata entries under label 1447 follow this base structure, containing org
       "tax_id_number": "string"  // Tax identification number
     },
     "metadata": {
-      "creation_slot": "u64",                      // Cardano slot number when created
-      "timestamp": "string",                       // ISO-8601 timestamp
+      "creation_slot": "u64",                      // Cardano slot number when created (NOT on DOCUMENT)
+      "timestamp": "string",                       // ISO-8601 timestamp (NOT on DOCUMENT)
       "version": "string"                          // Metadata format version (e.g., "1.1")
     },
     "type": "string",            // Type of metadata: "INDIVIDUAL_TRANSACTIONS", "REPORT" or "FUNDING"
@@ -457,6 +457,178 @@ The referenced off-chain document carries `org_id`, `currency_id`, `version`, `d
   ]
 }
 ```
+
+## Type: Document
+
+The `DOCUMENT` type anchors an **end-to-end-encrypted document** published by an organisation. The encrypted
+envelope itself is stored on IPFS; the on-chain record is a manifest referencing it. The operator and the
+public can verify integrity (hashes, CID) but can never read content — decryption keys exist only on the
+recipients' devices.
+
+### On-chain manifest (`data`)
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | Yes | Server-assigned document identifier (UUID) |
+| `ipfs_cid` | string | Yes | IPFS CID of the encrypted envelope document |
+| `content_hash` | string | Yes | SHA-256 of the raw ciphertext bytes (hex) |
+| `plaintext_hash` | string | Yes | SHA-256 commitment over the plaintext, computed client-side (hex) |
+| `envelope_version` | integer | Yes | Envelope wire-format version |
+| `slot_count` | integer | Yes | Number of recipient slots in the referenced envelope |
+| `recipient_key_hashes` | array of string | Yes | One SHA-256 recipient key hash per slot (see [Recipient key hashes](#recipient-key-hashes)). Length equals `slot_count`, and entry `i` corresponds to `slots[i]` in the envelope. Present from metadata version `1.1` onward. |
+
+### IPFS envelope document
+
+The document stored at `ipfs_cid` is JSON with this structure:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `version` | integer | Yes | Envelope wire-format version (currently `1`), matching the manifest's `envelope_version` |
+| `type` | string | Yes | Always `"REEVE_ENCRYPTED_DOCUMENT"` |
+| `org_id` | string | Yes | Publishing organisation's id, matching the on-chain `org.id` |
+| `content_hash` | string | Yes | SHA-256 of the raw ciphertext bytes (hex), matching the manifest |
+| `plaintext_hash` | string | Yes | SHA-256 commitment over the plaintext (hex), matching the manifest |
+| `payload` | object | Yes | The ciphertext and its nonce (see below) |
+| `slots` | array | Yes | One entry per recipient (see below); length equals the manifest's `slot_count` |
+
+#### `payload` object
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `ciphertext` | string | Yes | The encrypted document, base64 |
+| `nonce` | string | Yes | The AEAD nonce for `ciphertext` |
+
+#### `slots[]` entry
+
+Each slot holds the material one recipient needs to unwrap the document encryption key, and nothing else.
+There are **no recipient identifiers inside the envelope**: a recipient locates their slot either by its
+index in the manifest's `recipient_key_hashes`, or by trial decryption.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `ephemeral_pub` | string | Yes | Per-slot ephemeral X25519 public key, 32 bytes hex |
+| `wrapped_dek` | string | Yes | The document encryption key, AES-256-GCM-wrapped under an ECDH-derived slot KEK |
+
+The organisation-internal identifiers a slot carries *inside* a Reeve deployment (`key_id`,
+`recipient_ref`) are stripped before publication and appear neither here nor on-chain. Neither do e-mail
+addresses, recipient names or labels, or file names.
+
+### Example: IPFS envelope document
+
+```json
+{
+  "version": 1,
+  "type": "REEVE_ENCRYPTED_DOCUMENT",
+  "org_id": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+  "content_hash": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "plaintext_hash": "60303ae22b998861bce3b28f33eec1be758a213c86c93c076dbe9f558c11c752",
+  "payload": {
+    "ciphertext": "Y2lwaGVydGV4dA==",
+    "nonce": "cccccccccccccccccccccccc"
+  },
+  "slots": [
+    {
+      "ephemeral_pub": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "wrapped_dek": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    {
+      "ephemeral_pub": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "wrapped_dek": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ]
+}
+```
+
+### Recipient key hashes
+
+A recipient is the holder of an X25519 key pair. Their on-chain identifier is:
+
+```
+recipient_key_hash = sha256( 32 raw bytes decoded from the lowercase-hex X25519 public key )
+```
+
+rendered as 64 lowercase hex characters. No salt, no domain-separation prefix, no truncation — so any
+third party can reproduce it from a public key with one command:
+
+```console
+$ printf %s 8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a | xxd -r -p | sha256sum
+300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae
+```
+
+SHA-256 rather than the SHA3-256 used for `org.id`, because readers recompute this in a browser and
+WebCrypto implements no SHA-3 member.
+
+**Reference vectors** (the RFC 7748 §6.1 X25519 public keys):
+
+| X25519 public key | `recipient_key_hash` |
+|---|---|
+| `8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a` | `300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae` |
+| `de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f` | `f35e5616160a30bf3c6e79fa73c576d40205e8fc3ba4e1c6dcf93e6b98e857b4` |
+
+The list is what lets a public indexer answer "which documents are addressed to this key?" without
+decrypting anything.
+
+> **Privacy: this makes published documents linkable to their recipients.** A recipient key hash is a
+> stable, public, permanent identifier. Anyone holding a person's X25519 public key — and key cards
+> carrying public keys are exchanged by design — can compute their hash and enumerate every document
+> ever addressed to them, across every organisation, for as long as the chain exists. The hash cannot be
+> revoked, rotated away from, or deleted. This is a deliberate trade-off accepted in exchange for
+> recipient-side filtering, and it replaces this format's earlier property of carrying no recipient
+> identifiers at all. Everything else is unchanged: no e-mail addresses, recipient names or labels, or
+> file names appear in either the manifest or the envelope, and no content is readable by anyone but a
+> key holder.
+
+> **Note on validation**: as with `FUNDING` manifests, several rules are enforced programmatically:
+> `org_id` in the IPFS document matching the on-chain `org.id`, `content_hash` matching the decoded
+> `payload.ciphertext`, the CID matching the document bytes, `slot_count` matching `slots.length`, and
+> `recipient_key_hashes.length` matching `slot_count`.
+
+### Example: Document record
+
+> **`metadata` carries the version alone for this type.** `creation_slot` and `timestamp` are omitted
+> from a DOCUMENT manifest on purpose: both are decided at dispatch — the slot needs a live chain tip,
+> the timestamp is the publisher's clock — so a holder's wallet asked to attest the document *before*
+> it is published cannot reproduce either, and therefore could not commit to a manifest containing
+> them. Consumers should take both from the containing block instead, which is more trustworthy
+> anyway: block slot and block time cannot be influenced by the publisher, whereas these two fields
+> were publisher-supplied and could say anything. Every other publishable type still carries them.
+
+```json
+{
+  "1447": {
+    "org": {
+      "id": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+      "name": "Cardano Foundation",
+      "currency_id": "ISO_4217:CHF",
+      "country_code": "CH",
+      "tax_id_number": "CHE-184477354"
+    },
+    "metadata": {
+      "version": "1.1"
+    },
+    "type": "DOCUMENT",
+    "data": {
+      "id": "0b0f7d1e-6f0a-4d9e-9d5e-1c2b3a4d5e6f",
+      "ipfs_cid": "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+      "content_hash": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      "plaintext_hash": "60303ae22b998861bce3b28f33eec1be758a213c86c93c076dbe9f558c11c752",
+      "envelope_version": 1,
+      "slot_count": 2,
+      "recipient_key_hashes": [
+        "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae",
+        "f35e5616160a30bf3c6e79fa73c576d40205e8fc3ba4e1c6dcf93e6b98e857b4"
+      ]
+    }
+  }
+}
+```
+
+### Metadata versions
+
+| Version | Change |
+|---------|--------|
+| `1.0` | Initial `DOCUMENT` manifest. |
+| `1.1` | Adds `recipient_key_hashes`. Documents anchored at `1.0` carry no hashes and can never match a recipient filter; the chain is immutable, so they are not backfilled. |
 
 ## Glossary
 
