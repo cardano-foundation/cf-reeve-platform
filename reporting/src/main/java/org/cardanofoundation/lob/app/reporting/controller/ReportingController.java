@@ -114,6 +114,10 @@ public class ReportingController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
     public ResponseEntity<List<ReportResponseDto>> templateCreateCsv(
             @Valid @ModelAttribute CreateCsvReportRequest csvReportRequest) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(csvReportRequest.getOrganisationId())) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(List.of(ReportResponseDto.builder().error(Optional.of(problem)).build()));
+        }
         return csvReportService.createCsvReports(csvReportRequest)
                 .fold(
                         error -> ResponseEntity.status(error.getStatus()).body(List.of(ReportResponseDto.builder().error(Optional.of(error)).build())),

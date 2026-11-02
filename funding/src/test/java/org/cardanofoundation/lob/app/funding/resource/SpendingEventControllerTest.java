@@ -113,10 +113,10 @@ class SpendingEventControllerTest {
 
     @Test
     void listEventsByProject_returns200() {
-        when(spendingEventService.listEventsByProject(eq("p1"), any(), any(), eq(PAGEABLE)))
+        when(spendingEventService.listEventsByProject(eq("p1"), eq("org1"), any(), any(), eq(PAGEABLE)))
                 .thenReturn(PagedResponse.<SpendingEventView>builder().content(List.of(eventView())).total(1).build());
 
-        ResponseEntity<?> response = spendingEventController.listEventsByProject("p1", Optional.empty(), Optional.empty(), PAGEABLE);
+        ResponseEntity<?> response = spendingEventController.listEventsByProject("p1", "org1", Optional.empty(), Optional.empty(), PAGEABLE);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((PagedResponse<?>) response.getBody()).getContent()).hasSize(1);
@@ -141,9 +141,9 @@ class SpendingEventControllerTest {
     @Test
     void getEvent_returns200_withView() {
         SpendingEventView view = eventView();
-        when(spendingEventService.getEvent("e1")).thenReturn(view);
+        when(spendingEventService.getEvent("e1", "org1")).thenReturn(view);
 
-        ResponseEntity<?> response = spendingEventController.getEvent("e1");
+        ResponseEntity<?> response = spendingEventController.getEvent("e1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo(view);
@@ -151,10 +151,10 @@ class SpendingEventControllerTest {
 
     @Test
     void getEvent_returns404_withProblem() {
-        when(spendingEventService.getEvent("e1"))
+        when(spendingEventService.getEvent("e1", "org1"))
                 .thenReturn(SpendingEventView.error(problem(HttpStatus.NOT_FOUND, ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND)));
 
-        ResponseEntity<?> response = spendingEventController.getEvent("e1");
+        ResponseEntity<?> response = spendingEventController.getEvent("e1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(((SpendingEventView) response.getBody()).getError().orElseThrow().getTitle())
@@ -189,9 +189,9 @@ class SpendingEventControllerTest {
     @SuppressWarnings("removal") // the single-event endpoint stays tested until it is removed
     void publishEvent_returns200_withView() {
         SpendingEventView view = eventView();
-        when(spendingEventService.publishEvent("e1")).thenReturn(view);
+        when(spendingEventService.publishEvent("e1", "org1")).thenReturn(view);
 
-        ResponseEntity<?> response = spendingEventController.publishEvent("e1");
+        ResponseEntity<?> response = spendingEventController.publishEvent("e1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo(view);
@@ -225,19 +225,19 @@ class SpendingEventControllerTest {
 
     @Test
     void deleteEvent_returns204_whenNoError() {
-        when(spendingEventService.deleteEvent("e1")).thenReturn(Optional.empty());
+        when(spendingEventService.deleteEvent("e1", "org1")).thenReturn(Optional.empty());
 
-        ResponseEntity<?> response = spendingEventController.deleteEvent("e1");
+        ResponseEntity<?> response = spendingEventController.deleteEvent("e1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     }
 
     @Test
     void deleteEvent_returns409_withProblem() {
-        when(spendingEventService.deleteEvent("e1"))
+        when(spendingEventService.deleteEvent("e1", "org1"))
                 .thenReturn(Optional.of(problem(HttpStatus.CONFLICT, ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED)));
 
-        ResponseEntity<?> response = spendingEventController.deleteEvent("e1");
+        ResponseEntity<?> response = spendingEventController.deleteEvent("e1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);

@@ -3,7 +3,10 @@ package org.cardanofoundation.lob.app.organisation.resource;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -19,21 +22,30 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.CostCenterUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.CostCenterView;
 import org.cardanofoundation.lob.app.organisation.service.CostCenterService;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
 class CostCenterControllerTest {
 
     @Mock
     private CostCenterService costCenterService;
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
 
     @InjectMocks
     private CostCenterController costCenterController;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
+    }
 
     @Test
     void getAllCostCenter() {
@@ -101,6 +113,59 @@ class CostCenterControllerTest {
         assertTrue(response.getStatusCode().is2xxSuccessful());
         assertNotNull(response.getBody());
         assertEquals(costCenterViews, response.getBody());
+    }
+
+    @Test
+    void getAllCostCenters_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<?> response = costCenterController.getAllCostCenters("org123", null, null, null, true, Pageable.unpaged());
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(costCenterService);
+    }
+
+    @Test
+    void downloadCostCentersCsv_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<?> response = costCenterController.downloadCostCentersCsv("org123", null, null, null, true);
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(costCenterService);
+    }
+
+    @Test
+    void insertCostCenters_noOrgAccess() {
+        CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<CostCenterView> response = costCenterController.insertCostCenters("org123", costCenterUpdate);
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(costCenterService);
+    }
+
+    @Test
+    void updateCostCenters_noOrgAccess() {
+        CostCenterUpdate costCenterUpdate = mock(CostCenterUpdate.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<CostCenterView> response = costCenterController.updateCostCenters("org123", costCenterUpdate);
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(costCenterService);
+    }
+
+    @Test
+    void insertCostCentersCsv_noOrgAccess() {
+        MultipartFile file = mock(MultipartFile.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<?> response = costCenterController.insertCostCentersCsv("org123", file);
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(costCenterService);
     }
 
 }

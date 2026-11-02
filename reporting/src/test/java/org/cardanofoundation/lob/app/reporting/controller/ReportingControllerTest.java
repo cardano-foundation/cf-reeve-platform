@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -77,6 +78,8 @@ class ReportingControllerTest {
         generateRequest.setIntervalType("MONTHLY");
         generateRequest.setYear((short) 2024);
         generateRequest.setPeriod((short) 1);
+
+        lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
     }
 
     @Test
@@ -401,4 +404,17 @@ class ReportingControllerTest {
         ResponseEntity<?> response = reportingController.reject(request);
         assertEquals(HttpStatus.OK, response.getStatusCode());
     }
+
+    @Test
+    void templateCreateCsv_NoOrganisationAccess() {
+        CreateCsvReportRequest request = mock(CreateCsvReportRequest.class);
+        when(request.getOrganisationId()).thenReturn("org123");
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<List<ReportResponseDto>> response = reportingController.templateCreateCsv(request);
+
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+        verify(csvReportService, never()).createCsvReports(any());
+    }
+
 }

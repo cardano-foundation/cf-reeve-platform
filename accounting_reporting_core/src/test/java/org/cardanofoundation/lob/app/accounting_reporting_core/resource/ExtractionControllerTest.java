@@ -6,7 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
 
@@ -31,10 +33,12 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presenta
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.presentation_layer_service.ExtractionItemService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionTransactionsRequest;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response.ExtractionValidationResponse;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
 class ExtractionControllerTest {
@@ -48,13 +52,40 @@ class ExtractionControllerTest {
     private AccountingCorePresentationViewService accountingCorePresentationViewService;
     @Mock
     private JpaSortFieldValidator jpaSortFieldValidator;
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
 
     @InjectMocks
     private ExtractionController extractionController;
 
     @BeforeEach
     void setUp() {
-        extractionController = new ExtractionController(extractionItemService, organisationPublicApi, accountingCorePresentationViewService, objectMapper, jpaSortFieldValidator);
+        extractionController = new ExtractionController(extractionItemService, organisationPublicApi, accountingCorePresentationViewService, objectMapper, jpaSortFieldValidator, keycloakSecurityHelper);
+        lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
+    }
+
+    @Test
+    void extractionTriggerForm_noOrgAccess() {
+        ExtractionRequest request = new ExtractionRequest();
+        request.setOrganisationId("org1");
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        ResponseEntity<?> response = extractionController.extractionTriggerForm(request);
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(organisationPublicApi, accountingCorePresentationViewService);
+    }
+
+    @Test
+    void extractionValidationForm_noOrgAccess() {
+        ExtractionRequest request = new ExtractionRequest();
+        request.setOrganisationId("org1");
+        when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
+
+        ResponseEntity<ExtractionValidationResponse> response = extractionController.extractionValidationForm(request);
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(accountingCorePresentationViewService);
     }
 
     @Test

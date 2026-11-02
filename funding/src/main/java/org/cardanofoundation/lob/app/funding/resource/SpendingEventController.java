@@ -105,10 +105,11 @@ public class SpendingEventController {
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
     public ResponseEntity<PagedResponse<SpendingEventView>> listEventsByProject(
             @PathVariable String projectId,
+            @RequestParam String organisationId,
             @RequestParam(required = false) Optional<EventStatus> status,
             @RequestParam(required = false) Optional<EventType> eventType,
             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-        return Responses.respond(spendingEventService.listEventsByProject(projectId, status, eventType, pageable), HttpStatus.OK);
+        return Responses.respond(spendingEventService.listEventsByProject(projectId, organisationId, status, eventType, pageable), HttpStatus.OK);
     }
 
     @Operation(summary = "List the available event types", responses = {
@@ -139,8 +140,8 @@ public class SpendingEventController {
     })
     @GetMapping(value = "/events/{eventId}", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<SpendingEventView> getEvent(@PathVariable String eventId) {
-        return Responses.respond(spendingEventService.getEvent(eventId), HttpStatus.OK);
+    public ResponseEntity<SpendingEventView> getEvent(@PathVariable String eventId, @RequestParam String organisationId) {
+        return Responses.respond(spendingEventService.getEvent(eventId, organisationId), HttpStatus.OK);
     }
 
     @Operation(
@@ -690,6 +691,9 @@ public class SpendingEventController {
         return Responses.respond(spendingEventService.updateEvent(eventId, request), HttpStatus.OK);
     }
 
+    /**
+     * @deprecated use {@link #publishEvents} with a one-item eventIds list; kept until the frontend has switched over.
+     */
     @Operation(summary = "Publish an event to the blockchain",
             description = "Deprecated: use POST /events/publish with a one-item eventIds list instead. "
                     + "This endpoint will be removed once the frontend has switched over.",
@@ -705,8 +709,9 @@ public class SpendingEventController {
     @PostMapping(value = "/events/{eventId}/publish", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
     @Deprecated(forRemoval = true)
-    public ResponseEntity<SpendingEventView> publishEvent(@PathVariable String eventId) {
-        return Responses.respond(spendingEventService.publishEvent(eventId), HttpStatus.OK);
+    @SuppressWarnings("java:S1133") // can't remove yet: frontend still calls this endpoint
+    public ResponseEntity<SpendingEventView> publishEvent(@PathVariable String eventId, @RequestParam String organisationId) {
+        return Responses.respond(spendingEventService.publishEvent(eventId, organisationId), HttpStatus.OK);
     }
 
     @Operation(summary = "Publish several events to the blockchain in one call",
@@ -740,8 +745,8 @@ public class SpendingEventController {
     })
     @DeleteMapping(value = "/events/{eventId}", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<ProblemDetail> deleteEvent(@PathVariable String eventId) {
-        return Responses.respondDelete(spendingEventService.deleteEvent(eventId));
+    public ResponseEntity<ProblemDetail> deleteEvent(@PathVariable String eventId, @RequestParam String organisationId) {
+        return Responses.respondDelete(spendingEventService.deleteEvent(eventId, organisationId));
     }
 
     @Operation(summary = "Bulk-delete orphaned ERROR events",

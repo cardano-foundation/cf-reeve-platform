@@ -149,13 +149,13 @@ public class ProjectService {
         return values.stream().filter(v -> v != null && !v.isBlank()).map(v -> v.trim().toLowerCase()).toList();
     }
 
-    public ProjectView getProject(String projectId) {
-        Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
+    public ProjectView getProject(String projectId, String organisationId) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return ProjectView.error(Problems.unauthorized());
+        }
+        Optional<ProjectEntity> projectM = projectRepository.findByIdAndOrganisationId(projectId, organisationId).stream().findFirst();
         if (projectM.isEmpty()) {
             return ProjectView.error(Problems.projectNotFound(projectId));
-        }
-        if (!keycloakSecurityHelper.canUserAccessOrg(projectM.get().getOrganisationId())) {
-            return ProjectView.error(Problems.unauthorized());
         }
         // Get-by-id returns the full detail: milestones, sub-projects and the associated events.
         return toView(projectM.get(), true);
@@ -184,13 +184,13 @@ public class ProjectService {
         return ProjectDraftStatusView.builder().hasDraftEvent(hasDraft).build();
     }
 
-    public PagedResponse<ProjectView> listSubProjects(String parentProjectId, Pageable pageable) {
-        Optional<ProjectEntity> parentM = projectRepository.findById(parentProjectId);
+    public PagedResponse<ProjectView> listSubProjects(String parentProjectId, String organisationId, Pageable pageable) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return PagedResponse.error(Problems.unauthorized());
+        }
+        Optional<ProjectEntity> parentM = projectRepository.findByIdAndOrganisationId(parentProjectId, organisationId).stream().findFirst();
         if (parentM.isEmpty()) {
             return PagedResponse.error(Problems.projectNotFound(parentProjectId));
-        }
-        if (!keycloakSecurityHelper.canUserAccessOrg(parentM.get().getOrganisationId())) {
-            return PagedResponse.error(Problems.unauthorized());
         }
         return PagedResponse.of(projectRepository.findByParentProjectId(parentProjectId, pageable), this::toView);
     }
@@ -202,6 +202,9 @@ public class ProjectService {
      */
     @Transactional
     public ProjectView createWithMilestones(ProjectWithMilestonesCreateRequest request) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(request.getOrganisationId())) {
+            return ProjectView.error(Problems.unauthorized());
+        }
         Optional<ProblemDetail> xor = FundingValidations.milestonesXorSubProjects(
                 !request.getMilestones().isEmpty(), !request.getSubProjects().isEmpty());
         if (xor.isPresent()) {
@@ -369,13 +372,13 @@ public class ProjectService {
     }
 
     @Transactional
-    public CascadeDeletionView deleteProject(String projectId) {
-        Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
+    public CascadeDeletionView deleteProject(String projectId, String organisationId) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return CascadeDeletionView.error(Problems.unauthorized());
+        }
+        Optional<ProjectEntity> projectM = projectRepository.findByIdAndOrganisationId(projectId, organisationId).stream().findFirst();
         if (projectM.isEmpty()) {
             return CascadeDeletionView.error(Problems.projectNotFound(projectId));
-        }
-        if (!keycloakSecurityHelper.canUserAccessOrg(projectM.get().getOrganisationId())) {
-            return CascadeDeletionView.error(Problems.unauthorized());
         }
         // Cascade: fails when any published event is associated anywhere in the subtree; otherwise the
         // project, its sub-projects and milestones are removed, and every non-published event that had

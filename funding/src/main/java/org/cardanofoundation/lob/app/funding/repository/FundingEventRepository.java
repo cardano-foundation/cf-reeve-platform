@@ -23,6 +23,9 @@ public interface FundingEventRepository extends JpaRepository<FundingEventEntity
 
     Page<FundingEventEntity> findByOrganisationId(String organisationId, Pageable pageable);
 
+    /** Resolves an event only when it actually belongs to the given organisation (ownership check). */
+    Set<FundingEventEntity> findByIdAndOrganisationId(String id, String organisationId);
+
     /**
      * Row-locked read used by publish: a concurrent publish of the same event (same or another request)
      * blocks here until the first one commits, then sees it PUBLISHED — so an event can never be

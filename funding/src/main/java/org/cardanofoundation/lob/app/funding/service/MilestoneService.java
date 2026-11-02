@@ -57,33 +57,34 @@ public class MilestoneService {
     // path project and the milestone is confirmed to belong to it.
     // -------------------------------------------------------------------------
 
-    public PagedResponse<MilestoneView> listMilestones(String projectId, Pageable pageable) {
-        Optional<ProblemDetail> denied = authorizeProject(projectId);
+    public PagedResponse<MilestoneView> listMilestones(String projectId, String organisationId, Pageable pageable) {
+        Optional<ProblemDetail> denied = authorizeProject(projectId, organisationId);
         if (denied.isPresent()) {
             return PagedResponse.error(denied.get());
         }
         return PagedResponse.of(milestoneRepository.findByProjectId(projectId, pageable), this::toView);
     }
 
-    public MilestoneView getMilestone(String projectId, String milestoneId) {
-        Optional<ProblemDetail> denied = authorizeProject(projectId);
+    public MilestoneView getMilestone(String projectId, String milestoneId, String organisationId) {
+        Optional<ProblemDetail> denied = authorizeProject(projectId, organisationId);
         if (denied.isPresent()) {
             return MilestoneView.error(denied.get());
         }
-        return milestoneRepository.findByIdAndProjectId(milestoneId, projectId)
+        return milestoneRepository.findByIdAndProjectIdAndProject_OrganisationId(milestoneId, projectId, organisationId)
+                .stream().findFirst()
                 .map(this::toView)
                 .orElseGet(() -> MilestoneView.error(Problems.milestoneNotFound(milestoneId)));
     }
 
     @Transactional
-    public MilestoneView createMilestone(String projectId, MilestoneCreateRequest request) {
-        return createMilestoneInternal(projectId, request, null);
+    public MilestoneView createMilestone(String projectId, String organisationId, MilestoneCreateRequest request) {
+        return createMilestoneInternal(projectId, organisationId, request, null);
     }
 
     /** CSV-bulk-import-only: see {@link #create(String, MilestoneCreateRequest, String)}'s Javadoc. */
     @Transactional
-    public MilestoneView createMilestone(String projectId, MilestoneCreateRequest request, @Nullable String explicitProId) {
-        return createMilestoneInternal(projectId, request, explicitProId);
+    public MilestoneView createMilestone(String projectId, String organisationId, MilestoneCreateRequest request, @Nullable String explicitProId) {
+        return createMilestoneInternal(projectId, organisationId, request, explicitProId);
     }
 
     /**
@@ -92,8 +93,8 @@ public class MilestoneService {
      * invokes another {@code @Transactional} method via {@code this}, which would silently bypass
      * Spring's proxy-based transaction management.
      */
-    private MilestoneView createMilestoneInternal(String projectId, MilestoneCreateRequest request, @Nullable String explicitProId) {
-        Optional<ProblemDetail> denied = authorizeProject(projectId);
+    private MilestoneView createMilestoneInternal(String projectId, String organisationId, MilestoneCreateRequest request, @Nullable String explicitProId) {
+        Optional<ProblemDetail> denied = authorizeProject(projectId, organisationId);
         if (denied.isPresent()) {
             return MilestoneView.error(denied.get());
         }
@@ -101,24 +102,25 @@ public class MilestoneService {
     }
 
     @Transactional
-    public MilestoneView updateMilestone(String projectId, String milestoneId, MilestoneUpdateRequest request) {
-        Optional<ProblemDetail> denied = authorizeProject(projectId);
+    public MilestoneView updateMilestone(String projectId, String milestoneId, String organisationId, MilestoneUpdateRequest request) {
+        Optional<ProblemDetail> denied = authorizeProject(projectId, organisationId);
         if (denied.isPresent()) {
             return MilestoneView.error(denied.get());
         }
-        if (milestoneRepository.findByIdAndProjectId(milestoneId, projectId).isEmpty()) {
+        if (milestoneRepository.findByIdAndProjectIdAndProject_OrganisationId(milestoneId, projectId, organisationId).isEmpty()) {
             return MilestoneView.error(Problems.milestoneNotFound(milestoneId));
         }
         return update(milestoneId, request).fold(MilestoneView::error, this::toView);
     }
 
     @Transactional
-    public CascadeDeletionView deleteMilestone(String projectId, String milestoneId) {
-        Optional<ProblemDetail> denied = authorizeProject(projectId);
+    public CascadeDeletionView deleteMilestone(String projectId, String milestoneId, String organisationId) {
+        Optional<ProblemDetail> denied = authorizeProject(projectId, organisationId);
         if (denied.isPresent()) {
             return CascadeDeletionView.error(denied.get());
         }
-        Optional<MilestoneEntity> milestoneM = milestoneRepository.findByIdAndProjectId(milestoneId, projectId);
+        Optional<MilestoneEntity> milestoneM = milestoneRepository.findByIdAndProjectIdAndProject_OrganisationId(milestoneId, projectId, organisationId)
+                .stream().findFirst();
         if (milestoneM.isEmpty()) {
             return CascadeDeletionView.error(Problems.milestoneNotFound(milestoneId));
         }
@@ -129,13 +131,13 @@ public class MilestoneService {
                 .fold(CascadeDeletionView::error, events -> CascadeDeletionView.success(FundingCascadeDeleteService.toAffectedEventViews(events)));
     }
 
-    private Optional<ProblemDetail> authorizeProject(String projectId) {
-        Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
+    private Optional<ProblemDetail> authorizeProject(String projectId, String organisationId) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return Optional.of(Problems.unauthorized());
+        }
+        Optional<ProjectEntity> projectM = projectRepository.findByIdAndOrganisationId(projectId, organisationId).stream().findFirst();
         if (projectM.isEmpty()) {
             return Optional.of(Problems.projectNotFound(projectId));
-        }
-        if (!keycloakSecurityHelper.canUserAccessOrg(projectM.get().getOrganisationId())) {
-            return Optional.of(Problems.unauthorized());
         }
         return Optional.empty();
     }
