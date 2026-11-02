@@ -60,7 +60,7 @@ public class AccountingCoreResourceReconciliation {
             )
     })
     @PostMapping(value = "/reconcile/trigger", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('transactions', 'reconcilate')")
     public ResponseEntity<ReconcileResponseView> reconcileTriggerAction(@Valid @RequestBody ReconciliationRequest body) {
         if (!keycloakSecurityHelper.canUserAccessOrg(body.getOrganisationId())) {
             return ResponseEntity.status(UNAUTHORIZED.value())
@@ -84,7 +84,7 @@ public class AccountingCoreResourceReconciliation {
     })
     @Tag(name = "Reconciliation", description = "Reconciliation API")
     @PostMapping(value = "/transactions-reconcile", produces = "application/json")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('transactions', 'reconcilate_view')")
     public ResponseEntity<?> reconcileStart(@Valid @RequestBody ReconciliationFilterRequest body,
                                             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         Either<ProblemDetail, Pageable> pageableEither = jpaSortFieldValidator.convertPageable(pageable,
@@ -104,7 +104,7 @@ public class AccountingCoreResourceReconciliation {
     })
     @Tag(name = "Reconciliation", description = "Reconciliation API")
     @GetMapping(value = "/transactions-rejection-codes", produces = "application/json")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('transactions', 'view')")
     public ResponseEntity<ReconciliationRejectionCodeRequest[]> reconciliationRejectionCode() {
         return ResponseEntity.ok().body(ReconciliationRejectionCodeRequest.values());
     }
@@ -116,7 +116,7 @@ public class AccountingCoreResourceReconciliation {
             )
     })
     @PostMapping(value = "/reconciliation-statistic", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('transactions', 'reconcilate_view')")
     public ResponseEntity<Map<String, ReconciliationStatisticView>> reconciliationStatistic(@Valid @RequestBody ReconciliationStatisticRequest body) {
         Map<String, ReconciliationStatisticView> result = accountingCorePresentationService.getReconciliationStatisticByDateRange(body);
         return ResponseEntity.ok().body(result);

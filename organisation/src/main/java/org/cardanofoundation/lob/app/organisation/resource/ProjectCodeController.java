@@ -72,7 +72,7 @@ public class ProjectCodeController {
 
     @Operation(summary = "Download projects CSV file", description = "Download projects as a CSV file")
     @GetMapping(value = "/{orgId}/projects/download", produces = "test/csv")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
+    @PreAuthorize("@permissions.can('export_setup_data', 'download')")
     public ResponseEntity<StreamingResponseBody> downloadProjectsCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                                      @RequestParam(value = "customerCode", required = false) String customerCode,
                                                                      @RequestParam(value = "name", required = false) String name,
@@ -94,7 +94,7 @@ public class ProjectCodeController {
             ),
     })
     @PostMapping(value = "/{orgId}/projects", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('projects', 'create')")
     public ResponseEntity<ProjectView> insertProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();
@@ -112,7 +112,7 @@ public class ProjectCodeController {
             ),
     })
     @PutMapping(value = "/{orgId}/projects", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('projects', 'edit')")
     public ResponseEntity<ProjectView> updateProject(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ProjectUpdate projectUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();
@@ -130,7 +130,7 @@ public class ProjectCodeController {
             ),
     })
     @PostMapping(value = "/{orgId}/projects", produces = APPLICATION_JSON_VALUE, consumes = MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('projects', 'create')")
     public ResponseEntity<?> insertProjectsCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam("file") MultipartFile file) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();

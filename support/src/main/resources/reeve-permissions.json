@@ -1,0 +1,486 @@
+{
+  "_comment": "Permission catalogue. Endpoints check resource:action permissions; Keycloak (single realm) decides who has them: permissions are client roles of reeve-api, roles below are realm roles composed of them, presets bundle roles. groups is the subgroup layout created under /organisations/<orgId>; organisationRole is assigned on the organisation group itself so every member has it. Seeds/migrates Keycloak through cf-lob/keycloak-config/tools. Groups form a tree: a member of a subgroup also gets the roles of its parent groups (e.g. transactions/setup/erp = viewer + setup + erp). Publisher sits next to reviewer so review and publish can be given to different people (four-eyes).",
+  "modules": [
+    "transactions",
+    "reporting",
+    "funding"
+  ],
+  "resources": {
+    "organisations": {
+      "actions": [
+        "create"
+      ]
+    },
+    "transactions": {
+      "modules": [
+        "transactions"
+      ],
+      "actions": [
+        "view",
+        "export",
+        "import_view",
+        "import",
+        "review_view",
+        "review_approve",
+        "review_reject",
+        "publish_view",
+        "publish_approve",
+        "publish_reject",
+        "batches_view",
+        "batches_reprocess",
+        "reconcilate_view",
+        "reconcilate"
+      ]
+    },
+    "data_explorer": {
+      "modules": [
+        "transactions"
+      ],
+      "actions": [
+        "view",
+        "dashboard_view",
+        "dashboard_create",
+        "dashboard_edit",
+        "search_view"
+      ]
+    },
+    "reports": {
+      "modules": [
+        "reporting"
+      ],
+      "actions": [
+        "view",
+        "create",
+        "edit",
+        "delete",
+        "preview",
+        "publish",
+        "publish_view",
+        "reject"
+      ]
+    },
+    "report_templates": {
+      "modules": [
+        "reporting"
+      ],
+      "actions": [
+        "view",
+        "create",
+        "edit",
+        "delete"
+      ]
+    },
+    "report_types": {
+      "modules": [
+        "reporting"
+      ],
+      "actions": [
+        "edit"
+      ]
+    },
+    "project_management": {
+      "modules": [
+        "funding"
+      ],
+      "actions": [
+        "view",
+        "create",
+        "edit",
+        "delete",
+        "publish",
+        "create_project"
+      ]
+    },
+    "settings": {
+      "actions": [
+        "view"
+      ]
+    },
+    "organization": {
+      "actions": [
+        "view"
+      ]
+    },
+    "organization_details": {
+      "actions": [
+        "view",
+        "edit"
+      ]
+    },
+    "netsuite_configuration": {
+      "modules": [
+        "transactions"
+      ],
+      "actions": [
+        "view",
+        "create",
+        "edit"
+      ]
+    },
+    "organization_setup": {
+      "modules": [
+        "transactions"
+      ],
+      "actions": [
+        "view",
+        "import"
+      ]
+    },
+    "export_setup_data": {
+      "modules": [
+        "transactions"
+      ],
+      "actions": [
+        "view",
+        "download"
+      ]
+    },
+    "chart_of_accounts": {
+      "modules": [
+        "transactions",
+        "reporting"
+      ],
+      "actions": [
+        "view",
+        "create",
+        "edit"
+      ]
+    },
+    "event_codes": {
+      "modules": [
+        "transactions"
+      ],
+      "actions": [
+        "view",
+        "create",
+        "edit"
+      ]
+    },
+    "cost_centers": {
+      "modules": [
+        "transactions"
+      ],
+      "actions": [
+        "view",
+        "create",
+        "edit"
+      ]
+    },
+    "projects": {
+      "modules": [
+        "transactions"
+      ],
+      "actions": [
+        "view",
+        "create",
+        "edit"
+      ]
+    },
+    "vat_codes": {
+      "modules": [
+        "transactions"
+      ],
+      "actions": [
+        "view",
+        "create",
+        "edit"
+      ]
+    },
+    "currencies": {
+      "actions": [
+        "view",
+        "create",
+        "edit"
+      ]
+    },
+    "accounting_regimes": {
+      "modules": [
+        "reporting"
+      ],
+      "actions": [
+        "view",
+        "create",
+        "edit"
+      ]
+    }
+  },
+  "organisationRole": "org_member",
+  "roles": {
+    "org_member": {
+      "description": "Member of the organisation: organisation details and settings, read-only. Assigned on the organisation group, so every member has it.",
+      "permissions": [
+        "settings:view",
+        "organization:view",
+        "organization_details:view",
+        "currencies:view"
+      ]
+    },
+    "org_admin": {
+      "description": "Edit the organisation details and currencies.",
+      "permissions": [
+        "organization_details:edit",
+        "currencies:create",
+        "currencies:edit"
+      ]
+    },
+    "transactions_viewer": {
+      "description": "Transactions module: transactions, batches, reconciliation status, data explorer, setup data, read-only.",
+      "permissions": [
+        "transactions:view",
+        "transactions:export",
+        "transactions:batches_view",
+        "transactions:reconcilate_view",
+        "data_explorer:view",
+        "data_explorer:dashboard_view",
+        "data_explorer:search_view",
+        "chart_of_accounts:view",
+        "event_codes:view",
+        "cost_centers:view",
+        "projects:view",
+        "vat_codes:view",
+        "export_setup_data:view"
+      ]
+    },
+    "transactions_setup": {
+      "description": "Transactions module: configure chart of accounts, event/reference codes, cost centers, project codes, VAT codes, currencies; import/export setup data.",
+      "permissions": [
+        "chart_of_accounts:create",
+        "chart_of_accounts:edit",
+        "event_codes:create",
+        "event_codes:edit",
+        "cost_centers:create",
+        "cost_centers:edit",
+        "projects:create",
+        "projects:edit",
+        "vat_codes:create",
+        "vat_codes:edit",
+        "currencies:create",
+        "currencies:edit",
+        "organization_setup:view",
+        "organization_setup:import",
+        "export_setup_data:download"
+      ]
+    },
+    "transactions_erp": {
+      "description": "Transactions module: configure the ERP (NetSuite) connection.",
+      "permissions": [
+        "netsuite_configuration:view",
+        "netsuite_configuration:create",
+        "netsuite_configuration:edit"
+      ]
+    },
+    "transactions_importer": {
+      "description": "Transactions module: import/extract from the ERP and reprocess batches.",
+      "permissions": [
+        "transactions:import_view",
+        "transactions:import",
+        "transactions:batches_reprocess"
+      ]
+    },
+    "transactions_reviewer": {
+      "description": "Transactions module: review (approve/reject) transactions.",
+      "permissions": [
+        "transactions:review_view",
+        "transactions:review_approve",
+        "transactions:review_reject"
+      ]
+    },
+    "transactions_reconciler": {
+      "description": "Transactions module: run the reconciliation.",
+      "permissions": [
+        "transactions:reconcilate"
+      ]
+    },
+    "transactions_publisher": {
+      "description": "Transactions module: publish (approve/reject) transactions.",
+      "permissions": [
+        "transactions:publish_view",
+        "transactions:publish_approve",
+        "transactions:publish_reject"
+      ]
+    },
+    "reports_viewer": {
+      "description": "Reporting module: reports, templates, chart of accounts and accounting regimes, read-only.",
+      "permissions": [
+        "reports:view",
+        "report_templates:view",
+        "chart_of_accounts:view",
+        "accounting_regimes:view"
+      ]
+    },
+    "reports_setup": {
+      "description": "Reporting module: configure accounting regimes and report type field mappings.",
+      "permissions": [
+        "accounting_regimes:create",
+        "accounting_regimes:edit",
+        "report_types:edit"
+      ]
+    },
+    "reports_editor": {
+      "description": "Reporting module: create, edit, generate and delete reports and report templates.",
+      "permissions": [
+        "reports:create",
+        "reports:edit",
+        "reports:delete",
+        "reports:preview",
+        "report_templates:create",
+        "report_templates:edit",
+        "report_templates:delete"
+      ]
+    },
+    "reports_publisher": {
+      "description": "Reporting module: publish/reject reports.",
+      "permissions": [
+        "reports:publish_view",
+        "reports:publish",
+        "reports:reject"
+      ]
+    },
+    "funding_viewer": {
+      "description": "Funding module: projects and spending events, read-only.",
+      "permissions": [
+        "project_management:view"
+      ]
+    },
+    "funding_project_manager": {
+      "description": "Funding module: create, edit and delete projects and milestones, bulk import; delete events.",
+      "permissions": [
+        "project_management:create_project",
+        "project_management:delete"
+      ]
+    },
+    "funding_event_editor": {
+      "description": "Funding module: create and edit spending events.",
+      "permissions": [
+        "project_management:create",
+        "project_management:edit"
+      ]
+    },
+    "funding_publisher": {
+      "description": "Funding module: publish spending events.",
+      "permissions": [
+        "project_management:publish"
+      ]
+    }
+  },
+  "presets": {
+    "preset_auditor": {
+      "description": "Preset (former reeve_auditor): read-only access to every module.",
+      "replaces": "reeve_auditor",
+      "roles": [
+        "org_member",
+        "transactions_viewer",
+        "reports_viewer",
+        "funding_viewer"
+      ],
+      "permissions": []
+    },
+    "preset_accountant": {
+      "description": "Preset (former reeve_accountant).",
+      "replaces": "reeve_accountant",
+      "roles": [
+        "org_member",
+        "transactions_viewer",
+        "reports_viewer",
+        "funding_viewer",
+        "transactions_setup",
+        "transactions_importer",
+        "transactions_reviewer",
+        "transactions_reconciler",
+        "reports_editor",
+        "funding_event_editor"
+      ],
+      "permissions": [
+        "report_types:edit"
+      ]
+    },
+    "preset_admin": {
+      "description": "Preset (former reeve_admin).",
+      "replaces": "reeve_admin",
+      "roles": [
+        "org_member",
+        "transactions_viewer",
+        "reports_viewer",
+        "funding_viewer",
+        "org_admin",
+        "transactions_setup",
+        "transactions_erp",
+        "transactions_importer",
+        "transactions_reviewer",
+        "transactions_reconciler",
+        "reports_setup",
+        "funding_project_manager",
+        "funding_event_editor",
+        "funding_publisher"
+      ],
+      "permissions": [
+        "reports:publish_view",
+        "transactions:publish_view"
+      ]
+    },
+    "preset_account_manager": {
+      "description": "Preset (former reeve_account_manager): everything.",
+      "replaces": "reeve_account_manager",
+      "roles": [
+        "org_member",
+        "org_admin",
+        "transactions_viewer",
+        "transactions_setup",
+        "transactions_erp",
+        "transactions_importer",
+        "transactions_reviewer",
+        "transactions_reconciler",
+        "transactions_publisher",
+        "reports_viewer",
+        "reports_setup",
+        "reports_editor",
+        "reports_publisher",
+        "funding_viewer",
+        "funding_project_manager",
+        "funding_event_editor",
+        "funding_publisher"
+      ],
+      "permissions": [
+        "data_explorer:dashboard_create",
+        "data_explorer:dashboard_edit"
+      ]
+    }
+  },
+  "groups": {
+    "org_admin": "org_admin",
+    "transactions": "transactions_viewer",
+    "transactions/reconciler": "transactions_reconciler",
+    "transactions/importer": "transactions_importer",
+    "transactions/reviewer": "transactions_reviewer",
+    "transactions/publisher": "transactions_publisher",
+    "transactions/setup": "transactions_setup",
+    "transactions/setup/erp": "transactions_erp",
+    "reporting": "reports_viewer",
+    "reporting/editor": "reports_editor",
+    "reporting/publisher": "reports_publisher",
+    "reporting/setup": "reports_setup",
+    "funding": "funding_viewer",
+    "funding/event_editor": "funding_event_editor",
+    "funding/project_manager": "funding_project_manager",
+    "funding/publisher": "funding_publisher",
+    "presets/auditor": "preset_auditor",
+    "presets/accountant": "preset_accountant",
+    "presets/admin": "preset_admin",
+    "presets/account_manager": "preset_account_manager"
+  },
+  "platform": {
+    "_comment": "Not tied to an organisation: groups under /platform (not /organisations), permissions checked with @permissions.canPlatform(...).",
+    "group": "platform",
+    "roles": {
+      "platform_admin": {
+        "description": "Platform administrator: creates organisations.",
+        "permissions": [
+          "organisations:create"
+        ]
+      }
+    },
+    "groups": {
+      "administrators": "platform_admin"
+    }
+  }
+}

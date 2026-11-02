@@ -103,7 +103,7 @@ public class ChartOfAccountController {
 
     @Operation(summary = "Download chart of accounts CSV file", description = "Download chart of accounts as a CSV file")
     @GetMapping(value = "/{orgId}/chart-of-accounts/download", produces = "test/csv")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
+    @PreAuthorize("@permissions.can('export_setup_data', 'download')")
     public ResponseEntity<StreamingResponseBody> downloadChartOfAccountsCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                                             @RequestParam(value = "customerCode", required = false) String customerCode,
                                                                             @RequestParam(value = "name", required = false) String name,
@@ -129,7 +129,7 @@ public class ChartOfAccountController {
             ),
     })
     @PostMapping(value = "/{orgId}/chart-of-accounts", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('chart_of_accounts', 'create')")
     public ResponseEntity<?> insertChartOfAccount(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                   @Valid @RequestBody ChartOfAccountUpdate chartOfAccountUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
@@ -150,7 +150,7 @@ public class ChartOfAccountController {
             ),
     })
     @PostMapping(value = "/{orgId}/chart-of-accounts", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('chart_of_accounts', 'create')")
     public ResponseEntity<?> insertChartOfAccountByCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                        @RequestParam(value = "file") MultipartFile file) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
@@ -171,7 +171,7 @@ public class ChartOfAccountController {
             ),
     })
     @PutMapping(value = "/{orgId}/chart-of-accounts", produces = "application/json")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('chart_of_accounts', 'edit')")
     public ResponseEntity<?> updateChartOfAccount(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                   @Valid @RequestBody ChartOfAccountUpdate chartOfAccountUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {

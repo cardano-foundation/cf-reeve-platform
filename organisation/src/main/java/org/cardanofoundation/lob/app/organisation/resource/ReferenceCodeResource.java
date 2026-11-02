@@ -76,7 +76,7 @@ public class ReferenceCodeResource {
 
     @Operation(summary = "Download projects CSV file", description = "Download projects as a CSV file")
     @GetMapping(value = "/{orgId}/reference-codes/download", produces = "test/csv")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
+    @PreAuthorize("@permissions.can('export_setup_data', 'download')")
     public ResponseEntity<StreamingResponseBody> downloadRefCodesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                                      @RequestParam(value = "refCode", required = false) String referenceCode,
                                                                      @RequestParam(value = "name", required = false) String name,
@@ -98,7 +98,7 @@ public class ReferenceCodeResource {
             ),
     })
     @PostMapping(value = "/{orgId}/reference-codes", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('event_codes', 'create')")
     public ResponseEntity<?> insertReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @Valid @RequestBody ReferenceCodeUpdate referenceCodeUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
@@ -117,7 +117,7 @@ public class ReferenceCodeResource {
             ),
     })
     @PostMapping(value = "/{orgId}/reference-codes", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('event_codes', 'create')")
     public ResponseEntity<?> insertRefCodeByCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                        @RequestParam(value = "file") MultipartFile file) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
@@ -137,7 +137,7 @@ public class ReferenceCodeResource {
             ),
     })
     @PutMapping(value = "/{orgId}/reference-codes", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('event_codes', 'edit')")
     public ResponseEntity<?> updateReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @Valid @RequestBody ReferenceCodeUpdate referenceCodeUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {

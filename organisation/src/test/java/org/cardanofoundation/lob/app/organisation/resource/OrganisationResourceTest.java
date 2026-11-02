@@ -1,7 +1,10 @@
 package org.cardanofoundation.lob.app.organisation.resource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -28,6 +31,7 @@ import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationView;
 import org.cardanofoundation.lob.app.organisation.domain.view.ValidationView;
 import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
+import org.cardanofoundation.lob.app.support.security.access.OrganisationAccessProvisioner;
 
 @ExtendWith(MockitoExtension.class)
 class OrganisationResourceTest {
@@ -36,6 +40,8 @@ class OrganisationResourceTest {
     private OrganisationService organisationService;
     @Mock
     private KeycloakSecurityHelper keycloakSecurityHelper;
+    @Mock
+    private OrganisationAccessProvisioner organisationAccessProvisioner;
 
     @InjectMocks
     private OrganisationResource organisationResource;
@@ -44,7 +50,7 @@ class OrganisationResourceTest {
     void organisationList_success() {
         Organisation org = mock(Organisation.class);
         OrganisationView view = mock(OrganisationView.class);
-        when(keycloakSecurityHelper.canUserAccessOrg("123")).thenReturn(true);
+        when(keycloakSecurityHelper.isMemberOfOrg("123")).thenReturn(true);
         when(organisationService.findById("123")).thenReturn(Optional.of(org));
         when(organisationService.getOrganisationView(org)).thenReturn(view);
 
@@ -54,6 +60,23 @@ class OrganisationResourceTest {
         assertEquals(1, Objects.requireNonNull(listResponseEntity.getBody()).size());
         assertEquals(view, listResponseEntity.getBody().getFirst());
 
+    }
+
+    @Test
+    void organisationList_withoutIds_onlyReturnsTheUsersOrganisations() {
+        Organisation member = mock(Organisation.class);
+        Organisation other = mock(Organisation.class);
+        OrganisationView view = mock(OrganisationView.class);
+        when(member.getId()).thenReturn("123");
+        when(other.getId()).thenReturn("456");
+        when(organisationService.findAll()).thenReturn(List.of(member, other));
+        when(keycloakSecurityHelper.isMemberOfOrg("123")).thenReturn(true);
+        when(keycloakSecurityHelper.isMemberOfOrg("456")).thenReturn(false);
+        when(organisationService.getOrganisationView(member)).thenReturn(view);
+
+        ResponseEntity<List<OrganisationView>> listResponseEntity = organisationResource.organisationList(Optional.empty());
+
+        assertEquals(List.of(view), listResponseEntity.getBody());
     }
 
     @Test
@@ -118,6 +141,7 @@ class OrganisationResourceTest {
         when(organisationService.findById("ce65239c88cb26981fd2c911f35766788d33ca8383649e76105943592916d0a9")).thenReturn(Optional.empty());
         ResponseEntity<?> responseEntity = organisationResource.organisationCreate(request);
         assertEquals(400, responseEntity.getStatusCode().value());
+        verify(organisationAccessProvisioner, never()).organisationCreated(anyString(), anyString());
     }
 
     @Test
@@ -131,9 +155,13 @@ class OrganisationResourceTest {
         when(organisationService.findById("ce65239c88cb26981fd2c911f35766788d33ca8383649e76105943592916d0a9")).thenReturn(Optional.empty());
         when(organisationService.getOrganisationView(organisation)).thenReturn(view);
 
+        when(view.getId()).thenReturn("ce65239c88cb26981fd2c911f35766788d33ca8383649e76105943592916d0a9");
+        when(view.getName()).thenReturn("New Org");
+
         ResponseEntity<?> responseEntity = organisationResource.organisationCreate(request);
         assertEquals(200, responseEntity.getStatusCode().value());
         assertEquals(view, responseEntity.getBody());
+        verify(organisationAccessProvisioner).organisationCreated("ce65239c88cb26981fd2c911f35766788d33ca8383649e76105943592916d0a9", "New Org");
     }
 
     @Test

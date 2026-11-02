@@ -87,7 +87,7 @@ public class CurrencyController {
             ),
     })
     @PostMapping(value = "/{orgId}/currencies", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('currencies', 'create')")
     public ResponseEntity<CurrencyView> insertCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CurrencyUpdate currencyUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();
@@ -104,7 +104,7 @@ public class CurrencyController {
             ),
     })
     @PutMapping(value = "/{orgId}/currencies", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('currencies', 'edit')")
     public ResponseEntity<CurrencyView> updateCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CurrencyUpdate currencyUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();
@@ -121,7 +121,7 @@ public class CurrencyController {
             ),
     })
     @PostMapping(value = "/{orgId}/currencies", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('currencies', 'create')")
     public ResponseEntity<?> insertCurrenciesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam(value = "file") MultipartFile file) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();
@@ -141,7 +141,7 @@ public class CurrencyController {
     )
     @GetMapping(value = "/{orgId}/currencies/download", produces = "text/csv"
     )
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('export_setup_data', 'download')")
     public ResponseEntity<StreamingResponseBody> downloadCurrenciesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                                        @RequestParam(value = "code", required = false) String code,
                                                                        @RequestParam(value = "isoCode", required = false) List<String> isoCodes) {
