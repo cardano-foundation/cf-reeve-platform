@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
@@ -34,6 +35,7 @@ public class PermissionCatalogue {
     private final Map<String, String> groupLayout;
     private final String platformGroup;
 
+    @Autowired
     public PermissionCatalogue() {
         this(readCatalogue());
     }
@@ -44,7 +46,7 @@ public class PermissionCatalogue {
 
         Map<String, Set<String>> modulesByResource = new LinkedHashMap<>();
         Set<String> allPermissions = new LinkedHashSet<>();
-        catalogue.path("resources").fields().forEachRemaining(resourceEntry -> {
+        catalogue.path("resources").properties().forEach(resourceEntry -> {
             String resource = resourceEntry.getKey();
             Set<String> resourceModuleNames = new LinkedHashSet<>();
             resourceEntry.getValue().path("modules").forEach(module -> resourceModuleNames.add(module.asText()));
@@ -53,7 +55,7 @@ public class PermissionCatalogue {
         });
 
         Map<String, String> layout = new LinkedHashMap<>();
-        catalogue.path("groups").fields().forEachRemaining(group -> layout.put(group.getKey(), group.getValue().asText()));
+        catalogue.path("groups").properties().forEach(group -> layout.put(group.getKey(), group.getValue().asText()));
 
         this.modules = Collections.unmodifiableSet(moduleNames);
         this.resourceModules = Collections.unmodifiableMap(modulesByResource);

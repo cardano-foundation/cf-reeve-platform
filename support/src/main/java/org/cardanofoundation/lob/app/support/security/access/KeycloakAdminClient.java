@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -46,7 +47,7 @@ public class KeycloakAdminClient {
 
     private final KeycloakAdminProperties properties;
     private final RestClient restClient;
-    private volatile AccessToken accessToken;
+    private final AtomicReference<AccessToken> accessToken = new AtomicReference<>();
     private volatile String permissionsClientUuid;
 
     public KeycloakAdminClient(KeycloakAdminProperties properties) {
@@ -59,7 +60,7 @@ public class KeycloakAdminClient {
      * recreated: both are looked up again on the next call.
      */
     public synchronized void forgetCachedState() {
-        accessToken = null;
+        accessToken.set(null);
         permissionsClientUuid = null;
     }
 
@@ -140,7 +141,7 @@ public class KeycloakAdminClient {
     private void collectChildren(String groupId, List<GroupNode> nodes) {
         for (JsonNode group : get("/groups/{groupId}/children?briefRepresentation=false&first=0&max=" + MAX_RESULTS, groupId)) {
             Map<String, List<String>> attributes = new LinkedHashMap<>();
-            group.path("attributes").fields().forEachRemaining(attribute -> {
+            group.path("attributes").properties().forEach(attribute -> {
                 List<String> values = new ArrayList<>();
                 attribute.getValue().forEach(value -> values.add(value.asText()));
                 attributes.put(attribute.getKey(), values);
@@ -253,7 +254,7 @@ public class KeycloakAdminClient {
     }
 
     private synchronized String token() {
-        AccessToken current = accessToken;
+        AccessToken current = accessToken.get();
         if (current != null && Instant.now().isBefore(current.expiresAt())) {
             return current.value();
         }
@@ -276,8 +277,9 @@ public class KeycloakAdminClient {
             throw new IllegalStateException("Keycloak did not return an access token for client " + properties.getClientId());
         }
         long expiresIn = response.path("expires_in").asLong(60);
-        accessToken = new AccessToken(response.get("access_token").asText(), Instant.now().plusSeconds(Math.max(expiresIn - 15, 5)));
-        return accessToken.value();
+        AccessToken fresh = new AccessToken(response.get("access_token").asText(), Instant.now().plusSeconds(Math.max(expiresIn - 15, 5)));
+        accessToken.set(fresh);
+        return fresh.value();
     }
 
     private static Set<String> names(JsonNode roles) {

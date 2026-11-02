@@ -22,6 +22,7 @@ class PermissionCatalogueTest {
         assertThat(catalogue.modulesOf("accounting_regimes")).containsExactly("reporting");
         assertThat(catalogue.modulesOf("chart_of_accounts")).containsExactlyInAnyOrder("transactions", "reporting");
         assertThat(catalogue.modulesOf("project_management")).containsExactly("funding");
+        assertThat(catalogue.modulesOf("vat_codes")).containsExactlyInAnyOrder("transactions", "funding");
         assertThat(catalogue.modulesOf("currencies")).isEmpty();
         assertThat(catalogue.modulesOf("organization_details")).isEmpty();
     }

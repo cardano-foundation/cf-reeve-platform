@@ -40,6 +40,7 @@ public class KeycloakUserAccessResolver implements UserAccessResolver {
 
     private static final String MODULES_ATTRIBUTE = "modules";
     private static final String ALL = "all";
+    private static final String PATH_SEPARATOR = "/";
 
     private final KeycloakAdminClient keycloakAdminClient;
     private final KeycloakAdminProperties properties;
@@ -73,18 +74,24 @@ public class KeycloakUserAccessResolver implements UserAccessResolver {
                 log.warn("User {} not found in Keycloak, no organisation access granted", username);
                 return UserAccess.none(username);
             }
-            try {
-                return userAccess.get(userId.get(), id -> load(id, username));
-            } catch (RuntimeException firstFailure) {
-                // Keycloak may have been reset or reconfigured (new realm keys, recreated client, new group ids):
-                // drop everything remembered about it and try once more before refusing access
-                log.warn("Organisation access lookup for user {} failed, retrying with fresh Keycloak state: {}", username, firstFailure.getMessage());
-                forgetKeycloakState();
-                return userAccess.get(userId.get(), id -> load(id, username));
-            }
+            return resolveWithOneRetry(userId.get(), username);
         } catch (RuntimeException e) {
             log.error("Unable to resolve the organisation access of user {} from Keycloak, no access granted", username, e);
             return UserAccess.none(username);
+        }
+    }
+
+    /**
+     * Keycloak may have been reset or reconfigured (new realm keys, recreated client, new group ids): on a failure,
+     * drop everything remembered about it and try once more before refusing access.
+     */
+    private UserAccess resolveWithOneRetry(String userId, String username) {
+        try {
+            return userAccess.get(userId, id -> load(id, username));
+        } catch (RuntimeException firstFailure) {
+            log.warn("Organisation access lookup for user {} failed, retrying with fresh Keycloak state: {}", username, firstFailure.getMessage());
+            forgetKeycloakState();
+            return userAccess.get(userId, id -> load(id, username));
         }
     }
 
@@ -111,33 +118,17 @@ public class KeycloakUserAccessResolver implements UserAccessResolver {
 
         Map<String, Set<String>> rolesByOrganisation = new LinkedHashMap<>();
         Map<String, Set<String>> directPermissionsByOrganisation = new LinkedHashMap<>();
-
         Set<String> platformPermissions = new LinkedHashSet<>();
+
         for (GroupRef group : keycloakAdminClient.userGroups(userId)) {
             List<String> segments = pathSegments(group.path());
             if (!segments.isEmpty() && segments.get(0).equals(permissionCatalogue.getPlatformGroup())) {
-                // platform-wide access, e.g. /platform/administrators: roles of the group (no organisation, no modules)
-                grantingRoles(groupRoles.get(group.id(), keycloakAdminClient::groupRealmRoles), permissionsOfRole)
-                        .forEach(role -> platformPermissions.addAll(permissionsOfRole.getOrDefault(role, Set.of())));
-                platformPermissions.addAll(groupPermissions.get(group.id(), keycloakAdminClient::groupPermissions));
-                continue;
-            }
-            if (segments.size() < 2 || !segments.get(0).equals(properties.getOrganisationsGroup())) {
-                continue;
-            }
-            String organisationId = segments.get(1);
-            Set<String> roles = rolesByOrganisation.computeIfAbsent(organisationId, id -> new LinkedHashSet<>());
-            Set<String> directPermissions = directPermissionsByOrganisation.computeIfAbsent(organisationId, id -> new LinkedHashSet<>());
-
-            // the group itself and its parents down to the organisation group
-            for (int depth = 2; depth <= segments.size(); depth++) {
-                String path = "/" + String.join("/", segments.subList(0, depth));
-                String groupId = depth == segments.size() ? group.id() : Optional.ofNullable(groupsByPath.get(path)).map(GroupNode::id).orElse(null);
-                if (groupId == null) {
-                    continue;
-                }
-                roles.addAll(grantingRoles(groupRoles.get(groupId, keycloakAdminClient::groupRealmRoles), permissionsOfRole));
-                directPermissions.addAll(groupPermissions.get(groupId, keycloakAdminClient::groupPermissions));
+                addPlatformGroup(group, permissionsOfRole, platformPermissions);
+            } else if (segments.size() >= 2 && segments.get(0).equals(properties.getOrganisationsGroup())) {
+                String organisationId = segments.get(1);
+                addOrganisationGroup(group, segments, groupsByPath, permissionsOfRole,
+                        rolesByOrganisation.computeIfAbsent(organisationId, id -> new LinkedHashSet<>()),
+                        directPermissionsByOrganisation.computeIfAbsent(organisationId, id -> new LinkedHashSet<>()));
             }
         }
 
@@ -145,10 +136,39 @@ public class KeycloakUserAccessResolver implements UserAccessResolver {
         rolesByOrganisation.forEach((organisationId, roles) -> {
             Set<String> granted = new LinkedHashSet<>(directPermissionsByOrganisation.getOrDefault(organisationId, Set.of()));
             roles.forEach(role -> granted.addAll(permissionsOfRole.getOrDefault(role, Set.of())));
-            Set<String> modules = enabledModules(groupsByPath.get("/" + properties.getOrganisationsGroup() + "/" + organisationId));
+            Set<String> modules = enabledModules(groupsByPath.get(groupPath(List.of(properties.getOrganisationsGroup(), organisationId))));
             organisations.put(organisationId, new OrganisationAccess(organisationId, roles, modules, permissionCatalogue.filterByModules(granted, modules)));
         });
         return new UserAccess(username, organisations, platformPermissions);
+    }
+
+    /**
+     * Platform-wide access, e.g. /platform/administrators: the roles of the group (no organisation, no modules).
+     */
+    private void addPlatformGroup(GroupRef group, Map<String, Set<String>> permissionsOfRole, Set<String> platformPermissions) {
+        grantingRoles(groupRoles.get(group.id(), keycloakAdminClient::groupRealmRoles), permissionsOfRole)
+                .forEach(role -> platformPermissions.addAll(permissionsOfRole.getOrDefault(role, Set.of())));
+        platformPermissions.addAll(groupPermissions.get(group.id(), keycloakAdminClient::groupPermissions));
+    }
+
+    /**
+     * The roles and permissions of the group itself and of its parents down to the organisation group.
+     */
+    private void addOrganisationGroup(GroupRef group, List<String> segments, Map<String, GroupNode> groupsByPath,
+                                      Map<String, Set<String>> permissionsOfRole, Set<String> roles, Set<String> directPermissions) {
+        for (int depth = 2; depth <= segments.size(); depth++) {
+            String groupId = depth == segments.size()
+                    ? group.id()
+                    : Optional.ofNullable(groupsByPath.get(groupPath(segments.subList(0, depth)))).map(GroupNode::id).orElse(null);
+            if (groupId != null) {
+                roles.addAll(grantingRoles(groupRoles.get(groupId, keycloakAdminClient::groupRealmRoles), permissionsOfRole));
+                directPermissions.addAll(groupPermissions.get(groupId, keycloakAdminClient::groupPermissions));
+            }
+        }
+    }
+
+    private static String groupPath(List<String> segments) {
+        return PATH_SEPARATOR + String.join(PATH_SEPARATOR, segments);
     }
 
     private Map<String, GroupNode> loadOrganisationTree() {
@@ -189,7 +209,7 @@ public class KeycloakUserAccessResolver implements UserAccessResolver {
 
     private static List<String> pathSegments(String path) {
         List<String> segments = new ArrayList<>();
-        for (String segment : path.split("/")) {
+        for (String segment : path.split(PATH_SEPARATOR)) {
             if (!segment.isBlank()) {
                 segments.add(segment);
             }

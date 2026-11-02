@@ -178,7 +178,8 @@
     },
     "vat_codes": {
       "modules": [
-        "transactions"
+        "transactions",
+        "funding"
       ],
       "actions": [
         "view",
