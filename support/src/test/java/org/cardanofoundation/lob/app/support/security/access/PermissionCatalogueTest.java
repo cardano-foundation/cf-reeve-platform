@@ -23,7 +23,7 @@ class PermissionCatalogueTest {
         assertThat(catalogue.modulesOf("chart_of_accounts")).containsExactlyInAnyOrder("transactions", "reporting");
         assertThat(catalogue.modulesOf("project_management")).containsExactly("funding");
         assertThat(catalogue.modulesOf("vat_codes")).containsExactlyInAnyOrder("transactions", "funding");
-        assertThat(catalogue.modulesOf("currencies")).isEmpty();
+        assertThat(catalogue.modulesOf("currencies")).containsExactlyInAnyOrder("transactions", "funding");
         assertThat(catalogue.modulesOf("organization_details")).isEmpty();
     }
 
@@ -32,7 +32,7 @@ class PermissionCatalogueTest {
         Set<String> granted = Set.of("transactions:view", "reports:view", "project_management:view", "chart_of_accounts:view", "currencies:view");
 
         assertThat(catalogue.filterByModules(granted, Set.of("reporting")))
-                .containsExactlyInAnyOrder("reports:view", "chart_of_accounts:view", "currencies:view");
+                .containsExactlyInAnyOrder("reports:view", "chart_of_accounts:view");
         assertThat(catalogue.filterByModules(granted, Set.of("funding")))
                 .containsExactlyInAnyOrder("project_management:view", "currencies:view");
     }
@@ -48,6 +48,7 @@ class PermissionCatalogueTest {
                 .containsEntry("transactions/publisher", "transactions_publisher")
                 .containsEntry("transactions/setup/erp", "transactions_erp")
                 .containsEntry("funding", "funding_viewer")
+                .containsEntry("funding/setup", "funding_setup")
                 .containsEntry("presets/accountant", "preset_accountant")
                 .doesNotContainKey("transactions/viewer")
                 .doesNotContainValue("org_member");

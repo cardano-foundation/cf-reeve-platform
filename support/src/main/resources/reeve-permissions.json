@@ -188,6 +188,10 @@
       ]
     },
     "currencies": {
+      "modules": [
+        "transactions",
+        "funding"
+      ],
       "actions": [
         "view",
         "create",
@@ -338,9 +342,20 @@
       ]
     },
     "funding_viewer": {
-      "description": "Funding module: projects and spending events, read-only.",
+      "description": "Funding module: projects and spending events, read-only (plus the VAT codes and currencies they use).",
       "permissions": [
-        "project_management:view"
+        "project_management:view",
+        "vat_codes:view",
+        "currencies:view"
+      ]
+    },
+    "funding_setup": {
+      "description": "Funding module: create and edit the VAT codes and currencies the funding module uses.",
+      "permissions": [
+        "vat_codes:create",
+        "vat_codes:edit",
+        "currencies:create",
+        "currencies:edit"
       ]
     },
     "funding_project_manager": {
@@ -389,7 +404,8 @@
         "transactions_reviewer",
         "transactions_reconciler",
         "reports_editor",
-        "funding_event_editor"
+        "funding_event_editor",
+        "funding_setup"
       ],
       "permissions": [
         "report_types:edit"
@@ -412,7 +428,8 @@
         "reports_setup",
         "funding_project_manager",
         "funding_event_editor",
-        "funding_publisher"
+        "funding_publisher",
+        "funding_setup"
       ],
       "permissions": [
         "reports:publish_view",
@@ -439,7 +456,8 @@
         "funding_viewer",
         "funding_project_manager",
         "funding_event_editor",
-        "funding_publisher"
+        "funding_publisher",
+        "funding_setup"
       ],
       "permissions": [
         "data_explorer:dashboard_create",
@@ -464,6 +482,7 @@
     "funding/event_editor": "funding_event_editor",
     "funding/project_manager": "funding_project_manager",
     "funding/publisher": "funding_publisher",
+    "funding/setup": "funding_setup",
     "presets/auditor": "preset_auditor",
     "presets/accountant": "preset_accountant",
     "presets/admin": "preset_admin",
