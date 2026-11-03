@@ -36,6 +36,7 @@ public class KeycloakAdminClient {
      */
     public static final String ORGANISATION_ID_ATTRIBUTE = "organisationId";
 
+    private static final String ATTRIBUTES = "attributes";
     private static final int MAX_RESULTS = 10_000;
     private static final String CHILDREN_WITH_ATTRIBUTES = "/groups/{groupId}/children?briefRepresentation=false&first=0&max=" + MAX_RESULTS;
 
@@ -180,7 +181,7 @@ public class KeycloakAdminClient {
 
     private static GroupNode groupNode(JsonNode group) {
         Map<String, List<String>> attributes = new LinkedHashMap<>();
-        group.path("attributes").properties().forEach(attribute -> {
+        group.path(ATTRIBUTES).properties().forEach(attribute -> {
             List<String> values = new ArrayList<>();
             attribute.getValue().forEach(value -> values.add(value.asText()));
             attributes.put(attribute.getKey(), values);
@@ -213,7 +214,7 @@ public class KeycloakAdminClient {
                 .uri(adminPath("/groups/{groupId}/children"), parentId)
                 .headers(headers -> headers.setBearerAuth(token()))
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("name", name, "attributes", attributes))
+                .body(Map.of("name", name, ATTRIBUTES, attributes))
                 .retrieve()
                 .toBodilessEntity()
                 .getHeaders()
@@ -230,7 +231,7 @@ public class KeycloakAdminClient {
                 .uri(adminPath("/groups/{groupId}"), group.id())
                 .headers(headers -> headers.setBearerAuth(token()))
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("name", name, "attributes", group.attributes()))
+                .body(Map.of("name", name, ATTRIBUTES, group.attributes()))
                 .retrieve()
                 .toBodilessEntity();
     }
