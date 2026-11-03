@@ -63,7 +63,7 @@ public class ProjectController {
             @RequestParam String organisationId,
             @Parameter(description = "Case-insensitive partial match on the root project title or any sub-project or milestone title beneath it, at any level", example = "Education")
             @RequestParam(required = false) String search,
-            @Parameter(description = "One or more base currency codes of the root project; repeat the parameter or comma-separate values", example = "USD,EUR")
+            @Parameter(description = "One or more base currency codes of the root project; repeat the parameter or comma-separate values")
             @RequestParam(required = false) List<String> currency,
             @Parameter(description = "Amount the minAmount/maxAmount range applies to; defaults to BUDGETED. "
                     + "FUNDED = allocated FUNDING minus REFUND, SPENT = allocated SPENDING, both rolled up over the whole project structure")

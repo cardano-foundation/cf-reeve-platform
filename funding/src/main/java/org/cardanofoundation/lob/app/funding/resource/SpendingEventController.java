@@ -65,9 +65,9 @@ public class SpendingEventController {
     @PreAuthorize("@permissions.can('project_management', 'view')")
     public ResponseEntity<PagedResponse<SpendingEventView>> listEvents(
             @RequestParam String organisationId,
-            @Parameter(description = "One or more statuses; repeat the parameter or comma-separate values", example = "DRAFT,ERROR")
+            @Parameter(description = "One or more statuses; repeat the parameter or comma-separate values")
             @RequestParam(required = false) List<EventStatus> status,
-            @Parameter(description = "One or more event types; repeat the parameter or comma-separate values", example = "FUNDING,SPENDING")
+            @Parameter(description = "One or more event types; repeat the parameter or comma-separate values")
             @RequestParam(required = false) List<EventType> eventType,
             @Parameter(description = "Case-insensitive partial match on the title of any project (or parent project) the event is allocated to", example = "Education")
             @RequestParam(required = false) String projectTitle,
