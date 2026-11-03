@@ -30,8 +30,8 @@ class OrganisationHeaderOpenApiCustomizerTest {
             assertThat(header.getIn()).isEqualTo("header");
             assertThat(header.getName()).isEqualTo("X-Organisation-Id");
             assertThat(header.getRequired()).isFalse();
-            // no example: Swagger would pre-fill it and send requests to that organisation
-            assertThat(header.getExample()).isNull();
+            // Swagger pre-fills the example; it's the same organisation as the endpoints' organisationId examples
+            assertThat(header.getExample()).isEqualTo("75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94");
         });
         assertThat(openApi.getPaths().get("/api/v1/b").getDelete().getParameters()).hasSize(1);
     }
