@@ -1,10 +1,12 @@
 package org.cardanofoundation.lob.app.support.security.access;
 
 /**
- * Called after an organisation is created, so the identity provider knows about it and the creator can access it.
+ * Keeps the identity provider up to date with the organisations: called after one is created or renamed.
  */
 public interface OrganisationAccessProvisioner {
 
     void organisationCreated(String organisationId, String organisationName);
+
+    void organisationRenamed(String organisationId, String organisationName);
 
 }

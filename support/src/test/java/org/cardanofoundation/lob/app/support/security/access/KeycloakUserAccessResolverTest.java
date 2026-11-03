@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.support.security.access;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -12,6 +13,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+
+import org.springframework.security.oauth2.jwt.Jwt;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,10 +41,10 @@ class KeycloakUserAccessResolverTest {
                 "funding_publisher", Set.of("project_management:publish"),
                 "offline_access", Set.of()));
         when(client.organisationTree()).thenReturn(List.of(
-                new GroupNode("g-a", "/organisations/org-a", Map.of("modules", List.of("transactions"))),
+                new GroupNode("g-a", "/organisations/org-a", Map.of("organisationId", List.of("org-a"), "modules", List.of("transactions"))),
                 new GroupNode("g-a-tx", "/organisations/org-a/transactions", Map.of()),
                 new GroupNode("g-a-tx-rev", "/organisations/org-a/transactions/reviewer", Map.of()),
-                new GroupNode("g-b", "/organisations/org-b", Map.of()),
+                new GroupNode("g-b", "/organisations/org-b", Map.of("organisationId", List.of("org-b"))),
                 new GroupNode("g-b-rep", "/organisations/org-b/reporting", Map.of()),
                 new GroupNode("g-b-rep-view", "/organisations/org-b/reporting/viewer", Map.of())));
         when(client.groupRealmRoles(anyString())).thenReturn(Set.of());
@@ -74,7 +77,7 @@ class KeycloakUserAccessResolverTest {
     @Test
     void deepSubgroupInheritsEveryParentRole_butNotItsSiblings() {
         when(client.organisationTree()).thenReturn(List.of(
-                new GroupNode("g-c", "/organisations/org-c", Map.of()),
+                new GroupNode("g-c", "/organisations/org-c", Map.of("organisationId", List.of("org-c"))),
                 new GroupNode("g-c-tx", "/organisations/org-c/transactions", Map.of()),
                 new GroupNode("g-c-tx-setup", "/organisations/org-c/transactions/setup", Map.of()),
                 new GroupNode("g-c-tx-setup-erp", "/organisations/org-c/transactions/setup/erp", Map.of()),
@@ -122,6 +125,43 @@ class KeycloakUserAccessResolverTest {
 
         assertThat(orgB.roles()).containsExactly("org_member");
         assertThat(orgB.permissions()).containsExactlyInAnyOrder("settings:view", "organization:view");
+    }
+
+    @Test
+    void theOrganisationIdComesFromTheAttribute_theGroupNameIsOnlyALabel() {
+        when(client.organisationTree()).thenReturn(List.of(
+                new GroupNode("g-acme", "/organisations/Acme Ltd", Map.of("organisationId", List.of("org-acme"), "modules", List.of("funding"))),
+                new GroupNode("g-acme-fund", "/organisations/Acme Ltd/funding", Map.of()),
+                new GroupNode("g-acme-pub", "/organisations/Acme Ltd/funding/publisher", Map.of())));
+        when(client.groupRealmRoles("g-acme-pub")).thenReturn(Set.of("funding_publisher"));
+        when(client.userGroups("user-13")).thenReturn(List.of(new GroupRef("g-acme-pub", "publisher", "/organisations/Acme Ltd/funding/publisher")));
+
+        UserAccess access = resolver.resolve(TestJwts.jwt(Map.of("sub", "user-13", "preferred_username", "u13")));
+
+        assertThat(access.isMemberOf("Acme Ltd")).isFalse();
+        OrganisationAccess acme = access.organisation("org-acme").orElseThrow();
+        assertThat(acme.modules()).containsExactly("funding");
+        assertThat(acme.hasPermission("project_management", "publish")).isTrue();
+    }
+
+    @Test
+    void groupWithoutOrganisationIdGivesNoAccess() {
+        when(client.organisationTree()).thenReturn(List.of(new GroupNode("g-x", "/organisations/org-x", Map.of())));
+        when(client.groupRealmRoles("g-x")).thenReturn(Set.of("org_member"));
+        when(client.userGroups("user-14")).thenReturn(List.of(new GroupRef("g-x", "org-x", "/organisations/org-x")));
+
+        assertThat(resolver.resolve(TestJwts.jwt(Map.of("sub", "user-14", "preferred_username", "u14"))).organisations()).isEmpty();
+    }
+
+    @Test
+    void organisationCreatedAfterTheTreeWasCachedIsFoundStraightAway() {
+        when(client.userGroups("user-15")).thenReturn(List.of(new GroupRef("g-a", "org-a", "/organisations/org-a")));
+        resolver.resolve(TestJwts.jwt(Map.of("sub", "user-15", "preferred_username", "u15")));
+
+        when(client.organisationTree()).thenReturn(List.of(new GroupNode("g-new", "/organisations/New Org", Map.of("organisationId", List.of("org-new")))));
+        when(client.userGroups("user-16")).thenReturn(List.of(new GroupRef("g-new", "New Org", "/organisations/New Org")));
+
+        assertThat(resolver.resolve(TestJwts.jwt(Map.of("sub", "user-16", "preferred_username", "u16"))).isMemberOf("org-new")).isTrue();
     }
 
     @Test
@@ -205,6 +245,30 @@ class KeycloakUserAccessResolverTest {
         // the role definitions and organisation tree were reloaded, not taken from the stale cache
         verify(client, times(2)).realmRolePermissions();
         verify(client, times(2)).organisationTree();
+    }
+
+    @Test
+    void userUnknownToKeycloakGetsNoAccess() {
+        when(client.findUserId("ghost")).thenReturn(Optional.empty());
+
+        UserAccess access = resolver.resolve(TestJwts.jwt(Map.of("preferred_username", "ghost")));
+
+        assertThat(access.organisations()).isEmpty();
+        verify(client, never()).userGroups(anyString());
+    }
+
+    @Test
+    void evictMakesTheNextLookupSeeChangesInKeycloak() {
+        Jwt jwt = TestJwts.jwt(Map.of("sub", "user-17", "preferred_username", "u17"));
+        when(client.userGroups("user-17")).thenReturn(List.of());
+        assertThat(resolver.resolve(jwt).organisations()).isEmpty();
+
+        when(client.userGroups("user-17")).thenReturn(List.of(new GroupRef("g-a", "org-a", "/organisations/org-a")));
+        assertThat(resolver.resolve(jwt).organisations()).isEmpty();
+
+        resolver.evict(jwt);
+
+        assertThat(resolver.resolve(jwt).isMemberOf("org-a")).isTrue();
     }
 
     @Test

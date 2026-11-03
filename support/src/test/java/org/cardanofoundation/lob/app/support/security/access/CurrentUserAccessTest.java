@@ -1,6 +1,7 @@
 package org.cardanofoundation.lob.app.support.security.access;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -123,6 +124,43 @@ class CurrentUserAccessTest {
 
         assertThat(currentUserAccess.get().organisations()).isEmpty();
         assertThat(keycloakSecurityHelper.canUserAccessOrg("org-a")).isFalse();
+    }
+
+    @Test
+    void evictForgetsTheResultOfThisRequestAndTheResolversCache() {
+        currentUserAccess.get();
+
+        currentUserAccess.evict();
+        currentUserAccess.get();
+
+        verify(resolver).evict(any());
+        verify(resolver, times(2)).resolve(any());
+    }
+
+    @Test
+    void outsideARequestTheResolverIsAskedEachTimeAndThereIsNoHeader() {
+        RequestContextHolder.resetRequestAttributes();
+
+        currentUserAccess.get();
+        currentUserAccess.get();
+
+        verify(resolver, times(2)).resolve(any());
+        assertThat(currentUserAccess.requestedOrganisationId()).isEmpty();
+    }
+
+    @Test
+    void withoutATokenThereIsNoAccess() {
+        SecurityContextHolder.clearContext();
+
+        assertThat(currentUserAccess.get().organisations()).isEmpty();
+        verify(resolver, times(0)).resolve(any());
+    }
+
+    @Test
+    void resolversWithoutACacheHaveNothingToEvict() {
+        UserAccessResolver withoutCache = jwt -> UserAccess.none("user");
+
+        assertThatCode(() -> withoutCache.evict(TestJwts.jwt(Map.of("sub", "user")))).doesNotThrowAnyException();
     }
 
 }

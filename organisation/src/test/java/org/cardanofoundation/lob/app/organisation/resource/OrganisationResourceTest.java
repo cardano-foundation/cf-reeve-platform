@@ -201,6 +201,24 @@ class OrganisationResourceTest {
         ResponseEntity<?> responseEntity = organisationResource.organisationUpdate("123", request);
         assertEquals(200, responseEntity.getStatusCode().value());
         assertEquals(view, responseEntity.getBody());
+        verify(organisationAccessProvisioner, never()).organisationRenamed(anyString(), anyString());
+    }
+
+    @Test
+    void organisationUpdate_newNameRenamesTheKeycloakGroup() {
+        OrganisationUpdate request = mock(OrganisationUpdate.class);
+        Organisation org = mock(Organisation.class);
+        OrganisationView view = mock(OrganisationView.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("123")).thenReturn(true);
+        when(organisationService.findById("123")).thenReturn(Optional.of(org));
+        when(organisationService.updateOrganisation(org, request)).thenReturn(Optional.of(org));
+        when(organisationService.getOrganisationView(org)).thenReturn(view);
+        when(request.getName()).thenReturn("New Name");
+        when(view.getName()).thenReturn("New Name");
+
+        ResponseEntity<?> responseEntity = organisationResource.organisationUpdate("123", request);
+        assertEquals(200, responseEntity.getStatusCode().value());
+        verify(organisationAccessProvisioner).organisationRenamed("123", "New Name");
     }
 
     @Test

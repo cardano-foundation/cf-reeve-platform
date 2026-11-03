@@ -20,12 +20,13 @@ import org.cardanofoundation.lob.app.support.security.access.KeycloakAdminClient
 /**
  * Keycloak is the source of truth for who can do what in which organisation:
  * <ul>
- *     <li>an organisation is a group {@code /organisations/<organisationId>}; its {@code modules} attribute lists the
- *     enabled modules (missing attribute = every module enabled)</li>
+ *     <li>an organisation is a group under {@code /organisations}, named after the organisation; its {@code organisationId}
+ *     attribute holds the organisation id (a group without it gives no access), so renaming the group changes nothing else,
+ *     and its {@code modules} attribute lists the enabled modules (missing attribute = every module enabled)</li>
  *     <li>being in any group under it makes the user a member of that organisation</li>
  *     <li>the user gets the realm roles (and permissions) mapped to the groups they are in <b>and to their parent groups
- *     up to the organisation group</b>, so a role mapped on {@code /organisations/<organisationId>} (org_member) applies to
- *     every member, and roles of e.g. {@code /organisations/<organisationId>/transactions/reviewer} only in that organisation</li>
+ *     up to the organisation group</b>, so a role mapped on {@code /organisations/<name>} (org_member) applies to
+ *     every member, and roles of e.g. {@code /organisations/<name>/transactions/reviewer} only in that organisation</li>
  *     <li>a permission is a client role of the permissions client ({@code reeve-api}), a role is a realm role composed of
  *     permissions and/or other roles</li>
  * </ul>
@@ -118,6 +119,7 @@ public class KeycloakUserAccessResolver implements UserAccessResolver {
 
         Map<String, Set<String>> rolesByOrganisation = new LinkedHashMap<>();
         Map<String, Set<String>> directPermissionsByOrganisation = new LinkedHashMap<>();
+        Map<String, GroupNode> organisationGroups = new LinkedHashMap<>();
         Set<String> platformPermissions = new LinkedHashSet<>();
 
         for (GroupRef group : keycloakAdminClient.userGroups(userId)) {
@@ -125,7 +127,16 @@ public class KeycloakUserAccessResolver implements UserAccessResolver {
             if (!segments.isEmpty() && segments.get(0).equals(permissionCatalogue.getPlatformGroup())) {
                 addPlatformGroup(group, permissionsOfRole, platformPermissions);
             } else if (segments.size() >= 2 && segments.get(0).equals(properties.getOrganisationsGroup())) {
-                String organisationId = segments.get(1);
+                String organisationPath = groupPath(segments.subList(0, 2));
+                groupsByPath = treeContaining(organisationPath, groupsByPath);
+                GroupNode organisationGroup = groupsByPath.get(organisationPath);
+                Optional<String> organisationIdAttribute = Optional.ofNullable(organisationGroup).flatMap(GroupNode::organisationId);
+                if (organisationIdAttribute.isEmpty()) {
+                    log.warn("Group {} has no {} attribute, it gives user {} no access", organisationPath, KeycloakAdminClient.ORGANISATION_ID_ATTRIBUTE, username);
+                    continue;
+                }
+                String organisationId = organisationIdAttribute.get();
+                organisationGroups.put(organisationId, organisationGroup);
                 addOrganisationGroup(group, segments, groupsByPath, permissionsOfRole,
                         rolesByOrganisation.computeIfAbsent(organisationId, id -> new LinkedHashSet<>()),
                         directPermissionsByOrganisation.computeIfAbsent(organisationId, id -> new LinkedHashSet<>()));
@@ -136,7 +147,7 @@ public class KeycloakUserAccessResolver implements UserAccessResolver {
         rolesByOrganisation.forEach((organisationId, roles) -> {
             Set<String> granted = new LinkedHashSet<>(directPermissionsByOrganisation.getOrDefault(organisationId, Set.of()));
             roles.forEach(role -> granted.addAll(permissionsOfRole.getOrDefault(role, Set.of())));
-            Set<String> modules = enabledModules(groupsByPath.get(groupPath(List.of(properties.getOrganisationsGroup(), organisationId))));
+            Set<String> modules = enabledModules(organisationGroups.get(organisationId));
             organisations.put(organisationId, new OrganisationAccess(organisationId, roles, modules, permissionCatalogue.filterByModules(granted, modules)));
         });
         return new UserAccess(username, organisations, platformPermissions);
@@ -169,6 +180,17 @@ public class KeycloakUserAccessResolver implements UserAccessResolver {
 
     private static String groupPath(List<String> segments) {
         return PATH_SEPARATOR + String.join(PATH_SEPARATOR, segments);
+    }
+
+    /**
+     * A user's group that isn't in the cached tree was just created or renamed: load the tree again.
+     */
+    private Map<String, GroupNode> treeContaining(String path, Map<String, GroupNode> groupsByPath) {
+        if (groupsByPath.containsKey(path)) {
+            return groupsByPath;
+        }
+        organisationTree.evict(ALL);
+        return organisationTree.get(ALL, key -> loadOrganisationTree());
     }
 
     private Map<String, GroupNode> loadOrganisationTree() {

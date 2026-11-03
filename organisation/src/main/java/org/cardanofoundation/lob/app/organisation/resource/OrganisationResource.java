@@ -213,6 +213,10 @@ public class OrganisationResource {
             return ResponseEntity.status(issue.getStatus()).body(issue);
         }
 
+        if (organisationUpdate.getName() != null) {
+            organisationAccessProvisioner.organisationRenamed(orgId, organisation.get().getName());
+        }
+
         return ResponseEntity.ok().body(organisation.get());
 
 

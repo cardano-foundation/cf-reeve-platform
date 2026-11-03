@@ -31,7 +31,13 @@ import com.fasterxml.jackson.databind.node.MissingNode;
 @Slf4j
 public class KeycloakAdminClient {
 
+    /**
+     * Attribute of an organisation group holding the organisation id. The group name is only a readable label.
+     */
+    public static final String ORGANISATION_ID_ATTRIBUTE = "organisationId";
+
     private static final int MAX_RESULTS = 10_000;
+    private static final String CHILDREN_WITH_ATTRIBUTES = "/groups/{groupId}/children?briefRepresentation=false&first=0&max=" + MAX_RESULTS;
 
     public record GroupRef(String id, String name, String path) {
     }
@@ -40,6 +46,17 @@ public class KeycloakAdminClient {
      * A group somewhere under the organisations group.
      */
     public record GroupNode(String id, String path, Map<String, List<String>> attributes) {
+
+        public String name() {
+            return path.substring(path.lastIndexOf('/') + 1);
+        }
+
+        public Optional<String> organisationId() {
+            return attributes.getOrDefault(ORGANISATION_ID_ATTRIBUTE, List.of()).stream()
+                    .filter(value -> !value.isBlank())
+                    .findFirst();
+        }
+
     }
 
     private record AccessToken(String value, Instant expiresAt) {
@@ -138,20 +155,37 @@ public class KeycloakAdminClient {
         return nodes;
     }
 
+    /**
+     * The organisation groups only (direct children of the organisations group), with attributes.
+     */
+    public List<GroupNode> organisationGroups() {
+        Optional<String> parentId = findGroupIdByPath(properties.getOrganisationsGroup());
+        if (parentId.isEmpty()) {
+            return List.of();
+        }
+        List<GroupNode> nodes = new ArrayList<>();
+        get(CHILDREN_WITH_ATTRIBUTES, parentId.get()).forEach(group -> nodes.add(groupNode(group)));
+        return nodes;
+    }
+
     private void collectChildren(String groupId, List<GroupNode> nodes) {
-        for (JsonNode group : get("/groups/{groupId}/children?briefRepresentation=false&first=0&max=" + MAX_RESULTS, groupId)) {
-            Map<String, List<String>> attributes = new LinkedHashMap<>();
-            group.path("attributes").properties().forEach(attribute -> {
-                List<String> values = new ArrayList<>();
-                attribute.getValue().forEach(value -> values.add(value.asText()));
-                attributes.put(attribute.getKey(), values);
-            });
-            String id = group.path("id").asText();
-            nodes.add(new GroupNode(id, group.path("path").asText(), attributes));
+        for (JsonNode group : get(CHILDREN_WITH_ATTRIBUTES, groupId)) {
+            GroupNode node = groupNode(group);
+            nodes.add(node);
             if (group.path("subGroupCount").asInt(1) > 0) {
-                collectChildren(id, nodes);
+                collectChildren(node.id(), nodes);
             }
         }
+    }
+
+    private static GroupNode groupNode(JsonNode group) {
+        Map<String, List<String>> attributes = new LinkedHashMap<>();
+        group.path("attributes").properties().forEach(attribute -> {
+            List<String> values = new ArrayList<>();
+            attribute.getValue().forEach(value -> values.add(value.asText()));
+            attributes.put(attribute.getKey(), values);
+        });
+        return new GroupNode(group.path("id").asText(), group.path("path").asText(), attributes);
     }
 
     public List<GroupRef> childGroups(String groupId) {
@@ -189,6 +223,16 @@ public class KeycloakAdminClient {
                 .map(GroupRef::id)
                 .findFirst()
                 .orElseThrow());
+    }
+
+    public void renameGroup(GroupNode group, String name) {
+        restClient.put()
+                .uri(adminPath("/groups/{groupId}"), group.id())
+                .headers(headers -> headers.setBearerAuth(token()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("name", name, "attributes", group.attributes()))
+                .retrieve()
+                .toBodilessEntity();
     }
 
     public void assignRealmRoleToGroup(String groupId, String roleName) {
