@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
+import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 
@@ -42,13 +43,14 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.utils.PageableFie
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
+import org.cardanofoundation.lob.app.support.security.OrgAccessDenied;
 
 @RestController
 @RequestMapping("/api/v1/extraction")
 @CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
 @Slf4j
-@PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAuditorRole())")
 public class ExtractionController {
 
         private final ExtractionItemService extractionItemService;
@@ -56,6 +58,7 @@ public class ExtractionController {
         private final AccountingCorePresentationViewService accountingCorePresentationService;
         private final ObjectMapper objectMapper;
         private final JpaSortFieldValidator jpaSortFieldValidator;
+        private final KeycloakSecurityHelper keycloakSecurityHelper;
 
         @Tag(name = "Extraction", description = "Extraction search")
         @PostMapping(value = "/search", produces = APPLICATION_JSON_VALUE,
@@ -65,6 +68,7 @@ public class ExtractionController {
                                         mediaType = APPLICATION_JSON_VALUE,
                                         array = @ArraySchema(schema = @Schema(
                                                         implementation = ExtractionTransactionItemView.class)))})})
+        @PreAuthorize("@permissions.can('data_explorer', 'search_view')")
         public ResponseEntity<?> transactionSearch(
                         @Valid @RequestBody ExtractionTransactionsRequest transactionsRequest,
                         @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
@@ -96,11 +100,16 @@ public class ExtractionController {
                                         schema = @Schema(
                                                         example = "{\"event\": \"EXTRACTION\",\"message\":\"We have received your extraction request now. Please review imported transactions from the batch list.\"}"))},
                                         responseCode = "202")})
+        @PreAuthorize("@permissions.can('transactions', 'import')")
         public ResponseEntity<?> extractionTrigger(@Valid @RequestBody ExtractionRequest body) {
                 return extractTriggerProcessing(body);
         }
 
         private ResponseEntity<?> extractTriggerProcessing(ExtractionRequest body) {
+                // The multipart variant bypasses OrganisationCheckInterceptor, so check access here for both.
+                if (!keycloakSecurityHelper.canUserAccessOrg(body.getOrganisationId())) {
+                        return OrgAccessDenied.response();
+                }
                 Optional<Organisation> orgM = organisationPublicApi
                                 .findByOrganisationId(body.getOrganisationId());
 
@@ -147,6 +156,7 @@ public class ExtractionController {
                                         schema = @Schema(
                                                         example = "{\"event\": \"EXTRACTION\",\"message\":\"We have received your extraction request now. Please review imported transactions from the batch list.\"}"))},
                                         responseCode = "202")})
+        @PreAuthorize("@permissions.can('transactions', 'import')")
         public ResponseEntity<?> extractionTriggerForm(@ModelAttribute ExtractionRequest body) {
                 return extractTriggerProcessing(body);
         }
@@ -158,6 +168,7 @@ public class ExtractionController {
                         content = {@Content(mediaType = APPLICATION_JSON_VALUE, schema = @Schema(
                                         implementation = ExtractionValidationResponse.class))},
                         responseCode = "202")})
+        @PreAuthorize("@permissions.can('transactions', 'import')")
         public ResponseEntity<ExtractionValidationResponse> extractionValidation(
                         @Valid @RequestBody ExtractionRequest body) {
                 return extractionValidationProcessing(body);
@@ -165,6 +176,10 @@ public class ExtractionController {
 
         private ResponseEntity<ExtractionValidationResponse> extractionValidationProcessing(
                         ExtractionRequest body) {
+                if (!keycloakSecurityHelper.canUserAccessOrg(body.getOrganisationId())) {
+                        return ResponseEntity.status(UNAUTHORIZED.value())
+                                        .body(new ExtractionValidationResponse(false, List.of(OrgAccessDenied.problem())));
+                }
                 Either<List<ProblemDetail>, Void> extractionValidation =
                                 accountingCorePresentationService.extractionValidation(body);
                 if (extractionValidation.isLeft()) {
@@ -184,6 +199,7 @@ public class ExtractionController {
                         content = {@Content(mediaType = APPLICATION_JSON_VALUE, schema = @Schema(
                                         implementation = ExtractionValidationResponse.class))},
                         responseCode = "202")})
+        @PreAuthorize("@permissions.can('transactions', 'import')")
         public ResponseEntity<ExtractionValidationResponse> extractionValidationForm(
                         @ModelAttribute ExtractionRequest body) {
                 return extractionValidationProcessing(body);

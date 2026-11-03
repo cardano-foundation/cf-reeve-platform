@@ -29,8 +29,13 @@ public class ProjectMilestoneCsvLine {
     @CsvBindByName(column = "Project Title")
     private String projectTitle;
 
-    @CsvBindByName(column = "Funding ID", profiles = "optional")
-    private String fundingId;
+    /**
+     * The project's permanent identifier (see {@code ProjectEntity#proId}) — the only key an existing
+     * root project is matched by ({@link #projectTitle} is just the value to write). Mandatory on the
+     * row carrying the root's columns, for an update as well as a create.
+     */
+    @CsvBindByName(column = "Project ID", profiles = "optional")
+    private String projectId;
 
     @CsvBindByName(column = "Total Amount", profiles = "optional")
     private String totalAmount;
@@ -41,17 +46,22 @@ public class ProjectMilestoneCsvLine {
     @CsvBindByName(column = "Sub Project Title", profiles = "optional")
     private String subProjectTitle;
 
-    @CsvBindByName(column = "Sub Funding ID", profiles = "optional")
-    private String subFundingId;
+    /**
+     * The sub-project's permanent identifier — the only key an existing sub-project is matched by. Blank
+     * means "create a new sub-project" (proId auto-assigned); it never falls back to matching by title.
+     */
+    @CsvBindByName(column = "Sub Project ID", profiles = "optional")
+    private String subProjectId;
 
     @CsvBindByName(column = "Sub Total Amount", profiles = "optional")
     private String subTotalAmount;
 
-    @CsvBindByName(column = "Sub Currency", profiles = "optional")
-    private String subCurrency;
-
     @CsvBindByName(column = "Milestone Title", profiles = "optional")
     private String milestoneTitle;
+
+    /** See {@link #subProjectId} — same semantics, for the milestone this row carries. */
+    @CsvBindByName(column = "Milestone ID", profiles = "optional")
+    private String milestoneId;
 
     @CsvBindByName(column = "Milestone Amount", profiles = "optional")
     private String milestoneAmount;
@@ -65,11 +75,33 @@ public class ProjectMilestoneCsvLine {
 
     /** Whether this row carries any of the root project's own creation/update columns. */
     public boolean hasRootProjectData() {
-        return notBlank(fundingId) || notBlank(totalAmount) || notBlank(currency);
+        return notBlank(totalAmount) || notBlank(currency);
     }
 
     public boolean hasMilestone() {
         return milestoneTitle != null && !milestoneTitle.isBlank();
+    }
+
+    /**
+     * True when this row carries a sub-project amount with no sub-project title to attach it to —
+     * either the row's own {@code Sub Project Title} cell was left blank while {@code Sub Total
+     * Amount} was filled in, or (less obviously) the {@code Sub Project Title} column is missing
+     * from the file's header entirely, which binds {@link #subProjectTitle} to {@code null} for
+     * every row without opencsv raising any error (it's an {@code optional} column so a fully
+     * absent header doesn't fail {@code CsvParser}'s required-headers check either). Either way the
+     * amount can't be silently attached to the root project instead — it names a sub-project.
+     */
+    public boolean hasOrphanedSubProjectData() {
+        return !hasSubProject() && notBlank(subTotalAmount);
+    }
+
+    /**
+     * Same idea as {@link #hasOrphanedSubProjectData()} but for a milestone: an amount and/or date
+     * present with no {@code Milestone Title} to create/update, whether that's a blank cell on this
+     * row or the whole column missing from the header.
+     */
+    public boolean hasOrphanedMilestoneData() {
+        return !hasMilestone() && (notBlank(milestoneAmount) || notBlank(milestoneDate));
     }
 
     private static boolean notBlank(String s) {

@@ -39,6 +39,12 @@ public class ReportTemplateDto extends BaseRequest {
     @NotNull(message = "Data mode must not be null")
     private String dataMode;
 
+    // Not @NotNull: checked by AccountingRegimeResolver on create, and on update only when it changes, so a
+    // template created before this field existed (null regime) can still be saved unchanged
+    @Schema(description = "Accounting regime: the label of one of the organisation's active accounting regimes, or \"Not applicable\". "
+            + "Required on create; on update an unchanged value is accepted as-is.", example = "IFRS", required = true)
+    private String accountingRegime;
+
     @Schema(description = "Template description", example = "Standard quarterly financial report with balance sheet", nullable = true)
     private String description;
 

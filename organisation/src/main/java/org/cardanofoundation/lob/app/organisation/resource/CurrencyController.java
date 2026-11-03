@@ -35,6 +35,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.cardanofoundation.lob.app.organisation.domain.request.CurrencyUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.CurrencyView;
 import org.cardanofoundation.lob.app.organisation.service.CurrencyService;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
+import org.cardanofoundation.lob.app.support.security.OrgAccessDenied;
 
 @RestController
 @RequestMapping("/api/v1/organisations")
@@ -44,6 +46,7 @@ import org.cardanofoundation.lob.app.organisation.service.CurrencyService;
 public class CurrencyController {
 
     private final CurrencyService currencyService;
+    private final KeycloakSecurityHelper keycloakSecurityHelper;
 
     @Operation(description = "Get all currencies", responses = {
             @ApiResponse(content =
@@ -55,6 +58,9 @@ public class CurrencyController {
                                               @RequestParam(value = "code", required = false) String code,
                                               @RequestParam(value = "isoCode", required = false) List<String> isoCodes,
                                               @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         return currencyService.getAllCurrencies(orgId, code, isoCodes, pageable).fold(
                 problem -> ResponseEntity.status(problem.getStatus()).body(problem),
                 ResponseEntity::ok);
@@ -67,6 +73,9 @@ public class CurrencyController {
     })
     @GetMapping(value = "/{orgId}/currencies/{customerCode}", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<CurrencyView> getCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @PathVariable("customerCode") @Parameter(example = "CHF") String customerCode) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         return currencyService.getCurrency(orgId, customerCode)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
@@ -78,8 +87,11 @@ public class CurrencyController {
             ),
     })
     @PostMapping(value = "/{orgId}/currencies", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('currencies', 'create')")
     public ResponseEntity<CurrencyView> insertCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CurrencyUpdate currencyUpdate) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         CurrencyView currencyView = currencyService.insertCurrency(orgId, currencyUpdate, false);
         return currencyView.getError().map(error -> ResponseEntity.status(error.getStatus())
                         .body(currencyView))
@@ -92,8 +104,11 @@ public class CurrencyController {
             ),
     })
     @PutMapping(value = "/{orgId}/currencies", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('currencies', 'edit')")
     public ResponseEntity<CurrencyView> updateCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CurrencyUpdate currencyUpdate) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         CurrencyView currencyView = currencyService.updateCurrency(orgId, currencyUpdate);
         return currencyView.getError().map(error -> ResponseEntity.status(error.getStatus())
                         .body(currencyView))
@@ -106,8 +121,11 @@ public class CurrencyController {
             ),
     })
     @PostMapping(value = "/{orgId}/currencies", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('currencies', 'create')")
     public ResponseEntity<?> insertCurrenciesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam(value = "file") MultipartFile file) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         return currencyService.insertViaCsv(orgId, file).fold(
                 problem -> ResponseEntity.status(HttpStatus.BAD_REQUEST.value()).body(problem),
                 ResponseEntity::ok
@@ -123,10 +141,13 @@ public class CurrencyController {
     )
     @GetMapping(value = "/{orgId}/currencies/download", produces = "text/csv"
     )
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('export_setup_data', 'download')")
     public ResponseEntity<StreamingResponseBody> downloadCurrenciesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                                        @RequestParam(value = "code", required = false) String code,
                                                                        @RequestParam(value = "isoCode", required = false) List<String> isoCodes) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         StreamingResponseBody responseBody = outputStream -> currencyService.downloadCsv(orgId, code, isoCodes, outputStream);
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=\"currencies_%s.csv\"".formatted(orgId))

@@ -101,6 +101,10 @@ public class ReportEntity extends CommonEntity {
     private LocalDateTime ledgerDispatchDate;
     private String publishedBy;
 
+    // Copied from the report template on creation, and re-synced at publish time so a
+    // published report's regime disclosure stays fixed even if the template is edited afterwards.
+    private String accountingRegime;
+
     @NotAudited
     @ManyToMany
     @JoinTable(

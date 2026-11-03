@@ -1,6 +1,6 @@
-# UTXO address-balance monitoring: only unspent UTXOs whose ownerAddr is in this allow-list are kept and
-# written to address_utxo. Comma- or whitespace-separated. Empty = no filtering (all unspent UTXOs are
-# written), which is the safe bring-up default. Override via env LOB_UTXO_FILTER_ADDRESSES.
+# Address balance monitor: allow-list of addresses whose unspent UTXOs are stored in address_utxo
+# (everything else is dropped), then published as cardano_address_balance. Comma-separated only.
+# Empty = nothing monitored (no series). Read at startup, so changing it needs a restart.
 lob.utxo.filter.addresses: ${LOB_UTXO_FILTER_ADDRESSES:}
 
 store:

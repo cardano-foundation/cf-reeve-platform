@@ -23,6 +23,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneUpdateRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.CascadeDeletionView;
 import org.cardanofoundation.lob.app.funding.domain.view.MilestoneView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
 import org.cardanofoundation.lob.app.funding.service.MilestoneService;
@@ -42,11 +43,12 @@ public class MilestoneController {
                     schema = @Schema(implementation = PagedResponse.class))})
     })
     @GetMapping(value = "/projects/{projectId}/milestones", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'view')")
     public ResponseEntity<PagedResponse<MilestoneView>> listMilestones(
             @PathVariable String projectId,
+            @RequestParam String organisationId,
             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-        return Responses.respond(milestoneService.listMilestones(projectId, pageable), HttpStatus.OK);
+        return Responses.respond(milestoneService.listMilestones(projectId, organisationId, pageable), HttpStatus.OK);
     }
 
     @Operation(description = "Get a single milestone", responses = {
@@ -54,11 +56,12 @@ public class MilestoneController {
                     schema = @Schema(implementation = MilestoneView.class))})
     })
     @GetMapping(value = "/projects/{projectId}/milestones/{milestoneId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'view')")
     public ResponseEntity<MilestoneView> getMilestone(
             @PathVariable String projectId,
-            @PathVariable String milestoneId) {
-        return Responses.respond(milestoneService.getMilestone(projectId, milestoneId), HttpStatus.OK);
+            @PathVariable String milestoneId,
+            @RequestParam String organisationId) {
+        return Responses.respond(milestoneService.getMilestone(projectId, milestoneId, organisationId), HttpStatus.OK);
     }
 
     @Operation(description = "Create a milestone for a project", responses = {
@@ -66,11 +69,12 @@ public class MilestoneController {
                     schema = @Schema(implementation = MilestoneView.class))})
     })
     @PostMapping(value = "/projects/{projectId}/milestones", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'create_project')")
     public ResponseEntity<MilestoneView> createMilestone(
             @PathVariable String projectId,
+            @RequestParam String organisationId,
             @Valid @RequestBody MilestoneCreateRequest request) {
-        return Responses.respond(milestoneService.createMilestone(projectId, request), HttpStatus.CREATED);
+        return Responses.respond(milestoneService.createMilestone(projectId, organisationId, request), HttpStatus.CREATED);
     }
 
     @Operation(description = "Update a milestone", responses = {
@@ -78,25 +82,30 @@ public class MilestoneController {
                     schema = @Schema(implementation = MilestoneView.class))})
     })
     @PutMapping(value = "/projects/{projectId}/milestones/{milestoneId}", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'create_project')")
     public ResponseEntity<MilestoneView> updateMilestone(
             @PathVariable String projectId,
             @PathVariable String milestoneId,
+            @RequestParam String organisationId,
             @Valid @RequestBody MilestoneUpdateRequest request) {
-        return Responses.respond(milestoneService.updateMilestone(projectId, milestoneId, request), HttpStatus.OK);
+        return Responses.respond(milestoneService.updateMilestone(projectId, milestoneId, organisationId, request), HttpStatus.OK);
     }
 
-    @Operation(description = "Delete a milestone", responses = {
-            @ApiResponse(responseCode = "204"),
+    @Operation(description = "Delete a milestone. On success, lists any non-published events that had an "
+            + "allocation removed by this delete and were flagged ERROR as a result (LOB-2365 follow-up) — "
+            + "the events themselves are not deleted.", responses = {
+            @ApiResponse(responseCode = "200", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+                    schema = @Schema(implementation = CascadeDeletionView.class))}),
             @ApiResponse(responseCode = "404", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
                     schema = @Schema(implementation = ProblemDetail.class))})
     })
     @DeleteMapping(value = "/projects/{projectId}/milestones/{milestoneId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<ProblemDetail> deleteMilestone(
+    @PreAuthorize("@permissions.can('project_management', 'delete')")
+    public ResponseEntity<CascadeDeletionView> deleteMilestone(
             @PathVariable String projectId,
-            @PathVariable String milestoneId) {
-        return Responses.respondDelete(milestoneService.deleteMilestone(projectId, milestoneId));
+            @PathVariable String milestoneId,
+            @RequestParam String organisationId) {
+        return Responses.respond(milestoneService.deleteMilestone(projectId, milestoneId, organisationId), HttpStatus.OK);
     }
 
 }

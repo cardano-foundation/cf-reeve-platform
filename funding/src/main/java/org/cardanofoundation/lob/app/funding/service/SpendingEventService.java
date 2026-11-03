@@ -1,8 +1,10 @@
 package org.cardanofoundation.lob.app.funding.service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -12,16 +14,23 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import io.vavr.control.Either;
 
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.funding.domain.entity.*;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
@@ -47,41 +56,70 @@ public class SpendingEventService {
     private final ProjectStructureService projectStructureService;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
     private final OrganisationPublicApiIF organisationPublicApi;
+    private final PlatformTransactionManager transactionManager;
 
     // -------------------------------------------------------------------------
     // View-returning API (used by the controller — carries the ProblemDetail)
     // -------------------------------------------------------------------------
 
-    public PagedResponse<SpendingEventView> listEvents(String organisationId, Optional<EventStatus> status,
-            Optional<EventType> eventType, Pageable pageable) {
+    public PagedResponse<SpendingEventView> listEvents(String organisationId, SpendingEventFilterRequest filter,
+            Pageable pageable) {
         if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
             return PagedResponse.error(Problems.unauthorized());
         }
         if (organisationPublicApi.findByOrganisationId(organisationId).isEmpty()) {
             return PagedResponse.error(Problems.organisationNotFound(organisationId));
         }
-        return PagedResponse.of(findByOrganisationIdAndFilter(organisationId, status, eventType, pageable), this::toView);
+        Optional<ProblemDetail> invalidFilter = validateFilter(filter);
+        if (invalidFilter.isPresent()) {
+            return PagedResponse.error(invalidFilter.get());
+        }
+        return PagedResponse.of(findByOrganisationIdAndFilter(organisationId, filter, pageable), this::toView);
     }
 
-    public PagedResponse<SpendingEventView> listEventsByProject(String projectId, Optional<EventStatus> status,
-            Optional<EventType> eventType, Pageable pageable) {
-        Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
-        if (projectM.isEmpty()) {
-            return PagedResponse.error(Problems.notFound("Project not found: " + projectId, ErrorTitleConstants.PROJECT_NOT_FOUND));
+    /** Rejects ranges that can never match: inverted date/amount ranges and negative amount bounds. */
+    private static Optional<ProblemDetail> validateFilter(SpendingEventFilterRequest filter) {
+        if (filter.getDateFrom() != null && filter.getDateTo() != null && filter.getDateFrom().isAfter(filter.getDateTo())) {
+            return Optional.of(Problems.badRequest(
+                    "Event date 'from' (%s) must not be after 'to' (%s).".formatted(filter.getDateFrom(), filter.getDateTo()),
+                    ErrorTitleConstants.EVENT_FILTER_INVALID));
         }
-        if (!keycloakSecurityHelper.canUserAccessOrg(projectM.get().getOrganisationId())) {
+        if (isNegative(filter.getMinAmount()) || isNegative(filter.getMaxAmount())) {
+            return Optional.of(Problems.badRequest(
+                    "Amount filters must not be negative.", ErrorTitleConstants.EVENT_FILTER_INVALID));
+        }
+        if (filter.getMinAmount() != null && filter.getMaxAmount() != null
+                && filter.getMinAmount().compareTo(filter.getMaxAmount()) > 0) {
+            return Optional.of(Problems.badRequest(
+                    "Minimum amount (%s) must not be greater than maximum amount (%s).".formatted(
+                            filter.getMinAmount().toPlainString(), filter.getMaxAmount().toPlainString()),
+                    ErrorTitleConstants.EVENT_FILTER_INVALID));
+        }
+        return Optional.empty();
+    }
+
+    private static boolean isNegative(BigDecimal amount) {
+        return amount != null && amount.signum() < 0;
+    }
+
+    public PagedResponse<SpendingEventView> listEventsByProject(String projectId, String organisationId, Optional<EventStatus> status,
+            Optional<EventType> eventType, Pageable pageable) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
             return PagedResponse.error(Problems.unauthorized());
+        }
+        if (projectRepository.findByIdAndOrganisationId(projectId, organisationId).isEmpty()) {
+            return PagedResponse.error(Problems.notFound("Project not found: " + projectId, ErrorTitleConstants.PROJECT_NOT_FOUND));
         }
         return PagedResponse.of(findByProjectIdAndFilter(projectId, status, eventType, pageable), this::toView);
     }
 
-    public SpendingEventView getEvent(String eventId) {
-        Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);
+    public SpendingEventView getEvent(String eventId, String organisationId) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return SpendingEventView.error(Problems.unauthorized());
+        }
+        Optional<FundingEventEntity> eventM = fundingEventRepository.findByIdAndOrganisationId(eventId, organisationId).stream().findFirst();
         if (eventM.isEmpty()) {
             return SpendingEventView.error(Problems.eventNotFound(eventId));
-        }
-        if (!keycloakSecurityHelper.canUserAccessOrg(eventM.get().getOrganisationId())) {
-            return SpendingEventView.error(Problems.unauthorized());
         }
         return toView(eventM.get());
     }
@@ -93,7 +131,7 @@ public class SpendingEventService {
 
     @Transactional
     public SpendingEventView updateEvent(String eventId, SpendingEventCreateRequest request) {
-        Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId);
+        Optional<ProblemDetail> denied = denyIfCallerCannotAccessEvent(eventId);
         if (denied.isPresent()) {
             return SpendingEventView.error(denied.get());
         }
@@ -114,25 +152,114 @@ public class SpendingEventService {
     }
 
     @Transactional
-    public SpendingEventView publishEvent(String eventId) {
-        Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId);
-        if (denied.isPresent()) {
-            return SpendingEventView.error(denied.get());
+    public SpendingEventView publishEvent(String eventId, String organisationId) {
+        // The org check needs no DB read, so it can run first; the locked read must still be the first
+        // load of this event in the transaction (no denyIfNoEventAccess beforehand): an already-managed
+        // entity is not refreshed by the locking query, so a concurrent publish would be judged against
+        // stale, pre-commit state. An event of another organisation is reported as not found.
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return SpendingEventView.error(Problems.unauthorized());
         }
-        return publish(eventId).fold(SpendingEventView::error, this::toView);
+        Either<ProblemDetail, FundingEventEntity> eventOrError = findEventForUpdateOrError(eventId)
+                .filterOrElse(event -> organisationId.equals(event.getOrganisationId()),
+                        ignored -> Problems.eventNotFound(eventId));
+        if (eventOrError.isLeft()) {
+            return SpendingEventView.error(eventOrError.getLeft());
+        }
+        return publish(eventOrError.get()).fold(SpendingEventView::error, this::toView);
+    }
+
+    /**
+     * Publishes every listed event of this organisation that single-event publish would accept, and
+     * skips the rest with the problem single publish would have returned (LOB-2391). An event of another
+     * organisation is reported as not found, so the response doesn't reveal it exists. Duplicate ids
+     * are collapsed into one outcome, in request order.
+     *
+     * <p>Runs outside any transaction: each event is locked, published and committed in its own
+     * transaction, so its row lock is released straight away and an unexpected failure on one event
+     * (reported as {@code SPENDING_EVENT_PUBLISH_FAILED}) never undoes the events already published.
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public SpendingEventBulkPublishView publishEvents(String organisationId, List<String> eventIds) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return SpendingEventBulkPublishView.error(Problems.unauthorized());
+        }
+        if (organisationPublicApi.findByOrganisationId(organisationId).isEmpty()) {
+            return SpendingEventBulkPublishView.error(Problems.organisationNotFound(organisationId));
+        }
+
+        TransactionTemplate perEventTransaction = new TransactionTemplate(transactionManager);
+        perEventTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
+        List<SpendingEventBulkPublishView.Result> results = new ArrayList<>();
+        for (String eventId : new LinkedHashSet<>(eventIds)) {
+            try {
+                results.add(perEventTransaction.execute(status -> publishForBulk(organisationId, eventId)));
+            } catch (RuntimeException e) {
+                log.error("Bulk publish: unexpected failure publishing event {}", eventId, e);
+                results.add(SpendingEventBulkPublishView.Result.skipped(eventId, null, Problems.of(
+                        HttpStatus.INTERNAL_SERVER_ERROR, "Event could not be published: " + eventId,
+                        ErrorTitleConstants.SPENDING_EVENT_PUBLISH_FAILED)));
+            }
+        }
+        return SpendingEventBulkPublishView.success(results);
+    }
+
+    /** One bulk-publish item; runs inside its own transaction (see {@link #publishEvents}). */
+    private SpendingEventBulkPublishView.Result publishForBulk(String organisationId, String eventId) {
+        Either<ProblemDetail, FundingEventEntity> eventOrError = findEventForUpdateOrError(eventId)
+                .filterOrElse(event -> organisationId.equals(event.getOrganisationId()),
+                        ignored -> Problems.eventNotFound(eventId));
+        String fundingId = eventOrError.map(FundingEventEntity::getFundingId).getOrNull();
+        return eventOrError.flatMap(this::publish).fold(
+                problem -> SpendingEventBulkPublishView.Result.skipped(eventId, fundingId, problem),
+                published -> SpendingEventBulkPublishView.Result.published(eventId, fundingId));
     }
 
     @Transactional
-    public Optional<ProblemDetail> deleteEvent(String eventId) {
-        Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId);
+    public Optional<ProblemDetail> deleteEvent(String eventId, String organisationId) {
+        Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId, organisationId);
         if (denied.isPresent()) {
             return denied;
         }
         return delete(eventId).fold(Optional::of, ignored -> Optional.empty());
     }
 
-    /** 401 when the event exists and the caller cannot access its organisation; empty otherwise. */
-    private Optional<ProblemDetail> denyIfNoEventAccess(String eventId) {
+    /**
+     * Bulk-deletes every "orphan" event for this organisation — an {@code ERROR} event none of
+     * whose allocations points at an existing milestone (see {@link FundingEventRepository#findOrphanedEvents}) — so a
+     * human can clear them out in one action instead of finding and deleting each one individually
+     * (LOB-2365 follow-up). An {@code ERROR} event that still has at least one allocation to an existing
+     * milestone is never touched here; that one may still hold data worth fixing, so it stays for the normal
+     * event edit/delete flow.
+     */
+    @Transactional
+    public OrphanEventsCleanupView deleteOrphanedErrorEvents(String organisationId) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return OrphanEventsCleanupView.error(Problems.unauthorized());
+        }
+        if (organisationPublicApi.findByOrganisationId(organisationId).isEmpty()) {
+            return OrphanEventsCleanupView.error(Problems.organisationNotFound(organisationId));
+        }
+        List<FundingEventEntity> orphans = fundingEventRepository.findOrphanedEvents(organisationId, EventStatus.ERROR);
+        fundingEventRepository.deleteAll(orphans);
+        return OrphanEventsCleanupView.success(FundingCascadeDeleteService.toAffectedEventViews(orphans));
+    }
+
+    /** 401 when the caller cannot access the organisation, 404 when no event exists for that id within it. */
+    private Optional<ProblemDetail> denyIfNoEventAccess(String eventId, String organisationId) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return Optional.of(Problems.unauthorized());
+        }
+        if (fundingEventRepository.findByIdAndOrganisationId(eventId, organisationId).isEmpty()) {
+            return Optional.of(Problems.eventNotFound(eventId));
+        }
+        return Optional.empty();
+    }
+
+    /** 401 when the event exists and the caller cannot access its organisation; empty otherwise (used by update, whose
+     *  request body carries its own organisationId that is checked separately against the event's actual organisation). */
+    private Optional<ProblemDetail> denyIfCallerCannotAccessEvent(String eventId) {
         Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);
         if (eventM.isPresent() && !keycloakSecurityHelper.canUserAccessOrg(eventM.get().getOrganisationId())) {
             return Optional.of(Problems.unauthorized());
@@ -146,14 +273,28 @@ public class SpendingEventService {
 
     public Page<FundingEventEntity> findByOrganisationIdAndFilter(
             String organisationId,
-            Optional<EventStatus> status,
-            Optional<EventType> eventType,
+            SpendingEventFilterRequest filter,
             Pageable pageable) {
         return fundingEventRepository.findByOrganisationIdAndFilter(
                 organisationId,
-                status.orElse(null),
-                eventType.orElse(null),
+                emptyToNull(filter.getStatuses()),
+                emptyToNull(filter.getEventTypes()),
+                blankToNull(filter.getProjectTitle()),
+                blankToNull(filter.getCurrency()),
+                filter.getDateFrom(),
+                filter.getDateTo(),
+                filter.getMinAmount(),
+                filter.getMaxAmount(),
                 pageable);
+    }
+
+    // The repository query treats null as "filter off"; an empty list or blank string must mean the same.
+    private static <T> List<T> emptyToNull(List<T> values) {
+        return values == null || values.isEmpty() ? null : values;
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     public Page<FundingEventEntity> findByProjectIdAndFilter(
@@ -170,9 +311,19 @@ public class SpendingEventService {
 
     @Transactional
     public Either<ProblemDetail, FundingEventEntity> create(SpendingEventCreateRequest request) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(request.getOrganisationId())) {
+            return Either.left(Problems.unauthorized());
+        }
         FundingEventEntity event = toEntity(request);
         if (fundingEventRepository.existsById(event.getId())) {
-            return Either.left(Problems.conflict("Event already exists: %s".formatted(event.getId()),
+            // Named by the natural key that actually determines the id (see FundingEventEntity#id) —
+            // the id itself is an opaque hash, meaningless to a user reading the error.
+            String fundingHash = event.getFundingHash() == null ? "(none)" : event.getFundingHash();
+            String fundingEntity = event.getFundingEntity() == null ? "(none)" : event.getFundingEntity();
+            return Either.left(Problems.conflict(
+                    "An event with Funding ID %s, Type %s, Hash %s, Entity %s, Currency %s and Event Date %s already exists".formatted(
+                            event.getFundingId(), event.getEventType(), fundingHash, fundingEntity,
+                            event.getCurrencyRcy(), event.getEventDate()),
                     ErrorTitleConstants.SPENDING_EVENT_ALREADY_EXISTS));
         }
         return validateAndPersist(event, request);
@@ -185,8 +336,19 @@ public class SpendingEventService {
 
         FundingEventEntity event = eventOrError.get();
 
-        Optional<ProblemDetail> draftProblem = requireDraft(event, "Cannot update a published event: %s");
+        Optional<ProblemDetail> draftProblem = requireDraft(event, "Cannot update event with Funding ID %s: it is already published");
         if (draftProblem.isPresent()) return Either.left(draftProblem.get());
+
+        // An ERROR event (LOB-2365 — a project/milestone structural edit made its allocation no longer
+        // fit) is exactly what this update is meant to fix. Setting it back to DRAFT up front is safe
+        // even though validation hasn't run yet: every allocation is fully re-validated against the
+        // milestone's *current* amount below (see populateNode's FundingValidations.allocation call), so
+        // reaching the final saveAndFlush at all means the fix actually worked; if validation fails
+        // instead, updateEvent's rollbackAndError marks the whole transaction rollback-only, so this
+        // in-memory change (like the allocations already cleared just below) is discarded, not persisted.
+        if (event.getStatus() == EventStatus.ERROR) {
+            event.setStatus(EventStatus.DRAFT);
+        }
 
         // The event's identity — organisation and type — is fixed at creation; the update payload
         // must not silently target another organisation's projects or change the event's semantics.
@@ -219,11 +381,21 @@ public class SpendingEventService {
         Optional<ProblemDetail> entityProblem = FundingValidations.fundingEntity(event.getEventType(), event.getFundingEntity());
         if (entityProblem.isPresent()) return Either.left(entityProblem.get());
 
+        Optional<ProblemDetail> fundingIdProblem = fundingEventIdAvailable(event);
+        if (fundingIdProblem.isPresent()) return Either.left(fundingIdProblem.get());
+
+        Optional<ProblemDetail> eventDateRequiredProblem = FundingValidations.eventDateRequired(event.getEventDate());
+        if (eventDateRequiredProblem.isPresent()) return Either.left(eventDateRequiredProblem.get());
+
         Optional<ProblemDetail> eventDateProblem = FundingValidations.eventDateNotInFuture(event.getEventDate());
         if (eventDateProblem.isPresent()) return Either.left(eventDateProblem.get());
 
         Optional<ProblemDetail> spendProblem = validateEventSpendDetail(event);
         if (spendProblem.isPresent()) return Either.left(spendProblem.get());
+
+        Optional<ProblemDetail> spendAmountsProblem = FundingValidations.spendAmountsPositive(
+                event.getEventType(), event.getAmountFcy(), event.getFxRate());
+        if (spendAmountsProblem.isPresent()) return Either.left(spendAmountsProblem.get());
 
         Either<ProblemDetail, Void> allocResult = populateMilestoneAllocations(event, request.getAllocations(), request.getOrganisationId());
         if (allocResult.isLeft()) return Either.left(allocResult.getLeft());
@@ -231,13 +403,59 @@ public class SpendingEventService {
         recalculateTotalAmount(event);
         Optional<ProblemDetail> totalProblem = validateEventTotals(event);
         if (totalProblem.isPresent()) return Either.left(totalProblem.get());
-        return Either.right(fundingEventRepository.saveAndFlush(event));
+
+        try {
+            return Either.right(fundingEventRepository.saveAndFlush(event));
+        } catch (DataIntegrityViolationException e) {
+            // Last-resort safety net behind fundingEventIdAvailable's app-level check above — the
+            // event's id (see FundingEventEntity#id) is the table's primary key, so a race between two
+            // concurrent submissions that resolve to the exact same natural key surfaces as a
+            // pk_funding_event violation. Any other constraint violation is a genuine bug, not a
+            // handleable client error, so it is rethrown.
+            if (event.getEventType() == EventType.FUNDING && isDuplicateEventIdViolation(e)) {
+                return Either.left(Problems.fundingEventIdAlreadyUsed(event.getFundingId()));
+            }
+            throw e;
+        }
+    }
+
+    private static boolean isDuplicateEventIdViolation(DataIntegrityViolationException e) {
+        String message = String.valueOf(e.getMostSpecificCause().getMessage());
+        return message.contains("pk_funding_event");
+    }
+
+    /**
+     * A FUNDING event's identity is its full natural key — organisation, Funding ID, Funding Hash,
+     * Funding Entity, Currency and Event Date (see {@link FundingEventEntity#id}); if any one of
+     * those differs from every other FUNDING event, it is a distinct event, not a duplicate. Create
+     * already rejects an exact-key collision up front (see {@link #create}); this exists for {@link
+     * #update}, where the event's row keeps its original id while its natural-key fields can
+     * change, so a change that happens to land on another FUNDING event's exact key must still be
+     * caught — otherwise two different rows would describe the same real-world grant. Recomputing
+     * the candidate id from the event's (possibly just-changed) fields and checking for a
+     * <em>different</em> existing row with that id catches exactly that case; on create the
+     * candidate always equals the event's own not-yet-persisted id, so this is a no-op there.
+     */
+    private Optional<ProblemDetail> fundingEventIdAvailable(FundingEventEntity event) {
+        if (event.getEventType() != EventType.FUNDING) {
+            return Optional.empty();
+        }
+        String candidateId = FundingEventEntity.id(event.getOrganisationId(), event.getEventType(),
+                event.getFundingId(), event.getFundingHash(), event.getFundingEntity(), event.getCurrencyRcy(),
+                null, null, null, null, null, null, event.getEventDate());
+        boolean exists = !candidateId.equals(event.getId()) && fundingEventRepository.existsById(candidateId);
+        if (exists) {
+            return Optional.of(Problems.fundingEventIdAlreadyUsed(event.getFundingId()));
+        }
+        return Optional.empty();
     }
 
     /** Published events are immutable — returns a conflict built from {@code messageTemplate} otherwise empty. */
     private static Optional<ProblemDetail> requireDraft(FundingEventEntity event, String messageTemplate) {
         if (event.getStatus() == EventStatus.PUBLISHED) {
-            String message = messageTemplate.formatted(event.getId());
+            // Funding ID is the identifier the user actually recognises — event.getId() is an opaque
+            // internal hash that means nothing to someone reading the error (e.g. from a CSV re-upload).
+            String message = messageTemplate.formatted(event.getFundingId());
             log.warn(message);
             return Optional.of(Problems.conflict(message, ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED));
         }
@@ -270,15 +488,29 @@ public class SpendingEventService {
 
     @Transactional
     public Either<ProblemDetail, FundingEventEntity> publish(String eventId) {
-        Either<ProblemDetail, FundingEventEntity> eventOrError = findEventOrError(eventId);
-        if (eventOrError.isLeft()) return eventOrError;
+        return findEventForUpdateOrError(eventId).flatMap(this::publish);
+    }
 
-        FundingEventEntity event = eventOrError.get();
-        Optional<ProblemDetail> draftProblem = requireDraft(event, "Event is already published: %s");
+    /** Publish rules, applied to an event already row-locked via {@link FundingEventRepository#findByIdForUpdate}. */
+    private Either<ProblemDetail, FundingEventEntity> publish(FundingEventEntity event) {
+        Optional<ProblemDetail> draftProblem = requireDraft(event, "Event with Funding ID %s is already published");
         if (draftProblem.isPresent()) return Either.left(draftProblem.get());
+
+        // An ERROR event (LOB-2365) no longer fits the current project/milestone structure — publishing
+        // it as-is would push a mismatched allocation on-chain. It must be corrected via update() first
+        // (which re-validates it and clears the flag back to DRAFT) before it can ever be published.
+        if (event.getStatus() == EventStatus.ERROR) {
+            return Either.left(Problems.conflict(
+                    "Cannot publish event with Funding ID %s: it no longer fits the current project/milestone structure and must be corrected first"
+                            .formatted(event.getFundingId()),
+                    ErrorTitleConstants.SPENDING_EVENT_HAS_ERROR));
+        }
 
         event.setStatus(EventStatus.PUBLISHED);
         event.setLedgerDispatchApproved(true);
+        // a draft reverted after a failed on-chain publish (LOB-2380) still carries FAILED; the publish job only
+        // picks up NOT_DISPATCHED events
+        event.setLedgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED);
         return Either.right(fundingEventRepository.saveAndFlush(event));
     }
 
@@ -288,7 +520,7 @@ public class SpendingEventService {
         if (eventOrError.isLeft()) return Either.left(eventOrError.getLeft());
 
         FundingEventEntity event = eventOrError.get();
-        Optional<ProblemDetail> draftProblem = requireDraft(event, "Cannot delete a published event: %s");
+        Optional<ProblemDetail> draftProblem = requireDraft(event, "Cannot delete event with Funding ID %s: it is already published");
         if (draftProblem.isPresent()) return Either.left(draftProblem.get());
 
         fundingEventRepository.delete(event);
@@ -300,10 +532,17 @@ public class SpendingEventService {
     // -------------------------------------------------------------------------
 
     public SpendingEventView toView(FundingEventEntity event) {
-        List<EventProjectAllocationView> projViews = buildProjectAllocationViews(event.getId());
+        List<OrphanedAllocationView> orphans = buildOrphanedAllocationViews(event.getId());
+        List<EventProjectAllocationView> projViews = new ArrayList<>(buildProjectAllocationViews(event.getId()));
+        if (!orphans.isEmpty()) {
+            projViews.add(toDeletedMilestonesPlaceholder(event.getId(), orphans));
+        }
+        boolean overspend = projViews.stream().anyMatch(p -> p.isOverspend()
+                || p.getMilestoneAllocations().stream().anyMatch(EventMilestoneAllocationView::isOverspend));
 
         return SpendingEventView.builder()
                 .eventId(event.getId())
+                .overspend(overspend)
                 .organisationId(event.getOrganisationId())
                 .eventType(event.getEventType())
                 .status(event.getStatus())
@@ -312,6 +551,8 @@ public class SpendingEventService {
                 .currencyRcy(event.getCurrencyRcy())
                 .txHash(event.getTxHash())
                 .ledgerDispatchStatus(event.getLedgerDispatchStatus())
+                .lastFailureMessage(event.getLastFailureMessage())
+                .lastFailureAt(event.getLastFailureAt())
                 .fundingHash(event.getFundingHash())
                 .fundingEntity(event.getFundingEntity())
                 .eventDate(event.getEventDate())
@@ -324,6 +565,7 @@ public class SpendingEventService {
                 .hash(event.getHash())
                 .notes(event.getNotes())
                 .projectAllocations(projViews)
+                .orphanedAllocations(orphans)
                 .build();
     }
 
@@ -356,6 +598,15 @@ public class SpendingEventService {
     // Private helpers
     // -------------------------------------------------------------------------
 
+    private Either<ProblemDetail, FundingEventEntity> findEventForUpdateOrError(String eventId) {
+        Optional<FundingEventEntity> eventM = fundingEventRepository.findByIdForUpdate(eventId);
+        if (eventM.isEmpty()) {
+            log.warn("Event not found: {}", eventId);
+            return Either.left(Problems.eventNotFound(eventId));
+        }
+        return Either.right(eventM.get());
+    }
+
     private Either<ProblemDetail, FundingEventEntity> findEventOrError(String eventId) {
         Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);
         if (eventM.isEmpty()) {
@@ -368,17 +619,17 @@ public class SpendingEventService {
     /**
      * For each allocation request (project + milestones), resolves/creates the project and its
      * milestones, then adds a flat {@link EventMilestoneAllocationEntity} per milestone directly
-     * to the event. The project association is implicit via the milestone's project FK.
+     * to the event. The project association is implicit via the milestone's project FK. There is
+     * deliberately no hard cap here on the event's amount against milestone/project budgets — a
+     * SPENDING event that pushes cumulative spend past its budget is still recorded; the overspend
+     * is surfaced later, once persisted, when building the response view (see {@link
+     * #toMilestoneAllocationView} / {@link #buildProjectAllocationViews}).
      */
     private Either<ProblemDetail, Void> populateMilestoneAllocations(
             FundingEventEntity event,
             List<EventProjectAllocationRequest> allocationRequests,
             String organisationId) {
 
-        // Combined budgets the event books against — a SPENDING event's spend (amountRcy) may not exceed
-        // the summed milestone budgets nor the summed project budgets. A null budget anywhere lifts that
-        // bound (it cannot be meaningfully enforced).
-        BudgetAccumulator budget = new BudgetAccumulator();
         // Tracks every milestone already allocated in this event (across all nodes) — a milestone can
         // only belong to one project, so a repeat here always means the same milestone was requested
         // twice. Without this check, two allocation rows for the same milestone add two
@@ -392,27 +643,39 @@ public class SpendingEventService {
             if (rootResult.isLeft()) return Either.left(rootResult.getLeft());
 
             Optional<ProblemDetail> nodeProblem = populateNode(
-                    event, rootResult.get(), req.getMilestones(), req.getSubProjects(), budget, seenMilestoneIds);
+                    event, rootResult.get(), req.getMilestones(), req.getSubProjects(), seenMilestoneIds);
             if (nodeProblem.isPresent()) return Either.left(nodeProblem.get());
         }
-
-        Optional<ProblemDetail> capProblem = FundingValidations.eventAmountWithinBudget(
-                event.getEventType(), event.getAmountRcy(),
-                budget.milestoneKnown ? budget.milestoneBudget : null,
-                budget.projectKnown ? budget.projectBudget : null);
-        if (capProblem.isPresent()) return Either.left(capProblem.get());
 
         return Either.right(null);
     }
 
     /**
+     * See {@link FundingValidations#overfunding} — only queries the DB when the event is FUNDING. On
+     * an update, the event's own prior allocations are cleared and flushed before {@code populateNode}
+     * runs (see {@link #update}), so the queried amount always reflects <em>other</em> events only —
+     * never double-counts the event being saved. This is deliberately not duplicated as a per-row
+     * precheck in {@code FundingBulkImportService} — see the comment in its {@code
+     * buildMilestoneAllocation} — since only this post-clear query can exclude the event's own prior
+     * allocations correctly.
+     */
+    private Optional<ProblemDetail> overfundingProblem(EventType eventType, MilestoneEntity milestone, BigDecimal allocatedAmount) {
+        if (eventType != EventType.FUNDING) {
+            return Optional.empty();
+        }
+        BigDecimal cumulativeFunded = milestoneAllocationRepository.spentAmountByMilestoneId(milestone.getId(), EventType.FUNDING)
+                .add(allocatedAmount != null ? allocatedAmount : BigDecimal.ZERO);
+        return FundingValidations.overfunding(eventType, cumulativeFunded, milestone);
+    }
+
+    /**
      * Recursively attaches an allocation node to the event, mirroring the create-project endpoint's tree:
      * a node resolves/creates <em>either</em> its milestones (each carrying an allocated amount)
-     * <em>or</em> its sub-projects (never both). Budgets are accumulated for the event-amount cap.
+     * <em>or</em> its sub-projects (never both).
      */
     private Optional<ProblemDetail> populateNode(FundingEventEntity event, ProjectEntity project,
             List<EventMilestoneAllocationRequest> milestones, List<EventSubProjectAllocationRequest> subProjects,
-            BudgetAccumulator budget, Set<String> seenMilestoneIds) {
+            Set<String> seenMilestoneIds) {
 
         Optional<ProblemDetail> xor = FundingValidations.milestonesXorSubProjects(
                 !milestones.isEmpty(), !subProjects.isEmpty());
@@ -421,14 +684,6 @@ public class SpendingEventService {
         }
 
         if (!milestones.isEmpty()) {
-            // A node carrying allocations is a target project — its budget bounds the event amount.
-            if (project.getTotalAmount() != null) {
-                budget.projectBudget = budget.projectBudget.add(project.getTotalAmount());
-            } else {
-                budget.projectKnown = false;
-            }
-
-            BigDecimal projectAllocatedTotal = BigDecimal.ZERO;
             for (EventMilestoneAllocationRequest milestoneReq : milestones) {
                 Either<ProblemDetail, MilestoneEntity> milestoneResult = milestoneService.resolveOrCreate(project, milestoneReq.getMilestone());
                 if (milestoneResult.isLeft()) return Optional.of(milestoneResult.getLeft());
@@ -441,27 +696,22 @@ public class SpendingEventService {
                             ErrorTitleConstants.DUPLICATE_MILESTONE_ALLOCATION));
                 }
 
+                Optional<ProblemDetail> currencyProblem = FundingValidations.eventCurrencyMatchesMilestone(
+                        event.getCurrencyRcy(), milestone);
+                if (currencyProblem.isPresent()) return currencyProblem;
+
                 Optional<ProblemDetail> allocationProblem = FundingValidations.allocation(
                         milestoneReq.getAllocatedAmount(), milestone, event.getEventType());
                 if (allocationProblem.isPresent()) return allocationProblem;
 
-                if (milestoneReq.getAllocatedAmount() != null) {
-                    projectAllocatedTotal = projectAllocatedTotal.add(milestoneReq.getAllocatedAmount());
-                }
-                if (milestone.getMilestoneAmount() != null) {
-                    budget.milestoneBudget = budget.milestoneBudget.add(milestone.getMilestoneAmount());
-                } else {
-                    budget.milestoneKnown = false;
-                }
+                Optional<ProblemDetail> overfundingProblem = overfundingProblem(event.getEventType(), milestone, milestoneReq.getAllocatedAmount());
+                if (overfundingProblem.isPresent()) return overfundingProblem;
 
                 event.getMilestoneAllocations().add(EventMilestoneAllocationEntity.builder()
                         .id(new EventMilestoneAllocationEntity.Id(event.getId(), milestone.getId()))
                         .allocatedAmount(milestoneReq.getAllocatedAmount())
                         .build());
             }
-
-            Optional<ProblemDetail> totalProblem = FundingValidations.allocationTotal(projectAllocatedTotal, project);
-            if (totalProblem.isPresent()) return totalProblem;
         }
 
         // Sub-project titles are unique within their parent — reject duplicate titles among the sibling
@@ -479,18 +729,10 @@ public class SpendingEventService {
             if (subResult.isLeft()) return Optional.of(subResult.getLeft());
 
             Optional<ProblemDetail> childProblem = populateNode(
-                    event, subResult.get(), subNode.getMilestones(), subNode.getSubProjects(), budget, seenMilestoneIds);
+                    event, subResult.get(), subNode.getMilestones(), subNode.getSubProjects(), seenMilestoneIds);
             if (childProblem.isPresent()) return childProblem;
         }
         return Optional.empty();
-    }
-
-    /** Mutable holder for the event-amount cap budgets accumulated while walking the allocation tree. */
-    private static final class BudgetAccumulator {
-        private BigDecimal milestoneBudget = BigDecimal.ZERO;
-        private boolean milestoneKnown = true;
-        private BigDecimal projectBudget = BigDecimal.ZERO;
-        private boolean projectKnown = true;
     }
 
     private Either<ProblemDetail, ProjectEntity> resolveOrCreateRootProject(EventProjectAllocationRequest req, String organisationId) {
@@ -499,9 +741,19 @@ public class SpendingEventService {
                     ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
 
-        String projectId = ProjectEntity.id(organisationId, req.getProjectTitle());
-        if (projectRepository.existsById(projectId)) {
-            return Either.right(projectRepository.findById(projectId).orElseThrow());
+        // proId is permanent (see ProjectEntity#proId) — when the caller supplies it, it's the reliable
+        // way to find a project that may have since been renamed. Falling back to the current title
+        // only resolves a project whose title still matches; recomputing the id hash from the request's
+        // title (the old strategy) is deliberately not done here any more — it only ever "accidentally"
+        // found a project by its *original* creation-time title, never a project referenced by its new
+        // one, which is exactly the bug this fixes.
+        // A blank proId (e.g. "" from a JSON client) means "not supplied" — same as null — so it must
+        // fall back to title matching rather than searching for a project whose proId is literally "".
+        Optional<ProjectEntity> existing = (req.getProId() != null && !req.getProId().isBlank())
+                ? projectRepository.findByOrganisationIdAndProIdAndParentProjectIsNull(organisationId, req.getProId())
+                : projectRepository.findByOrganisationIdAndProjectTitleAndParentProjectIsNull(organisationId, req.getProjectTitle());
+        if (existing.isPresent()) {
+            return Either.right(existing.get());
         }
 
         // A root that directly carries milestones needs a budget; one that only holds sub-projects may omit it.
@@ -514,16 +766,38 @@ public class SpendingEventService {
         if (amountProblem.isPresent()) {
             return Either.left(amountProblem.get());
         }
+        Optional<ProblemDetail> currencyProblem = FundingValidations.currencyCode(
+                req.getCurrency(), milestoneService.isCurrencyRegisteredAndActive(organisationId, req.getCurrency()));
+        if (currencyProblem.isPresent()) {
+            return Either.left(currencyProblem.get());
+        }
         Optional<ProblemDetail> fundingIdProblem = projectStructureService.fundingIdAvailable(organisationId, req.getFundingId());
         if (fundingIdProblem.isPresent()) {
             return Either.left(fundingIdProblem.get());
         }
 
+        // A root project's proId is user-suppliable and, per the product design, mandatory to create a
+        // new one — same rule as ProjectService#createRootProject (see its comment for the reasoning).
+        // Note this check only applies here, once creation is the only remaining path: a blank proId is
+        // still perfectly fine above, where it just means "match by title instead."
+        if (req.getProId() == null || req.getProId().isBlank()) {
+            return Either.left(Problems.badRequest(
+                    "proId is required to create a new root project: " + req.getProjectTitle(), ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
+        }
+        String proId = req.getProId();
+        // Caller-chosen, so it needs its own uniqueness pre-check.
+        if (projectRepository.existsByOrganisationIdAndProIdAndParentProjectIsNull(organisationId, proId)) {
+            return Either.left(Problems.conflict(
+                    "Project ID already exists in this organisation: " + proId,
+                    ErrorTitleConstants.PROJECT_PROID_ALREADY_EXISTS));
+        }
+
         ProjectEntity newProject = ProjectEntity.builder()
-                .id(projectId)
+                .id(ProjectEntity.id(organisationId, proId)) // derived from proId, never from the editable title
                 .organisationId(organisationId)
                 .fundingId(req.getFundingId())
                 .projectTitle(req.getProjectTitle())
+                .proId(proId)
                 .totalAmount(req.getTotalAmount())
                 .currency(req.getCurrency())
                 .build();
@@ -536,8 +810,10 @@ public class SpendingEventService {
                     ErrorTitleConstants.PROJECT_FIELDS_REQUIRED));
         }
 
-        String subProjectUid = ProjectEntity.subId(parent.getId(), subReq.getProjectTitle());
-        Optional<ProjectEntity> existing = projectRepository.findById(subProjectUid);
+        // See resolveOrCreateRootProject's comment on why this no longer recomputes the id hash from title.
+        Optional<ProjectEntity> existing = (subReq.getProId() != null && !subReq.getProId().isBlank())
+                ? projectRepository.findByParentProjectIdAndProId(parent.getId(), subReq.getProId())
+                : projectRepository.findByParentProjectIdAndProjectTitle(parent.getId(), subReq.getProjectTitle());
         if (existing.isPresent()) {
             return Either.right(existing.get());
         }
@@ -572,18 +848,59 @@ public class SpendingEventService {
                         Collectors.toList()));
     }
 
+    /**
+     * The event's allocations whose milestone no longer exists — {@link #allocationsByProject} drops them
+     * (it can't group them under a project), but they must stay visible, since deleting a milestone never
+     * removes its allocation rows (LOB-2365 follow-up).
+     */
+    private List<OrphanedAllocationView> buildOrphanedAllocationViews(String eventId) {
+        return milestoneAllocationRepository.findById_EventId(eventId).stream()
+                .filter(alloc -> milestoneService.findById(alloc.getId().getMilestoneId()).isEmpty())
+                .map(alloc -> OrphanedAllocationView.builder()
+                        .milestoneId(alloc.getId().getMilestoneId().trim())
+                        .allocatedAmount(alloc.getAllocatedAmount())
+                        .milestoneDeleted(true)
+                        .build())
+                .toList();
+    }
+
+    /** Groups the orphaned allocations into one project-less entry so they also show up in projectAllocations. */
+    private static EventProjectAllocationView toDeletedMilestonesPlaceholder(String eventId, List<OrphanedAllocationView> orphans) {
+        return EventProjectAllocationView.builder()
+                .containsDeletedMilestones(true)
+                .spentAmount(BigDecimal.ZERO)
+                .milestoneAllocations(orphans.stream()
+                        .map(o -> EventMilestoneAllocationView.builder()
+                                .eventId(eventId)
+                                .milestoneId(o.getMilestoneId())
+                                .allocatedAmount(o.getAllocatedAmount())
+                                .milestoneDeleted(true)
+                                .build())
+                        .toList())
+                .build();
+    }
+
     private List<EventProjectAllocationView> buildProjectAllocationViews(String eventId) {
         return allocationsByProject(eventId).entrySet().stream()
                 .map(entry -> {
                     ProjectEntity project = entry.getKey();
                     List<EventMilestoneAllocationView> mViews = entry.getValue().stream()
-                            .map(SpendingEventService::toMilestoneAllocationView)
+                            .map(this::toMilestoneAllocationView)
                             .toList();
+                    // Cumulative spend directly against this project's own milestones (the project holds
+                    // either milestones or sub-projects, never both — see FundingValidations.milestonesXorSubProjects
+                    // — so this is exact, no roll-up needed). Overspend is surfaced, not blocked; see
+                    // FundingValidations.isOverspend.
+                    BigDecimal projectSpent = milestoneAllocationRepository.spentAmountByProjectId(project.getId(), EventType.SPENDING);
+                    boolean projectOverspend = FundingValidations.isOverspend(projectSpent, project.getTotalAmount());
                     return EventProjectAllocationView.builder()
                             .projectId(project.getId())
                             .externalProjectId(project.getExternalProjectId())
                             .projectTitle(project.getProjectTitle())
                             .parentProjectId(project.getParentProject() != null ? project.getParentProject().getId() : null)
+                            .totalAmount(project.getTotalAmount())
+                            .spentAmount(projectSpent)
+                            .overspend(projectOverspend)
                             .milestoneAllocations(mViews)
                             .build();
                 })
@@ -607,10 +924,12 @@ public class SpendingEventService {
                     return SpendingEventPublishView.ProjectAllocation.builder()
                             .projectId(root.getId())
                             .projectTitle(root.getProjectTitle())
+                            .proId(root.getProId())
                             .subProject(isSubProject
                                     ? SpendingEventPublishView.SubProject.builder()
                                             .subProjectId(project.getId())
                                             .subProjectTitle(project.getProjectTitle())
+                                            .proId(project.getProId())
                                             .milestones(milestones)
                                             .build()
                                     : null)
@@ -629,7 +948,10 @@ public class SpendingEventService {
         return cursor;
     }
 
-    private static EventMilestoneAllocationView toMilestoneAllocationView(AllocatedMilestone am) {
+    private EventMilestoneAllocationView toMilestoneAllocationView(AllocatedMilestone am) {
+        BigDecimal spentAmount = milestoneAllocationRepository.spentAmountByMilestoneId(
+                am.milestone().getId(), EventType.SPENDING);
+        boolean overspend = FundingValidations.isOverspend(spentAmount, am.milestone().getMilestoneAmount());
         return EventMilestoneAllocationView.builder()
                 .eventId(am.allocation().getId().getEventId())
                 .milestoneId(am.allocation().getId().getMilestoneId())
@@ -639,6 +961,8 @@ public class SpendingEventService {
                 .allocatedAmount(am.allocation().getAllocatedAmount())
                 .currency(am.milestone().getCurrency())
                 .milestoneDate(am.milestone().getMilestoneDate())
+                .spentAmount(spentAmount)
+                .overspend(overspend)
                 .build();
     }
 
@@ -646,6 +970,7 @@ public class SpendingEventService {
         return SpendingEventPublishView.Milestone.builder()
                 .milestoneId(am.allocation().getId().getMilestoneId())
                 .milestoneTitle(am.milestone().getMilestoneTitle())
+                .proId(am.milestone().getProId())
                 .milestoneAmount(am.milestone().getMilestoneAmount())
                 .allocatedAmount(am.allocation().getAllocatedAmount())
                 .currency(toCurrency(am.milestone().getCurrency()))
@@ -660,7 +985,15 @@ public class SpendingEventService {
                         request.getEventType(),
                         request.getFundingId(),
                         request.getFundingHash(),
-                        request.getCurrencyRcy()))
+                        request.getFundingEntity(),
+                        request.getCurrencyRcy(),
+                        request.getCategory(),
+                        request.getVendor(),
+                        request.getHash(),
+                        request.getAmountFcy(),
+                        request.getCurrencyFcy(),
+                        request.getAmountRcy(),
+                        request.getEventDate()))
                 .eventType(request.getEventType())
                 .status(EventStatus.DRAFT)
                 .organisationId(request.getOrganisationId())

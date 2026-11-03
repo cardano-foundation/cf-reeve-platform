@@ -15,8 +15,6 @@ import java.time.Month;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import jakarta.validation.Valid;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -53,12 +51,12 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.*;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.ValidateIngestionResponseWaiter;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.TransactionRepositoryGateway;
+import org.cardanofoundation.lob.app.accounting_reporting_core.utils.ErrorUtils;
 import org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ProjectRepository;
 import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
-import org.cardanofoundation.lob.app.support.javers.BagParser;
 import org.cardanofoundation.lob.app.support.problem_support.IdentifiableProblem;
 import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 
@@ -204,9 +202,9 @@ public class AccountingCorePresentationViewService {
                 .toList();
     }
 
-    public Optional<TransactionView> transactionDetailSpecific(String transactionId) {
+    public Optional<TransactionView> transactionDetailSpecific(String transactionId, String organisationId) {
         Optional<TransactionEntity> transactionEntity =
-                transactionRepositoryGateway.findById(transactionId);
+                transactionRepositoryGateway.findByIdAndOrganisationId(transactionId, organisationId).stream().findFirst();
 
         return transactionEntity.map(this::getTransactionView);
     }
@@ -221,7 +219,8 @@ public class AccountingCorePresentationViewService {
             return Either.left(pageableEither.getLeft());
         }
         Pageable finalPage = pageableEither.get();
-        return Either.right(transactionBatchRepositoryGateway.findById(batchId)
+        return Either.right(transactionBatchRepositoryGateway.findByIdAndOrganisationId(batchId, batchFilterRequest.getOrganisationId())
+                .stream().findFirst()
                 .map(transactionBatchEntity -> {
                     Page<TransactionEntity> transactions = this.getTransaction(
                             transactionBatchEntity, txStatus, finalPage,
@@ -249,10 +248,7 @@ public class AccountingCorePresentationViewService {
                             transactions.stream().map(
                                             this::getTransactionView)
                                     .toList(),
-                            convertBagToJson(transactionBatchEntity.getDetails()
-                                    .orElse(Details.builder()
-                                            .build()))
-                                    .getBag(),
+                            detailsView(transactionBatchEntity),
                             transactions.getTotalElements());
                 }));
     }
@@ -281,10 +277,7 @@ public class AccountingCorePresentationViewService {
                                     transactionBatchEntity
                                             .getFilteringParameters()),
                             List.of(),
-                            convertBagToJson(transactionBatchEntity.getDetails()
-                                    .orElse(Details.builder()
-                                            .build()))
-                                    .getBag(),
+                            detailsView(transactionBatchEntity),
                             null // transactions are not loaded here
                     );
                 }).toList();
@@ -358,7 +351,9 @@ public class AccountingCorePresentationViewService {
     public TransactionItemsProcessRejectView rejectTransactionItems(
             TransactionItemsRejectionRequest transactionItemsRejectionRequest) {
         Optional<TransactionEntity> txM = transactionRepositoryGateway
-                .findById(transactionItemsRejectionRequest.getTransactionId());
+                .findByIdAndOrganisationId(transactionItemsRejectionRequest.getTransactionId(),
+                        transactionItemsRejectionRequest.getOrganisationId())
+                .stream().findFirst();
         if (txM.isEmpty()) {
             Either<IdentifiableProblem, TransactionEntity> errorE =
                     transactionNotFoundResponse(transactionItemsRejectionRequest
@@ -387,9 +382,9 @@ public class AccountingCorePresentationViewService {
     }
 
     @Transactional
-    public BatchReprocessView scheduleReIngestionForFailed(String batchId) {
+    public BatchReprocessView scheduleReIngestionForFailed(String batchId, String organisationId) {
         Either<ProblemDetail, Void> txM =
-                accountingCoreService.scheduleReIngestionForFailed(batchId);
+                accountingCoreService.scheduleReIngestionForFailed(batchId, organisationId);
 
         if (txM.isEmpty()) {
             return BatchReprocessView.createFail(batchId, txM.getLeft());
@@ -419,6 +414,7 @@ public class AccountingCorePresentationViewService {
         } else {
             return accountingCoreTransactionRepository.findAllByBatchId(
                     Optional.ofNullable(transactionBatchEntity).map(TransactionBatchEntity::getId).orElse(null),
+                    batchFilterRequest.getOrganisationId(),
                     status,
                     batchFilterRequest.getInternalTransactionNumber(),
                     batchFilterRequest.getTransactionTypes(),
@@ -656,7 +652,8 @@ public class AccountingCorePresentationViewService {
                         .map(CommonEntity::getCreatedAt).orElse(null),
                 transactionEntity.getItemCount(),
                 getTransactionItemView(transactionEntity),
-                getViolations(transactionEntity)
+                getViolations(transactionEntity),
+                Optional.empty()
 
         );
     }
@@ -1002,13 +999,12 @@ public class AccountingCorePresentationViewService {
         return filterOptionsListMap;
     }
 
-    private Details convertBagToJson(Details details) {
-        details.setBag(BagParser.parse(details.getBag()));
-        return details;
-
+    // Each adapter stores a differently shaped bag, so batches always expose the normalised one
+    private static Map<String, Object> detailsView(TransactionBatchEntity transactionBatchEntity) {
+        return transactionBatchEntity.getDetails().map(ErrorUtils::normalisedBag).orElseGet(Map::of);
     }
 
-    public void downloadCsvTransactions(@Valid String orgId, String batchId, List<TransactionProcessingStatus> txStatus, BatchFilterRequest batchFilterRequest, OutputStream outputStream) {
+    public void downloadCsvTransactions(String batchId, List<TransactionProcessingStatus> txStatus, BatchFilterRequest batchFilterRequest, OutputStream outputStream) {
         TransactionBatchEntity transactionBatchEntity = transactionBatchRepositoryGateway.findById(Optional.ofNullable(batchId).orElse("")).orElse(null);
         Page<TransactionEntity> transactions = this.getTransaction(
                 transactionBatchEntity, txStatus, Pageable.unpaged(),
@@ -1045,46 +1041,48 @@ public class AccountingCorePresentationViewService {
             csvWriter.writeNext(header, false);
             for (TransactionEntity transactionEntity : transactions) {
                 for (TransactionItemEntity item : transactionEntity.getItems()) {
-                    boolean isCredit = item.getOperationType().equals(OperationType.CREDIT);
-                    Optional<CostCenter> parentCostcenter = item.getCostCenter().flatMap(costCenter -> costCenterRepository.findById(new CostCenter.Id(transactionEntity.getOrganisation().getId(), costCenter.getCustomerCode())));
-                    Optional<Project> parentProject = item.getProject().flatMap(project -> projectRepository.findById(new Project.Id(transactionEntity.getOrganisation().getId(), project.getCustomerCode())));
-                    String[] data = {
-                            transactionEntity.getInternalTransactionNumber(),
-                            transactionEntity.getEntryDate().toString(),
-                            Optional.ofNullable(transactionEntity.getTransactionType()).map(Enum::name).orElse(""),
-                            item.getFxRate().stripTrailingZeros().toPlainString(),
-                            isCredit ? "" : item.getAmountLcy().stripTrailingZeros().toPlainString(),
-                            isCredit ? item.getAmountLcy().stripTrailingZeros().toPlainString() : "",
-                            isCredit ? "" : item.getAmountFcy().stripTrailingZeros().toPlainString(),
-                            isCredit ? item.getAmountFcy().stripTrailingZeros().toPlainString() : "",
-                            item.getAccountDebit().map(Account::getCode).orElse(""),
-                            item.getAccountDebit().flatMap(Account::getName).orElse(""),
-                            item.getAccountCredit().map(Account::getCode).orElse(""),
-                            item.getAccountCredit().flatMap(Account::getName).orElse(""),
-                            item.getAccountEvent().map(AccountEvent::getCode).orElse(""),
-                            item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse(""),
-                            parentProject.map(Project::getParentCustomerCode).orElse(""),
-                            item.getDocument().map(Document::getNum).orElse(""),
-                            item.getDocument().map(document -> document.getCurrency().getCustomerCode()).orElse(""),
-                            item.getDocument().flatMap(document -> document.getVat().map(Vat::getRate)).orElse(Optional.ofNullable(ZERO)).map(bigDecimal -> bigDecimal.stripTrailingZeros().toPlainString()).orElse(""),
-                            item.getDocument().flatMap(document -> document.getVat().map(Vat::getCustomerCode)).orElse(""),
-                            item.getCostCenter().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode).orElse(""),
-                            parentCostcenter.map(CostCenter::getParentCustomerCode).orElse(""),
-                            item.getDocument().flatMap(document -> document.getCounterparty().map(Counterparty::getCustomerCode)).orElse(""),
-                            item.getDocument().flatMap(document -> document.getCounterparty().map(Counterparty::getName)).orElse(Optional.of("")).orElse(""),
-                            item.getDocument().flatMap(document -> document.getCounterparty().map(counterparty -> counterparty.getType().name())).orElse(""),
-                            transactionEntity.getExtractorType(),
-                            mapTransactionProcessingStatusToString(transactionEntity.getProcessingStatus()),
-                            transactionEntity.getLedgerDispatchReceipt().map(LedgerDispatchReceipt::getPrimaryBlockchainHash).orElse("")
-                    };
-
-                    csvWriter.writeNext(data, false);
+                    csvWriter.writeNext(toCsvRow(transactionEntity, item), false);
                 }
             }
             csvWriter.flush();
         } catch (Exception e) {
-            log.error("Error while writing transactions to CSV for orgId {}: {}", orgId, e.getMessage(), e);
+            log.error("Error while writing transactions to CSV for orgId {}: {}", batchFilterRequest.getOrganisationId(), e.getMessage(), e);
         }
+    }
+
+    private String[] toCsvRow(TransactionEntity transactionEntity, TransactionItemEntity item) {
+        boolean isCredit = item.getOperationType().equals(OperationType.CREDIT);
+        Optional<CostCenter> parentCostcenter = item.getCostCenter().flatMap(costCenter -> costCenterRepository.findById(new CostCenter.Id(transactionEntity.getOrganisation().getId(), costCenter.getCustomerCode())));
+        Optional<Project> parentProject = item.getProject().flatMap(project -> projectRepository.findById(new Project.Id(transactionEntity.getOrganisation().getId(), project.getCustomerCode())));
+        return new String[]{
+                transactionEntity.getInternalTransactionNumber(),
+                transactionEntity.getEntryDate().toString(),
+                Optional.ofNullable(transactionEntity.getTransactionType()).map(Enum::name).orElse(""),
+                item.getFxRate().stripTrailingZeros().toPlainString(),
+                isCredit ? "" : item.getAmountLcy().stripTrailingZeros().toPlainString(),
+                isCredit ? item.getAmountLcy().stripTrailingZeros().toPlainString() : "",
+                isCredit ? "" : item.getAmountFcy().stripTrailingZeros().toPlainString(),
+                isCredit ? item.getAmountFcy().stripTrailingZeros().toPlainString() : "",
+                item.getAccountDebit().map(Account::getCode).orElse(""),
+                item.getAccountDebit().flatMap(Account::getName).orElse(""),
+                item.getAccountCredit().map(Account::getCode).orElse(""),
+                item.getAccountCredit().flatMap(Account::getName).orElse(""),
+                item.getAccountEvent().map(AccountEvent::getCode).orElse(""),
+                item.getProject().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Project::getCustomerCode).orElse(""),
+                parentProject.map(Project::getParentCustomerCode).orElse(""),
+                item.getDocument().map(Document::getNum).orElse(""),
+                item.getDocument().map(document -> document.getCurrency().getCustomerCode()).orElse(""),
+                item.getDocument().flatMap(document -> document.getVat().map(Vat::getRate)).orElse(Optional.ofNullable(ZERO)).map(bigDecimal -> bigDecimal.stripTrailingZeros().toPlainString()).orElse(""),
+                item.getDocument().flatMap(document -> document.getVat().map(Vat::getCustomerCode)).orElse(""),
+                item.getCostCenter().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode).orElse(""),
+                parentCostcenter.map(CostCenter::getParentCustomerCode).orElse(""),
+                item.getDocument().flatMap(document -> document.getCounterparty().map(Counterparty::getCustomerCode)).orElse(""),
+                item.getDocument().flatMap(document -> document.getCounterparty().map(Counterparty::getName)).orElse(Optional.of("")).orElse(""),
+                item.getDocument().flatMap(document -> document.getCounterparty().map(counterparty -> counterparty.getType().name())).orElse(""),
+                transactionEntity.getExtractorType(),
+                mapTransactionProcessingStatusToString(transactionEntity.getProcessingStatus()),
+                transactionEntity.getLedgerDispatchReceipt().map(LedgerDispatchReceipt::getPrimaryBlockchainHash).orElse("")
+        };
     }
 
     private String mapTransactionProcessingStatusToString(Optional<TransactionProcessingStatus> status) {

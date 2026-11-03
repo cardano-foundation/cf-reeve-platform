@@ -50,15 +50,27 @@ public final class Problems {
                 ErrorTitleConstants.ORGANISATION_NOT_FOUND);
     }
 
-    public static ProblemDetail projectReferenceNotFound(String projectTitle) {
-        return notFound("Project not found for projectTitle: %s".formatted(projectTitle),
+    public static ProblemDetail projectReferenceNotFound(String proId) {
+        return notFound("Project ID '%s' not found".formatted(proId),
                 ErrorTitleConstants.PROJECT_REFERENCE_NOT_FOUND);
     }
 
-    public static ProblemDetail ambiguousProjectReference(String projectTitle) {
+    public static ProblemDetail subProjectReferenceNotFound(String projectTitle, String subProjectTitle) {
+        return notFound("Sub-project '%s' not found under project '%s'"
+                        .formatted(subProjectTitle, projectTitle),
+                ErrorTitleConstants.SUBPROJECT_REFERENCE_NOT_FOUND);
+    }
+
+    public static ProblemDetail ambiguousProjectReference(String proId) {
         return badRequest(
-                "projectTitle %s matches more than one project in this organisation; use the JSON API to disambiguate"
-                        .formatted(projectTitle),
+                "Project ID '%s' matches more than one project in this organisation; set Project ID to the root project's ID and Sub Project ID to name a specific sub-project"
+                        .formatted(proId),
                 ErrorTitleConstants.AMBIGUOUS_PROJECT_REFERENCE);
+    }
+
+    public static ProblemDetail fundingEventIdAlreadyUsed(String fundingId) {
+        return conflict(
+                "fundingId %s is already used by another FUNDING event".formatted(fundingId),
+                ErrorTitleConstants.FUNDING_EVENT_FUNDING_ID_ALREADY_USED);
     }
 }

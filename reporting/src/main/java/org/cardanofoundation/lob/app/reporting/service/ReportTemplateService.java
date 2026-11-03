@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -60,6 +61,7 @@ public class ReportTemplateService {
     private final Validator validator;
     private final ReportTemplateTypeValidator reportTemplateTypeValidator;
     private final ReportingService reportingService;
+    private final AccountingRegimeResolver accountingRegimeResolver;
 
     private Either<ProblemDetail, Void> validateReport(ReportTemplateDto dto) {
         Either<ProblemDetail, Void> errorDetails = validateReportTemplateDto(dto);
@@ -94,6 +96,35 @@ public class ReportTemplateService {
         return Either.right(null);
     }
 
+    /**
+     * The accounting regime rules shared by create, update and the CSV import. A new template, or a changed
+     * regime, must be one the organisation offers, and is stored as its exact label. An unchanged one is
+     * accepted as-is (null on templates created before the field existed, or a regime deactivated since),
+     * since the template builder resends it unchanged. Either way it can't change once the template has a
+     * published report.
+     */
+    Either<ProblemDetail, Void> validateAccountingRegime(ReportTemplateDto dto, Optional<ReportTemplateEntity> existing) {
+        boolean unchanged = existing.isPresent() && Objects.equals(existing.get().getAccountingRegime(), dto.getAccountingRegime());
+        if (!unchanged) {
+            Either<ProblemDetail, String> accountingRegime = accountingRegimeResolver.resolve(dto.getOrganisationId(), dto.getAccountingRegime());
+            if (accountingRegime.isLeft()) {
+                return Either.left(accountingRegime.getLeft());
+            }
+            dto.setAccountingRegime(accountingRegime.get());
+        }
+        return existing.map(template -> checkAccountingRegimeImmutable(template, dto)).orElse(Either.right(null));
+    }
+
+    Either<ProblemDetail, Void> checkAccountingRegimeImmutable(ReportTemplateEntity existing, ReportTemplateDto dto) {
+        boolean regimeChanged = !Objects.equals(existing.getAccountingRegime(), dto.getAccountingRegime());
+        if (regimeChanged && reportingRepository.existsByReportTemplateIdAndLedgerDispatchApprovedTrue(existing.getId())) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The accounting regime of template '" + existing.getName() + "' cannot be changed because it has at least one published report.");
+            problem.setTitle("ACCOUNTING_REGIME_IMMUTABLE_AFTER_PUBLISH");
+            return Either.left(problem);
+        }
+        return Either.right(null);
+    }
+
     private Either<ProblemDetail, Void> validateForbiddenCharacters(List<ReportTemplateFieldDto> fields) {
         for(ReportTemplateFieldDto field : fields) {
             if(!field.getChildFields().isEmpty()) {
@@ -115,6 +146,8 @@ public class ReportTemplateService {
         log.info("Creating report template: {}", dto.getName());
         Either<ProblemDetail, Void> validateReport = validateReport(dto);
         if (validateReport.isLeft()) return Either.left(validateReport.getLeft());
+        Either<ProblemDetail, Void> accountingRegime = validateAccountingRegime(dto, Optional.empty());
+        if (accountingRegime.isLeft()) return Either.left(accountingRegime.getLeft());
         // Check if a template with the same name already exists for this organisation
         Optional<ReportTemplateEntity> existingTemplateOpt =
                 reportTemplateRepository.findLatestByOrganisationIdAndName(dto.getOrganisationId(), dto.getName());
@@ -143,7 +176,7 @@ public class ReportTemplateService {
         return Either.right(reportTemplateMapper.toResponseDto(saved));
     }
 
-    private Either<ProblemDetail, Void> validateDataMode(ReportTemplateDto dto) {
+    Either<ProblemDetail, Void> validateDataMode(ReportTemplateDto dto) {
         DataMode dataMode;
         try {
             dataMode = DataMode.valueOf(dto.getDataMode());
@@ -151,12 +184,12 @@ public class ReportTemplateService {
             return Either.left(Helper.buildDataModeError(dto.getDataMode()));
         }
         if(dataMode.equals(DataMode.SYSTEM) && !hasAllMappings(dto.getFields())) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "All fields must have mappings when data mode is SYSTEM");
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "All fields must have mappings when data mode is " + DataMode.SYSTEM.getCsvLabel());
             problem.setTitle(Constants.INVALID_FIELD_MAPPINGS);
             return Either.left(problem);
         }
         if(dataMode.equals(DataMode.USER) && hasMappings(dto.getFields())) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "No field mappings are allowed in a USER data mode template");
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "No field mappings are allowed in a " + DataMode.USER.getCsvLabel() + " data mode template");
             problem.setTitle(Constants.INVALID_FIELD_MAPPINGS);
             return Either.left(problem);
         }
@@ -252,6 +285,10 @@ public class ReportTemplateService {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The report template type '" + dto.getReportTemplateType() + "' is not valid.");
             problem.setTitle("Invalid Report Template Type");
             return Either.left(problem);
+        }
+        Either<ProblemDetail, Void> accountingRegime = validateAccountingRegime(dto, Optional.of(existing));
+        if (accountingRegime.isLeft()) {
+            return Either.left(accountingRegime.getLeft());
         }
 
         // Check if there are any reports using this template

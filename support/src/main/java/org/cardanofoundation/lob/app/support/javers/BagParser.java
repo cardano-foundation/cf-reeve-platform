@@ -10,16 +10,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class BagParser {
     public static Map<String, Object> parse(Map<String, Object> bag) {
-        return (Map<String, Object>) expandTree(new HashMap<>(bag));
+        return (Map<String, Object>) expandTree(bag);
     }
 
     private static Object expandTree(Object currentNode) {
         ObjectMapper objectMapper = new ObjectMapper();
 
         if (currentNode instanceof Map) {
-            Map<String, Object> currentMap = (Map<String, Object>) currentNode;
-            currentMap.replaceAll((key, value) -> expandTree(value));
-            return currentMap;
+            Map<String, Object> expanded = new HashMap<>();
+            ((Map<String, Object>) currentNode).forEach((key, value) -> expanded.put(key, expandTree(value)));
+            return expanded;
         }
         else if (currentNode instanceof List) {
             List<Object> currentList = (List<Object>) currentNode;

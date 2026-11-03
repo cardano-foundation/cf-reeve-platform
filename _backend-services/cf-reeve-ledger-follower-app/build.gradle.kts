@@ -12,7 +12,7 @@ springBoot {
 }
 
 group = "org.cardano.foundation"
-version = "1.6.0"
+version = "1.8.0"
 java.sourceCompatibility = JavaVersion.VERSION_21
 
 // support postgres 17

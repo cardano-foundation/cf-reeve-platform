@@ -30,6 +30,8 @@ import org.cardanofoundation.lob.app.organisation.domain.request.EventCodeUpdate
 import org.cardanofoundation.lob.app.organisation.domain.view.AccountEventView;
 import org.cardanofoundation.lob.app.organisation.service.AccountEventService;
 import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
+import org.cardanofoundation.lob.app.support.security.OrgAccessDenied;
 
 @RestController
 @RequestMapping("/api/v1/organisations")
@@ -40,6 +42,7 @@ public class AccountEventController {
 
     private final AccountEventService eventCodeService;
     private final OrganisationService organisationService;
+    private final KeycloakSecurityHelper keycloakSecurityHelper;
 
     @Operation(description = "Reference Codes", responses = {
             @ApiResponse(content =
@@ -55,6 +58,9 @@ public class AccountEventController {
                                                @RequestParam(value = "active", required = false) Boolean active,
                                                @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable
     ) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         return eventCodeService.getAllAccountEvent(orgId, customerCode, name, creditRefCodes, debitRefCodes, active, pageable).fold(
                 problem -> ResponseEntity.status(problem.getStatus()).body(problem),
                 ResponseEntity::ok);
@@ -63,13 +69,16 @@ public class AccountEventController {
 
     @Operation(summary = "Download event codes CSV file", description = "Download event codes as a CSV file")
     @GetMapping(value = "/{orgId}/event-codes/download", produces = "test/csv")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
+    @PreAuthorize("@permissions.can('export_setup_data', 'download')")
     public ResponseEntity<StreamingResponseBody> downloadEventCodesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                                        @RequestParam(value = "customerCode", required = false) String customerCode,
                                                                        @RequestParam(value = "name", required = false) String name,
                                                                        @RequestParam(value = "creditRefCodes", required = false) List<String> creditRefCodes,
                                                                        @RequestParam(value = "debitRefCodes", required = false) List<String> debitRefCodes,
                                                                        @RequestParam(value = "active", required = false) Boolean active) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         StreamingResponseBody responseBody = outputStream -> eventCodeService.downloadCsv(orgId, customerCode, name, creditRefCodes, debitRefCodes, active, outputStream);
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=\"event-codes_%s.csv\"".formatted(orgId))
@@ -83,9 +92,12 @@ public class AccountEventController {
             ),
     })
     @PostMapping(value = "/{orgId}/event-codes", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('event_codes', 'create')")
     public ResponseEntity<?> insertReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @Valid @RequestBody EventCodeUpdate eventCodeUpdate) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
 
         AccountEventView eventCode = eventCodeService.insertAccountEvent(orgId, eventCodeUpdate, false);
         if (eventCode.getError().isPresent()) {
@@ -101,9 +113,12 @@ public class AccountEventController {
             ),
     })
     @PostMapping(value = "/{orgId}/event-codes", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('event_codes', 'create')")
     public ResponseEntity<?> insertReferenceCodeByCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                       @RequestParam(value = "file") MultipartFile file) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
 
         Either<List<ProblemDetail>, List<AccountEventView>> eventCodeE = eventCodeService.insertAccountEventByCsv(orgId, file);
         if (eventCodeE.isLeft()) {
@@ -119,9 +134,12 @@ public class AccountEventController {
             ),
     })
     @PutMapping(value = "/{orgId}/event-codes", produces = "application/json")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('event_codes', 'edit')")
     public ResponseEntity<?> updateReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @Valid @RequestBody EventCodeUpdate eventCodeUpdate) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         AccountEventView eventCode = eventCodeService.updateAccountEvent(orgId, eventCodeUpdate);
         if (eventCode.getError().isPresent()) {
             return ResponseEntity.status(eventCode.getError().get().getStatus()).body(eventCode);

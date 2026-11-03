@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -15,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -24,8 +26,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventType;
+import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventBulkPublishRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.request.SpendingEventFilterRequest;
+import org.cardanofoundation.lob.app.funding.domain.view.OrphanEventsCleanupView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
+import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventBulkPublishView;
 import org.cardanofoundation.lob.app.funding.domain.view.SpendingEventView;
 import org.cardanofoundation.lob.app.funding.service.SpendingEventService;
 import org.cardanofoundation.lob.app.funding.util.ErrorTitleConstants;
@@ -54,10 +60,10 @@ class SpendingEventControllerTest {
 
     @Test
     void listEvents_returns200() {
-        when(spendingEventService.listEvents(eq("org1"), any(), any(), eq(PAGEABLE)))
+        when(spendingEventService.listEvents(eq("org1"), any(), eq(PAGEABLE)))
                 .thenReturn(PagedResponse.<SpendingEventView>builder().content(List.of(eventView())).total(1).build());
 
-        ResponseEntity<?> response = spendingEventController.listEvents("org1", Optional.empty(), Optional.empty(), PAGEABLE);
+        ResponseEntity<?> response = spendingEventController.listEvents("org1", null, null, null, null, null, null, null, null, PAGEABLE);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((PagedResponse<?>) response.getBody()).getContent()).hasSize(1);
@@ -65,20 +71,52 @@ class SpendingEventControllerTest {
 
     @Test
     void listEvents_propagatesErrorStatus() {
-        when(spendingEventService.listEvents(eq("org1"), any(), any(), eq(PAGEABLE)))
+        when(spendingEventService.listEvents(eq("org1"), any(), eq(PAGEABLE)))
                 .thenReturn(PagedResponse.error(problem(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED")));
 
-        ResponseEntity<?> response = spendingEventController.listEvents("org1", Optional.empty(), Optional.empty(), PAGEABLE);
+        ResponseEntity<?> response = spendingEventController.listEvents("org1", null, null, null, null, null, null, null, null, PAGEABLE);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     @Test
+    void listEvents_mapsQueryParamsIntoFilter() {
+        ArgumentCaptor<SpendingEventFilterRequest> filterCaptor = ArgumentCaptor.forClass(SpendingEventFilterRequest.class);
+        when(spendingEventService.listEvents(eq("org1"), filterCaptor.capture(), eq(PAGEABLE)))
+                .thenReturn(PagedResponse.<SpendingEventView>builder().content(List.of()).build());
+
+        spendingEventController.listEvents("org1", List.of(EventStatus.DRAFT, EventStatus.ERROR), List.of(EventType.FUNDING),
+                "Edu", "USD", LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31),
+                new BigDecimal("10"), new BigDecimal("500"), PAGEABLE);
+
+        SpendingEventFilterRequest filter = filterCaptor.getValue();
+        assertThat(filter.getStatuses()).containsExactly(EventStatus.DRAFT, EventStatus.ERROR);
+        assertThat(filter.getEventTypes()).containsExactly(EventType.FUNDING);
+        assertThat(filter.getProjectTitle()).isEqualTo("Edu");
+        assertThat(filter.getCurrency()).isEqualTo("USD");
+        assertThat(filter.getDateFrom()).isEqualTo(LocalDate.of(2026, 1, 1));
+        assertThat(filter.getDateTo()).isEqualTo(LocalDate.of(2026, 12, 31));
+        assertThat(filter.getMinAmount()).isEqualByComparingTo("10");
+        assertThat(filter.getMaxAmount()).isEqualByComparingTo("500");
+    }
+
+    @Test
+    void listEvents_returns400_whenFilterInvalid() {
+        when(spendingEventService.listEvents(eq("org1"), any(), eq(PAGEABLE)))
+                .thenReturn(PagedResponse.error(problem(HttpStatus.BAD_REQUEST, "EVENT_FILTER_INVALID")));
+
+        ResponseEntity<?> response = spendingEventController.listEvents("org1", null, null, null, null,
+                LocalDate.of(2026, 2, 1), LocalDate.of(2026, 1, 1), null, null, PAGEABLE);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
     void listEventsByProject_returns200() {
-        when(spendingEventService.listEventsByProject(eq("p1"), any(), any(), eq(PAGEABLE)))
+        when(spendingEventService.listEventsByProject(eq("p1"), eq("org1"), any(), any(), eq(PAGEABLE)))
                 .thenReturn(PagedResponse.<SpendingEventView>builder().content(List.of(eventView())).total(1).build());
 
-        ResponseEntity<?> response = spendingEventController.listEventsByProject("p1", Optional.empty(), Optional.empty(), PAGEABLE);
+        ResponseEntity<?> response = spendingEventController.listEventsByProject("p1", "org1", Optional.empty(), Optional.empty(), PAGEABLE);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((PagedResponse<?>) response.getBody()).getContent()).hasSize(1);
@@ -103,9 +141,9 @@ class SpendingEventControllerTest {
     @Test
     void getEvent_returns200_withView() {
         SpendingEventView view = eventView();
-        when(spendingEventService.getEvent("e1")).thenReturn(view);
+        when(spendingEventService.getEvent("e1", "org1")).thenReturn(view);
 
-        ResponseEntity<?> response = spendingEventController.getEvent("e1");
+        ResponseEntity<?> response = spendingEventController.getEvent("e1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo(view);
@@ -113,10 +151,10 @@ class SpendingEventControllerTest {
 
     @Test
     void getEvent_returns404_withProblem() {
-        when(spendingEventService.getEvent("e1"))
+        when(spendingEventService.getEvent("e1", "org1"))
                 .thenReturn(SpendingEventView.error(problem(HttpStatus.NOT_FOUND, ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND)));
 
-        ResponseEntity<?> response = spendingEventController.getEvent("e1");
+        ResponseEntity<?> response = spendingEventController.getEvent("e1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(((SpendingEventView) response.getBody()).getError().orElseThrow().getTitle())
@@ -148,34 +186,83 @@ class SpendingEventControllerTest {
     }
 
     @Test
+    @SuppressWarnings("removal") // the single-event endpoint stays tested until it is removed
     void publishEvent_returns200_withView() {
         SpendingEventView view = eventView();
-        when(spendingEventService.publishEvent("e1")).thenReturn(view);
+        when(spendingEventService.publishEvent("e1", "org1")).thenReturn(view);
 
-        ResponseEntity<?> response = spendingEventController.publishEvent("e1");
+        ResponseEntity<?> response = spendingEventController.publishEvent("e1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo(view);
     }
 
     @Test
-    void deleteEvent_returns204_whenNoError() {
-        when(spendingEventService.deleteEvent("e1")).thenReturn(Optional.empty());
+    void publishEvents_returns200_withPerEventResults() {
+        SpendingEventBulkPublishView view = SpendingEventBulkPublishView.success(List.of(
+                SpendingEventBulkPublishView.Result.published("e1", "GRANT-1"),
+                SpendingEventBulkPublishView.Result.skipped("e2", "GRANT-2",
+                        problem(HttpStatus.CONFLICT, ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED))));
+        SpendingEventBulkPublishRequest request = SpendingEventBulkPublishRequest.builder()
+                .organisationId("org1").eventIds(List.of("e1", "e2")).build();
+        when(spendingEventService.publishEvents("org1", List.of("e1", "e2"))).thenReturn(view);
 
-        ResponseEntity<?> response = spendingEventController.deleteEvent("e1");
+        ResponseEntity<?> response = spendingEventController.publishEvents(request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo(view);
+    }
+
+    @Test
+    void publishEvents_returns401_whenRequestRejected() {
+        SpendingEventBulkPublishRequest request = SpendingEventBulkPublishRequest.builder()
+                .organisationId("org1").eventIds(List.of("e1")).build();
+        when(spendingEventService.publishEvents("org1", List.of("e1")))
+                .thenReturn(SpendingEventBulkPublishView.error(problem(HttpStatus.UNAUTHORIZED, ErrorTitleConstants.UNAUTHORIZED)));
+
+        assertThat(spendingEventController.publishEvents(request).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void deleteEvent_returns204_whenNoError() {
+        when(spendingEventService.deleteEvent("e1", "org1")).thenReturn(Optional.empty());
+
+        ResponseEntity<?> response = spendingEventController.deleteEvent("e1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     }
 
     @Test
     void deleteEvent_returns409_withProblem() {
-        when(spendingEventService.deleteEvent("e1"))
+        when(spendingEventService.deleteEvent("e1", "org1"))
                 .thenReturn(Optional.of(problem(HttpStatus.CONFLICT, ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED)));
 
-        ResponseEntity<?> response = spendingEventController.deleteEvent("e1");
+        ResponseEntity<?> response = spendingEventController.deleteEvent("e1", "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo(ErrorTitleConstants.SPENDING_EVENT_ALREADY_PUBLISHED);
+    }
+
+    @Test
+    void deleteOrphanedErrorEvents_returns200_withDeletedEvents() {
+        OrphanEventsCleanupView view = OrphanEventsCleanupView.success(List.of());
+        when(spendingEventService.deleteOrphanedErrorEvents("org1")).thenReturn(view);
+
+        ResponseEntity<?> response = spendingEventController.deleteOrphanedErrorEvents("org1");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo(view);
+    }
+
+    @Test
+    void deleteOrphanedErrorEvents_returns400_withProblem() {
+        when(spendingEventService.deleteOrphanedErrorEvents("org1"))
+                .thenReturn(OrphanEventsCleanupView.error(problem(HttpStatus.BAD_REQUEST, ErrorTitleConstants.ORGANISATION_NOT_FOUND)));
+
+        ResponseEntity<?> response = spendingEventController.deleteOrphanedErrorEvents("org1");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(((OrphanEventsCleanupView) response.getBody()).getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.ORGANISATION_NOT_FOUND);
     }
 
 }

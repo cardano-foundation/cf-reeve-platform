@@ -24,6 +24,12 @@ public class MilestoneUpdateRequest {
     private String milestoneTitle;
 
     @Nullable
+    @Schema(example = "Site survey and vendor contract signature", description = "Locked (along with "
+            + "milestoneAmount and milestoneDate) once a published event allocates to this milestone — "
+            + "milestoneTitle stays editable regardless. See MILESTONE_LOCKED.")
+    private String description;
+
+    @Nullable
     @Schema(example = "75000.00")
     private BigDecimal milestoneAmount;
 

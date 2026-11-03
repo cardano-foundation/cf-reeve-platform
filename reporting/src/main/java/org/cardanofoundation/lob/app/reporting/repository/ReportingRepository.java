@@ -23,6 +23,8 @@ public interface ReportingRepository extends JpaRepository<ReportEntity, String>
 
     List<ReportEntity> findByReportTemplateId(String reportTemplateId);
 
+    boolean existsByReportTemplateIdAndLedgerDispatchApprovedTrue(String reportTemplateId);
+
     Optional<ReportEntity> findByOrganisationIdAndId(String organisationId, String id);
 
     @Query("SELECT r FROM ReportEntity r WHERE r.organisationId = :organisationId " +

@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -64,6 +65,36 @@ class TransactionConverterTest {
         Either<FatalError, Transactions> org = transactionConverter.convert("org", "10", List.of(mockTxLine));
 
         assertThat(org.isLeft()).isTrue();
+        Map<String, Object> error = (Map<String, Object>) org.getLeft().getBag().get("error");
+        Assertions.assertEquals("ORGANISATION_NOT_IMPORTED", error.get("code"));
+        Assertions.assertEquals("Organisation not imported: no organisation mapping for NetSuite subsidiary 10", error.get("message"));
+    }
+
+    @Test
+    void testConvert_bothDebitAndCreditAmounts_returnsReadableError() {
+        TxLine mockTxLine = mock(TxLine.class);
+        when(codesMappingService.getCodeMapping(netsuiteInstanceId, 10L, CodeMappingType.ORGANISATION)).thenReturn(Optional.of("orgID"));
+        when(mockTxLine.subsidiary()).thenReturn(10L);
+        when(mockTxLine.transactionNumber()).thenReturn("transactionID");
+        when(mockTxLine.type()).thenReturn("type");
+        when(transactionTypeMapper.apply("type")).thenReturn(Optional.of(TransactionType.Transfer));
+        when(mockTxLine.date()).thenReturn(LocalDate.now());
+        when(mockTxLine.exchangeRate()).thenReturn(BigDecimal.ONE);
+        when(mockTxLine.accountMain()).thenReturn("accountMain");
+        when(mockTxLine.amountDebit()).thenReturn(BigDecimal.ONE);
+        when(mockTxLine.amountCredit()).thenReturn(BigDecimal.ONE);
+        when(validator.validate(mockTxLine)).thenReturn(Set.of());
+        when(preprocessorService.preProcess("accountMain", FieldType.CHART_OF_ACCOUNT)).thenReturn(Either.right("Success"));
+        when(preprocessorService.preProcess("accountMain", FieldType.ACCOUNT_CREDIT_NAME)).thenReturn(Either.right("Success"));
+
+        Either<FatalError, Transactions> org = transactionConverter.convert("orgID", "10", List.of(mockTxLine));
+
+        assertThat(org.isLeft()).isTrue();
+        Map<String, Object> bag = org.getLeft().getBag();
+        Map<String, Object> error = (Map<String, Object>) bag.get("error");
+        Assertions.assertEquals("TRANSACTIONS_VALIDATION_ERROR", error.get("code"));
+        Assertions.assertEquals("Both debit and credit amounts are non-zero for transaction: transactionID", error.get("message"));
+        Assertions.assertEquals("Both debit and credit amounts are non-zero for transaction: transactionID", bag.get("technicalErrorMessage"));
     }
 
     @Test
