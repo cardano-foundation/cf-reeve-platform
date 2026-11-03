@@ -59,7 +59,10 @@ class KeycloakOrganisationProvisionerTest {
         verify(client).assignRealmRoleToGroup(created.get(""), "org_member");
         verify(client).assignRealmRoleToGroup(created.get("transactions"), "transactions_viewer");
         verify(client).assignRealmRoleToGroup(created.get("transactions/setup/erp"), "transactions_erp");
-        verify(client).assignRealmRoleToGroup(created.get("presets/account_manager"), "preset_account_manager");
+        verify(client).assignRealmRoleToGroup(created.get("funding/setup"), "funding_setup");
+
+        // the legacy presets are not part of a new organisation
+        assertThat(created.keySet()).noneMatch(path -> path.startsWith("presets"));
 
         // users are assigned by an administrator in Keycloak, not automatically
         verify(client, never()).addUserToGroup(anyString(), anyString());

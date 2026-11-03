@@ -1,5 +1,5 @@
 {
-  "_comment": "Permission catalogue. Endpoints check resource:action permissions; Keycloak (single realm) decides who has them: permissions are client roles of reeve-api, roles below are realm roles composed of them, presets bundle roles. groups is the subgroup layout created under /organisations/<orgId>; organisationRole is assigned on the organisation group itself so every member has it. Seeds/migrates Keycloak through cf-lob/keycloak-config/tools. Groups form a tree: a member of a subgroup also gets the roles of its parent groups (e.g. transactions/setup/erp = viewer + setup + erp). Publisher sits next to reviewer so review and publish can be given to different people (four-eyes).",
+  "_comment": "Permission catalogue. Endpoints check resource:action permissions; Keycloak (single realm) decides who has them: permissions are client roles of reeve-api, roles below are realm roles composed of them, presets bundle roles. groups is the subgroup layout created under /organisations/<orgId>; legacyGroups (presets) only exist in organisations that were migrated from the former reeve_* roles or are seeded with them, never in new organisations; organisationRole is assigned on the organisation group itself so every member has it. Seeds/migrates Keycloak through cf-lob/keycloak-config/tools. Groups form a tree: a member of a subgroup also gets the roles of its parent groups (e.g. transactions/setup/erp = viewer + setup + erp). Publisher sits next to reviewer so review and publish can be given to different people (four-eyes).",
   "modules": [
     "transactions",
     "reporting",
@@ -482,7 +482,9 @@
     "funding/event_editor": "funding_event_editor",
     "funding/project_manager": "funding_project_manager",
     "funding/publisher": "funding_publisher",
-    "funding/setup": "funding_setup",
+    "funding/setup": "funding_setup"
+  },
+  "legacyGroups": {
     "presets/auditor": "preset_auditor",
     "presets/accountant": "preset_accountant",
     "presets/admin": "preset_admin",

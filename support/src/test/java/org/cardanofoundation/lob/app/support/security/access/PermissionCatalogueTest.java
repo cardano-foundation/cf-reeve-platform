@@ -49,7 +49,8 @@ class PermissionCatalogueTest {
                 .containsEntry("transactions/setup/erp", "transactions_erp")
                 .containsEntry("funding", "funding_viewer")
                 .containsEntry("funding/setup", "funding_setup")
-                .containsEntry("presets/accountant", "preset_accountant")
+                // presets are legacy: only migrated or seeded organisations have them, not new ones
+                .doesNotContainKey("presets/accountant")
                 .doesNotContainKey("transactions/viewer")
                 .doesNotContainValue("org_member");
     }
