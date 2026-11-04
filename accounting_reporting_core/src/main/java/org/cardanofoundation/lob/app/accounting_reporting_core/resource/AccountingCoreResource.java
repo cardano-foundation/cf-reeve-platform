@@ -173,6 +173,7 @@ public class AccountingCoreResource {
             )
     })
     @GetMapping(value = "/transaction-types", produces = APPLICATION_JSON_VALUE, name = "Transaction types")
+    @PreAuthorize("@permissions.can('transactions', 'view')")
     public ResponseEntity<String> transactionType() throws JsonProcessingException {
         ArrayNode jsonArray = objectMapper.createArrayNode();
 
@@ -194,6 +195,7 @@ public class AccountingCoreResource {
             )
     })
     @GetMapping(value = "/rejection-reasons", produces = APPLICATION_JSON_VALUE, name = "Rejection reasons")
+    @PreAuthorize("@permissions.can('transactions', 'view')")
     public ResponseEntity<RejectionReason[]> rejectionReasons() {
         return ResponseEntity.ok().body(RejectionReason.values());
     }

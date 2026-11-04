@@ -56,6 +56,7 @@ public class ProjectCodeController {
             ),
     })
     @GetMapping(value = "/{orgId}/projects", produces = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("@permissions.can('projects', 'view')")
     public ResponseEntity<?> getAllProjects(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                             @RequestParam(value = "customerCode", required = false) String customerCode,
                                             @RequestParam(value = "name", required = false) String name,

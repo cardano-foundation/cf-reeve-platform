@@ -59,6 +59,8 @@ public class ReferenceCodeResource {
             ),
     })
     @GetMapping(value = "/{orgId}/reference-codes", produces = MediaType.APPLICATION_JSON_VALUE)
+    // The chart of accounts filters use them too, so it isn't only for who manages event codes
+    @PreAuthorize("@permissions.can('event_codes', 'view') or @permissions.can('chart_of_accounts', 'view')")
     public ResponseEntity<?> getReferenceCodes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                @RequestParam(value = "refCode", required = false) String referenceCode,
                                                @RequestParam(value = "name", required = false) String name,

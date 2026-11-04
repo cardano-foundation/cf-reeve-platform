@@ -7,6 +7,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,6 +36,8 @@ public class UserAccessController {
 
     @Operation(description = "Everything the logged in user can access, per organisation. The frontend uses it to build the organisation switcher and to show or hide features.")
     @GetMapping(value = "/access", produces = APPLICATION_JSON_VALUE)
+    // Any logged in user: it's how the frontend learns the permissions, also of a user without an organisation
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<UserAccessView> access() {
         UserAccess access = currentUserAccess.get();
 

@@ -52,6 +52,7 @@ public class ReportTypeController {
             ),
     })
     @GetMapping(value = "/{orgId}", produces = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("@permissions.can('report_types', 'view')")
     public ResponseEntity<List<ReportTypeView>> getReferenceCodes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();

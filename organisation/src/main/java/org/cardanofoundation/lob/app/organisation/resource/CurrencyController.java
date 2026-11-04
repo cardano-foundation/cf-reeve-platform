@@ -54,6 +54,7 @@ public class CurrencyController {
             ),
     })
     @GetMapping(value = "/{orgId}/currencies", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("@permissions.can('currencies', 'view')")
     public ResponseEntity<?> getAllCurrencies(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                               @RequestParam(value = "code", required = false) String code,
                                               @RequestParam(value = "isoCode", required = false) List<String> isoCodes,
@@ -72,6 +73,7 @@ public class CurrencyController {
             ),
     })
     @GetMapping(value = "/{orgId}/currencies/{customerCode}", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("@permissions.can('currencies', 'view')")
     public ResponseEntity<CurrencyView> getCurrency(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @PathVariable("customerCode") @Parameter(example = "CHF") String customerCode) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();
