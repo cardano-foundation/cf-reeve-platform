@@ -48,4 +48,12 @@ public class KeycloakSecurityHelper {
         return SYSTEM_USER;
     }
 
+    public String getCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.isAuthenticated() && authentication.getPrincipal() instanceof Jwt jwt) {
+            return jwt.getClaimAsString("sub");
+        }
+        return SYSTEM_USER;
+    }
+
 }

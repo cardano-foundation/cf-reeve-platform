@@ -1,25 +1,45 @@
 package org.cardanofoundation.lob.app.organisation.config;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 
+import org.cardanofoundation.lob.app.support.crypto.ConfigEncryptionProperties;
+import org.cardanofoundation.lob.app.support.crypto.RsaOaepHybridEncryptor;
 import org.cardanofoundation.lob.app.support.crypto.SecretCipherConfig;
+import org.cardanofoundation.lob.app.support.crypto.SecretEncryptor;
 
 /**
- * Makes {@link org.cardanofoundation.lob.app.support.crypto.SecretCipher} available wherever the
- * organisation module's beans are.
+ * Provides the encrypt-only {@link SecretEncryptor} (public key) for the organisation tier.
  * <p>
- * This deliberately lives <em>inside</em> {@code org.cardanofoundation.lob.app.organisation}
- * rather than alongside {@code OrganisationModuleConfig} (which sits in
- * {@code org.cardanofoundation.lob.app.config}). Anything that component-scans the organisation
- * package picks up {@code NetSuiteConfigAdminService}, which requires a cipher — including test
- * contexts and applications that scan the package directly without activating the module config.
- * Declaring the bean next to the module config would leave those contexts unable to start.
+ * This deliberately lives <em>inside</em> {@code org.cardanofoundation.lob.app.organisation}:
+ * the netsuite, accounting-core and csv module configs all component-scan this package, so this
+ * class is registered on pods that do not run the organisation module at all. The
+ * {@code lob.organisation.enabled} gate — the same condition as on
+ * {@code NetSuiteConfigAdminService}, the only consumer — keeps it inert there: a publisher pod
+ * configured with only the private key must boot.
  * <p>
- * Spring registers an imported {@code @Configuration} once regardless of how many places import
- * it, so this coexists with the imports on the module config classes.
+ * The bean is created unconditionally when the module is enabled; fail-fast on a missing or
+ * invalid key lives in the {@link RsaOaepHybridEncryptor} constructor, so the startup error names
+ * {@code LOB_CONFIG_ENCRYPTION_PUBLIC_KEY} instead of Spring's generic missing-bean message.
+ * <p>
+ * The {@link SecretCipherConfig} import keeps the key-pair canary registered: that config provides
+ * no bean anything injects, so only this import (and its twin on {@code NetsuiteCryptoConfig})
+ * holds it in the context. Spring dedupes the double import.
  */
 @Configuration
+@ConditionalOnProperty(name = "lob.organisation.enabled", havingValue = "true", matchIfMissing = false)
+@EnableConfigurationProperties(ConfigEncryptionProperties.class)
 @Import(SecretCipherConfig.class)
 public class OrganisationCryptoConfig {
+
+    @Bean
+    @ConditionalOnMissingBean(SecretEncryptor.class)
+    public SecretEncryptor secretEncryptor(ConfigEncryptionProperties properties) {
+        return new RsaOaepHybridEncryptor(properties.publicKey());
+    }
+
 }

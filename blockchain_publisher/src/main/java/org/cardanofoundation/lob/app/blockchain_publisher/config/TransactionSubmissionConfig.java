@@ -15,10 +15,16 @@ import com.bloxbean.cardano.client.api.UtxoSupplier;
 import com.bloxbean.cardano.client.backend.api.BackendService;
 import com.bloxbean.cardano.client.backend.api.DefaultUtxoSupplier;
 
+import org.cardanofoundation.lob.app.blockchain_common.service.ipfs.IpfsPublisher;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170MetadataFactory;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentIpfsSerialiser;
+import org.cardanofoundation.lob.app.blockchain_common.service_assistance.DocumentMetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_common.service_assistance.MetadataChecker;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.KeriService;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.ipfs.IpfsPublisher;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.L1TransactionCreatorConfig;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.authbegin.AuthBeginL1TransactionCreator;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentConverter;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentL1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report.API3L1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report.API3MetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.spendingevent.SpendingEventL1TransactionCreator;
@@ -27,9 +33,17 @@ import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction.API1MetadataSerialiser;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.transation_submit.*;
 import org.cardanofoundation.lob.app.blockchain_reader.BlockchainReaderPublicApiIF;
+import org.cardanofoundation.lob.app.keri_attestation.service.RemotesignRequestFactory;
+import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 
 @Configuration
 public class TransactionSubmissionConfig {
+
+    /**
+     * Label 170 carries CIP-170 attestation metadata, so no publishable type may be configured to use
+     * it. Enforced by {@link #documentL1TransactionCreator}.
+     */
+    private static final int RESERVED_CIP_170_LABEL = 170;
 
     @Bean
     @Profile(value = { "blockfrost", "dev--yaci-dev-kit", "test"} )
@@ -127,6 +141,55 @@ public class TransactionSubmissionConfig {
                 keriService,
                 keriMetadataLabel
         );
+    }
+
+    @Bean
+    public DocumentL1TransactionCreator documentL1TransactionCreator(@Qualifier("yaci_blockfrost") BackendService backendService,
+                                                                      DocumentConverter documentConverter,
+                                                                      DocumentIpfsSerialiser documentIpfsSerialiser,
+                                                                      DocumentMetadataSerialiser documentMetadataSerialiser,
+                                                                      BlockchainReaderPublicApiIF blockchainReaderPublicApi,
+                                                                      @Qualifier("documentJsonSchemaMetadataChecker") MetadataChecker metadataChecker,
+                                                                      OrganisationPublicApi organisationPublicApi,
+                                                                      Account organiserAccount,
+                                                                      Optional<IpfsPublisher> ipfsPublisher,
+                                                                      Cip170MetadataFactory cip170MetadataFactory,
+                                                                      @Value("${lob.l1.transaction.metadata_label:1447}") int metadataLabel,
+                                                                      @Value("${lob.l1.transaction.debug_store_output_tx:false}") boolean debugStoreOutputTx
+    ) {
+        // Unconditional, so a misconfigured label fails at startup in every deployment shape rather
+        // than overwriting a CIP-170 attestation map the first time a document is dispatched.
+        if (metadataLabel == RESERVED_CIP_170_LABEL) {
+            throw new IllegalStateException("metadata label 170 is reserved for CIP-170 attestations");
+        }
+        return new DocumentL1TransactionCreator(backendService,
+                documentConverter,
+                documentIpfsSerialiser,
+                documentMetadataSerialiser,
+                blockchainReaderPublicApi,
+                metadataChecker,
+                organisationPublicApi,
+                organiserAccount,
+                ipfsPublisher,
+                cip170MetadataFactory,
+                // Constructed, not injected: the class is stateless and collaborator-free, but it is a
+                // @Service in keri_attestation's package, which is only component-scanned when
+                // lob.keri-attestation.enabled=true. That is FALSE on the publisher pod — the very pod
+                // that needs it — so injecting it would fail the context exactly where it is required.
+                new RemotesignRequestFactory(),
+                metadataLabel,
+                debugStoreOutputTx
+        );
+    }
+
+    @Bean
+    public AuthBeginL1TransactionCreator authBeginL1TransactionCreator(@Qualifier("yaci_blockfrost") BackendService backendService,
+                                                                       BlockchainReaderPublicApiIF blockchainReaderPublicApi,
+                                                                       Cip170MetadataFactory cip170MetadataFactory,
+                                                                       Account organiserAccount
+    ) {
+        return new AuthBeginL1TransactionCreator(backendService, blockchainReaderPublicApi, cip170MetadataFactory,
+                organiserAccount);
     }
 
 //    @Bean

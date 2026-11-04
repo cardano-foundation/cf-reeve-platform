@@ -32,6 +32,8 @@ import org.cardanofoundation.lob.app.blockchain_publisher.repository.ReportEntit
 import org.cardanofoundation.lob.app.blockchain_publisher.repository.TransactionEntityRepository;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.CardanoDispatcher;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.CardanoStatusWatcher;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.authbegin.AuthBeginL1TransactionCreator;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document.DocumentL1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.report.API3L1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.spendingevent.SpendingEventL1TransactionCreator;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.transaction.API1L1TransactionCreator;
@@ -67,6 +69,10 @@ class BlockchainPublisherServiceDuplicateEventsTest {
     private API3L1TransactionCreator api3L1TransactionCreator;
     @MockitoBean
     private SpendingEventL1TransactionCreator spendingEventL1TransactionCreator;
+    @MockitoBean
+    private DocumentL1TransactionCreator documentL1TransactionCreator;
+    @MockitoBean
+    private AuthBeginL1TransactionCreator authBeginL1TransactionCreator;
 
 
     @BeforeEach
