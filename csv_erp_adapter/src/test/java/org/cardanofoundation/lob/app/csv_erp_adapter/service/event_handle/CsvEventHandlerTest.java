@@ -138,7 +138,9 @@ class CsvEventHandlerTest {
 
         verify(csvExtractionService).continueERPReconciliation(
                 event.getReconciliationId(),
-                event.getOrganisationId()
+                event.getOrganisationId(),
+                event.getFrom(),
+                event.getTo()
         );
     }
 

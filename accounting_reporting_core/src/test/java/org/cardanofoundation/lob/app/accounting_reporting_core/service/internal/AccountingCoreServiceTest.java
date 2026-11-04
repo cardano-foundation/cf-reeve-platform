@@ -34,8 +34,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.UserExtractionParameters;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ScheduledIngestionEvent;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ValidateIngestionEvent;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.extraction.ValidateIngestionResponseEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.event.reconcilation.ScheduledReconcilationEvent;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepository;
+import org.cardanofoundation.lob.app.accounting_reporting_core.service.ValidateIngestionResponseWaiter;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.organisation.util.AccountingPeriodCalculator;
@@ -61,6 +64,8 @@ class AccountingCoreServiceTest {
     private KeycloakSecurityHelper keycloakSecurityHelper;
     @Mock
     private AntiVirusScanner antiVirusScanner;
+    @Mock
+    private ValidateIngestionResponseWaiter responseWaiter;
 
     @InjectMocks
     private AccountingCoreService accountingCoreService;
@@ -266,6 +271,59 @@ class AccountingCoreServiceTest {
         assertThat(result.getLeft().getTitle()).isEqualTo("TX_BATCH_NOT_FOUND");
         assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.NOT_FOUND.value());
         verify(transactionBatchRepository).findByIdAndFilteringParametersOrganisationId("batch-1", "org-123");
+    }
+
+    private void givenValidationRequestPasses() {
+        given(organisationPublicApi.findByOrganisationId(eq("org-123"))).willReturn(Optional.of(mock(Organisation.class)));
+        given(accountingPeriodCalculator.calculateAccountingPeriod(any())).willReturn(Range.of(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31)));
+        given(antiVirusScanner.readFileBytes(any())).willReturn(Either.right(new byte[0]));
+    }
+
+    @Test
+    void validateIngestion_waitsForTheResponseToThePublishedCorrelationId() throws InterruptedException {
+        givenValidationRequestPasses();
+        given(responseWaiter.await(any(), any())).willReturn(Optional.of(
+                ValidateIngestionResponseEvent.builder().valid(true).errors(List.of()).build()));
+
+        Either<List<ProblemDetail>, Void> result = accountingCoreService.validateIngestion(userExtractionParameters, ExtractorType.CSV, Optional.empty(), null);
+
+        assertThat(result.isRight()).isTrue();
+        ArgumentCaptor<ValidateIngestionEvent> eventCaptor = ArgumentCaptor.forClass(ValidateIngestionEvent.class);
+        verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
+        verify(responseWaiter).await(eq(eventCaptor.getValue().getCorrelationId()), any());
+    }
+
+    @Test
+    void validateIngestion_returnsTheAdapterErrors() throws InterruptedException {
+        givenValidationRequestPasses();
+        given(responseWaiter.await(any(), any())).willReturn(Optional.of(
+                ValidateIngestionResponseEvent.builder().valid(false).errors(List.of("first", "second")).build()));
+
+        Either<List<ProblemDetail>, Void> result = accountingCoreService.validateIngestion(userExtractionParameters, ExtractorType.CSV, Optional.empty(), null);
+
+        assertThat(result.getLeft()).extracting(ProblemDetail::getDetail).containsExactly("first", "second");
+    }
+
+    @Test
+    void validateIngestion_reportsATimeoutWithAUsefulMessage() throws InterruptedException {
+        givenValidationRequestPasses();
+        given(responseWaiter.await(any(), any())).willReturn(Optional.empty());
+
+        Either<List<ProblemDetail>, Void> result = accountingCoreService.validateIngestion(userExtractionParameters, ExtractorType.CSV, Optional.empty(), null);
+
+        assertThat(result.getLeft()).extracting(ProblemDetail::getDetail)
+                .containsExactly("Timed out waiting for the ingestion validation result");
+    }
+
+    @Test
+    void validateIngestion_restoresTheInterruptFlag() throws InterruptedException {
+        givenValidationRequestPasses();
+        given(responseWaiter.await(any(), any())).willThrow(new InterruptedException());
+
+        Either<List<ProblemDetail>, Void> result = accountingCoreService.validateIngestion(userExtractionParameters, ExtractorType.CSV, Optional.empty(), null);
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(Thread.interrupted()).isTrue();
     }
 
 }

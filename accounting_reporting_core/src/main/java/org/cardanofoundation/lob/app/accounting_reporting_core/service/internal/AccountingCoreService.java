@@ -10,10 +10,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
@@ -66,6 +63,9 @@ public class AccountingCoreService {
 
     @Value("${lob.max.transaction.numbers.per.batch:600}")
     private int maxTransactionNumbersPerBatch = 600;
+
+    @Value("${lob.accounting_reporting_core.validate-ingestion.timeout:PT10S}")
+    private Duration validateIngestionTimeout = Duration.ofSeconds(10);
 
     @Transactional(readOnly = true)
     public Either<ProblemDetail, Void> scheduleIngestion(UserExtractionParameters userExtractionParameters, ExtractorType extractorType, Optional<MultipartFile> file, Map<String, Object> parameters) {
@@ -132,27 +132,33 @@ public class AccountingCoreService {
                         .build())
                 .build();
 
-        CompletableFuture<ValidateIngestionResponseEvent> future = responseWaiter.createFuture(correlationId);
-
         applicationEventPublisher.publishEvent(validateIngestionEvent);
         // wait synchronously, with timeout for ValidateIngestionResponseEvent to be published to mimic a synchronous call
         try {
-            ValidateIngestionResponseEvent response = future.get(10, TimeUnit.SECONDS);
+            Optional<ValidateIngestionResponseEvent> responseM = responseWaiter.await(correlationId, validateIngestionTimeout);
+            if (responseM.isEmpty()) {
+                log.error("No ValidateIngestionResponseEvent within {}, correlationId: {}", validateIngestionTimeout, correlationId);
+                return Either.left(List.of(validationProblem("Timed out waiting for the ingestion validation result")));
+            }
+            ValidateIngestionResponseEvent response = responseM.orElseThrow();
             if (!response.isValid()) {
                 // return the list of problems
-                return Either.left(response.getErrors().stream().map(error -> {
-                    ProblemDetail problem = ProblemDetail.forStatusAndDetail(BAD_REQUEST, error);
-                    problem.setTitle("VALIDATION_ERROR");
-                    return problem;
-                }).collect(Collectors.toList()));
+                return Either.left(response.getErrors().stream()
+                        .map(AccountingCoreService::validationProblem)
+                        .collect(Collectors.toList()));
             }
-        } catch (InterruptedException | ExecutionException | TimeoutException e) {
-            log.error("Error waiting for ValidateIngestionResponseEvent", e);
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(BAD_REQUEST, "Error validating ingestion: %s".formatted(e.getMessage()));
-            problem.setTitle("VALIDATION_ERROR");
-            return Either.left(List.of(problem));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Interrupted waiting for ValidateIngestionResponseEvent, correlationId: {}", correlationId, e);
+            return Either.left(List.of(validationProblem("Interrupted waiting for the ingestion validation result")));
         }
         return Either.right(null);
+    }
+
+    private static ProblemDetail validationProblem(String detail) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(BAD_REQUEST, detail);
+        problem.setTitle("VALIDATION_ERROR");
+        return problem;
     }
 
     @Transactional(readOnly = true)

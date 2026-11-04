@@ -25,6 +25,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.JpaSort;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.opencsv.CSVWriter;
@@ -311,6 +312,8 @@ public class AccountingCorePresentationViewService {
                 .transactionNumbers(transactionNumbers).build();
     }
 
+    // Blocks until the ERP adapter answers: must not hold a database connection for the whole wait
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public Either<List<ProblemDetail>, Void> extractionValidation(ExtractionRequest body) {
         UserExtractionParameters userExtractionParameters =
                 getUserExtractionParameters(body);

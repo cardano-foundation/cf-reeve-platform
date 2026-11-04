@@ -89,7 +89,9 @@ public class CsvEventHandler implements ReeveErpAdapter {
         }
         csvExtractionService.continueERPReconciliation(
                 reconcilationCreatedEvent.getReconciliationId(),
-                reconcilationCreatedEvent.getOrganisationId()
+                reconcilationCreatedEvent.getOrganisationId(),
+                reconcilationCreatedEvent.getFrom(),
+                reconcilationCreatedEvent.getTo()
         );
         log.info("Handled handleCreatedReconciliationEvent.");
     }
