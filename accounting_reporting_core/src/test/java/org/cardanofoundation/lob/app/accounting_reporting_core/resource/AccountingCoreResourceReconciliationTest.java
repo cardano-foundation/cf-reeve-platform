@@ -174,4 +174,15 @@ class AccountingCoreResourceReconciliationTest {
         verifyNoInteractions(accountingCoreService);
     }
 
+
+    /** It calls reconcileTriggerAction on the same object, which skips that method's own @PreAuthorize. */
+    @org.junit.jupiter.api.Test
+    void csvTriggerNeedsTheReconcilePermissionOfItsOwn() throws NoSuchMethodException {
+        var annotation = AccountingCoreResourceReconciliation.class
+                .getMethod("reconcileTriggerCsvAction", org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRequest.class)
+                .getAnnotation(org.springframework.security.access.prepost.PreAuthorize.class);
+
+        org.junit.jupiter.api.Assertions.assertEquals("@permissions.can('transactions', 'reconcilate')", annotation.value());
+    }
+
 }

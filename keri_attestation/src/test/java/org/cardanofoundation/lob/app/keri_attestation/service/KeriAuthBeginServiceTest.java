@@ -40,6 +40,7 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentity
 import org.cardanofoundation.lob.app.keri_attestation.domain.view.CeremonyView;
 import org.cardanofoundation.lob.app.keri_attestation.domain.view.RequiredSteps;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 /**
  * Tests {@link KeriAuthBeginService#submitAuthBegin}. This module owns no Cardano wallet: the
@@ -75,17 +76,20 @@ class KeriAuthBeginServiceTest {
     private KeriIdentityLinkRepository identityLinkRepository;
     @Mock
     private CredentialChainValidator chainValidator;
+    @Mock
+    private KeycloakSecurityHelper securityHelper;
 
     private KeriAuthBeginService service;
 
     @BeforeEach
     void setUp() {
         lenient().when(keriClient.client()).thenReturn(client);
+        lenient().when(securityHelper.canUserAccessOrg(any())).thenReturn(true);
         lenient().when(chainValidator.validate(any(), any(), any(), any()))
                 .thenReturn(Either.right(new CredentialChainValidator.ValidatedCredential(CREDENTIAL_SAID, SCHEMA_SAID,
                         "Foundation Employee", WALLET_AID, WALLET_AID, TrustModel.STANDALONE, Map.of(), "fingerprint")));
         service = new KeriAuthBeginService(keriClient, cesrChainReducer, cesrFetcher, eventPublisher,
-                ceremonyService, identityLinkRepository, chainValidator);
+                ceremonyService, identityLinkRepository, chainValidator, securityHelper);
     }
 
     private static KeriAttestationProperties properties() {
@@ -138,6 +142,20 @@ class KeriAuthBeginServiceTest {
         Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, false, false);
 
         assertTrue(result.isLeft());
+        verifyNoInteractions(eventPublisher, identityLinkRepository);
+    }
+
+    /** A role in the request's organisation must not publish AUTH_BEGIN for the ceremony's other organisation. */
+    @Test
+    void ceremonyOfAnotherOrganisationFailsWithoutEmittingACommand() {
+        givenStepBegun();
+        when(securityHelper.canUserAccessOrg(any())).thenReturn(false);
+        when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
+
+        service.submitAuthBegin(CEREMONY_ID, USER_ID, false, false);
+
+        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
+                eq(KeriAttestationProblems.CEREMONY_FORBIDDEN), any());
         verifyNoInteractions(eventPublisher, identityLinkRepository);
     }
 

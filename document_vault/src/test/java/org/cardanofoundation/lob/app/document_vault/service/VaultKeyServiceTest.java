@@ -15,15 +15,11 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ProblemDetail;
-import org.springframework.security.authentication.TestingAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import io.vavr.control.Either;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,6 +36,7 @@ import org.cardanofoundation.lob.app.document_vault.repository.VaultKeyRepositor
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
+import org.cardanofoundation.lob.app.support.security.access.PermissionChecker;
 
 @ExtendWith(MockitoExtension.class)
 class VaultKeyServiceTest {
@@ -54,22 +51,16 @@ class VaultKeyServiceTest {
     private KeycloakSecurityHelper securityHelper;
     @Mock
     private OrganisationPublicApiIF organisationPublicApi;
+    @Mock
+    private PermissionChecker permissionChecker;
 
     private VaultKeyService service;
 
     @BeforeEach
     void currentUser() {
-        service = new VaultKeyService(keyRepository, entryRepository, securityHelper, organisationPublicApi, absentVerificationService());
-        ReflectionTestUtils.setField(service, "adminRoleName", "admin");
+        service = new VaultKeyService(keyRepository, entryRepository, securityHelper, organisationPublicApi, absentVerificationService(), permissionChecker);
         // lenient: MockitoExtension defaults to STRICT_STUBS and early-return tests never consume this stub
         lenient().when(securityHelper.getCurrentUserId()).thenReturn("acc1");
-    }
-
-    @AfterEach
-    void clearSecurityContext() {
-        // hasAdminRole() reads SecurityContextHolder directly; a test that populates it must not
-        // let that authentication leak into the next test in this class (or another class).
-        SecurityContextHolder.clearContext();
     }
 
     private RegisterKeyRequest request(String publicKey, String org) {
@@ -178,17 +169,10 @@ class VaultKeyServiceTest {
         verify(keyRepository, never()).delete(any(VaultKeyEntity.class));
     }
 
-    /**
-     * The admin bypass in {@code hasAdminRole()}: a Keycloak-authenticated caller holding
-     * {@code ROLE_<keycloak.roles.admin>} (default "admin") may delete a key they do not own.
-     * Mirrors VaultDocumentServiceTest's deleteByNonCreatorWithAdminRoleSucceeds.
-     */
     @Test
-    void deleteOthersKeyWithAdminSucceeds() {
-        TestingAuthenticationToken adminAuth = new TestingAuthenticationToken("admin-user", null, "ROLE_admin");
-        adminAuth.setAuthenticated(true);
-        SecurityContextHolder.getContext().setAuthentication(adminAuth);
-
+    void deleteOthersKeyWithDeleteAnySucceeds() {
+        when(securityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        when(permissionChecker.can("document_vault", "delete_any")).thenReturn(true);
         VaultKeyEntity key = orgKey("key1", "acc2"); // not the current user ("acc1")
         when(keyRepository.findById("key1")).thenReturn(Optional.of(key));
 
@@ -196,6 +180,32 @@ class VaultKeyServiceTest {
 
         assertTrue(problem.isEmpty());
         verify(keyRepository).delete(key);
+    }
+
+    @Test
+    void deleteOthersKeyAsMemberWithoutDeleteAnyIsRejected() {
+        when(securityHelper.canUserAccessOrg("org1")).thenReturn(true);
+        VaultKeyEntity key = orgKey("key1", "acc2");
+        when(keyRepository.findById("key1")).thenReturn(Optional.of(key));
+
+        Optional<ProblemDetail> problem = service.delete("key1");
+
+        assertEquals(VaultProblems.NOT_KEY_OWNER, problem.orElseThrow().getTitle());
+        verify(keyRepository, never()).delete(any(VaultKeyEntity.class));
+    }
+
+    /** delete_any held in another organisation must not reach this organisation's keys. */
+    @Test
+    void deleteOthersKeyOfAnotherOrganisationIsRejectedEvenWithDeleteAny() {
+        lenient().when(permissionChecker.can("document_vault", "delete_any")).thenReturn(true);
+        when(securityHelper.canUserAccessOrg("org1")).thenReturn(false);
+        VaultKeyEntity key = orgKey("key1", "acc2");
+        when(keyRepository.findById("key1")).thenReturn(Optional.of(key));
+
+        Optional<ProblemDetail> problem = service.delete("key1");
+
+        assertEquals(VaultProblems.NOT_KEY_OWNER, problem.orElseThrow().getTitle());
+        verify(keyRepository, never()).delete(any(VaultKeyEntity.class));
     }
 
     @Test

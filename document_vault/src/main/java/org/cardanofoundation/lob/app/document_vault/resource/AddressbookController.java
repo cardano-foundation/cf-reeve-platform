@@ -48,16 +48,13 @@ import org.cardanofoundation.lob.app.document_vault.service.CardImportService;
 @RequiredArgsConstructor
 public class AddressbookController {
 
-    private static final String ALL_ROLES = "hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) "
-            + "or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole())";
-
     private final AddressbookService addressbookService;
     private final CardImportService cardImportService;
 
     @Operation(description = "List an organisation's addressbook (member-only, paged). `assurance` is null "
             + "when unknown — a hand-entered contact claims no custody tier, and none can be checked.")
     @GetMapping(value = "/organisations/{organisationId}/addressbook", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize(ALL_ROLES)
+    @PreAuthorize("@permissions.can('document_vault', 'view')")
     public ResponseEntity<Object> listAddressbook(@PathVariable String organisationId,
                                                   @PageableDefault(size = 20) Pageable pageable) {
         return Responses.respond(addressbookService.list(organisationId, pageable), HttpStatus.OK);
@@ -66,7 +63,7 @@ public class AddressbookController {
     @Operation(description = "Add a contact by hand, when you have someone's public key but no key card. "
             + "Conflicts (409) if the organisation's addressbook already holds that public key.")
     @PostMapping(value = "/addressbook", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize(ALL_ROLES)
+    @PreAuthorize("@permissions.can('document_vault', 'create')")
     public ResponseEntity<Object> createEntry(@Valid @RequestBody CreateAddressbookEntryRequest request) {
         return Responses.respond(addressbookService.create(request), HttpStatus.CREATED);
     }
@@ -75,7 +72,7 @@ public class AddressbookController {
             + "editable: it is what the entry means, and repointing it would silently redirect a contact "
             + "a sender already verified. Delete the entry and add the new key instead.")
     @PutMapping(value = "/addressbook/{entryId}", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize(ALL_ROLES)
+    @PreAuthorize("@permissions.can('document_vault', 'edit')")
     public ResponseEntity<Object> updateEntry(@PathVariable String entryId,
                                               @Valid @RequestBody UpdateAddressbookEntryRequest request) {
         return Responses.respond(addressbookService.update(entryId, request), HttpStatus.OK);
@@ -84,7 +81,7 @@ public class AddressbookController {
     @Operation(description = "Remove a contact. Documents already encrypted to them are untouched and stay "
             + "decryptable — the contact simply stops being offered as a future recipient.")
     @DeleteMapping(value = "/addressbook/{entryId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize(ALL_ROLES)
+    @PreAuthorize("@permissions.can('document_vault', 'delete')")
     public ResponseEntity<Object> deleteEntry(@PathVariable String entryId) {
         return Responses.respondDelete(addressbookService.delete(entryId));
     }
@@ -95,7 +92,7 @@ public class AddressbookController {
             + "refreshes the existing row rather than duplicating it. Nothing is verified — the card is "
             + "unsigned, so confirm the key out-of-band before encrypting to it.")
     @PostMapping(value = "/addressbook/import", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize(ALL_ROLES)
+    @PreAuthorize("@permissions.can('document_vault', 'create')")
     public ResponseEntity<Object> importCard(@Valid @RequestBody ImportCardRequest request) {
         return Responses.respond(cardImportService.importCard(request), HttpStatus.OK);
     }
