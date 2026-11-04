@@ -136,6 +136,17 @@ public class TransactionEntityRepositoryGateway {
         return newTxs;
     }
 
+    /**
+     * Makes this organisation's stores run one at a time until the surrounding transaction ends.
+     * Accounting core resends a transaction until it hears back, so replicas can receive the same one
+     * at once. Without this, both would see it as new in {@link #storeOnlyNew} and the slower insert
+     * would fail on the primary key, rolling back everything else in its command.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void lockStoresForOrganisation(String organisationId) {
+        transactionEntityRepository.acquireTransactionScopedLock("blockchain_publisher.store." + organisationId);
+    }
+
     @Transactional
     public Set<TransactionEntity> updateErrorRollbackTransactions(Set<TransactionEntity> transactionEntities) {
         Set<String> txIds = transactionEntities.stream()

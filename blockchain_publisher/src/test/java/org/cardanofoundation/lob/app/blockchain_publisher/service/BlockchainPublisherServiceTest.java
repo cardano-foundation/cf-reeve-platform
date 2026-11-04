@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.service;
 
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -7,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -40,6 +42,15 @@ public class BlockchainPublisherServiceTest {
 
     @InjectMocks
     private BlockchainPublisherService blockchainPublisherService;
+
+    @Test
+    void storeTransactionForDispatchLater_locksBeforeCheckingWhichTransactionsAreNew() {
+        blockchainPublisherService.storeTransactionForDispatchLater("org1", Set.of());
+
+        InOrder inOrder = inOrder(transactionEntityRepositoryGateway);
+        inOrder.verify(transactionEntityRepositoryGateway).lockStoresForOrganisation("org1");
+        inOrder.verify(transactionEntityRepositoryGateway).storeOnlyNew(Set.of());
+    }
 
     @Test
     void handleTxStatusRequest() {
