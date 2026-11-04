@@ -41,8 +41,8 @@ class CurrentUserAccessTest {
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
 
         when(resolver.resolve(any())).thenReturn(new UserAccess("multi", Map.of(
-                "org-a", new OrganisationAccess("org-a", Set.of("reeve_account_manager"), Set.of(), Set.of("reports:publish", "reports:view")),
-                "org-b", new OrganisationAccess("org-b", Set.of("reeve_auditor"), Set.of(), Set.of("reports:view")))));
+                "org-a", new OrganisationAccess("org-a", Set.of("org_admin"), Set.of(), Set.of("reports:publish", "reports:view")),
+                "org-b", new OrganisationAccess("org-b", Set.of("reports_viewer"), Set.of(), Set.of("reports:view")))));
     }
 
     @AfterEach
@@ -81,7 +81,7 @@ class CurrentUserAccessTest {
     @Test
     void withoutHeader_singleOrganisationIsUsed() {
         when(resolver.resolve(any())).thenReturn(new UserAccess("single", Map.of(
-                "org-a", new OrganisationAccess("org-a", Set.of("reeve_auditor"), Set.of(), Set.of("reports:view")))));
+                "org-a", new OrganisationAccess("org-a", Set.of("reports_viewer"), Set.of(), Set.of("reports:view")))));
 
         assertThat(permissions.can("reports", "view")).isTrue();
     }

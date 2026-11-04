@@ -1,32 +1,30 @@
 package org.cardanofoundation.lob.app.support.security.access;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.stereotype.Component;
+import lombok.extern.slf4j.Slf4j;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.stereotype.Component;
 
 /**
  * The permissions ("resource:action") the platform knows about, the module(s) each resource belongs to and the
- * subgroup layout created for every organisation in Keycloak.
+ * subgroup layout created for every organisation in Keycloak. The application supplies them as lob.permissions.
  * <p>
  * Endpoints declare the permission they need; who has it is decided by Keycloak (see {@link KeycloakUserAccessResolver}).
- * The roles and presets in the catalogue file are only used to seed and migrate Keycloak.
+ * <p>
+ * Without a catalogue the application still starts, so other modules and tests boot, but nobody gets any permission.
  */
 @Component
+@EnableConfigurationProperties(PermissionProperties.class)
+@Slf4j
 public class PermissionCatalogue {
 
-    private static final String CATALOGUE_FILE = "reeve-permissions.json";
+    private static final String DEFAULT_PLATFORM_GROUP = "platform";
 
     private final Set<String> modules;
     private final Map<String, Set<String>> resourceModules;
@@ -35,38 +33,38 @@ public class PermissionCatalogue {
     private final Map<String, String> groupLayout;
     private final String platformGroup;
 
-    @Autowired
-    public PermissionCatalogue() {
-        this(readCatalogue());
-    }
-
-    private PermissionCatalogue(JsonNode catalogue) {
-        Set<String> moduleNames = new LinkedHashSet<>();
-        catalogue.path("modules").forEach(module -> moduleNames.add(module.asText()));
-
+    public PermissionCatalogue(PermissionProperties properties) {
         Map<String, Set<String>> modulesByResource = new LinkedHashMap<>();
         Set<String> allPermissions = new LinkedHashSet<>();
-        catalogue.path("resources").properties().forEach(resourceEntry -> {
-            String resource = resourceEntry.getKey();
-            Set<String> resourceModuleNames = new LinkedHashSet<>();
-            resourceEntry.getValue().path("modules").forEach(module -> resourceModuleNames.add(module.asText()));
-            modulesByResource.put(resource, Collections.unmodifiableSet(resourceModuleNames));
-            resourceEntry.getValue().path("actions").forEach(action -> allPermissions.add(permission(resource, action.asText())));
+        properties.resources().forEach(resource -> {
+            modulesByResource.put(resource.name(), Collections.unmodifiableSet(new LinkedHashSet<>(resource.modules())));
+            resource.actions().forEach(action -> allPermissions.add(permission(resource.name(), action)));
         });
 
         Map<String, String> layout = new LinkedHashMap<>();
-        catalogue.path("groups").properties().forEach(group -> layout.put(group.getKey(), group.getValue().asText()));
+        properties.groups().forEach(group -> layout.put(group.path(), group.role()));
 
-        this.modules = Collections.unmodifiableSet(moduleNames);
+        this.modules = Collections.unmodifiableSet(new LinkedHashSet<>(properties.modules()));
         this.resourceModules = Collections.unmodifiableMap(modulesByResource);
         this.permissions = Collections.unmodifiableSet(allPermissions);
-        this.organisationRole = catalogue.path("organisationRole").asText();
+        this.organisationRole = properties.organisationRole();
         this.groupLayout = Collections.unmodifiableMap(layout);
-        this.platformGroup = catalogue.path("platform").path("group").asText("platform");
+        this.platformGroup = properties.platform() == null || properties.platform().group() == null ? DEFAULT_PLATFORM_GROUP : properties.platform().group();
+
+        if (!isConfigured()) {
+            log.error("lob.permissions is not set: nobody will get any permission and no organisation can be provisioned");
+        }
     }
 
     public static String permission(String resource, String action) {
         return resource + ":" + action;
+    }
+
+    /**
+     * @return false when the application supplied no catalogue, in which case no permission is granted
+     */
+    public boolean isConfigured() {
+        return !permissions.isEmpty();
     }
 
     /**
@@ -113,6 +111,9 @@ public class PermissionCatalogue {
      * Drops permissions of modules that are not enabled.
      */
     public Set<String> filterByModules(Set<String> grantedPermissions, Set<String> enabledModules) {
+        if (!isConfigured()) {
+            return Set.of();
+        }
         Set<String> result = new LinkedHashSet<>();
         for (String granted : grantedPermissions) {
             String resource = granted.contains(":") ? granted.substring(0, granted.indexOf(':')) : granted;
@@ -122,14 +123,6 @@ public class PermissionCatalogue {
             }
         }
         return result;
-    }
-
-    private static JsonNode readCatalogue() {
-        try (InputStream inputStream = new ClassPathResource(CATALOGUE_FILE).getInputStream()) {
-            return new ObjectMapper().readTree(inputStream);
-        } catch (IOException e) {
-            throw new UncheckedIOException("Unable to read the permission catalogue " + CATALOGUE_FILE, e);
-        }
     }
 
 }

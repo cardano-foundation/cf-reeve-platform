@@ -1,66 +1,68 @@
 package org.cardanofoundation.lob.app.support.security.access;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
 
+import java.util.List;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
+/**
+ * The logic only: the real catalogue is lob.permissions in the application, which tests its own data.
+ */
 class PermissionCatalogueTest {
 
-    private final PermissionCatalogue catalogue = new PermissionCatalogue();
+    private final PermissionCatalogue catalogue = new PermissionCatalogue(new PermissionProperties(
+            List.of("transactions", "reporting", "funding"), "org_member",
+            List.of(
+                    new PermissionProperties.Resource("organization_details", List.of(), List.of("view")),
+                    new PermissionProperties.Resource("transactions", List.of("transactions"), List.of("view", "export")),
+                    new PermissionProperties.Resource("reports", List.of("reporting"), List.of("view")),
+                    new PermissionProperties.Resource("project_management", List.of("funding"), List.of("view")),
+                    new PermissionProperties.Resource("chart_of_accounts", List.of("transactions", "reporting"), List.of("view"))),
+            List.of(new PermissionProperties.Group("transactions/setup/erp", "transactions_erp")),
+            new PermissionProperties.Platform("platform")));
 
     @Test
-    void loadsModulesAndPermissions() {
+    void buildsThePermissionsFromResourcesAndActions() {
+        assertThat(catalogue.isConfigured()).isTrue();
         assertThat(catalogue.getModules()).containsExactly("transactions", "reporting", "funding");
-        assertThat(catalogue.getPermissions()).contains("transactions:view", "reports:publish", "project_management:create_project");
+        assertThat(catalogue.getPermissions()).containsExactly("organization_details:view", "transactions:view", "transactions:export",
+                "reports:view", "project_management:view", "chart_of_accounts:view");
     }
 
     @Test
-    void settingsBelongToTheModuleThatUsesThem() {
-        assertThat(catalogue.modulesOf("cost_centers")).containsExactly("transactions");
-        assertThat(catalogue.modulesOf("accounting_regimes")).containsExactly("reporting");
+    void knowsTheModulesOfAResource() {
+        assertThat(catalogue.modulesOf("transactions")).containsExactly("transactions");
         assertThat(catalogue.modulesOf("chart_of_accounts")).containsExactlyInAnyOrder("transactions", "reporting");
-        assertThat(catalogue.modulesOf("project_management")).containsExactly("funding");
-        assertThat(catalogue.modulesOf("vat_codes")).containsExactlyInAnyOrder("transactions", "funding");
-        assertThat(catalogue.modulesOf("currencies")).containsExactlyInAnyOrder("transactions", "funding");
         assertThat(catalogue.modulesOf("organization_details")).isEmpty();
     }
 
     @Test
     void filterByModules_keepsCoreAndResourcesOfAnyEnabledModule() {
-        Set<String> granted = Set.of("transactions:view", "reports:view", "project_management:view", "chart_of_accounts:view", "currencies:view");
+        Set<String> granted = Set.of("organization_details:view", "transactions:view", "reports:view", "project_management:view", "chart_of_accounts:view");
 
         assertThat(catalogue.filterByModules(granted, Set.of("reporting")))
-                .containsExactlyInAnyOrder("reports:view", "chart_of_accounts:view");
+                .containsExactlyInAnyOrder("organization_details:view", "reports:view", "chart_of_accounts:view");
         assertThat(catalogue.filterByModules(granted, Set.of("funding")))
-                .containsExactlyInAnyOrder("project_management:view", "currencies:view");
+                .containsExactlyInAnyOrder("organization_details:view", "project_management:view");
     }
 
     @Test
     void organisationRoleAndGroupLayout() {
         assertThat(catalogue.getOrganisationRole()).isEqualTo("org_member");
-        assertThat(catalogue.getGroupLayout())
-                // module folders carry the viewer role, so every stage below inherits read access
-                .containsEntry("transactions", "transactions_viewer")
-                .containsEntry("transactions/reviewer", "transactions_reviewer")
-                // four-eyes: publisher next to reviewer, not under it
-                .containsEntry("transactions/publisher", "transactions_publisher")
-                .containsEntry("transactions/setup/erp", "transactions_erp")
-                .containsEntry("funding", "funding_viewer")
-                .containsEntry("funding/setup", "funding_setup")
-                // presets are legacy: only migrated or seeded organisations have them, not new ones
-                .doesNotContainKey("presets/accountant")
-                .doesNotContainKey("transactions/viewer")
-                .doesNotContainValue("org_member");
+        assertThat(catalogue.getGroupLayout()).containsExactly(entry("transactions/setup/erp", "transactions_erp"));
+        assertThat(catalogue.getPlatformGroup()).isEqualTo("platform");
     }
 
-
     @Test
-    void platform() {
-        assertThat(catalogue.getPermissions()).contains("organisations:create").doesNotContain("organization_details:create");
-        assertThat(catalogue.modulesOf("organisations")).isEmpty();
-        assertThat(catalogue.getPlatformGroup()).isEqualTo("platform");
+    void withoutACatalogue_grantsNothing() {
+        PermissionCatalogue unconfigured = new PermissionCatalogue(new PermissionProperties(null, null, null, null, null));
+
+        assertThat(unconfigured.isConfigured()).isFalse();
+        assertThat(unconfigured.filterByModules(Set.of("transactions:view"), Set.of("transactions"))).isEmpty();
+        assertThat(unconfigured.getPlatformGroup()).isEqualTo("platform");
     }
 
 }

@@ -44,9 +44,9 @@ class UserAccessControllerTest {
     @Test
     void access_listsEveryOrganisationWithSortedRolesModulesAndPermissions() {
         Map<String, OrganisationAccess> organisations = new LinkedHashMap<>();
-        organisations.put("org-a", new OrganisationAccess("org-a", Set.of("reeve_accountant"), Set.of("transactions", "funding"),
+        organisations.put("org-a", new OrganisationAccess("org-a", Set.of("transactions_reviewer"), Set.of("transactions", "funding"),
                 Set.of("transactions:view", "project_management:view")));
-        organisations.put("org-b", new OrganisationAccess("org-b", Set.of("reeve_auditor"), Set.of("reporting"), Set.of("reports:view")));
+        organisations.put("org-b", new OrganisationAccess("org-b", Set.of("reports_viewer"), Set.of("reporting"), Set.of("reports:view")));
         when(currentUserAccess.get()).thenReturn(new UserAccess("multi", organisations));
         when(keycloakSecurityHelper.getCurrentUser()).thenReturn("Multi Org");
         Organisation orgA = mock(Organisation.class);
