@@ -36,6 +36,7 @@ class TransactionItemExtractionRepositoryTest {
 
         Mockito.when(em.createQuery(anyString(), eq(TransactionItemEntity.class))).thenReturn(queryResult);
         transactionItemExtractionRepository.findByItemAccount(
+                "org123",
                 LocalDate.of(2023, Month.JANUARY, 1),
                 LocalDate.of(2023, Month.JANUARY, 31),
                 List.of("AccountCode"),
@@ -49,7 +50,7 @@ class TransactionItemExtractionRepositoryTest {
         String expectedQuery = """
             SELECT ti FROM accounting_reporting_core.TransactionItemEntity ti
             INNER JOIN ti.transaction te
-            WHERE te.entryDate >= :dateFrom AND te.entryDate <= :dateTo
+            WHERE te.organisation.id = :organisationId AND te.entryDate >= :dateFrom AND te.entryDate <= :dateTo
             AND ti.status = :status AND te.ledgerDispatchStatus = :ledgerStatus
             AND (
                 ti.accountDebit.code IN :accountCodes OR ti.accountCredit.code IN :accountCodes
@@ -57,30 +58,30 @@ class TransactionItemExtractionRepositoryTest {
             AND (
                 ti.accountDebit.code IN (
                     SELECT oc.Id.customerCode FROM ChartOfAccount oc
-                    WHERE oc.subType.id IN :accountSubTypes
+                    WHERE oc.Id.organisationId = :organisationId AND oc.subType.id IN :accountSubTypes
                 )
                 OR ti.accountCredit.code IN (
                     SELECT oc.Id.customerCode FROM ChartOfAccount oc
-                    WHERE oc.subType.id IN :accountSubTypes
+                    WHERE oc.Id.organisationId = :organisationId AND oc.subType.id IN :accountSubTypes
                 )
             )
             AND (
                 ti.accountDebit.code IN (
                     SELECT oc.Id.customerCode FROM ChartOfAccount oc
-                    WHERE oc.subType.id IN (
+                    WHERE oc.Id.organisationId = :organisationId AND oc.subType.id IN (
                         SELECT st.id FROM ChartOfAccountSubType st
-                        WHERE st.type.id IN :accountTypes
+                        WHERE st.organisationId = :organisationId AND st.type.id IN :accountTypes
                     )
                 )
                 OR ti.accountCredit.code IN (
                     SELECT oc.Id.customerCode FROM ChartOfAccount oc
-                    WHERE oc.subType.id IN (
+                    WHERE oc.Id.organisationId = :organisationId AND oc.subType.id IN (
                         SELECT st.id FROM ChartOfAccountSubType st
-                        WHERE st.type.id IN :accountTypes
+                        WHERE st.organisationId = :organisationId AND st.type.id IN :accountTypes
                     )
                 )
             )
-            AND ti.costCenter.customerCode IN (SELECT cc.Id.customerCode from CostCenter cc WHERE cc.Id.customerCode in :costCenters OR cc.parent.Id.customerCode in :costCenters OR cc.Id.customerCode in (SELECT cc2.parent.Id.customerCode from CostCenter cc2 where cc2.Id.customerCode in :costCenters) )
+            AND ti.costCenter.customerCode IN (SELECT cc.Id.customerCode from CostCenter cc WHERE cc.Id.organisationId = :organisationId AND ( cc.Id.customerCode in :costCenters OR cc.parent.Id.customerCode in :costCenters OR cc.Id.customerCode in (SELECT cc2.parent.Id.customerCode from CostCenter cc2 where cc2.Id.organisationId = :organisationId AND cc2.Id.customerCode in :costCenters) ))
             AND ti.project.customerCode IN :projects
             """;
 

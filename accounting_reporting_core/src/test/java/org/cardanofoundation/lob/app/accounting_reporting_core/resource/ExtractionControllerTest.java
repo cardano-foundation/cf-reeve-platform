@@ -93,7 +93,7 @@ class ExtractionControllerTest {
         ExtractionTransactionsRequest request = mock(ExtractionTransactionsRequest.class);
         when(jpaSortFieldValidator.convertPageable(any(Pageable.class), any(),
                 eq(TransactionItemEntity.class))).thenReturn(Either.right(Pageable.unpaged()));
-        when(extractionItemService.findTransactionItems(any(),any(),any(), any(), any(), any(), any())).thenThrow(new RuntimeException());
+        when(extractionItemService.findTransactionItems(any(), any(),any(),any(), any(), any(), any(), any())).thenThrow(new RuntimeException());
 
         ResponseEntity<?> extractionTransactionViewResponseEntity = extractionController.transactionSearch(request,
                 Pageable.unpaged());

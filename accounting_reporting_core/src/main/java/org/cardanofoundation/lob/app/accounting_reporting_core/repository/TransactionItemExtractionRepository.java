@@ -23,7 +23,7 @@ public class TransactionItemExtractionRepository {
     private final EntityManager em;
     private final TransactionItemRepository transactionItemRepository;
 
-    public List<TransactionItemEntity> findByItemAccount(LocalDate dateFrom, LocalDate dateTo,
+    public List<TransactionItemEntity> findByItemAccount(String organisationId, LocalDate dateFrom, LocalDate dateTo,
                                                          List<String> accountCode, List<String> costCenter,
                                                          List<String> project, List<String> accountType,
                                                          List<String> accountSubType) {
@@ -31,7 +31,8 @@ public class TransactionItemExtractionRepository {
         StringBuilder jpql = new StringBuilder("""
                     SELECT ti FROM accounting_reporting_core.TransactionItemEntity ti
                     INNER JOIN ti.transaction te
-                    WHERE te.entryDate >= :dateFrom
+                    WHERE te.organisation.id = :organisationId
+                      AND te.entryDate >= :dateFrom
                       AND te.entryDate <= :dateTo
                       AND ti.status = :status
                       AND te.ledgerDispatchStatus = :ledgerStatus
@@ -51,11 +52,11 @@ public class TransactionItemExtractionRepository {
                     AND (
                         ti.accountDebit.code IN (
                             SELECT oc.Id.customerCode FROM ChartOfAccount oc
-                            WHERE oc.subType.id IN :accountSubTypes
+                            WHERE oc.Id.organisationId = :organisationId AND oc.subType.id IN :accountSubTypes
                         )
                         OR ti.accountCredit.code IN (
                             SELECT oc.Id.customerCode FROM ChartOfAccount oc
-                            WHERE oc.subType.id IN :accountSubTypes
+                            WHERE oc.Id.organisationId = :organisationId AND oc.subType.id IN :accountSubTypes
                         )
                     )
                     """);
@@ -66,16 +67,16 @@ public class TransactionItemExtractionRepository {
                     AND (
                         ti.accountDebit.code IN (
                             SELECT oc.Id.customerCode FROM ChartOfAccount oc
-                            WHERE oc.subType.id IN (
+                            WHERE oc.Id.organisationId = :organisationId AND oc.subType.id IN (
                                 SELECT st.id FROM ChartOfAccountSubType st
-                                WHERE st.type.id IN :accountTypes
+                                WHERE st.organisationId = :organisationId AND st.type.id IN :accountTypes
                             )
                         )
                         OR ti.accountCredit.code IN (
                             SELECT oc.Id.customerCode FROM ChartOfAccount oc
-                            WHERE oc.subType.id IN (
+                            WHERE oc.Id.organisationId = :organisationId AND oc.subType.id IN (
                                 SELECT st.id FROM ChartOfAccountSubType st
-                                WHERE st.type.id IN :accountTypes
+                                WHERE st.organisationId = :organisationId AND st.type.id IN :accountTypes
                             )
                         )
                     )
@@ -85,11 +86,11 @@ public class TransactionItemExtractionRepository {
         if (costCenter != null && !costCenter.isEmpty()) {
             jpql.append("""
                     AND ti.costCenter.customerCode IN (SELECT cc.Id.customerCode from CostCenter cc
-                    WHERE
+                    WHERE cc.Id.organisationId = :organisationId AND (
                     cc.Id.customerCode in :costCenters OR
                     cc.parent.Id.customerCode in :costCenters OR
-                    cc.Id.customerCode in (SELECT cc2.parent.Id.customerCode from CostCenter cc2 where cc2.Id.customerCode in :costCenters)
-                    )
+                    cc.Id.customerCode in (SELECT cc2.parent.Id.customerCode from CostCenter cc2 where cc2.Id.organisationId = :organisationId AND cc2.Id.customerCode in :costCenters)
+                    ))
                     """);
         }
 
@@ -97,6 +98,7 @@ public class TransactionItemExtractionRepository {
             jpql.append(" AND ti.project.customerCode IN :projects");
         }
         TypedQuery<TransactionItemEntity> query = em.createQuery(jpql.toString(), TransactionItemEntity.class);
+        query.setParameter("organisationId", organisationId);
         query.setParameter("dateFrom", dateFrom);
         query.setParameter("dateTo", dateTo);
         query.setParameter("status", TxItemValidationStatus.OK);

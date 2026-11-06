@@ -46,9 +46,9 @@ public class ExtractionItemService {
     private final OrganisationPublicApi organisationPublicApi;
 
     @Transactional(readOnly = true)
-    public ExtractionTransactionView findTransactionItems(LocalDate dateFrom, LocalDate dateTo, List<String> accountCode, List<String> costCenter, List<String> project, List<String> accountType, List<String> accountSubType) {
+    public ExtractionTransactionView findTransactionItems(String organisationId, LocalDate dateFrom, LocalDate dateTo, List<String> accountCode, List<String> costCenter, List<String> project, List<String> accountType, List<String> accountSubType) {
 
-        List<ExtractionTransactionItemView> transactionItem = transactionItemRepositoryImpl.findByItemAccount(dateFrom, dateTo, accountCode, costCenter, project, accountType, accountSubType)
+        List<ExtractionTransactionItemView> transactionItem = transactionItemRepositoryImpl.findByItemAccount(organisationId, dateFrom, dateTo, accountCode, costCenter, project, accountType, accountSubType)
                 .stream().map(this::extractionTransactionItemViewBuilder).toList();
 
         return ExtractionTransactionView.createSuccess(transactionItem, transactionItem.size(), 0, transactionItem.size());
@@ -115,6 +115,7 @@ public class ExtractionItemService {
 
     public ExtractionTransactionView findTransactionItems(ExtractionTransactionsRequest transactionsRequest, Pageable pageable) {
         Page<TransactionItemEntity> transactionItem = transactionItemRepository.searchItems(
+                transactionsRequest.getOrganisationId(),
                 Optional.ofNullable(transactionsRequest.getDateFrom())
                                 .orElse(LocalDate.of(1970, 1, 1)),
                 Optional.ofNullable(transactionsRequest.getDateTo())

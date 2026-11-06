@@ -48,7 +48,8 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
         )
         FROM accounting_reporting_core.TransactionItemEntity i
         JOIN i.transaction t
-        WHERE i.accountDebit.code IN :customerCodes
+        WHERE t.organisation.id = :organisationId
+          AND i.accountDebit.code IN :customerCodes
           AND t.entryDate >= :startDate
           AND t.entryDate <= :endDate
           AND i.amountLcy <> 0
@@ -57,6 +58,7 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
         GROUP BY i.accountDebit.code
         """)
     List<AccountCodeTotal> aggregateTransactionItemsDebitByAccountCodeAndDateRange(
+            @Param("organisationId") String organisationId,
             @Param("customerCodes") List<String> customerCodes,
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate);
@@ -72,7 +74,8 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
         )
         FROM accounting_reporting_core.TransactionItemEntity i
         JOIN i.transaction t
-        WHERE i.accountCredit.code IN :customerCodes
+        WHERE t.organisation.id = :organisationId
+          AND i.accountCredit.code IN :customerCodes
           AND t.entryDate >= :startDate
           AND t.entryDate <= :endDate
           AND i.amountLcy <> 0
@@ -81,14 +84,16 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
         GROUP BY i.accountCredit.code
         """)
     List<AccountCodeTotal> aggregateTransactionItemsCreditByAccountCodeAndDateRange(
+            @Param("organisationId") String organisationId,
             @Param("customerCodes") List<String> customerCodes,
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate);
 
     @Query("""
         SELECT DISTINCT t.document.num FROM accounting_reporting_core.TransactionItemEntity t
+        WHERE t.transaction.organisation.id = :organisationId
         """)
-    List<String> getAllDocumentNumbers();
+    List<String> getAllDocumentNumbers(@Param("organisationId") String organisationId);
 
     @Query("""
         SELECT DISTINCT t.document.counterparty.customerCode as customerCode, t.document.counterparty.name as name FROM accounting_reporting_core.TransactionItemEntity t
@@ -120,7 +125,8 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
         )
         FROM accounting_reporting_core.TransactionItemEntity i
         JOIN i.transaction t
-        WHERE i.accountDebit.code IN :customerCodes
+        WHERE t.organisation.id = :organisationId
+          AND i.accountDebit.code IN :customerCodes
           AND t.entryDate >= :startDate
           AND t.entryDate <= :endDate
           AND i.amountLcy <> 0
@@ -130,6 +136,7 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
         GROUP BY i.accountDebit.code
         """)
     List<AccountCodeTotal> aggregatePreviewTransactionItemsDebitByAccountCodeAndDateRange(
+            @Param("organisationId") String organisationId,
             @Param("customerCodes") List<String> customerCodes,
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate);
@@ -145,7 +152,8 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
         )
         FROM accounting_reporting_core.TransactionItemEntity i
         JOIN i.transaction t
-        WHERE i.accountCredit.code IN :customerCodes
+        WHERE t.organisation.id = :organisationId
+          AND i.accountCredit.code IN :customerCodes
           AND t.entryDate >= :startDate
           AND t.entryDate <= :endDate
           AND i.amountLcy <> 0
@@ -155,6 +163,7 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
         GROUP BY i.accountCredit.code
         """)
     List<AccountCodeTotal> aggregatePreviewTransactionItemsCreditByAccountCodeAndDateRange(
+            @Param("organisationId") String organisationId,
             @Param("customerCodes") List<String> customerCodes,
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate);
@@ -164,17 +173,18 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
         JOIN ti.transaction transaction
         LEFT JOIN FETCH ti.mappedProject mappedProject
         LEFT JOIN FETCH ti.mappedCostCenter mappedCostCenter
-        WHERE ti.status = 'OK'
+        WHERE ti.transaction.organisation.id = :organisationId
+        AND ti.status = 'OK'
         AND ti.transaction.ledgerDispatchStatus = 'FINALIZED'
         AND ti.transaction.entryDate >= :dateFrom
         AND ti.transaction.entryDate <= :dateTo
         AND (:accountCode IS NULL OR (ti.accountDebit.code IN :accountCode) OR (ti.accountCredit.code IN :accountCode))
         AND (:costCenter IS NULL OR ti.costCenter.customerCode IN (SELECT cc.Id.customerCode from CostCenter cc
-                    WHERE
+                    WHERE cc.Id.organisationId = :organisationId AND (
                     cc.Id.customerCode in :costCenter OR
                     cc.parent.Id.customerCode in :costCenter OR
-                    cc.Id.customerCode in (SELECT cc2.parent.Id.customerCode from CostCenter cc2 where cc2.Id.customerCode in :costCenter)
-                    ))
+                    cc.Id.customerCode in (SELECT cc2.parent.Id.customerCode from CostCenter cc2 where cc2.Id.organisationId = :organisationId AND cc2.Id.customerCode in :costCenter)
+                    )))
         AND (:project IS NULL OR ti.project.customerCode IN :project)
         AND (:blockchainHash IS NULL OR LOWER(ti.transaction.ledgerDispatchReceipt.primaryBlockchainHash) LIKE LOWER(CONCAT('%', CAST(:blockchainHash AS string), '%')))
         AND (:transactionNumbers IS NULL OR ti.transaction.internalTransactionNumber IN :transactionNumbers)
@@ -193,14 +203,14 @@ public interface TransactionItemRepository extends JpaRepository<TransactionItem
         AND (:reconciled IS NULL OR (:reconciled = True AND ti.transaction.reconcilation.finalStatus = 'OK') OR (:reconciled = False AND (ti.transaction.reconcilation IS NULL OR ti.transaction.reconcilation.finalStatus <> 'OK')))
         AND (:parentCostcenters IS NULL OR EXISTS (
             SELECT 1 FROM CostCenter cc
-            WHERE cc.id.customerCode = ti.costCenter.customerCode AND cc.parentCustomerCode IN :parentCostcenters))
+            WHERE cc.id.organisationId = :organisationId AND cc.id.customerCode = ti.costCenter.customerCode AND cc.parentCustomerCode IN :parentCostcenters))
         AND (:parentProjects IS NULL OR EXISTS (
             SELECT 1 FROM Project p
-            WHERE p.id.customerCode = ti.project.customerCode AND p.parentCustomerCode IN :parentProjects))
+            WHERE p.id.organisationId = :organisationId AND p.id.customerCode = ti.project.customerCode AND p.parentCustomerCode IN :parentProjects))
         AND (:accountCodesDebit IS NULL OR ti.accountDebit.code IN :accountCodesDebit)
         AND (:accountCodesCredit IS NULL OR ti.accountCredit.code IN :accountCodesCredit)
         """)
-    Page<TransactionItemEntity> searchItems(@Param("dateFrom") LocalDate dateFrom, @Param("dateTo") LocalDate dateTo, @Param("accountCode") List<String> accountCode,
+    Page<TransactionItemEntity> searchItems(@Param("organisationId") String organisationId, @Param("dateFrom") LocalDate dateFrom, @Param("dateTo") LocalDate dateTo, @Param("accountCode") List<String> accountCode,
             @Param("costCenter") List<String> costCenter, @Param("project") List<String> project, @Param("blockchainHash") String blockchainHash,
             @Param("transactionNumbers") List<String> transactionNumbers, @Param("transactionTypes") List<TransactionType> transactionTypes, @Param("documentNumbers") List<String> documentNumbers, @Param("currencys") List<String> currencys,
             @Param("minFcy") BigDecimal minFcy, @Param("maxFcy") BigDecimal maxFcy, @Param("minLcy") BigDecimal minLcy, @Param("maxLcy") BigDecimal maxLcy,
