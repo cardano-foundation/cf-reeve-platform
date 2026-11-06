@@ -92,12 +92,12 @@ jobs:
           ./gradlew $GRADLE_TARGETS -Pversion=${VERSION_PUBLISH} -x test --console=plain --no-daemon --build-cache
           echo "VERSION_PUBLISH=$VERSION_PUBLISH" | tee -a $GITHUB_ENV
 
-      - name:  🌍 earthly (docker build and push)
+      - name: EarthBuild (docker build and push)
         run: |
-          earthly +docker-publish \
+          earth +docker-publish \
             --PUSH=${DOCKER_PUSH} \
             --DOCKER_REGISTRIES="${{ env.DOCKER_REGISTRIES_FILTERED }}" \
-            --DOCKER_IMAGES_EXTRA_TAGS="${EARTHLY_DOCKER_IMAGES_EXTRA_TAGS}"
+            --DOCKER_IMAGES_EXTRA_TAGS="${EARTH_DOCKER_IMAGES_EXTRA_TAGS}"
 
       - name: Generate SBOM
         run: ./gradlew cyclonedxBom

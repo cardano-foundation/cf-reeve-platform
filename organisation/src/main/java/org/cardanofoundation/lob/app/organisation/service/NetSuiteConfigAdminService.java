@@ -27,7 +27,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.NetSuiteConfigu
 import org.cardanofoundation.lob.app.organisation.domain.view.NetSuiteConfigurationStatusView;
 import org.cardanofoundation.lob.app.organisation.repository.NetSuiteConfigStateRepository;
 import org.cardanofoundation.lob.app.support.crypto.SHA3;
-import org.cardanofoundation.lob.app.support.crypto.SecretCipher;
+import org.cardanofoundation.lob.app.support.crypto.SecretEncryptor;
 import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 
 /**
@@ -52,7 +52,7 @@ import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 public class NetSuiteConfigAdminService {
 
     private final NetSuiteConfigStateRepository netSuiteConfigStateRepository;
-    private final SecretCipher secretCipher;
+    private final SecretEncryptor secretEncryptor;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final Clock clock;
 
@@ -69,7 +69,7 @@ public class NetSuiteConfigAdminService {
             return Either.left(alreadyExists(organisationId));
         }
 
-        String encryptedKey = secretCipher.encrypt(request.getPrivateKey());
+        String encryptedKey = secretEncryptor.encrypt(request.getPrivateKey(), organisationId);
         String fingerprint = SHA3.digestAsHex(request.getPrivateKey());
 
         NetSuiteConfigState state = build(organisationId, request.getBaseUrl(), request.getTokenUrl(),
@@ -104,7 +104,7 @@ public class NetSuiteConfigAdminService {
         NetSuiteConfigState existing = existingM.orElseThrow();
 
         boolean replacingKey = request.getPrivateKey() != null && !request.getPrivateKey().isBlank();
-        String encryptedKey = replacingKey ? secretCipher.encrypt(request.getPrivateKey()) : null;
+        String encryptedKey = replacingKey ? secretEncryptor.encrypt(request.getPrivateKey(), organisationId) : null;
         String fingerprint = replacingKey
                 ? SHA3.digestAsHex(request.getPrivateKey())
                 : existing.getPrivateKeyFingerprint();

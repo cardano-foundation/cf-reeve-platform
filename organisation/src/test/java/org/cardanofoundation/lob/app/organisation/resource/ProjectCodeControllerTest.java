@@ -3,7 +3,10 @@ package org.cardanofoundation.lob.app.organisation.resource;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -19,21 +22,30 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.organisation.domain.csv.ProjectUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.ProjectView;
 import org.cardanofoundation.lob.app.organisation.service.ProjectCodeService;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
 class ProjectCodeControllerTest {
 
     @Mock
     private ProjectCodeService projectCodeService;
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
 
     @InjectMocks
     private ProjectCodeController projectCodeController;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
+    }
 
     @Test
     void getAllProjects() {
@@ -57,7 +69,7 @@ class ProjectCodeControllerTest {
         when(projectCodeService.insertProject("org123", projectUpdate, false)).thenReturn(projectView);
 
         // Call the controller method
-        ResponseEntity<ProjectView> response = projectCodeController.insertProject("org123", projectUpdate);
+        ResponseEntity<?> response = projectCodeController.insertProject("org123", projectUpdate);
 
         // Verify the response
         assertTrue(response.getStatusCode().is2xxSuccessful());
@@ -73,7 +85,7 @@ class ProjectCodeControllerTest {
         when(projectCodeService.updateProject("org123", projectUpdate)).thenReturn(projectView);
 
         // Call the controller method
-        ResponseEntity<ProjectView> response = projectCodeController.updateProject("org123", projectUpdate);
+        ResponseEntity<?> response = projectCodeController.updateProject("org123", projectUpdate);
 
         // Verify the response
         assertTrue(response.getStatusCode().is2xxSuccessful());
@@ -110,5 +122,58 @@ class ProjectCodeControllerTest {
         assertNotNull(responseEntity.getBody());
         assertEquals(List.of(projectView), responseEntity.getBody());
         assertEquals(200, responseEntity.getStatusCode().value());
+    }
+
+    @Test
+    void getAllProjects_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<?> response = projectCodeController.getAllProjects("org123", null, null, null, null, Pageable.unpaged());
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(projectCodeService);
+    }
+
+    @Test
+    void downloadProjectsCsv_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<?> response = projectCodeController.downloadProjectsCsv("org123", null, null, null, null);
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(projectCodeService);
+    }
+
+    @Test
+    void insertProject_noOrgAccess() {
+        ProjectUpdate projectUpdate = mock(ProjectUpdate.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<ProjectView> response = projectCodeController.insertProject("org123", projectUpdate);
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(projectCodeService);
+    }
+
+    @Test
+    void updateProject_noOrgAccess() {
+        ProjectUpdate projectUpdate = mock(ProjectUpdate.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<ProjectView> response = projectCodeController.updateProject("org123", projectUpdate);
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(projectCodeService);
+    }
+
+    @Test
+    void insertProjectsCsv_noOrgAccess() {
+        MultipartFile file = mock(MultipartFile.class);
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<?> response = projectCodeController.insertProjectsCsv("org123", file);
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(projectCodeService);
     }
 }

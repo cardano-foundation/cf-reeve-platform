@@ -46,6 +46,10 @@ public final class ErrorTitleConstants {
     /** A sub-project's or milestone's currency differs from its owning project's. */
     public static final String CURRENCY_PARENT_MISMATCH = "CURRENCY_PARENT_MISMATCH";
     public static final String EVENT_AMOUNT_INVALID = "EVENT_AMOUNT_INVALID";
+    /** An events-list filter range that can never match (from after to, min above max, negative amount). */
+    public static final String EVENT_FILTER_INVALID = "EVENT_FILTER_INVALID";
+    /** A projects-list amount filter that can never match (min above max, negative amount). */
+    public static final String PROJECT_FILTER_INVALID = "PROJECT_FILTER_INVALID";
     public static final String SPENDING_EVENT_NOT_FOUND = "SPENDING_EVENT_NOT_FOUND";
     public static final String SPENDING_EVENT_ALREADY_EXISTS = "SPENDING_EVENT_ALREADY_EXISTS";
     public static final String FUNDING_EVENT_FUNDING_ID_ALREADY_USED = "FUNDING_EVENT_FUNDING_ID_ALREADY_USED";

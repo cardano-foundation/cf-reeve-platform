@@ -3,7 +3,10 @@ package org.cardanofoundation.lob.app.organisation.resource;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -18,12 +21,14 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.cardanofoundation.lob.app.organisation.domain.request.AccountingRegimeUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.AccountingRegimeView;
 import org.cardanofoundation.lob.app.organisation.service.AccountingRegimeService;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
 class AccountingRegimeControllerTest {
@@ -31,8 +36,56 @@ class AccountingRegimeControllerTest {
     @Mock
     private AccountingRegimeService accountingRegimeService;
 
+    @Mock
+    private KeycloakSecurityHelper keycloakSecurityHelper;
+
     @InjectMocks
     private AccountingRegimeController accountingRegimeController;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(keycloakSecurityHelper.canUserAccessOrg(any())).thenReturn(true);
+    }
+
+    @Test
+    void getAllAccountingRegimes_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<List<AccountingRegimeView>> response = accountingRegimeController.getAllAccountingRegimes("org123");
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(accountingRegimeService);
+    }
+
+    @Test
+    void insertAccountingRegime_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<AccountingRegimeView> response = accountingRegimeController.insertAccountingRegime("org123", mock(AccountingRegimeUpdate.class));
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(accountingRegimeService);
+    }
+
+    @Test
+    void updateAccountingRegime_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<AccountingRegimeView> response = accountingRegimeController.updateAccountingRegime("org123", mock(AccountingRegimeUpdate.class));
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(accountingRegimeService);
+    }
+
+    @Test
+    void insertAccountingRegimesCsv_noOrgAccess() {
+        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
+
+        ResponseEntity<Object> response = accountingRegimeController.insertAccountingRegimesCsv("org123", mock(MultipartFile.class));
+
+        assertEquals(401, response.getStatusCode().value());
+        verifyNoInteractions(accountingRegimeService);
+    }
 
     @Test
     void getAllAccountingRegimes_success() {

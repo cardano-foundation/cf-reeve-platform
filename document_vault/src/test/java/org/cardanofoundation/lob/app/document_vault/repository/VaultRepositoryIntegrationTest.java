@@ -1,0 +1,442 @@
+package org.cardanofoundation.lob.app.document_vault.repository;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.util.List;
+
+import jakarta.persistence.EntityManager;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.ContextConfiguration;
+import org.springframework.transaction.annotation.Transactional;
+
+import org.junit.jupiter.api.Test;
+
+import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
+import org.cardanofoundation.lob.app.document_vault.DocumentVaultContextIntegrationTest;
+import org.cardanofoundation.lob.app.document_vault.domain.entity.AddressbookEntryEntity;
+import org.cardanofoundation.lob.app.document_vault.domain.entity.DocumentSlot;
+import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultDocumentEntity;
+import org.cardanofoundation.lob.app.document_vault.domain.entity.VaultKeyEntity;
+import org.cardanofoundation.lob.app.document_vault.domain.entity.WrappedRecordEntity;
+import org.cardanofoundation.lob.app.document_vault.domain.entity.WrappedRecordId;
+import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyAssurance;
+import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyOrigin;
+import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentStatus;
+
+@SpringBootTest
+@ContextConfiguration(classes = DocumentVaultContextIntegrationTest.TestConfig.class)
+@ActiveProfiles("test")
+@Transactional
+class VaultRepositoryIntegrationTest {
+
+    private static final String HEX64 = "a".repeat(64);
+    private static final String HEX96 = "b".repeat(96);
+
+    @Autowired
+    private VaultKeyRepository keyRepository;
+    @Autowired
+    private AddressbookEntryRepository entryRepository;
+    @Autowired
+    private WrappedRecordRepository recordRepository;
+    @Autowired
+    private VaultDocumentRepository documentRepository;
+    @Autowired
+    private EntityManager em;
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    private VaultKeyEntity key(String id, String accountId, String publicKey, String org) {
+        VaultKeyEntity key = new VaultKeyEntity();
+        key.setId(id);
+        key.setAccountId(accountId);
+        key.setOrganisationId(org);
+        key.setAccountName("Name " + accountId);
+        key.setPublicKey(publicKey);
+        key.setLabel("laptop");
+        // origin/assurance are NOT NULL columns — a fixture without them fails on flush, not on assert
+        key.setOrigin(KeyOrigin.SELF_ENROLLED);
+        key.setAssurance(KeyAssurance.PASSKEY);
+        return key;
+    }
+
+    private AddressbookEntryEntity entry(String id, String org, String publicKey, String displayName) {
+        AddressbookEntryEntity entry = new AddressbookEntryEntity();
+        entry.setId(id);
+        entry.setOrganisationId(org);
+        entry.setDisplayName(displayName);
+        entry.setEmail("bob@example.org");
+        entry.setDescription("external auditor");
+        entry.setPublicKey(publicKey);
+        entry.setAssurance(KeyAssurance.PORTABLE);
+        entry.setHomeOrganisationId("Privat");
+        return entry;
+    }
+
+    @Test
+    void keyRoundTripAndOrgQueryScopesToOrganisation() {
+        keyRepository.save(key("k1", "acc1", HEX64, "org1"));
+        keyRepository.save(key("k3", "acc2", "d".repeat(64), "org2"));
+        // same public key, same account, DIFFERENT org — allowed by design (one entry per org)
+        keyRepository.save(key("k4", "acc1", HEX64, "org2"));
+
+        List<VaultKeyEntity> org1Keys = keyRepository.findByOrganisationId("org1");
+        assertEquals(1, org1Keys.size());
+        assertEquals("k1", org1Keys.get(0).getId());
+        assertEquals("Name acc1", org1Keys.get(0).getAccountName());
+        assertEquals("org1", org1Keys.get(0).getOrganisationId());
+        assertEquals(KeyOrigin.SELF_ENROLLED, org1Keys.get(0).getOrigin());
+        assertEquals(KeyAssurance.PASSKEY, org1Keys.get(0).getAssurance());
+
+        assertEquals(1, keyRepository.findByAccountIdInAndOrganisationId(List.of("acc1", "acc2"), "org1").size());
+        assertTrue(keyRepository.existsByAccountIdAndOrganisationIdAndPublicKey("acc1", "org1", HEX64));
+        assertTrue(keyRepository.findByAccountIdAndOrganisationIdAndPublicKey("acc1", "org1", HEX64).isPresent());
+    }
+
+    /**
+     * The addressbook is scoped per organisation, and (organisation, publicKey) is its idempotency key —
+     * the constraint card re-import leans on to refresh a contact instead of duplicating them. Everything
+     * else about a contact may repeat.
+     */
+    @Test
+    void addressbookEntryRoundTripAndOrgScoping() {
+        entryRepository.save(entry("e1", "org1", HEX64, "Bob Miller"));
+        entryRepository.save(entry("e2", "org2", HEX64, "Bob Miller"));
+        // same organisation, same name, DIFFERENT key — a contact is not identified by their name
+        entryRepository.save(entry("e3", "org1", "d".repeat(64), "Bob Miller"));
+        em.flush();
+        em.clear();
+
+        List<AddressbookEntryEntity> org1 = entryRepository.findByOrganisationId("org1");
+        assertEquals(2, org1.size());
+
+        AddressbookEntryEntity reloaded = entryRepository
+                .findByOrganisationIdAndPublicKey("org1", HEX64).orElseThrow();
+        assertEquals("e1", reloaded.getId());
+        assertEquals("Privat", reloaded.getHomeOrganisationId());
+        assertEquals(KeyAssurance.PORTABLE, reloaded.getAssurance());
+        // a contact has no account id at all — that absence is what stops an imported card ever being
+        // mistaken for a Keycloak user
+        assertEquals("bob@example.org", reloaded.getEmail());
+    }
+
+    /** A hand-entered contact claims no custody tier, and null must survive the round trip as null. */
+    @Test
+    void anAddressbookEntryWithNoAssuranceOrEmailRoundTrips() {
+        AddressbookEntryEntity entry = entry("e-bare", "org1", HEX64, "Anonymous");
+        entry.setAssurance(null);
+        entry.setEmail(null);
+        entry.setHomeOrganisationId(null);
+        entryRepository.save(entry);
+        em.flush();
+        em.clear();
+
+        AddressbookEntryEntity reloaded = entryRepository.findById("e-bare").orElseThrow();
+        assertNull(reloaded.getAssurance());
+        assertNull(reloaded.getEmail());
+        assertNull(reloaded.getHomeOrganisationId());
+    }
+
+    /**
+     * VaultKeyService.delete's contract: "A document already wrapped to this public key stays
+     * decryptable — its ciphertext and slots are immutable ... deleting only removes the directory
+     * entry, so the key stops being offered as a future recipient."
+     *
+     * Every unit test of delete mocks the repository, so nothing has ever run that sentence against a
+     * real database. It cannot hold while document_vault_document_slot.key_id carries a foreign key
+     * with no ON DELETE clause: Postgres defaults to NO ACTION and refuses to orphan the slot. So
+     * deleting a key anyone ever encrypted to is a 500, not a directory tidy-up.
+     */
+    @Test
+    void deletingAKeyThatADocumentWasWrappedToLeavesTheDocumentIntact() {
+        keyRepository.save(key("k-used", "sender", HEX64, "org1"));
+
+        VaultDocumentEntity doc = new VaultDocumentEntity();
+        doc.setId("doc-wrapped");
+        doc.setOrganisationId("org1");
+        doc.setStatus(VaultDocumentStatus.DRAFT);
+        doc.setLedgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED);
+        doc.setEnvelopeVersion(1);
+        doc.setContentHash(HEX64);
+        doc.setPlaintextHash(HEX64);
+        doc.setCiphertext(new byte[] {1, 2, 3});
+        doc.setPayloadNonce("f".repeat(24));
+        doc.setFileName("report.pdf");
+        doc.setSizeBytes(3L);
+        doc.setCreatedByAccount("sender");
+        doc.setCreatedByName("Sender Name");
+        doc.setSlots(List.of(new DocumentSlot("k-used", "me", HEX64, HEX96, "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae")));
+        documentRepository.save(doc);
+        em.flush();
+        // MUST clear before deleting. SimpleJpaRepository.delete() silently no-ops when the entity
+        // reports isNew(), and VaultBaseEntity.isNew only flips on @PostLoad. Straight after save() the
+        // instance is still in the first-level cache, so findById would hand it back unloaded, isNew
+        // would stay true, and the delete would vanish — testing nothing. The service reloads in its own
+        // transaction, so this mirrors what it actually does.
+        em.clear();
+
+        keyRepository.deleteById("k-used");
+        em.flush();
+        em.clear();
+
+        // the directory entry is gone...
+        assertTrue(keyRepository.findById("k-used").isEmpty());
+        // ...and the document it was wrapped to is untouched, slot and ciphertext included
+        VaultDocumentEntity reloaded = documentRepository.findById("doc-wrapped").orElseThrow();
+        assertEquals(1, reloaded.getSlots().size());
+        assertEquals("k-used", reloaded.getSlots().get(0).getKeyId());
+        assertArrayEquals(new byte[] {1, 2, 3}, reloaded.getCiphertext());
+    }
+
+    @Test
+    void wrappedRecordRoundTripsByteIdentical() {
+        String blob = "{\"v\":1,\"wrappedPriv\":\"00ff\",\"unicode\":\"snowman \\u2603 emoji 🎉\"}";
+        WrappedRecordEntity record = new WrappedRecordEntity();
+        record.setId(new WrappedRecordId("acc1", "cred-1"));
+        record.setRecord(blob);
+        record.setVersion(1);
+        recordRepository.save(record);
+
+        // force a genuine DB round-trip: without this, findById below would return the
+        // same in-memory instance from the first-level cache instead of hitting PostgreSQL
+        em.flush();
+        em.clear();
+
+        WrappedRecordEntity reloaded = recordRepository.findById(new WrappedRecordId("acc1", "cred-1")).orElseThrow();
+        assertEquals(blob, reloaded.getRecord());
+        assertArrayEquals(blob.getBytes(StandardCharsets.UTF_8), reloaded.getRecord().getBytes(StandardCharsets.UTF_8));
+        assertEquals(1, recordRepository.findByIdAccountId("acc1", Pageable.unpaged()).getTotalElements());
+    }
+
+    @Test
+    void documentRoundTripAndSentReceivedQueries() {
+        keyRepository.save(key("k1", "sender", HEX64, "org1"));
+        keyRepository.save(key("k2", "recipient", "e".repeat(64), "org1"));
+
+        VaultDocumentEntity doc = new VaultDocumentEntity();
+        doc.setId("doc1");
+        doc.setOrganisationId("org1");
+        doc.setStatus(VaultDocumentStatus.DRAFT);
+        doc.setLedgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED);
+        doc.setEnvelopeVersion(1);
+        doc.setContentHash(HEX64);
+        doc.setPlaintextHash(HEX64);
+        doc.setCiphertext(new byte[] {1, 2, 3});
+        doc.setPayloadNonce("f".repeat(24));
+        doc.setFileName("report.pdf");
+        doc.setSizeBytes(3L);
+        doc.setCreatedByAccount("sender");
+        doc.setCreatedByName("Sender Name");
+        doc.setSlots(List.of(
+                new DocumentSlot("k1", "me", HEX64, HEX96, "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae"),
+                new DocumentSlot("k2", "recipient label", HEX64, HEX96, "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae")));
+        documentRepository.save(doc);
+
+        // second document, authored by "recipient", shared with "sender" (slot -> k1)
+        VaultDocumentEntity doc2 = new VaultDocumentEntity();
+        doc2.setId("doc2");
+        doc2.setOrganisationId("org1");
+        doc2.setEnvelopeVersion(1);
+        doc2.setContentHash(HEX64);
+        doc2.setPlaintextHash(HEX64);
+        doc2.setCiphertext(new byte[] {4, 5, 6});
+        doc2.setPayloadNonce("f".repeat(24));
+        doc2.setFileName("invoice.pdf");
+        doc2.setSizeBytes(3L);
+        doc2.setCreatedByAccount("recipient");
+        doc2.setCreatedByName("Recipient Name");
+        doc2.setSlots(List.of(new DocumentSlot("k1", "back at you", HEX64, HEX96, "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae")));
+        documentRepository.save(doc2);
+
+        // force a genuine DB round-trip: without this, findById below would return the
+        // same in-memory instance from the first-level cache instead of hitting PostgreSQL
+        em.flush();
+        em.clear();
+
+        VaultDocumentEntity reloaded = documentRepository.findById("doc1").orElseThrow();
+        assertArrayEquals(new byte[] {1, 2, 3}, reloaded.getCiphertext());
+        assertEquals(2, reloaded.getSlots().size());
+        assertEquals("k2", reloaded.getSlots().get(1).getKeyId());
+        assertEquals(VaultDocumentStatus.DRAFT, reloaded.getStatus());
+        assertEquals(LedgerDispatchStatus.NOT_DISPATCHED, reloaded.getLedgerDispatchStatus());
+
+        // org-wide, unfiltered
+        assertEquals(2, documentRepository.search("org1", "anyone", null, null, null, Pageable.unpaged()).getTotalElements());
+        // REAL multi-page scenario exercising the explicit countQuery: 2 rows, page size 1 -> 2 pages
+        Page<VaultDocumentEntity> firstPage = documentRepository.search("org1", "anyone", null, null, null,
+                org.springframework.data.domain.PageRequest.of(0, 1,
+                        org.springframework.data.domain.Sort.by("createdAt").descending()));
+        assertEquals(2, firstPage.getTotalElements());
+        assertEquals(2, firstPage.getTotalPages());
+        assertEquals(1, firstPage.getContent().size());
+        // direction filters (relative to the caller)
+        assertEquals(1, documentRepository.search("org1", "sender", "SENT", null, null, Pageable.unpaged()).getTotalElements());
+        assertEquals(1, documentRepository.search("org1", "recipient", "RECEIVED", null, null, Pageable.unpaged()).getTotalElements());
+        // sender's key k1 sits in BOTH docs' slots (doc1 self-slot + doc2 shared-back) -> 2;
+        // self-slots deliberately count as RECEIVED (sender self-access)
+        assertEquals(2, documentRepository.search("org1", "sender", "RECEIVED", null, null, Pageable.unpaged()).getTotalElements());
+        assertEquals(0, documentRepository.search("org1", "stranger", "RECEIVED", null, null, Pageable.unpaged()).getTotalElements());
+        // status + q filters
+        assertEquals(1, documentRepository.search("org1", "anyone", null, VaultDocumentStatus.DRAFT, "report", Pageable.unpaged()).getTotalElements());
+        assertEquals(0, documentRepository.search("org1", "anyone", null, VaultDocumentStatus.PUBLISHED, null, Pageable.unpaged()).getTotalElements());
+    }
+
+    /**
+     * Controller-mandated fix: pins the JPQL {@code escape '\'} contract at the
+     * real-database level. {@code q} arrives here PRE-ESCAPED (the service layer's job) — this test
+     * simulates that by passing an already-escaped literal directly to the repository.
+     */
+    @Test
+    void searchEscapesLikeMetacharactersInFreeTextQuery() {
+        keyRepository.save(key("k1", "sender", HEX64, "org1"));
+
+        VaultDocumentEntity literalDoc = new VaultDocumentEntity();
+        literalDoc.setId("doc-literal");
+        literalDoc.setOrganisationId("org1");
+        literalDoc.setEnvelopeVersion(1);
+        literalDoc.setContentHash(HEX64);
+        literalDoc.setPlaintextHash(HEX64);
+        literalDoc.setCiphertext(new byte[] {1});
+        literalDoc.setPayloadNonce("f".repeat(24));
+        literalDoc.setFileName("100%_off.pdf"); // literal percent AND underscore in the filename
+        literalDoc.setSizeBytes(1L);
+        literalDoc.setCreatedByAccount("sender");
+        literalDoc.setSlots(List.of(new DocumentSlot("k1", "me", HEX64, HEX96, "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae")));
+        documentRepository.save(literalDoc);
+
+        VaultDocumentEntity plainDoc = new VaultDocumentEntity();
+        plainDoc.setId("doc-plain");
+        plainDoc.setOrganisationId("org1");
+        plainDoc.setEnvelopeVersion(1);
+        plainDoc.setContentHash(HEX64);
+        plainDoc.setPlaintextHash(HEX64);
+        plainDoc.setCiphertext(new byte[] {2});
+        plainDoc.setPayloadNonce("f".repeat(24));
+        plainDoc.setFileName("plain.pdf"); // no LIKE metacharacters at all
+        plainDoc.setSizeBytes(1L);
+        plainDoc.setCreatedByAccount("sender");
+        plainDoc.setSlots(List.of(new DocumentSlot("k1", "me", HEX64, HEX96, "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae")));
+        documentRepository.save(plainDoc);
+
+        em.flush();
+        em.clear();
+
+        // an escaped literal substring ("100%_off", metacharacters backslash-escaped) finds
+        // exactly the one document that actually contains it — not a false-positive, not a miss
+        assertEquals(1, documentRepository.search("org1", "anyone", null, null, "100\\%\\_off", Pageable.unpaged())
+                .getTotalElements());
+        // an escaped "%" means "a literal percent sign", NOT "match anything" — it must find only
+        // the document that has one, never every row in the organisation
+        assertEquals(1, documentRepository.search("org1", "anyone", null, null, "\\%", Pageable.unpaged())
+                .getTotalElements());
+        // same for an escaped "_": literal underscore, not the single-character wildcard
+        assertEquals(1, documentRepository.search("org1", "anyone", null, null, "\\_", Pageable.unpaged())
+                .getTotalElements());
+    }
+
+    private VaultDocumentEntity minimalDocument(String id, VaultDocumentStatus status) {
+        VaultDocumentEntity doc = new VaultDocumentEntity();
+        doc.setId(id);
+        doc.setOrganisationId("org1");
+        doc.setStatus(status);
+        doc.setLedgerDispatchStatus(LedgerDispatchStatus.NOT_DISPATCHED);
+        doc.setEnvelopeVersion(1);
+        doc.setContentHash(HEX64);
+        doc.setPlaintextHash(HEX64);
+        doc.setCiphertext(new byte[] {1, 2, 3});
+        doc.setPayloadNonce("f".repeat(24));
+        doc.setSizeBytes(3L);
+        doc.setCreatedByAccount("sender");
+        return doc;
+    }
+
+    /**
+     * Pins the retention job's published lock (settled product decision) at the real
+     * repository/DB level: {@code deleteByStatusAndCreatedAtBefore} must purge stale DRAFT
+     * envelopes while a PUBLISHED envelope of the same age is left untouched, no matter how old.
+     *
+     * <p>Also pins the bulk-JPQL-delete/element-collection reliance: {@code deleteByStatusAndCreatedAtBefore}
+     * is now a bulk {@code delete from ...} JPQL query, which does NOT cascade to the
+     * {@code @ElementCollection} slot table via JPA. The purged draft gets a slot below so this test
+     * proves slot rows are actually gone afterwards — i.e. that the database's
+     * {@code ON DELETE CASCADE} FK (not Hibernate) is doing the cleanup.
+     */
+    @Test
+    void deleteByStatusAndCreatedAtBeforePurgesOnlyStaleDraftDocuments() {
+        keyRepository.save(key("k1", "sender", HEX64, "org1"));
+
+        VaultDocumentEntity oldDraft = minimalDocument("doc-old-draft", VaultDocumentStatus.DRAFT);
+        oldDraft.setSlots(List.of(new DocumentSlot("k1", "me", HEX64, HEX96, "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae")));
+        documentRepository.save(oldDraft);
+        documentRepository.save(minimalDocument("doc-old-published", VaultDocumentStatus.PUBLISHED));
+        documentRepository.save(minimalDocument("doc-recent-draft", VaultDocumentStatus.DRAFT));
+
+        // flush so the raw JDBC backdate below (and the bulk delete query itself) see committed
+        // rows rather than pending first-level-cache state
+        em.flush();
+        LocalDateTime old = LocalDateTime.now().minusDays(40);
+        jdbcTemplate.update("update document_vault_document set created_at = ? where document_id in (?, ?)",
+                old, "doc-old-draft", "doc-old-published");
+        // established pattern: entities created & purged within one @Transactional
+        // method keep Persistable.isNew() true until @PostLoad fires on a fresh load — clear the
+        // first-level cache so the bulk delete (which bypasses the persistence context entirely)
+        // isn't followed by stale managed entities lingering from the saves above.
+        em.clear();
+
+        long deleted = documentRepository.deleteByStatusAndCreatedAtBefore(
+                VaultDocumentStatus.DRAFT, LocalDateTime.now().minusDays(30));
+
+        assertEquals(1, deleted);
+        assertTrue(documentRepository.findById("doc-old-draft").isEmpty());
+        // published lock extends to retention: never purged, no matter the age
+        assertTrue(documentRepository.findById("doc-old-published").isPresent());
+        assertTrue(documentRepository.findById("doc-recent-draft").isPresent());
+
+        // proves the DB FK cascade (not JPA) cleaned up the element-collection slot rows: the bulk
+        // JPQL delete above never touched document_vault_document_slot directly
+        Integer remainingSlots = jdbcTemplate.queryForObject(
+                "select count(*) from document_vault_document_slot where document_id = ?",
+                Integer.class, "doc-old-draft");
+        assertEquals(0, remainingSlots);
+    }
+
+    /**
+     * pins {@code findByStatusAndLedgerDispatchStatus} at the
+     * real-database level — it must find ONLY documents stuck in PUBLISHED/MARK_DISPATCH (the durable
+     * publish handoff's recovery sweep target), not a PUBLISHED document that has already progressed
+     * past MARK_DISPATCH, and not a DRAFT document that happens to carry MARK_DISPATCH.
+     */
+    @Test
+    void findByStatusAndLedgerDispatchStatusFindsOnlyStuckPublishes() {
+        VaultDocumentEntity stuck = minimalDocument("doc-stuck", VaultDocumentStatus.PUBLISHED);
+        stuck.setLedgerDispatchStatus(LedgerDispatchStatus.MARK_DISPATCH);
+        documentRepository.save(stuck);
+
+        VaultDocumentEntity dispatched = minimalDocument("doc-dispatched", VaultDocumentStatus.PUBLISHED);
+        dispatched.setLedgerDispatchStatus(LedgerDispatchStatus.DISPATCHED);
+        documentRepository.save(dispatched);
+
+        VaultDocumentEntity draftMarked = minimalDocument("doc-draft", VaultDocumentStatus.DRAFT);
+        draftMarked.setLedgerDispatchStatus(LedgerDispatchStatus.MARK_DISPATCH);
+        documentRepository.save(draftMarked);
+
+        em.flush();
+        em.clear();
+
+        List<VaultDocumentEntity> stuckDocs = documentRepository.findByStatusAndLedgerDispatchStatus(
+                VaultDocumentStatus.PUBLISHED, LedgerDispatchStatus.MARK_DISPATCH, Pageable.unpaged());
+
+        assertEquals(1, stuckDocs.size());
+        assertEquals("doc-stuck", stuckDocs.get(0).getId());
+    }
+}
