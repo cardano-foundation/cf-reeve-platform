@@ -61,14 +61,7 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 @ConditionalOnProperty(prefix = "lob.keri-attestation.keria", name = "url")
 public class KeriAttestationController {
 
-    /**
-     * Mirrors {@code VaultDocumentController#publish}'s SpEL exactly (per the brief): every endpoint
-     * here either anchors on-chain (AUTH_BEGIN, ATTEST) or feeds into a ceremony that will, so the same
-     * manager-or-admin-only separation of duties applies uniformly rather than singling out the
-     * anchoring steps alone.
-     */
-    private static final String PUBLISH_ROLES =
-            "hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())";
+    // Every endpoint either anchors on-chain or feeds a ceremony that will, so all of them need the permission to publish.
 
     private final KeycloakSecurityHelper securityHelper;
     private final CeremonyService ceremonyService;
@@ -87,7 +80,7 @@ public class KeriAttestationController {
 
     @Operation(description = "The current user's KERI identity-link status. linked=false (not 404) when never linked — the frontend uses this to decide whether to show the linking flow.")
     @GetMapping(value = "/identity", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize(PUBLISH_ROLES)
+    @PreAuthorize("@permissions.can('document_vault', 'publish')")
     public ResponseEntity<IdentityView> identity() {
         String userId = securityHelper.getCurrentUserId();
         IdentityView view = identityLinkRepository.findById(userId)
@@ -98,14 +91,14 @@ public class KeriAttestationController {
 
     @Operation(description = "The platform's own KERI agent OOBI URL, for the wallet side of the OOBI exchange.")
     @GetMapping(value = "/agent/oobi", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize(PUBLISH_ROLES)
+    @PreAuthorize("@permissions.can('document_vault', 'publish')")
     public ResponseEntity<AgentOobiView> agentOobi() {
         return ResponseEntity.ok(new AgentOobiView(agentService.agentOobi()));
     }
 
     @Operation(description = "Resolve the user's wallet OOBI into an AID and create/update their identity link (design §4.7). relink=true is required to switch to a different AID once already linked.")
     @PostMapping(value = "/identity/oobi/resolve", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize(PUBLISH_ROLES)
+    @PreAuthorize("@permissions.can('document_vault', 'publish')")
     public ResponseEntity<Object> resolveOobi(@Valid @RequestBody ResolveOobiRequest request) {
         String userId = securityHelper.getCurrentUserId();
         return Responses.respond(
@@ -115,7 +108,7 @@ public class KeriAttestationController {
 
     @Operation(description = "Reset (fully unlink) the caller's KERI identity: deletes their identity link and fails every one of their non-terminal ceremonies. Idempotent — returns 200 even when the caller was never linked.")
     @DeleteMapping(value = "/identity", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize(PUBLISH_ROLES)
+    @PreAuthorize("@permissions.can('document_vault', 'publish')")
     public ResponseEntity<Object> resetIdentity() {
         String userId = securityHelper.getCurrentUserId();
         return Responses.respond(oobiService.resetIdentity(userId).map(v -> new ResetView(true)), HttpStatus.OK);
@@ -123,7 +116,7 @@ public class KeriAttestationController {
 
     @Operation(description = "Start a new attestation ceremony for a target (design §4.2). Fast-forwards past identity-level steps the user has already completed.")
     @PostMapping(value = "/ceremonies", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize(PUBLISH_ROLES)
+    @PreAuthorize("@permissions.can('document_vault', 'publish')")
     public ResponseEntity<Object> createCeremony(@Valid @RequestBody CreateCeremonyRequest request) {
         String userId = securityHelper.getCurrentUserId();
         return Responses.respond(ceremonyService.create(userId, request.getTargetType(), request.getTargetId()),
@@ -132,7 +125,7 @@ public class KeriAttestationController {
 
     @Operation(description = "Begin (or retry) the credential-presentation step: runs the IPEX apply/offer/agree/grant/admit exchange with the linked wallet synchronously and returns the final ceremony state.")
     @PostMapping(value = "/ceremonies/{id}/credential/request", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize(PUBLISH_ROLES)
+    @PreAuthorize("@permissions.can('document_vault', 'publish')")
     public ResponseEntity<Object> requestCredential(@PathVariable String id,
             @RequestBody(required = false) StepRetryRequest request) {
         String userId = securityHelper.getCurrentUserId();
@@ -144,7 +137,7 @@ public class KeriAttestationController {
             + "or hands a fresh AUTH_BEGIN transaction to blockchain_publisher. Publication is asynchronous — the ceremony rests in "
             + "AUTH_BEGIN_SUBMITTED and reaches AUTH_BEGIN_CONFIRMED once the publisher reports the transaction dispatched.")
     @PostMapping(value = "/ceremonies/{id}/auth-begin", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize(PUBLISH_ROLES)
+    @PreAuthorize("@permissions.can('document_vault', 'publish')")
     public ResponseEntity<Object> submitAuthBegin(@PathVariable String id,
             @RequestBody(required = false) AuthBeginRequest request) {
         String userId = securityHelper.getCurrentUserId();
@@ -155,7 +148,7 @@ public class KeriAttestationController {
 
     @Operation(description = "Begin (or retry) the ATTEST step: sends a remotesign anchoring request to the linked wallet and waits, synchronously, for the wallet's confirmed anchor, returning the final ceremony state.")
     @PostMapping(value = "/ceremonies/{id}/attest", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize(PUBLISH_ROLES)
+    @PreAuthorize("@permissions.can('document_vault', 'publish')")
     public ResponseEntity<Object> attest(@PathVariable String id,
             @RequestBody(required = false) StepRetryRequest request) {
         String userId = securityHelper.getCurrentUserId();
@@ -165,7 +158,7 @@ public class KeriAttestationController {
 
     @Operation(description = "Fetch a ceremony's current state (design §4.2/§4.6). Useful for the wizard's step derivation without re-driving a step.")
     @GetMapping(value = "/ceremonies/{id}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize(PUBLISH_ROLES)
+    @PreAuthorize("@permissions.can('document_vault', 'publish')")
     public ResponseEntity<Object> getCeremony(@PathVariable String id) {
         String userId = securityHelper.getCurrentUserId();
         return Responses.respond(ceremonyService.get(id, userId), HttpStatus.OK);

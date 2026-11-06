@@ -13,12 +13,9 @@ import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ProblemDetail;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +36,7 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.view.CredentialAtte
 import org.cardanofoundation.lob.app.keri_attestation.service.CredentialVerificationService;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
+import org.cardanofoundation.lob.app.support.security.access.PermissionChecker;
 
 @Service
 @RequiredArgsConstructor
@@ -51,9 +49,7 @@ public class VaultKeyService {
     private final OrganisationPublicApiIF organisationPublicApi;
     /** Absent when keri_attestation is disabled — keys then simply carry no verdict. */
     private final ObjectProvider<CredentialVerificationService> verificationServiceProvider;
-
-    @Value("${keycloak.roles.admin:admin}")
-    private String adminRoleName;
+    private final PermissionChecker permissionChecker;
 
     public Either<ProblemDetail, VaultKeyView> registerKey(RegisterKeyRequest request) {
         String accountId = securityHelper.getCurrentUserId();
@@ -148,17 +144,14 @@ public class VaultKeyService {
         }
         VaultKeyEntity key = keyM.get();
         boolean isOwner = key.getAccountId().equals(securityHelper.getCurrentUserId());
-        if (!isOwner && !hasAdminRole()) {
+        // canUserAccessOrg ties the permission (checked in the request's organisation) to the key's organisation
+        boolean canDeleteAny = securityHelper.canUserAccessOrg(key.getOrganisationId())
+                && permissionChecker.can("document_vault", "delete_any");
+        if (!isOwner && !canDeleteAny) {
             return Optional.of(VaultProblems.of403NotKeyOwner());
         }
         keyRepository.delete(key);
         return Optional.empty();
-    }
-
-    private boolean hasAdminRole() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        return authentication != null && authentication.getAuthorities().stream()
-                .anyMatch(authority -> authority.getAuthority().equals("ROLE_" + adminRoleName));
     }
 
     /** Shared with RecipientResolutionService and CardImportService — one mapping, one place. */

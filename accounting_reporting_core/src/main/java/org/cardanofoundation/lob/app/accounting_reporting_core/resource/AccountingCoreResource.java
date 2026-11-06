@@ -77,7 +77,7 @@ public class AccountingCoreResource {
             )
     })
     @PostMapping(value = "/transactions", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('transactions', 'view')")
     public ResponseEntity<List<TransactionView>> listAllAction(@Valid @RequestBody SearchRequest body) {
         List<TransactionView> transactions = accountingCorePresentationService.allTransactions(body);
         return ResponseEntity.ok().body(transactions);
@@ -86,7 +86,7 @@ public class AccountingCoreResource {
     @Tag(name = "Transactions", description = "Transactions API")
     @Operation(description = "Download transactions as a CSV file with possible filtering", summary = "Download transactions as a CSV file")
     @PostMapping(value = "/transactions/download/{orgId}", produces = "text/csv")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('transactions', 'export')")
     public ResponseEntity<StreamingResponseBody> downloadTransactionsCsv(@Valid @PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                                          @RequestParam(name = "batchId", required = false) String batchId,
                                                                          @RequestParam(name = "txStatus", required = false) List<TransactionProcessingStatus> txStatus,
@@ -118,7 +118,7 @@ public class AccountingCoreResource {
             )
     })
     @GetMapping(value = "/filter-options/{orgId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('transactions', 'view')")
     public ResponseEntity<FilterOptionsResponse> getFilterOptions(@Valid @PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                                   @Valid @RequestParam(name = "filterOptions") List<FilterOptions> filterOptionsList)  {
         if(!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
@@ -145,7 +145,7 @@ public class AccountingCoreResource {
             )
     })
     @GetMapping(value = "/transactions/{id}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('transactions', 'view')")
     public ResponseEntity<TransactionView> transactionDetailSpecific(@Valid @PathVariable("id") @Parameter(example = "7e9e8bcbb38a283b41eab57add98278561ab51d23a16f3e3baf3daa461b84ab4") String id,
                                                         @RequestParam(name = "organisationId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String organisationId) {
         if(!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
@@ -173,6 +173,7 @@ public class AccountingCoreResource {
             )
     })
     @GetMapping(value = "/transaction-types", produces = APPLICATION_JSON_VALUE, name = "Transaction types")
+    @PreAuthorize("@permissions.can('transactions', 'view')")
     public ResponseEntity<String> transactionType() throws JsonProcessingException {
         ArrayNode jsonArray = objectMapper.createArrayNode();
 
@@ -194,6 +195,7 @@ public class AccountingCoreResource {
             )
     })
     @GetMapping(value = "/rejection-reasons", produces = APPLICATION_JSON_VALUE, name = "Rejection reasons")
+    @PreAuthorize("@permissions.can('transactions', 'view')")
     public ResponseEntity<RejectionReason[]> rejectionReasons() {
         return ResponseEntity.ok().body(RejectionReason.values());
     }
@@ -207,7 +209,7 @@ public class AccountingCoreResource {
                     responseCode = "202"
             )
     })
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('transactions', 'import')")
     public ResponseEntity<?> extractionTrigger(@Valid @RequestBody ExtractionRequest body) {
         return handleExtraction(body);
     }
@@ -221,7 +223,7 @@ public class AccountingCoreResource {
                     responseCode = "202"
             )
     })
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('transactions', 'import')")
     public ResponseEntity<?> uploadFile(@ModelAttribute ExtractionRequest body) {
         return handleExtraction(body);
     }
@@ -274,7 +276,7 @@ public class AccountingCoreResource {
                     })
             }
     )
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('transactions', 'review_approve')")
     public ResponseEntity<List<TransactionProcessView>> approveTransactions(@Valid @RequestBody TransactionsRequest transactionsRequest) {
         List<TransactionProcessView> transactionProcessViews = accountingCorePresentationService.approveTransactions(transactionsRequest);
 
@@ -292,7 +294,7 @@ public class AccountingCoreResource {
                     })
             }
     )
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
+    @PreAuthorize("@permissions.can('transactions', 'publish_approve')")
     public ResponseEntity<List<TransactionProcessView>> approveTransactionsPublish(@Valid @RequestBody TransactionsRequest transactionsRequest) {
         List<TransactionProcessView> transactionProcessViewList = accountingCorePresentationService.approveTransactionsPublish(transactionsRequest);
 
@@ -310,7 +312,7 @@ public class AccountingCoreResource {
                     })
             }
     )
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('transactions', 'review_reject')")
     public ResponseEntity<TransactionItemsProcessRejectView> rejectTransactionItems(@Valid @RequestBody TransactionItemsRejectionRequest transactionItemsRejectionRequest) {
         TransactionItemsProcessRejectView transactionProcessViewsResult = accountingCorePresentationService.rejectTransactionItems(transactionItemsRejectionRequest);
 
@@ -328,7 +330,7 @@ public class AccountingCoreResource {
                     })
             }
     )
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('transactions', 'batches_view')")
     public ResponseEntity<?> listAllBatches(@Valid @RequestBody BatchSearchRequest body,
                                             @PageableDefault(page = 0, size = 10) Pageable pageable) {
         body.setLimit(pageable.getPageSize());
@@ -357,7 +359,7 @@ public class AccountingCoreResource {
                             "}"))})
             }
     )
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('transactions', 'batches_reprocess')")
     public ResponseEntity<BatchReprocessView> batchReprocess(@Valid @PathVariable("batchId") @Parameter(example = "TESTd12027c0788116d14723a4ab4a67636a7d6463d84f0c6f7adf61aba32c04") String batchId,
                                                               @RequestParam(name = "organisationId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String organisationId) {
         if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
@@ -376,7 +378,7 @@ public class AccountingCoreResource {
             description = "Returns the details of a batch, including a pageable list of transactions. " +
                     "Optionally, transactions can be filtered by their processing status."
     )
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('transactions', 'batches_view')")
     public ResponseEntity<?> batchesDetail(@Valid @PathVariable("batchId") @Parameter(example = "TESTd12027c0788116d14723a4ab4a67636a7d6463d84f0c6f7adf61aba32c04") String batchId,
                                            @RequestParam(name = "txStatus", required = false) List<TransactionProcessingStatus> txStatus,
                                            @RequestParam(name = "organisationId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String organisationId,
@@ -392,7 +394,7 @@ public class AccountingCoreResource {
             description = "Returns the details of a batch, including a pageable list of transactions. " +
                     "Optionally, transactions can be filtered by their processing status."
     )
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('transactions', 'batches_view')")
     public ResponseEntity<?> batchesDetail(@Valid @PathVariable("batchId") @Parameter(example = "TESTd12027c0788116d14723a4ab4a67636a7d6463d84f0c6f7adf61aba32c04") String batchId,
                                            @RequestParam(name = "txStatus", required = false) List<TransactionProcessingStatus> txStatus,
                                            @Valid @RequestBody BatchFilterRequest batchFilterRequest,

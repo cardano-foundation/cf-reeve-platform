@@ -34,7 +34,7 @@ public class TestSecurityConfig {
     @Bean
     @Primary
     public KeycloakSecurityHelper testKeycloakSecurityHelper() {
-        return new KeycloakSecurityHelper() {
+        return new KeycloakSecurityHelper(null) {
             @Override
             public boolean canUserAccessOrg(String orgId) {
                 return true;

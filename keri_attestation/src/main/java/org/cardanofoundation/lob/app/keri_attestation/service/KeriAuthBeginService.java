@@ -22,6 +22,7 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestat
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentityLinkEntity;
 import org.cardanofoundation.lob.app.keri_attestation.domain.view.CeremonyView;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 /**
  * Drives the AUTH_BEGIN step. This module never touches the chain: it validates the linked credential
@@ -61,6 +62,7 @@ public class KeriAuthBeginService {
     private final CeremonyService ceremonyService;
     private final KeriIdentityLinkRepository identityLinkRepository;
     private final CredentialChainValidator chainValidator;
+    private final KeycloakSecurityHelper securityHelper;
 
     /**
      * Moves the ceremony from {@code CREDENTIAL_RECEIVED} to {@code AUTH_BEGIN_SUBMITTED} and then
@@ -76,6 +78,13 @@ public class KeriAuthBeginService {
         }
         KeriAttestationCeremonyEntity ceremony = begun.get();
         int generation = ceremony.getAttemptGeneration();
+
+        // The endpoint's permission is checked in the request's organisation; AUTH_BEGIN is published for the
+        // ceremony's, so they must be the same one and the user must still belong to it.
+        if (ceremony.getOrganisationId() != null && !securityHelper.canUserAccessOrg(ceremony.getOrganisationId())) {
+            return failAuthBegin(ceremonyId, userId, generation, KeriAttestationProblems.CEREMONY_FORBIDDEN,
+                    "Current user can't act on organisation %s.".formatted(ceremony.getOrganisationId()));
+        }
 
         Optional<KeriIdentityLinkEntity> linkOpt = identityLinkRepository.findById(userId);
         if (linkOpt.isEmpty() || linkOpt.get().getAid() == null) {
