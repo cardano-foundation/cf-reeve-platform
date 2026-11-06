@@ -27,7 +27,6 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Led
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Rejection;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Vat;
-import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemExtractionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionTransactionsRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionItemView;
@@ -41,18 +40,8 @@ import org.cardanofoundation.lob.app.organisation.domain.entity.Project;
 @RequiredArgsConstructor
 @Transactional
 public class ExtractionItemService {
-    private final TransactionItemExtractionRepository transactionItemRepositoryImpl;
     private final TransactionItemRepository transactionItemRepository;
     private final OrganisationPublicApi organisationPublicApi;
-
-    @Transactional(readOnly = true)
-    public ExtractionTransactionView findTransactionItems(String organisationId, LocalDate dateFrom, LocalDate dateTo, List<String> accountCode, List<String> costCenter, List<String> project, List<String> accountType, List<String> accountSubType) {
-
-        List<ExtractionTransactionItemView> transactionItem = transactionItemRepositoryImpl.findByItemAccount(organisationId, dateFrom, dateTo, accountCode, costCenter, project, accountType, accountSubType)
-                .stream().map(this::extractionTransactionItemViewBuilder).toList();
-
-        return ExtractionTransactionView.createSuccess(transactionItem, transactionItem.size(), 0, transactionItem.size());
-    }
 
     private ExtractionTransactionItemView extractionTransactionItemViewBuilder(TransactionItemEntity item) {
         Optional<CostCenter> costCenter = organisationPublicApi.findCostCenter(item.getTransaction().getOrganisation().getId(), item.getCostCenter().map(org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.CostCenter::getCustomerCode).orElse(null));

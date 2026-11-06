@@ -11,6 +11,9 @@ import java.util.Set;
 
 import lombok.val;
 
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -27,16 +30,14 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Led
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionItemEntity;
-import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemExtractionRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ExtractionTransactionsRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ExtractionTransactionView;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 
 @ExtendWith(MockitoExtension.class)
 class ExtractionItemServiceTest {
 
-    @Mock
-    private TransactionItemExtractionRepository transactionItemExtractionRepository;
     @Mock
     private TransactionItemRepository transactionItemRepository;
 
@@ -71,13 +72,21 @@ class ExtractionItemServiceTest {
 
         item1.setTransaction(tx);
 
-        Mockito.when(transactionItemExtractionRepository.findByItemAccount(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any())).thenReturn(List.of(item1));
+        val request = new ExtractionTransactionsRequest();
+        request.setOrganisationId("orgId1");
+        val pageable = PageRequest.of(0, 10);
+
+        Mockito.when(transactionItemRepository.searchItems(Mockito.eq("orgId1"), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(),
+                Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(),
+                Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(),
+                Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(item1), pageable, 1));
         Mockito.when(organisationPublicApi.findProject(Mockito.any(), Mockito.any())).thenReturn(Optional.empty());
         Mockito.when(organisationPublicApi.findCostCenter(Mockito.any(), Mockito.any())).thenReturn(Optional.empty());
-        ExtractionTransactionView result = extractionItemService.findTransactionItems(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any());
+        ExtractionTransactionView result = extractionItemService.findTransactionItems(request, pageable);
         assertInstanceOf(ExtractionTransactionView.class, result);
         assertEquals(1L, result.getTotal());
-        verifyNoMoreInteractions(transactionItemExtractionRepository);
+        verifyNoMoreInteractions(transactionItemRepository);
 
     }
 }
