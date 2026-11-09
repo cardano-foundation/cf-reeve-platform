@@ -35,9 +35,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import org.junit.jupiter.api.Test;
 
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Organisation;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
-import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
 
 /**
  * Replays what two publisher replicas do when they receive the same command at once, on real Postgres.
