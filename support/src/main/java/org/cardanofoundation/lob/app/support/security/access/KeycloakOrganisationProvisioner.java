@@ -31,6 +31,10 @@ public class KeycloakOrganisationProvisioner implements OrganisationAccessProvis
 
     @Override
     public void organisationCreated(String organisationId, String organisationName) {
+        if (!permissionCatalogue.isConfigured()) {
+            log.error("lob.permissions is not set, not provisioning the Keycloak groups of organisation {}", organisationId);
+            return;
+        }
         try {
             String parentId = keycloakAdminClient.findGroupIdByPath(properties.getOrganisationsGroup())
                     .orElseGet(() -> keycloakAdminClient.createTopLevelGroup(properties.getOrganisationsGroup()));

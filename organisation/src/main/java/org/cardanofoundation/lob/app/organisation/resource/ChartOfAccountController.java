@@ -51,6 +51,7 @@ public class ChartOfAccountController {
     })
     @GetMapping(value = "/{orgId}/chart-types", produces = "application/json")
     @Transactional
+    @PreAuthorize("@permissions.can('chart_of_accounts', 'view')")
     public ResponseEntity<List<ChartOfAccountTypeView>> getChartOfAccountTypes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();
@@ -82,6 +83,7 @@ public class ChartOfAccountController {
             ),
     })
     @GetMapping(value = "/{orgId}/chart-of-accounts", produces = "application/json")
+    @PreAuthorize("@permissions.can('chart_of_accounts', 'view')")
     public ResponseEntity<?> getChartOfAccounts(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                 @RequestParam(value = "customerCode", required = false) String customerCode,
                                                 @RequestParam(value = "name", required = false) String name,

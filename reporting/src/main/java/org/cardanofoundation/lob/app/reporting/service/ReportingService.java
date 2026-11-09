@@ -303,7 +303,7 @@ public class ReportingService {
         LocalDate endDate = getReportEndDate(intervalType, startDate);
 
         Map<DateRange, Map<String, BigDecimal>> accountCodesTotalsRange =
-                fetchAccountCodesTotalsRange(template.getFields(), startDate, endDate, request.isPreview());
+                fetchAccountCodesTotalsRange(template.getOrganisationId(), template.getFields(), startDate, endDate, request.isPreview());
         List<ReportFieldDto> fields = fillFieldsFromTemplate(template.getFields(), startDate, endDate, accountCodesTotalsRange);
 
         // Generate report name
@@ -375,7 +375,7 @@ public class ReportingService {
         LocalDate endDate = getReportEndDate(intervalType, startDate);
 
         Map<DateRange, Map<String, BigDecimal>> accountCodesTotalsRange =
-                fetchAccountCodesTotalsRange(template.getFields(), startDate, endDate, false);
+                fetchAccountCodesTotalsRange(template.getOrganisationId(), template.getFields(), startDate, endDate, false);
         List<ReportFieldDto> fields = fillFieldsFromTemplate(template.getFields(), startDate, endDate, accountCodesTotalsRange);
         return Either.right(fields);
     }
@@ -712,6 +712,7 @@ public class ReportingService {
 
 
     private Map<DateRange, Map<String, BigDecimal>> fetchAccountCodesTotalsRange(
+            String organisationId,
             List<ReportTemplateFieldEntity> templateFields,
             LocalDate reportStartDate,
             LocalDate reportEndDate,
@@ -726,24 +727,24 @@ public class ReportingService {
         for (Map.Entry<DateRange, Set<String>> entry : dateRangeToAccountCodes.entrySet()) {
             List<String> accountCodes = new ArrayList<>(entry.getValue());
             if (!accountCodes.isEmpty()) {
-                result.put(entry.getKey(), fetchTotalsForDateRange(entry.getKey(), accountCodes, preview));
+                result.put(entry.getKey(), fetchTotalsForDateRange(organisationId, entry.getKey(), accountCodes, preview));
             }
         }
         return result;
     }
 
-    private Map<String, BigDecimal> fetchTotalsForDateRange(DateRange range, List<String> accountCodes, boolean preview) {
+    private Map<String, BigDecimal> fetchTotalsForDateRange(String organisationId, DateRange range, List<String> accountCodes, boolean preview) {
         List<AccountCodeTotal> debitRows = preview
                 ? transactionItemRepository.aggregatePreviewTransactionItemsDebitByAccountCodeAndDateRange(
-                        accountCodes, range.startDate(), range.endDate())
+                        organisationId, accountCodes, range.startDate(), range.endDate())
                 : transactionItemRepository.aggregateTransactionItemsDebitByAccountCodeAndDateRange(
-                        accountCodes, range.startDate(), range.endDate());
+                        organisationId, accountCodes, range.startDate(), range.endDate());
 
         List<AccountCodeTotal> creditRows = preview
                 ? transactionItemRepository.aggregatePreviewTransactionItemsCreditByAccountCodeAndDateRange(
-                        accountCodes, range.startDate(), range.endDate())
+                        organisationId, accountCodes, range.startDate(), range.endDate())
                 : transactionItemRepository.aggregateTransactionItemsCreditByAccountCodeAndDateRange(
-                        accountCodes, range.startDate(), range.endDate());
+                        organisationId, accountCodes, range.startDate(), range.endDate());
 
         Map<String, BigDecimal> totals = new HashMap<>();
         for (AccountCodeTotal row : debitRows) {
@@ -924,7 +925,7 @@ public class ReportingService {
 
             // Regenerate fields from template
             Map<DateRange, Map<String, BigDecimal>> accountCodesTotalsRange =
-                    fetchAccountCodesTotalsRange(report.getReportTemplate().getFields(), startDate, endDate, false);
+                    fetchAccountCodesTotalsRange(report.getReportTemplate().getOrganisationId(), report.getReportTemplate().getFields(), startDate, endDate, false);
             List<ReportFieldDto> regeneratedFields = fillFieldsFromTemplate(
                     report.getReportTemplate().getFields(),
                     startDate,

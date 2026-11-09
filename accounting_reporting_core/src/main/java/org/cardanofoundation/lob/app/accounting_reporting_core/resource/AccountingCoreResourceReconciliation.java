@@ -73,6 +73,7 @@ public class AccountingCoreResourceReconciliation {
     }
 
     @PostMapping(value = "/reconcile/triggercsv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("@permissions.can('transactions', 'reconcilate')")
     public ResponseEntity<ReconcileResponseView> reconcileTriggerCsvAction(@ModelAttribute ReconciliationRequest body) {
         return reconcileTriggerAction(body);
     }

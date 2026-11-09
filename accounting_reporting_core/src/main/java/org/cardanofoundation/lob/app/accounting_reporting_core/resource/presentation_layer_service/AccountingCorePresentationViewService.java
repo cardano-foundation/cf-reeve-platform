@@ -138,9 +138,9 @@ public class AccountingCorePresentationViewService {
     public ReconciliationResponseView allReconciliationTransaction(
             ReconciliationFilterRequest body, Pageable pageable) {
         Object transactionsStatistic = reconcilationRepository
-                .findCalcReconciliationStatistic(TransactionViolationCode.exclusions());
+                .findCalcReconciliationStatistic(body.getOrganisationId(), TransactionViolationCode.exclusions());
         Optional<ReconcilationEntity> latestReconcilation =
-                transactionReconcilationRepository.findTopByOrderByCreatedAtDesc();
+                transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(body.getOrganisationId());
         List<TransactionReconciliationTransactionsView> transactions;
         long count;
         Set<ReconcilationRejectionCode> rejectionCodes = body
@@ -153,6 +153,7 @@ public class AccountingCorePresentationViewService {
             pageable = expandSorts(pageable, true);
             Page<TransactionWithViolationDto> allReconciliationSpecial =
                     reconcilationRepository.findAllReconciliationSpecial(
+                            body.getOrganisationId(),
                             rejectionCodes.isEmpty() ? null
                                     : rejectionCodes,
                             body.getDateFrom().orElse(null),
@@ -171,7 +172,7 @@ public class AccountingCorePresentationViewService {
         } else {
             pageable = expandSorts(pageable, false);
             Page<TransactionEntity> pagedTransactions = reconcilationRepository
-                    .findAllReconcilation(body.getFilter().name(),
+                    .findAllReconcilation(body.getOrganisationId(), body.getFilter().name(),
                             body.getDateFrom().orElse(null),
                             body.getDateTo().orElse(null),
                             body.getTransactionTypes().isEmpty() ? null
@@ -914,7 +915,7 @@ public class AccountingCorePresentationViewService {
                                 .toList());
 
                 case DOCUMENT_NUMBERS -> filterOptionsListMap.put(filterOption,
-                        transactionItemRepository.getAllDocumentNumbers()
+                        transactionItemRepository.getAllDocumentNumbers(orgId)
                                 .stream()
                                 .map(document -> FilteringOptionsListResponse
                                         .builder()

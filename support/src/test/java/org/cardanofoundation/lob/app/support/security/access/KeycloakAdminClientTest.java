@@ -172,11 +172,11 @@ class KeycloakAdminClientTest {
         stubPermissionsClient();
         stubGet("/roles", """
                 [
-                  {"name": "preset", "composite": true},
+                  {"name": "bundle", "composite": true},
                   {"name": "module_role", "composite": true},
                   {"name": "offline_access", "composite": false}
                 ]""");
-        stubGet("/roles/preset/composites", """
+        stubGet("/roles/bundle/composites", """
                 [
                   {"name": "module_role", "clientRole": false},
                   {"name": "settings:view", "clientRole": true, "containerId": "api-uuid"}
@@ -189,7 +189,7 @@ class KeycloakAdminClientTest {
 
         Map<String, Set<String>> permissions = client.realmRolePermissions();
 
-        assertThat(permissions.get("preset")).containsExactlyInAnyOrder("settings:view", "reports:view");
+        assertThat(permissions.get("bundle")).containsExactlyInAnyOrder("settings:view", "reports:view");
         assertThat(permissions.get("module_role")).containsExactly("reports:view");
         assertThat(permissions.get("offline_access")).isEmpty();
     }

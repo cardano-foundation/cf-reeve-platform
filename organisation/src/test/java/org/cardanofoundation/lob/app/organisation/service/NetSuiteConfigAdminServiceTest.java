@@ -32,7 +32,7 @@ import org.cardanofoundation.lob.app.organisation.domain.request.NetSuiteConfigu
 import org.cardanofoundation.lob.app.organisation.domain.request.NetSuiteConfigurationUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.NetSuiteConfigurationStatusView;
 import org.cardanofoundation.lob.app.organisation.repository.NetSuiteConfigStateRepository;
-import org.cardanofoundation.lob.app.support.crypto.SecretCipher;
+import org.cardanofoundation.lob.app.support.crypto.SecretEncryptor;
 
 @ExtendWith(MockitoExtension.class)
 class NetSuiteConfigAdminServiceTest {
@@ -43,7 +43,7 @@ class NetSuiteConfigAdminServiceTest {
     @Mock
     private NetSuiteConfigStateRepository repository;
     @Mock
-    private SecretCipher secretCipher;
+    private SecretEncryptor secretEncryptor;
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
@@ -51,7 +51,7 @@ class NetSuiteConfigAdminServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new NetSuiteConfigAdminService(repository, secretCipher, eventPublisher,
+        service = new NetSuiteConfigAdminService(repository, secretEncryptor, eventPublisher,
                 Clock.fixed(Instant.parse("2026-08-14T10:00:00Z"), ZoneOffset.UTC));
     }
 
@@ -79,7 +79,7 @@ class NetSuiteConfigAdminServiceTest {
     @Test
     void createPersistsPendingStateAndPublishesTheEvent() {
         when(repository.findById(ORG)).thenReturn(Optional.empty());
-        when(secretCipher.encrypt(PEM)).thenReturn("v1:ENVELOPE");
+        when(secretEncryptor.encrypt(PEM, ORG)).thenReturn("ENCRYPTED");
 
         Either<ProblemDetail, NetSuiteConfigurationStatusView> result =
                 service.create(ORG, createRequest(), "admin");
@@ -96,14 +96,14 @@ class NetSuiteConfigAdminServiceTest {
         ArgumentCaptor<NetSuiteConfigUpsertedEvent> published =
                 ArgumentCaptor.forClass(NetSuiteConfigUpsertedEvent.class);
         verify(eventPublisher).publishEvent(published.capture());
-        assertThat(published.getValue().getPrivateKeyEncrypted()).isEqualTo("v1:ENVELOPE");
+        assertThat(published.getValue().getPrivateKeyEncrypted()).isEqualTo("ENCRYPTED");
         assertThat(published.getValue().getRevision()).isEqualTo(1L);
     }
 
     @Test
     void createNeverStoresTheSecretInTheProjection() {
         when(repository.findById(ORG)).thenReturn(Optional.empty());
-        when(secretCipher.encrypt(PEM)).thenReturn("v1:ENVELOPE");
+        when(secretEncryptor.encrypt(PEM, ORG)).thenReturn("ENCRYPTED");
 
         service.create(ORG, createRequest(), "admin");
 
@@ -112,7 +112,7 @@ class NetSuiteConfigAdminServiceTest {
         assertThat(saved.getValue().getPrivateKeyFingerprint())
                 .isNotBlank()
                 .isNotEqualTo(PEM)
-                .isNotEqualTo("v1:ENVELOPE");
+                .isNotEqualTo("ENCRYPTED");
     }
 
     @Test
@@ -132,7 +132,7 @@ class NetSuiteConfigAdminServiceTest {
     @Test
     void createLosingAConcurrentRaceReportsConflictAndPublishesNothing() {
         when(repository.findById(ORG)).thenReturn(Optional.empty());
-        when(secretCipher.encrypt(PEM)).thenReturn("v1:ENVELOPE");
+        when(secretEncryptor.encrypt(PEM, ORG)).thenReturn("ENCRYPTED");
         when(repository.save(any())).thenThrow(new DataIntegrityViolationException("duplicate key"));
 
         Either<ProblemDetail, NetSuiteConfigurationStatusView> result =
@@ -181,7 +181,7 @@ class NetSuiteConfigAdminServiceTest {
     @Test
     void updateWithANewKeyEncryptsItAndRefreshesTheFingerprint() {
         when(repository.findById(ORG)).thenReturn(Optional.of(existingState()));
-        when(secretCipher.encrypt(PEM)).thenReturn("v1:NEWENVELOPE");
+        when(secretEncryptor.encrypt(PEM, ORG)).thenReturn("NEWENCRYPTED");
 
         service.update(ORG,
                 new NetSuiteConfigurationUpdate("https://base", "https://token", "client", "cert", PEM), "admin");
@@ -189,7 +189,7 @@ class NetSuiteConfigAdminServiceTest {
         ArgumentCaptor<NetSuiteConfigUpsertedEvent> published =
                 ArgumentCaptor.forClass(NetSuiteConfigUpsertedEvent.class);
         verify(eventPublisher).publishEvent(published.capture());
-        assertThat(published.getValue().getPrivateKeyEncrypted()).isEqualTo("v1:NEWENVELOPE");
+        assertThat(published.getValue().getPrivateKeyEncrypted()).isEqualTo("NEWENCRYPTED");
 
         ArgumentCaptor<NetSuiteConfigState> saved = ArgumentCaptor.forClass(NetSuiteConfigState.class);
         verify(repository).save(saved.capture());

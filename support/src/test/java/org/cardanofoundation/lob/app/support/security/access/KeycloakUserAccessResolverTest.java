@@ -25,7 +25,19 @@ import org.cardanofoundation.lob.app.support.security.access.KeycloakAdminClient
 class KeycloakUserAccessResolverTest {
 
     private final KeycloakAdminClient client = mock(KeycloakAdminClient.class);
-    private final PermissionCatalogue catalogue = new PermissionCatalogue();
+    private final PermissionCatalogue catalogue = new PermissionCatalogue(new PermissionProperties(
+            List.of("transactions", "reporting", "funding"), "org_member",
+            List.of(
+                    new PermissionProperties.Resource("organisations", List.of(), List.of("create")),
+                    new PermissionProperties.Resource("settings", List.of(), List.of("view")),
+                    new PermissionProperties.Resource("organization", List.of(), List.of("view")),
+                    new PermissionProperties.Resource("transactions", List.of("transactions"), List.of("view", "review_view", "review_approve", "publish_approve")),
+                    new PermissionProperties.Resource("netsuite_configuration", List.of("transactions"), List.of("edit")),
+                    new PermissionProperties.Resource("chart_of_accounts", List.of("transactions", "reporting"), List.of("view", "edit")),
+                    new PermissionProperties.Resource("reports", List.of("reporting"), List.of("view")),
+                    new PermissionProperties.Resource("project_management", List.of("funding"), List.of("view", "publish"))),
+            List.of(),
+            new PermissionProperties.Platform("platform")));
     private KeycloakUserAccessResolver resolver;
 
     @BeforeEach
@@ -172,7 +184,7 @@ class KeycloakUserAccessResolverTest {
                 "sub", "user-4",
                 "preferred_username", "legacy",
                 "organisations", List.of("org-a"),
-                "roles", List.of("reeve_account_manager"))));
+                "roles", List.of("org_admin"))));
 
         assertThat(access.organisations()).isEmpty();
     }

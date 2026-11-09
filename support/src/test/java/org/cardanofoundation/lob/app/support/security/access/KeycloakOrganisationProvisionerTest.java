@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
@@ -21,7 +22,16 @@ import org.junit.jupiter.api.Test;
 class KeycloakOrganisationProvisionerTest {
 
     private final KeycloakAdminClient client = mock(KeycloakAdminClient.class);
-    private final PermissionCatalogue catalogue = new PermissionCatalogue();
+    private final PermissionCatalogue catalogue = new PermissionCatalogue(new PermissionProperties(
+            List.of("transactions", "reporting", "funding"), "org_member",
+            List.of(new PermissionProperties.Resource("transactions", List.of("transactions"), List.of("view"))),
+            List.of(
+                    new PermissionProperties.Group("transactions", "transactions_viewer"),
+                    new PermissionProperties.Group("transactions/setup", "transactions_setup"),
+                    new PermissionProperties.Group("transactions/setup/erp", "transactions_erp"),
+                    new PermissionProperties.Group("funding", "funding_viewer"),
+                    new PermissionProperties.Group("funding/setup", "funding_setup")),
+            null));
     private KeycloakOrganisationProvisioner provisioner;
 
     // relative group path -> id handed out by the mocked Keycloak
@@ -52,6 +62,16 @@ class KeycloakOrganisationProvisionerTest {
     }
 
     @Test
+    void withoutACatalogue_createsNothing() {
+        KeycloakOrganisationProvisioner unconfigured = new KeycloakOrganisationProvisioner(client, mock(KeycloakAdminProperties.class),
+                new PermissionCatalogue(new PermissionProperties(null, null, null, null, null)));
+
+        unconfigured.organisationCreated("org-new", "New Org");
+
+        verifyNoInteractions(client);
+    }
+
+    @Test
     void createsTheDefaultTreeAndAddsNobody() {
         provisioner.organisationCreated("org-new", "New Org");
 
@@ -61,9 +81,6 @@ class KeycloakOrganisationProvisionerTest {
         verify(client).assignRealmRoleToGroup(created.get("transactions"), "transactions_viewer");
         verify(client).assignRealmRoleToGroup(created.get("transactions/setup/erp"), "transactions_erp");
         verify(client).assignRealmRoleToGroup(created.get("funding/setup"), "funding_setup");
-
-        // the legacy presets are not part of a new organisation
-        assertThat(created.keySet()).noneMatch(path -> path.startsWith("presets"));
 
         // the group is named after the organisation, the id is an attribute
         verify(client).createChildGroup("root", "New Org", Map.of(

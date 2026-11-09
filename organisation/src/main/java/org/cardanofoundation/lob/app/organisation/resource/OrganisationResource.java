@@ -61,6 +61,7 @@ public class OrganisationResource {
             ),
     })
     @GetMapping(value = "/organisations", produces = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("@permissions.can('organization', 'view')")
     public ResponseEntity<List<OrganisationView>> organisationList(@RequestParam(value = "orgIds", required = false) Optional<String[]> orgIds) {
         return ResponseEntity.ok().body(
                 orgIds.map(orgs -> Arrays.stream(orgs)
@@ -91,6 +92,7 @@ public class OrganisationResource {
             ))})
     })
     @GetMapping(value = "/organisations/{orgId}", produces = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("@permissions.can('organization_details', 'view')")
     public ResponseEntity<?> organisationDetailSpecific(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();
@@ -112,6 +114,7 @@ public class OrganisationResource {
             ),
     })
     @GetMapping(value = "/organisations/{orgId}/events", produces = "application/json")
+    @PreAuthorize("@permissions.can('event_codes', 'view')")
     public ResponseEntity<List<EventView>> organisationEvent(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();

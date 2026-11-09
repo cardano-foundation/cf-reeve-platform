@@ -45,4 +45,24 @@ class UserAccessWiringTest {
         contextRunner.run(context -> assertThat(context).hasNotFailed());
     }
 
+    @Test
+    void bindsTheCatalogueFromProperties() {
+        contextRunner
+                .withPropertyValues(
+                        "lob.permissions.modules[0]=transactions",
+                        "lob.permissions.organisation-role=org_member",
+                        "lob.permissions.resources[0].name=data_explorer",
+                        "lob.permissions.resources[0].modules[0]=transactions",
+                        "lob.permissions.resources[0].actions[0]=view",
+                        "lob.permissions.groups[0].path=transactions/setup/erp",
+                        "lob.permissions.groups[0].role=transactions_erp")
+                .run(context -> {
+                    PermissionCatalogue catalogue = context.getBean(PermissionCatalogue.class);
+                    assertThat(catalogue.getPermissions()).containsExactly("data_explorer:view");
+                    assertThat(catalogue.modulesOf("data_explorer")).containsExactly("transactions");
+                    assertThat(catalogue.getGroupLayout()).containsEntry("transactions/setup/erp", "transactions_erp");
+                    assertThat(catalogue.getOrganisationRole()).isEqualTo("org_member");
+                });
+    }
+
 }
