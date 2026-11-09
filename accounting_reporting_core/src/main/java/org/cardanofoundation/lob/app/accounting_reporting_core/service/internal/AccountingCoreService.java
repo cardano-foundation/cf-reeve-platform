@@ -145,7 +145,7 @@ public class AccountingCoreService {
                 // return the list of problems
                 return Either.left(response.getErrors().stream()
                         .map(AccountingCoreService::validationProblem)
-                        .collect(Collectors.toList()));
+                        .toList());
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

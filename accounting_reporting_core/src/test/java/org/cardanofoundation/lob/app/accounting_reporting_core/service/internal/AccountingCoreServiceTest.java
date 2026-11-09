@@ -274,7 +274,7 @@ class AccountingCoreServiceTest {
     }
 
     private void givenValidationRequestPasses() {
-        given(organisationPublicApi.findByOrganisationId(eq("org-123"))).willReturn(Optional.of(mock(Organisation.class)));
+        given(organisationPublicApi.findByOrganisationId("org-123")).willReturn(Optional.of(mock(Organisation.class)));
         given(accountingPeriodCalculator.calculateAccountingPeriod(any())).willReturn(Range.of(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 12, 31)));
         given(antiVirusScanner.readFileBytes(any())).willReturn(Either.right(new byte[0]));
     }
