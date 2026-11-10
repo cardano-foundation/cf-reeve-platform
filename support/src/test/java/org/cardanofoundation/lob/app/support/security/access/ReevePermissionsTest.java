@@ -6,8 +6,6 @@ import java.util.Map;
 
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
-import org.springframework.boot.context.properties.bind.Binder;
-import org.springframework.boot.context.properties.source.ConfigurationPropertySources;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.StandardEnvironment;
@@ -20,9 +18,7 @@ import org.junit.jupiter.api.Test;
  */
 class ReevePermissionsTest {
 
-    private final PermissionCatalogue catalogue = new PermissionCatalogue(new Binder(ConfigurationPropertySources.from(PermissionCatalogueEnvironmentPostProcessor.load()))
-            .bind("lob.permissions", PermissionProperties.class)
-            .orElseThrow(() -> new IllegalStateException("reeve-permissions.yml has no lob.permissions")));
+    private final PermissionCatalogue catalogue = new PermissionCatalogue(PermissionCatalogueEnvironmentPostProcessor.shippedCatalogue());
 
     @Test
     void bindsTheModulesAndPermissions() {
