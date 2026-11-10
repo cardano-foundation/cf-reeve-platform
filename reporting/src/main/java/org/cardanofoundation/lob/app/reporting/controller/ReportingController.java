@@ -88,7 +88,7 @@ public class ReportingController {
         }
     )
     @PostMapping(produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
+    @PreAuthorize("@permissions.can('reports', 'create')")
     public ResponseEntity<ReportResponseDto> create(
         @Valid @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "Report data. For GENERATED dataMode, fields are auto-calculated. For USER dataMode, provide fields manually.",
@@ -111,7 +111,7 @@ public class ReportingController {
 
     @Tag(name = "Reporting", description = "Create Report from CSV")
     @PostMapping(produces = APPLICATION_JSON_VALUE, consumes = MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
+    @PreAuthorize("@permissions.can('reports', 'create')")
     public ResponseEntity<List<ReportResponseDto>> templateCreateCsv(
             @Valid @ModelAttribute CreateCsvReportRequest csvReportRequest) {
         if (!keycloakSecurityHelper.canUserAccessOrg(csvReportRequest.getOrganisationId())) {
@@ -142,7 +142,7 @@ public class ReportingController {
         }
     )
     @GetMapping(value = "/{id}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('reports', 'view')")
     public ResponseEntity<?> findById(
         @PathVariable @Parameter(description = "Report ID (hash-based)", example = "b1c2d3e4f5g6h7i8j9k0l1m2n3o4p5q6r7s8t9u0v1w2x3y4z5a6b7c8d9e0f1g2") String id,
         @RequestParam(value = "organisationId", required = false)
@@ -200,7 +200,7 @@ public class ReportingController {
         }
     )
     @GetMapping(produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('reports', 'view')")
     public ResponseEntity<?> findAll(
             @RequestParam(value = "organisationId", required = true)
         @Parameter(
@@ -250,7 +250,7 @@ public class ReportingController {
         }
     )
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
+    @PreAuthorize("@permissions.can('reports', 'delete')")
     public ResponseEntity<?> delete(
         @PathVariable @Parameter(description = "Report ID (hash-based)", example = "b1c2d3e4f5g6h7i8j9k0l1m2n3o4p5q6r7s8t9u0v1w2x3y4z5a6b7c8d9e0f1g2") String id
     ) {
@@ -296,7 +296,7 @@ public class ReportingController {
         }
     )
     @PostMapping(value = "/generate", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
+    @PreAuthorize("@permissions.can('reports', 'create')")
     public ResponseEntity<?> generate(
         @Valid @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "Request containing template ID, organisation ID, interval type, year and period. Fields will be auto-generated.",
@@ -338,7 +338,7 @@ public class ReportingController {
                     @ApiResponse(responseCode = "404", description = "Report not found")})
     @PostMapping(value = "/publish", produces = APPLICATION_JSON_VALUE,
             consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
+    @PreAuthorize("@permissions.can('reports', 'publish')")
     public ResponseEntity<?> publish(
             @Valid @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     description = "Request containing report id and organisation ID",
@@ -375,7 +375,7 @@ public class ReportingController {
         }
     )
     @PostMapping(value = "/{id}/reprocess", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
+    @PreAuthorize("@permissions.can('reports', 'edit')")
     public ResponseEntity<?> reprocess(
         @PathVariable @Parameter(description = "Report ID (hash-based)", example = "b1c2d3e4f5g6h7i8j9k0l1m2n3o4p5q6r7s8t9u0v1w2x3y4z5a6b7c8d9e0f1g2") String id,
         @RequestParam(value = "organisationId", required = true)
@@ -404,7 +404,7 @@ public class ReportingController {
 
     @Operation(summary = "Download report as CSV", description = "Downloads the report data as a CSV file. Only available for published reports.")
     @GetMapping(value = "/download", produces = "text/csv")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('reports', 'view')")
     public ResponseEntity<StreamingResponseBody> downloadReports(@RequestParam(value = "organisationId", required = true)
                                                                     @Parameter(
                                                                             description = "Filter by organisation ID",
@@ -449,7 +449,7 @@ public class ReportingController {
                     @ApiResponse(responseCode = "404", description = "Report not found")})
     @PostMapping(value = "/reject", produces = APPLICATION_JSON_VALUE,
             consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole())")
+    @PreAuthorize("@permissions.can('reports', 'reject')")
     public ResponseEntity<?> reject(
             @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     description = "Request containing report id and organisation ID",

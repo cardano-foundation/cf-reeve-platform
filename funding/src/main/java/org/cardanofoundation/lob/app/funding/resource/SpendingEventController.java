@@ -62,12 +62,12 @@ public class SpendingEventController {
                     content = {@Content(mediaType = APPLICATION_JSON_VALUE, schema = @Schema(implementation = PagedResponse.class))}),
     })
     @GetMapping(value = "/events", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'view')")
     public ResponseEntity<PagedResponse<SpendingEventView>> listEvents(
             @RequestParam String organisationId,
-            @Parameter(description = "One or more statuses; repeat the parameter or comma-separate values", example = "DRAFT,ERROR")
+            @Parameter(description = "One or more statuses; repeat the parameter or comma-separate values")
             @RequestParam(required = false) List<EventStatus> status,
-            @Parameter(description = "One or more event types; repeat the parameter or comma-separate values", example = "FUNDING,SPENDING")
+            @Parameter(description = "One or more event types; repeat the parameter or comma-separate values")
             @RequestParam(required = false) List<EventType> eventType,
             @Parameter(description = "Case-insensitive partial match on the title of any project (or parent project) the event is allocated to", example = "Education")
             @RequestParam(required = false) String projectTitle,
@@ -102,7 +102,7 @@ public class SpendingEventController {
                     schema = @Schema(implementation = ProblemDetail.class))})
     })
     @GetMapping(value = "/projects/{projectId}/events", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'view')")
     public ResponseEntity<PagedResponse<SpendingEventView>> listEventsByProject(
             @PathVariable String projectId,
             @RequestParam String organisationId,
@@ -117,7 +117,7 @@ public class SpendingEventController {
                     array = @ArraySchema(schema = @Schema(implementation = String.class)))})
     })
     @GetMapping(value = "/event-types", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'view')")
     public ResponseEntity<List<String>> eventTypes() {
         return ResponseEntity.ok(Arrays.stream(EventType.values()).map(Enum::name).toList());
     }
@@ -127,7 +127,7 @@ public class SpendingEventController {
                     array = @ArraySchema(schema = @Schema(implementation = String.class)))})
     })
     @GetMapping(value = "/event-statuses", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'view')")
     public ResponseEntity<List<String>> eventStatuses() {
         return ResponseEntity.ok(Arrays.stream(EventStatus.values()).map(Enum::name).toList());
     }
@@ -139,7 +139,7 @@ public class SpendingEventController {
                     schema = @Schema(implementation = ProblemDetail.class))})
     })
     @GetMapping(value = "/events/{eventId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'view')")
     public ResponseEntity<SpendingEventView> getEvent(@PathVariable String eventId, @RequestParam String organisationId) {
         return Responses.respond(spendingEventService.getEvent(eventId, organisationId), HttpStatus.OK);
     }
@@ -498,7 +498,7 @@ public class SpendingEventController {
             }
     )
     @PostMapping(value = "/events", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
+    @PreAuthorize("@permissions.can('project_management', 'create')")
     public ResponseEntity<SpendingEventView> createEvent(
             @Valid @RequestBody SpendingEventCreateRequest request) {
         return Responses.respond(spendingEventService.createEvent(request), HttpStatus.CREATED);
@@ -684,7 +684,7 @@ public class SpendingEventController {
             }
     )
     @PutMapping(value = "/events/{eventId}", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
+    @PreAuthorize("@permissions.can('project_management', 'edit')")
     public ResponseEntity<SpendingEventView> updateEvent(
             @PathVariable String eventId,
             @Valid @RequestBody SpendingEventCreateRequest request) {
@@ -707,7 +707,7 @@ public class SpendingEventController {
                             schema = @Schema(implementation = ProblemDetail.class))})
             })
     @PostMapping(value = "/events/{eventId}/publish", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'publish')")
     @Deprecated(forRemoval = true)
     @SuppressWarnings("java:S1133") // can't remove yet: frontend still calls this endpoint
     public ResponseEntity<SpendingEventView> publishEvent(@PathVariable String eventId, @RequestParam String organisationId) {
@@ -729,7 +729,7 @@ public class SpendingEventController {
                             schema = @Schema(implementation = ProblemDetail.class))})
             })
     @PostMapping(value = "/events/publish", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'publish')")
     public ResponseEntity<SpendingEventBulkPublishView> publishEvents(
             @Valid @RequestBody SpendingEventBulkPublishRequest request) {
         return Responses.respond(
@@ -744,7 +744,7 @@ public class SpendingEventController {
                     schema = @Schema(implementation = ProblemDetail.class))})
     })
     @DeleteMapping(value = "/events/{eventId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'delete')")
     public ResponseEntity<ProblemDetail> deleteEvent(@PathVariable String eventId, @RequestParam String organisationId) {
         return Responses.respondDelete(spendingEventService.deleteEvent(eventId, organisationId));
     }
@@ -769,7 +769,7 @@ public class SpendingEventController {
             }
     )
     @DeleteMapping(value = "/events/orphans", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'delete')")
     public ResponseEntity<OrphanEventsCleanupView> deleteOrphanedErrorEvents(@RequestParam String organisationId) {
         return Responses.respond(spendingEventService.deleteOrphanedErrorEvents(organisationId), HttpStatus.OK);
     }

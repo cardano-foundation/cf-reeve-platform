@@ -13,6 +13,7 @@ import org.cardanofoundation.lob.app.blockchain_common.service_assistance.Cip170
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationProperties;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 /**
  * {@code KeriAuthBeginService} constructor-required {@link CardanoMetadataTxSubmitter}, an
@@ -40,6 +41,7 @@ class KeriAuthBeginServiceMissingSubmitterContextTest {
                 .withBean(CeremonyService.class, () -> mock(CeremonyService.class))
                 .withBean(KeriIdentityLinkRepository.class, () -> mock(KeriIdentityLinkRepository.class))
                 .withBean(CredentialChainValidator.class, () -> mock(CredentialChainValidator.class))
+                .withBean(KeycloakSecurityHelper.class, () -> mock(KeycloakSecurityHelper.class))
                 // Deliberately no CardanoMetadataTxSubmitter bean: this is the module-without-publisher
                 // deployment shape the ObjectProvider indirection exists for.
                 .withBean(KeriAuthBeginService.class)

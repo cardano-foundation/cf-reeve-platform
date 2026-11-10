@@ -38,29 +38,18 @@ import org.cardanofoundation.lob.app.document_vault.service.VaultDocumentService
 @RequiredArgsConstructor
 public class VaultDocumentController {
 
-    private static final String ALL_ROLES = "hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) "
-            + "or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole())";
-
-    /**
-     * Anchoring on-chain is irreversible, so publishing is gated more narrowly than the other
-     * endpoints, matching the platform's separation of duties: auditors and accountants never publish
-     * anywhere. An accountant can therefore upload a draft but needs a manager to publish it.
-     */
-    private static final String PUBLISH_ROLES =
-            "hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())";
-
     private final VaultDocumentService documentService;
 
     @Operation(description = "Upload an encrypted envelope: ciphertext plus per-recipient wrapped-DEK slots")
     @PostMapping(value = "/documents", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize(ALL_ROLES)
+    @PreAuthorize("@permissions.can('document_vault', 'create')")
     public ResponseEntity<Object> upload(@Valid @RequestBody UploadDocumentRequest request) {
         return Responses.respond(documentService.upload(request), HttpStatus.CREATED);
     }
 
     @Operation(description = "Org-wide document metadata listing: paged, sortable (createdAt, fileName, sizeBytes, status), filterable by direction/status/free text")
     @GetMapping(value = "/organisations/{organisationId}/documents", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize(ALL_ROLES)
+    @PreAuthorize("@permissions.can('document_vault', 'view')")
     public ResponseEntity<Object> list(@PathVariable String organisationId,
                                        @RequestParam(required = false) DocumentDirection direction,
                                        @RequestParam(required = false) VaultDocumentStatus status,
@@ -72,14 +61,14 @@ public class VaultDocumentController {
 
     @Operation(description = "Fetch the full encrypted envelope for client-side decryption (creator or recipient only; 404 otherwise)")
     @GetMapping(value = "/documents/{documentId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize(ALL_ROLES)
+    @PreAuthorize("@permissions.can('document_vault', 'view')")
     public ResponseEntity<Object> fetch(@PathVariable String documentId) {
         return Responses.respond(documentService.fetch(documentId), HttpStatus.OK);
     }
 
     @Operation(description = "Delete a document (creator or admin only; DRAFT only)")
     @DeleteMapping(value = "/documents/{documentId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize(ALL_ROLES)
+    @PreAuthorize("@permissions.can('document_vault', 'delete')")
     public ResponseEntity<Object> delete(@PathVariable String documentId) {
         return Responses.respondDelete(documentService.delete(documentId));
     }
@@ -88,7 +77,9 @@ public class VaultDocumentController {
             + "Requires IPFS; locks the document forever. Manager or admin only. Optional body may carry a completed KERI "
             + "wallet-attestation ceremony id to consume as part of the publish; omit the body (or the field) for a plain publish.")
     @PostMapping(value = "/documents/{documentId}/publish", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize(PUBLISH_ROLES)
+    // Anchoring on-chain is irreversible, so publishing is a separate permission: someone can upload a draft
+    // and still need another person to publish it.
+    @PreAuthorize("@permissions.can('document_vault', 'publish')")
     public ResponseEntity<Object> publish(@PathVariable String documentId,
                                           @Valid @RequestBody(required = false) PublishDocumentRequest request) {
         return Responses.respond(documentService.publish(documentId, resolveAttestationCeremonyId(request)), HttpStatus.OK);

@@ -69,14 +69,14 @@ public class FundingBulkImportController {
             }
     )
     @PostMapping(value = "/bulk-import", produces = APPLICATION_JSON_VALUE, consumes = MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'create_project')")
     public ResponseEntity<FundingBulkImportResult> bulkImport(@ModelAttribute BulkImportRequest request) {
         return Responses.respond(fundingBulkImportService.importFiles(request), HttpStatus.OK);
     }
 
     @Operation(summary = "Download a blank CSV template (with one example row) for a bulk-import file type")
     @GetMapping(value = "/bulk-import/templates/{fileType}", produces = "text/csv")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'create_project')")
     public ResponseEntity<StreamingResponseBody> downloadTemplate(@PathVariable FundingCsvFileType fileType) {
         StreamingResponseBody responseBody = outputStream -> fundingCsvTemplateService.writeTemplate(fileType, outputStream);
         return ResponseEntity.ok()
@@ -103,7 +103,7 @@ public class FundingBulkImportController {
             }
     )
     @GetMapping(value = "/bulk-import/export/projects-milestones")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'view')")
     public ResponseEntity<Object> exportProjectsMilestones(
             @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
             @RequestParam String organisationId,

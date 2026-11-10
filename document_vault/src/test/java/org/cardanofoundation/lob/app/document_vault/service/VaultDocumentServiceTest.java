@@ -29,8 +29,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
-import org.springframework.security.authentication.TestingAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import io.vavr.control.Either;
@@ -38,7 +36,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -64,6 +61,7 @@ import org.cardanofoundation.lob.app.keri_attestation.service.AttestationConsump
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
+import org.cardanofoundation.lob.app.support.security.access.PermissionChecker;
 
 @ExtendWith(MockitoExtension.class)
 class VaultDocumentServiceTest {
@@ -93,6 +91,9 @@ class VaultDocumentServiceTest {
     @Mock
     private AttestationConsumptionApi attestationConsumptionApi;
 
+    @Mock
+    private PermissionChecker permissionChecker;
+
     // Not @InjectMocks: the ObjectProvider<...> fields erase to the same raw type, so Mockito's
     // constructor matching could not tell which mock belongs where.
     private VaultDocumentService service;
@@ -101,19 +102,12 @@ class VaultDocumentServiceTest {
     void setUp() {
         service = new VaultDocumentService(documentRepository, keyLookupService, securityHelper,
                 organisationPublicApi, eventPublisher,
-                attestationFreezeGuardProvider, attestationConsumptionApiProvider);
+                attestationFreezeGuardProvider, attestationConsumptionApiProvider, permissionChecker);
         ReflectionTestUtils.setField(service, "maxDocumentBytes", 10_485_760L);
         ReflectionTestUtils.setField(service, "maxSlots", 64);
         // lenient: STRICT_STUBS would fail early-return tests that never consume these
         lenient().when(securityHelper.getCurrentUserId()).thenReturn("sender");
         lenient().when(securityHelper.canUserAccessOrg("org1")).thenReturn(true);
-    }
-
-    @AfterEach
-    void clearSecurityContext() {
-        // hasAdminRole() reads SecurityContextHolder directly; a test that populates it must not
-        // let that authentication leak into the next test in this class (or another class).
-        SecurityContextHolder.clearContext();
     }
 
     private VaultKeyEntity orgKey(String id, String accountId, String org) {
@@ -309,17 +303,9 @@ class VaultDocumentServiceTest {
         assertEquals(VaultProblems.NOT_DOCUMENT_CREATOR, problem.get().getTitle());
     }
 
-    /**
-     * The admin bypass in {@code hasAdminRole()}: a Keycloak-authenticated caller holding
-     * {@code ROLE_<keycloak.roles.admin>} (default "admin") may delete a DRAFT they did not
-     * create. This is the previously untested branch flagged in review.
-     */
     @Test
-    void deleteByNonCreatorWithAdminRoleSucceeds() {
-        ReflectionTestUtils.setField(service, "adminRoleName", "admin"); // matches keycloak.roles.admin default
-        TestingAuthenticationToken adminAuth = new TestingAuthenticationToken("admin-user", null, "ROLE_admin");
-        adminAuth.setAuthenticated(true);
-        SecurityContextHolder.getContext().setAuthentication(adminAuth);
+    void deleteByNonCreatorWithDeleteAnySucceeds() {
+        when(permissionChecker.can("document_vault", "delete_any")).thenReturn(true);
 
         VaultDocumentEntity doc = new VaultDocumentEntity();
         doc.setId("doc1");
@@ -335,7 +321,7 @@ class VaultDocumentServiceTest {
 
     @Test
     void deleteOutsideOwnOrganisationIsRejectedEvenForCreator() {
-        // Keycloak admin roles are realm-wide; membership of the document's org is checked separately
+        // The request's organisation decides the permissions, so the document must belong to it
         VaultDocumentEntity doc = new VaultDocumentEntity();
         doc.setId("doc1");
         doc.setOrganisationId("other-org");
@@ -376,6 +362,23 @@ class VaultDocumentServiceTest {
 
         assertTrue(problem.isPresent());
         assertEquals(VaultProblems.DOCUMENT_PUBLISHED_IMMUTABLE, problem.get().getTitle());
+    }
+
+    /** Published is final: no permission gets past it, so delete_any isn't even consulted. */
+    @Test
+    void deleteOnPublishedDocumentIsRejectedEvenWithDeleteAny() {
+        VaultDocumentEntity doc = new VaultDocumentEntity();
+        doc.setId("doc1");
+        doc.setOrganisationId("org1");
+        doc.setCreatedByAccount("someone-else");
+        doc.setStatus(VaultDocumentStatus.PUBLISHED);
+        lenient().when(permissionChecker.can("document_vault", "delete_any")).thenReturn(true);
+        when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
+
+        Optional<ProblemDetail> problem = service.delete("doc1");
+
+        assertEquals(VaultProblems.DOCUMENT_PUBLISHED_IMMUTABLE, problem.orElseThrow().getTitle());
+        verify(documentRepository, never()).delete(any(VaultDocumentEntity.class));
     }
 
     @Test
@@ -514,7 +517,7 @@ class VaultDocumentServiceTest {
         Either<ProblemDetail, DocumentView> result = service.publish("doc1");
 
         assertTrue(result.isRight());
-        verifyNoInteractions(attestationFreezeGuardProvider, attestationConsumptionApiProvider);
+        verifyNoInteractions(attestationFreezeGuardProvider, attestationConsumptionApiProvider, permissionChecker);
         assertNull(doc.getAttestationCeremonyId());
     }
 
@@ -529,7 +532,7 @@ class VaultDocumentServiceTest {
         assertTrue(result.isLeft());
         assertEquals(VaultProblems.ATTESTATION_CEREMONY_ID_BLANK, result.getLeft().getTitle());
         assertEquals(422, result.getLeft().getStatus());
-        verifyNoInteractions(documentRepository, attestationFreezeGuardProvider, attestationConsumptionApiProvider);
+        verifyNoInteractions(documentRepository, attestationFreezeGuardProvider, attestationConsumptionApiProvider, permissionChecker);
     }
 
     @Test

@@ -35,14 +35,11 @@ import org.cardanofoundation.lob.app.document_vault.service.WrappedRecordService
 @RequiredArgsConstructor
 public class WrappedRecordController {
 
-    private static final String ALL_ROLES = "hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) "
-            + "or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole())";
-
     private final WrappedRecordService recordService;
 
     @Operation(description = "Create or replace the wrapped record for one of the caller's passkey credentials")
     @PutMapping(value = "/records/{credentialId}", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize(ALL_ROLES)
+    @PreAuthorize("@permissions.can('document_vault', 'edit')")
     public ResponseEntity<Object> upsert(@PathVariable @Size(max = 512) String credentialId,
                                          @Valid @RequestBody UpsertWrappedRecordRequest request) {
         return Responses.respond(recordService.upsert(credentialId, request), HttpStatus.OK);
@@ -50,14 +47,14 @@ public class WrappedRecordController {
 
     @Operation(description = "Fetch the caller's wrapped record for a credential (keychain-load on a new device)")
     @GetMapping(value = "/records/{credentialId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize(ALL_ROLES)
+    @PreAuthorize("@permissions.can('document_vault', 'view')")
     public ResponseEntity<Object> get(@PathVariable @Size(max = 512) String credentialId) {
         return Responses.respond(recordService.get(credentialId), HttpStatus.OK);
     }
 
     @Operation(description = "List all wrapped records of the caller (paged)")
     @GetMapping(value = "/records", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize(ALL_ROLES)
+    @PreAuthorize("@permissions.can('document_vault', 'view')")
     public ResponseEntity<PagedResponse<WrappedRecordView>> listMine(
             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         return ResponseEntity.ok(recordService.listMine(pageable));

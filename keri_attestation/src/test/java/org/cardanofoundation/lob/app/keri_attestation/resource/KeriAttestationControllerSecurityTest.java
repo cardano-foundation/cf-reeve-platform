@@ -13,19 +13,13 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.request.ResolveOobi
 import org.cardanofoundation.lob.app.keri_attestation.domain.request.StepRetryRequest;
 
 /**
- * Why reflection and not a live 403: same rationale as document_vault's
- * {@code VaultDocumentControllerSecurityTest} — method security is switched on by support's
- * {@code SecurityConfig}, which is {@code @ConditionalOnProperty(keycloak.enabled=true)}. This
- * module's tests run with Keycloak disabled, so there is no {@code securityConfig} bean and
- * {@code @PreAuthorize} is inert; a "wrong role gets 403" test here would pass regardless of what the
- * annotation said. What this DOES pin is the expression itself on every endpoint (per the brief:
- * mirror {@code VaultDocumentController#publish}'s SpEL exactly, on all of them, not just the
- * on-chain-anchoring ones).
+ * Module tests run without method security, so a live 403 test here would pass whatever the annotation said.
+ * What this pins is the expression on every endpoint: all of them either anchor on-chain or feed a ceremony that
+ * will, so they need the same permission as publishing a document.
  */
 class KeriAttestationControllerSecurityTest {
 
-    private static final String PUBLISH_ROLES =
-            "hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())";
+    private static final String PUBLISH = "@permissions.can('document_vault', 'publish')";
 
     @Test
     void identityIsRoleGated() throws NoSuchMethodException {
@@ -76,7 +70,7 @@ class KeriAttestationControllerSecurityTest {
 
     private static void assertGated(java.lang.reflect.Method method) {
         PreAuthorize annotation = method.getAnnotation(PreAuthorize.class);
-        assertNotNull(annotation, method.getName() + " must be role-gated (manager or admin only)");
-        assertEquals(PUBLISH_ROLES, annotation.value());
+        assertNotNull(annotation, method.getName() + " must be permission-gated");
+        assertEquals(PUBLISH, annotation.value());
     }
 }

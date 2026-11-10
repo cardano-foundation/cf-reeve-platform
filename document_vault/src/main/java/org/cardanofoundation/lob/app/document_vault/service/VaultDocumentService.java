@@ -23,8 +23,6 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ProblemDetail;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,6 +48,7 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.core.ConsumedAttest
 import org.cardanofoundation.lob.app.keri_attestation.service.AttestationConsumptionApi;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
+import org.cardanofoundation.lob.app.support.security.access.PermissionChecker;
 
 /**
  * Stores and publishes encrypted documents. The client delivers the two crypto outputs (ciphertext
@@ -80,6 +79,7 @@ public class VaultDocumentService {
     /** Present only when {@code lob.keri-attestation.enabled}, like
      *  {@link #attestationFreezeGuardProvider}. */
     private final ObjectProvider<AttestationConsumptionApi> attestationConsumptionApiProvider;
+    private final PermissionChecker permissionChecker;
 
     /** The {@code AttestationTargetProvider} target type for documents. A literal rather than an
      *  import, because document_vault must not depend on the module declaring the port constant. */
@@ -90,9 +90,6 @@ public class VaultDocumentService {
 
     @Value("${lob.document_vault.max-slots:64}")
     private int maxSlots;
-
-    @Value("${keycloak.roles.admin:admin}")
-    private String adminRoleName;
 
     public Either<ProblemDetail, DocumentUploadedView> upload(UploadDocumentRequest request) {
         String organisationId = request.getOrganisationId();
@@ -475,7 +472,7 @@ public class VaultDocumentService {
                     "No document %s.".formatted(documentId)));
         }
         VaultDocumentEntity document = documentM.get();
-        // Membership first: Keycloak admin roles are realm-wide, so an out-of-org admin must not delete.
+        // Membership first: it ties the permission below (checked in the request's organisation) to the document's.
         if (!securityHelper.canUserAccessOrg(document.getOrganisationId())) {
             return Optional.of(VaultProblems.forbidden(
                     "Current user is not a member of organisation %s.".formatted(document.getOrganisationId())));
@@ -485,17 +482,11 @@ public class VaultDocumentService {
                     "Document %s is published and can never be edited or deleted.".formatted(documentId)));
         }
         boolean isCreator = document.getCreatedByAccount().equals(securityHelper.getCurrentUserId());
-        if (!isCreator && !hasAdminRole()) {
+        if (!isCreator && !permissionChecker.can("document_vault", "delete_any")) {
             return Optional.of(VaultProblems.of403NotCreator());
         }
         documentRepository.delete(document);
         return Optional.empty();
-    }
-
-    private boolean hasAdminRole() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        return authentication != null && authentication.getAuthorities().stream()
-                .anyMatch(authority -> authority.getAuthority().equals("ROLE_" + adminRoleName));
     }
 
     private static String sha256Hex(byte[] bytes) {

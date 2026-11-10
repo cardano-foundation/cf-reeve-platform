@@ -10,25 +10,18 @@ import org.junit.jupiter.api.Test;
 import org.cardanofoundation.lob.app.document_vault.domain.request.PublishDocumentRequest;
 
 /**
- * Why reflection and not a live 403: method security is switched on by support's SecurityConfig,
- * which is @ConditionalOnProperty(keycloak.enabled=true). The module's tests run with Keycloak
- * DISABLED — there is no `securityConfig` bean and @PreAuthorize is inert — so an "accountant gets
- * 403" test here would pass no matter what the annotation said, which is worse than no test.
- *
- * What CAN regress is the expression itself (someone widening it to ALL_ROLES). That is what this
- * pins. End-to-end role enforcement is a deployment concern, as for every other @PreAuthorize here.
+ * Module tests run without method security, so a live 403 test here would pass whatever the annotation said.
+ * What can regress is the expression itself (someone widening it), and that is what this pins.
  */
 class VaultDocumentControllerSecurityTest {
 
     @Test
-    void publishIsRestrictedToManagerAndAdmin() throws NoSuchMethodException {
+    void publishNeedsThePublishPermission() throws NoSuchMethodException {
         PreAuthorize annotation = VaultDocumentController.class
                 .getMethod("publish", String.class, PublishDocumentRequest.class)
                 .getAnnotation(PreAuthorize.class);
 
-        assertNotNull(annotation, "publish must be role-gated: anchoring on-chain is irreversible");
-        assertEquals("hasRole(@securityConfig.getManagerRole()) "
-                        + "or hasRole(@securityConfig.getAdminRole())",
-                annotation.value());
+        assertNotNull(annotation, "publish must be permission-gated: anchoring on-chain is irreversible");
+        assertEquals("@permissions.can('document_vault', 'publish')", annotation.value());
     }
 }
