@@ -5,7 +5,7 @@ import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * The part of the permission catalogue the backend needs, supplied by the application (lob.permissions).
+ * The part of the permission catalogue the backend needs, bound from lob.permissions (reeve-permissions.yml unless the application overrides it).
  * Entries are lists rather than maps because Spring removes characters like "/" and "_" from map keys when binding.
  */
 @ConfigurationProperties("lob.permissions")

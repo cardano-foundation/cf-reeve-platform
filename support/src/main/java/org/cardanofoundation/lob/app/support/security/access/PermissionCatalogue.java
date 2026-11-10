@@ -13,11 +13,13 @@ import org.springframework.stereotype.Component;
 
 /**
  * The permissions ("resource:action") the platform knows about, the module(s) each resource belongs to and the
- * subgroup layout created for every organisation in Keycloak. The application supplies them as lob.permissions.
+ * subgroup layout created for every organisation in Keycloak, bound from lob.permissions. The platform ships them in
+ * reeve-permissions.yml (see {@link PermissionCatalogueEnvironmentPostProcessor}); an application may override them.
  * <p>
  * Endpoints declare the permission they need; who has it is decided by Keycloak (see {@link KeycloakUserAccessResolver}).
  * <p>
- * Without a catalogue the application still starts, so other modules and tests boot, but nobody gets any permission.
+ * Without a catalogue (e.g. a test context that doesn't start Spring Boot) the application still starts, but nobody gets
+ * any permission.
  */
 @Component
 @EnableConfigurationProperties(PermissionProperties.class)
@@ -61,7 +63,7 @@ public class PermissionCatalogue {
     }
 
     /**
-     * @return false when the application supplied no catalogue, in which case no permission is granted
+     * @return false when no catalogue was bound, in which case no permission is granted
      */
     public boolean isConfigured() {
         return !permissions.isEmpty();
