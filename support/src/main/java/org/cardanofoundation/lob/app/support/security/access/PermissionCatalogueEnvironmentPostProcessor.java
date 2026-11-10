@@ -26,7 +26,7 @@ public class PermissionCatalogueEnvironmentPostProcessor implements EnvironmentP
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
         if (!environment.getPropertySources().contains(PROPERTY_SOURCE_NAME)) {
-            environment.getPropertySources().addLast(read().get(PROPERTY_SOURCE_NAME));
+            read().forEach(environment.getPropertySources()::addLast);
         }
     }
 
