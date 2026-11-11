@@ -41,8 +41,13 @@ public class AuthBeginPublishable implements CardanoPublishable<AuthBeginEntity>
     }
 
     @Override
-    public Set<AuthBeginEntity> findReadyToDispatch(String organisationId, int batchSize) {
-        return repositoryGateway.findAuthBeginsReadyToBeDispatched(organisationId, batchSize);
+    public Set<String> claimReadyToDispatch(String organisationId, int batchSize) {
+        return repositoryGateway.claimAuthBeginsReadyToBeDispatched(organisationId, batchSize, dispatchingStrategy());
+    }
+
+    @Override
+    public Set<AuthBeginEntity> loadByIds(Set<String> ids) {
+        return repositoryGateway.findAllByIdsPreservingOrder(ids);
     }
 
     @Override
@@ -80,16 +85,6 @@ public class AuthBeginPublishable implements CardanoPublishable<AuthBeginEntity>
     @Override
     public void storeAll(Set<AuthBeginEntity> entities) {
         repositoryGateway.storeAll(entities);
-    }
-
-    @Override
-    public boolean supportsLocking() {
-        return true;
-    }
-
-    @Override
-    public void lock(Set<AuthBeginEntity> entities) {
-        repositoryGateway.lock(entities);
     }
 
     @Override

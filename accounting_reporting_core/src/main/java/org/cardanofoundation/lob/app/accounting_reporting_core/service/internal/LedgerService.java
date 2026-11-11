@@ -75,7 +75,10 @@ public class LedgerService {
     }
 
 
-    @Transactional(readOnly = true)
+    // Not readOnly: findDispatchableTransactions locks its rows (FOR UPDATE SKIP LOCKED), which Postgres
+    // forbids in a read-only transaction. The row locks also serialise concurrent job instances: whoever
+    // reads first publishes; the other instance skips those rows for this tick.
+    @Transactional
     public void dispatchPending(int limit) {
         for (Organisation organisation : organisationPublicApi.listAll()) {
             Set<TransactionEntity> dispatchTransactions = accountingCoreTransactionRepository.findDispatchableTransactions(organisation.getId(), Limit.of(limit));

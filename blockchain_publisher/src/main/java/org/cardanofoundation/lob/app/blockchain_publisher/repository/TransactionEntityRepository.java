@@ -3,9 +3,14 @@ package org.cardanofoundation.lob.app.blockchain_publisher.repository;
 import java.time.LocalDateTime;
 import java.util.Set;
 
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
+
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
@@ -13,11 +18,19 @@ import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.Tran
 
 public interface TransactionEntityRepository extends JpaRepository<TransactionEntity, String> {
 
+    /** Held until the surrounding transaction ends. Cast because Hibernate cannot map a void result. */
+    @Query(value = "SELECT CAST(pg_advisory_xact_lock(hashtextextended(:key, 0)) AS text)", nativeQuery = true)
+    String acquireTransactionScopedLock(@Param("key") String key);
+
     @Query("SELECT t FROM blockchain_publisher.txs.TransactionEntity t WHERE t.organisation.id = :organisationId AND t.l1SubmissionData.publishStatus IN :publishStatuses ORDER BY t.createdAt ASC, t.id ASC")
     Set<TransactionEntity> findTransactionsByStatus(@Param("organisationId") String organisationId,
                                                      @Param("publishStatuses") Set<BlockchainPublishStatus> publishStatuses,
                                                      Limit limit);
 
+    // Atomic claim read: FOR UPDATE SKIP LOCKED (lock timeout -2) so concurrent dispatcher instances
+    // never see the same "free" rows; must run inside the transaction that also writes lockedAt.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "-2"))
     @Query("""
             SELECT t FROM blockchain_publisher.txs.TransactionEntity t
             WHERE t.organisation.id = :organisationId

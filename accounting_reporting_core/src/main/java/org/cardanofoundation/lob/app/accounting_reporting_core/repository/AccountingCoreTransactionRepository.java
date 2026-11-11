@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Set;
 
 import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
 
 import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.Page;
@@ -14,6 +15,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TransactionType;
@@ -23,6 +25,10 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Tra
 
 public interface AccountingCoreTransactionRepository extends JpaRepository<TransactionEntity, String> {
 
+    // Atomic claim read: FOR UPDATE SKIP LOCKED (lock timeout -2) so concurrent DispatcherJob instances never
+    // publish the same batch in the same tick; rows are released when the surrounding transaction commits.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "-2"))
     @Query("""
             SELECT t FROM accounting_reporting_core.TransactionEntity t
             WHERE t.organisation.id = :organisationId

@@ -144,8 +144,8 @@ public class AccountingCoreEventHandler {
     public void handleTransactionBatchChunkCommittedEvent(TransactionBatchChunkCommittedEvent event) {
         log.info("Chunk committed for batchId: {}, scheduling status update with Debouncer", event.getBatchId());
 
-        transactionBatchService.updateTransactionBatchStatusAndStats(
-                event.getBatchId(), event.getProcessedTransactionCount(), Optional.empty());
+        // No count: chunks of a batch are processed across replicas, so only the database knows the total
+        transactionBatchService.updateTransactionBatchStatusAndStats(event.getBatchId(), null, Optional.empty());
         event.getBatchesToBeUpdated().forEach(bId
                 -> transactionBatchService.updateTransactionBatchStatusAndStats(bId, null, Optional.empty()));
 

@@ -63,6 +63,8 @@ public class BlockchainPublisherService {
                 .map(transactionConverter::convertToDbDetached)
                 .collect(Collectors.toSet());
 
+        transactionEntityRepositoryGateway.lockStoresForOrganisation(organisationId);
+
         Set<TransactionEntity> storedTransactions = transactionEntityRepositoryGateway.storeOnlyNew(txEntities);
 
         Set<TransactionEntity> rollbackTransaction = transactionEntityRepositoryGateway.updateErrorRollbackTransactions(txEntities);

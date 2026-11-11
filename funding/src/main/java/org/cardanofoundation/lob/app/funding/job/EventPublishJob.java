@@ -4,13 +4,14 @@ import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.funding.domain.entity.FundingEventEntity;
@@ -24,15 +25,31 @@ import org.cardanofoundation.lob.app.support.collections.Partitions;
 
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class EventPublishJob {
 
     private final FundingEventRepository fundingEventRepository;
     private final SpendingEventService spendingEventService;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final OrganisationPublicApi organisationPublicApi;
+    private final TransactionTemplate transactionTemplate;
+
     @Value("${lob.funding.publish.batch_size:100}")
     private int dispatchBatchSize;
+
+    public EventPublishJob(FundingEventRepository fundingEventRepository,
+                           SpendingEventService spendingEventService,
+                           ApplicationEventPublisher applicationEventPublisher,
+                           OrganisationPublicApi organisationPublicApi,
+                           PlatformTransactionManager transactionManager) {
+        this.fundingEventRepository = fundingEventRepository;
+        this.spendingEventService = spendingEventService;
+        this.applicationEventPublisher = applicationEventPublisher;
+        this.organisationPublicApi = organisationPublicApi;
+        // One transaction per organisation: the locking read (FOR UPDATE SKIP LOCKED), the publish command
+        // and the DISPATCHED marking commit atomically, so a concurrent job instance skips the same events
+        // and a crash before commit leaves them cleanly unclaimed for the next tick.
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+    }
 
     @Scheduled(
             fixedDelayString = "${lob.funding.publish.fixed_delay:PT1M}",
@@ -41,22 +58,26 @@ public class EventPublishJob {
     public void publishEvents() {
         log.debug("Publishing Events");
         for (Organisation organisation : organisationPublicApi.listAll()) {
-            Set<FundingEventEntity> allPublishableEvents = fundingEventRepository.findAllToBePublished(organisation.getId());
-            Set<SpendingEventPublishView> spendingEventViews = allPublishableEvents.stream()
-                    .map(spendingEventService::toPublishView)
-                    .collect(Collectors.toSet());
-
-            for (Partitions.Partition<SpendingEventPublishView> partition : Partitions.partition(spendingEventViews, dispatchBatchSize)) {
-                Set<SpendingEventPublishView> eventViewSet = partition.asSet();
-                log.info("Publishing {} events for organisationId: {}", eventViewSet.size(), organisation.getId());
-                applicationEventPublisher.publishEvent(new SpendingEventsPublishCommand(organisation.getId(), eventViewSet));
-            }
-            allPublishableEvents.forEach(event -> {
-                event.setPublishedAt(LocalDateTime.now());
-                event.setLedgerDispatchStatus(LedgerDispatchStatus.DISPATCHED);
-            });
-            fundingEventRepository.saveAll(allPublishableEvents);
+            transactionTemplate.executeWithoutResult(status -> publishEventsForOrganisation(organisation));
         }
+    }
+
+    private void publishEventsForOrganisation(Organisation organisation) {
+        Set<FundingEventEntity> allPublishableEvents = fundingEventRepository.findAllToBePublished(organisation.getId());
+        Set<SpendingEventPublishView> spendingEventViews = allPublishableEvents.stream()
+                .map(spendingEventService::toPublishView)
+                .collect(Collectors.toSet());
+
+        for (Partitions.Partition<SpendingEventPublishView> partition : Partitions.partition(spendingEventViews, dispatchBatchSize)) {
+            Set<SpendingEventPublishView> eventViewSet = partition.asSet();
+            log.info("Publishing {} events for organisationId: {}", eventViewSet.size(), organisation.getId());
+            applicationEventPublisher.publishEvent(new SpendingEventsPublishCommand(organisation.getId(), eventViewSet));
+        }
+        allPublishableEvents.forEach(event -> {
+            event.setPublishedAt(LocalDateTime.now());
+            event.setLedgerDispatchStatus(LedgerDispatchStatus.DISPATCHED);
+        });
+        fundingEventRepository.saveAll(allPublishableEvents);
     }
 
 }

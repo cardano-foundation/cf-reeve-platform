@@ -32,7 +32,6 @@ import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.L1Batch;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.L1Submission;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.L1SubmissionData;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.txs.TransactionEntity;
-import org.cardanofoundation.lob.app.blockchain_publisher.service.dispatch.ImmediateDispatchingStrategy;
 import org.cardanofoundation.lob.app.blockchain_publisher.service.transation_submit.TransactionSubmissionService;
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApi;
 import org.cardanofoundation.lob.app.organisation.domain.entity.Organisation;
@@ -68,32 +67,31 @@ class CardanoDispatcherTest {
         dispatcher.dispatch(module);
 
         verify(organisationPublicApi).listAll();
-        verify(module, never()).findReadyToDispatch(anyString(), anyInt());
+        verify(module, never()).claimReadyToDispatch(anyString(), anyInt());
         verifyNoInteractions(transactionSubmissionService);
     }
 
     @Test
-    void nothingToDispatch_unlocksRemainingWhenLocking() {
+    void nothingClaimed_skipsLoadingAndDispatch() {
         when(organisationPublicApi.listAll()).thenReturn(List.of(org()));
-        when(module.findReadyToDispatch("org1", DEFAULT_BATCH)).thenReturn(Set.of());
-        when(module.dispatchingStrategy()).thenReturn(new ImmediateDispatchingStrategy<>());
-        when(module.supportsLocking()).thenReturn(true);
+        when(module.claimReadyToDispatch("org1", DEFAULT_BATCH)).thenReturn(Set.of());
 
         dispatcher.dispatch(module);
 
-        verify(module).unlock(Set.of());
+        verify(module, never()).loadByIds(any());
         verify(module, never()).buildL1Transaction(anyString(), any());
+        verify(module, never()).unlock(any());
         verifyNoInteractions(transactionSubmissionService);
     }
 
     @Test
-    void buildProblem_appliesFailureAndNotifies() {
+    void buildProblem_appliesFailureNotifiesAndUnlocks() {
         TransactionEntity tx = TransactionEntity.builder().id("tx1").build();
         L1SubmissionData failureData = L1SubmissionData.builder().publishRetry(1L).publishStatus(BlockchainPublishStatus.STORED).build();
 
         when(organisationPublicApi.listAll()).thenReturn(List.of(org()));
-        when(module.findReadyToDispatch("org1", DEFAULT_BATCH)).thenReturn(Set.of(tx));
-        when(module.dispatchingStrategy()).thenReturn(new ImmediateDispatchingStrategy<>());
+        when(module.claimReadyToDispatch("org1", DEFAULT_BATCH)).thenReturn(Set.of("tx1"));
+        when(module.loadByIds(Set.of("tx1"))).thenReturn(Set.of(tx));
         when(module.groupForDispatch(Set.of(tx))).thenReturn(List.of(Set.of(tx)));
         when(module.buildL1Transaction("org1", Set.of(tx)))
                 .thenReturn(Either.left(ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "boom")));
@@ -104,6 +102,7 @@ class CardanoDispatcherTest {
         verify(l1SubmissionDataUpdater).applyFailure(any(), eq("boom"));
         verify(module).store(tx);
         verify(module).notifyLedgerUpdate("org1", Set.of(tx));
+        verify(module).unlock(Set.of(tx));
         verifyNoInteractions(transactionSubmissionService);
     }
 
@@ -113,8 +112,8 @@ class CardanoDispatcherTest {
         L1SubmissionData failureData = L1SubmissionData.builder().publishRetry(1L).build();
 
         when(organisationPublicApi.listAll()).thenReturn(List.of(org()));
-        when(module.findReadyToDispatch("org1", DEFAULT_BATCH)).thenReturn(Set.of(tx));
-        when(module.dispatchingStrategy()).thenReturn(new ImmediateDispatchingStrategy<>());
+        when(module.claimReadyToDispatch("org1", DEFAULT_BATCH)).thenReturn(Set.of("tx1"));
+        when(module.loadByIds(Set.of("tx1"))).thenReturn(Set.of(tx));
         when(module.groupForDispatch(Set.of(tx))).thenReturn(List.of(Set.of(tx)));
         when(module.buildL1Transaction("org1", Set.of(tx))).thenReturn(Either.right(Optional.empty()));
         when(l1SubmissionDataUpdater.applyFailure(any(), eq("Empty response"))).thenReturn(failureData);
@@ -124,27 +123,26 @@ class CardanoDispatcherTest {
         verify(l1SubmissionDataUpdater).applyFailure(any(), eq("Empty response"));
         verify(module).store(tx);
         verify(module).notifyLedgerUpdate("org1", Set.of(tx));
+        verify(module).unlock(Set.of(tx));
         verifyNoInteractions(transactionSubmissionService);
     }
 
     @Test
-    void success_setsSubmittedStoresAndNotifies() throws ApiException {
+    void success_setsSubmittedStoresNotifiesAndUnlocks() throws ApiException {
         TransactionEntity tx = TransactionEntity.builder().id("tx1").build();
         byte[] data = new byte[]{1, 2, 3};
         L1Batch<TransactionEntity> batch = new L1Batch<>("org1", Set.of(tx), Set.of(), 42L, data, "receiver");
 
         when(organisationPublicApi.listAll()).thenReturn(List.of(org()));
-        when(module.findReadyToDispatch("org1", DEFAULT_BATCH)).thenReturn(Set.of(tx));
-        when(module.dispatchingStrategy()).thenReturn(new ImmediateDispatchingStrategy<>());
+        when(module.claimReadyToDispatch("org1", DEFAULT_BATCH)).thenReturn(Set.of("tx1"));
+        when(module.loadByIds(Set.of("tx1"))).thenReturn(Set.of(tx));
         when(module.groupForDispatch(Set.of(tx))).thenReturn(List.of(Set.of(tx)));
         when(module.buildL1Transaction("org1", Set.of(tx))).thenReturn(Either.right(Optional.of(batch)));
-        when(module.supportsLocking()).thenReturn(true);
         when(transactionSubmissionService.submitTransactionWithPossibleConfirmation(data, "receiver"))
                 .thenReturn(new L1Submission("hash1", Optional.of(7L), true));
 
         dispatcher.dispatch(module);
 
-        verify(module).lock(Set.of(tx));
         verify(module).store(tx);
         verify(module).notifyLedgerUpdate("org1", Set.of(tx));
         verify(module).unlock(Set.of(tx));
@@ -157,15 +155,15 @@ class CardanoDispatcherTest {
     }
 
     @Test
-    void submissionException_appliesFailure() throws ApiException {
+    void submissionException_appliesFailureAndUnlocks() throws ApiException {
         TransactionEntity tx = TransactionEntity.builder().id("tx1").build();
         byte[] data = new byte[]{1};
         L1Batch<TransactionEntity> batch = new L1Batch<>("org1", Set.of(tx), Set.of(), 42L, data, "receiver");
         L1SubmissionData failureData = L1SubmissionData.builder().publishRetry(1L).build();
 
         when(organisationPublicApi.listAll()).thenReturn(List.of(org()));
-        when(module.findReadyToDispatch("org1", DEFAULT_BATCH)).thenReturn(Set.of(tx));
-        when(module.dispatchingStrategy()).thenReturn(new ImmediateDispatchingStrategy<>());
+        when(module.claimReadyToDispatch("org1", DEFAULT_BATCH)).thenReturn(Set.of("tx1"));
+        when(module.loadByIds(Set.of("tx1"))).thenReturn(Set.of(tx));
         when(module.groupForDispatch(Set.of(tx))).thenReturn(List.of(Set.of(tx)));
         when(module.buildL1Transaction("org1", Set.of(tx))).thenReturn(Either.right(Optional.of(batch)));
         when(transactionSubmissionService.submitTransactionWithPossibleConfirmation(data, "receiver")).thenThrow(new ApiException("submit failed"));
@@ -176,6 +174,7 @@ class CardanoDispatcherTest {
         verify(l1SubmissionDataUpdater).applyFailure(any(), any());
         verify(module).store(tx);
         verify(module).notifyLedgerUpdate("org1", Set.of(tx));
+        verify(module).unlock(Set.of(tx));
     }
 
 }
