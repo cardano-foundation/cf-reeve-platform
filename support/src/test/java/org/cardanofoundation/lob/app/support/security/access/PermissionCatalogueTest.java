@@ -9,7 +9,7 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
- * The logic only: the real catalogue is lob.permissions in the application, which tests its own data.
+ * The logic only: the real catalogue (reeve-permissions.yml) is tested by ReevePermissionsTest.
  */
 class PermissionCatalogueTest {
 
