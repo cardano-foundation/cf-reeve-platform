@@ -40,7 +40,6 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentity
 import org.cardanofoundation.lob.app.keri_attestation.domain.view.CeremonyView;
 import org.cardanofoundation.lob.app.keri_attestation.domain.view.RequiredSteps;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
-import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 /**
  * Tests {@link KeriAuthBeginService#submitAuthBegin}. This module owns no Cardano wallet: the
@@ -76,20 +75,17 @@ class KeriAuthBeginServiceTest {
     private KeriIdentityLinkRepository identityLinkRepository;
     @Mock
     private CredentialChainValidator chainValidator;
-    @Mock
-    private KeycloakSecurityHelper securityHelper;
 
     private KeriAuthBeginService service;
 
     @BeforeEach
     void setUp() {
         lenient().when(keriClient.client()).thenReturn(client);
-        lenient().when(securityHelper.canUserAccessOrg(any())).thenReturn(true);
         lenient().when(chainValidator.validate(any(), any(), any(), any()))
                 .thenReturn(Either.right(new CredentialChainValidator.ValidatedCredential(CREDENTIAL_SAID, SCHEMA_SAID,
                         "Foundation Employee", WALLET_AID, WALLET_AID, TrustModel.STANDALONE, Map.of(), "fingerprint")));
         service = new KeriAuthBeginService(keriClient, cesrChainReducer, cesrFetcher, eventPublisher,
-                ceremonyService, identityLinkRepository, chainValidator, securityHelper);
+                ceremonyService, identityLinkRepository, chainValidator);
     }
 
     private static KeriAttestationProperties properties() {
@@ -128,7 +124,7 @@ class KeriAuthBeginServiceTest {
     }
 
     private void givenStepBegun() {
-        when(ceremonyService.beginStep(eq(CEREMONY_ID), eq(USER_ID), eq(CeremonyState.CREDENTIAL_RECEIVED),
+        when(ceremonyService.beginStep(eq(CEREMONY_ID), eq(ORGANISATION_ID), eq(USER_ID), eq(CeremonyState.CREDENTIAL_RECEIVED),
                 eq(CeremonyState.AUTH_BEGIN_SUBMITTED), eq(false))).thenReturn(Either.right(ceremony()));
     }
 
@@ -137,25 +133,11 @@ class KeriAuthBeginServiceTest {
     @Test
     void beginStepFailureReturnsLeftWithoutOtherInteractions() {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(org.springframework.http.HttpStatus.CONFLICT, "nope");
-        when(ceremonyService.beginStep(any(), any(), any(), any(), eq(false))).thenReturn(Either.left(problem));
+        when(ceremonyService.beginStep(any(), any(), any(), any(), any(), eq(false))).thenReturn(Either.left(problem));
 
-        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, false, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, ORGANISATION_ID, USER_ID, false, false);
 
         assertTrue(result.isLeft());
-        verifyNoInteractions(eventPublisher, identityLinkRepository);
-    }
-
-    /** A role in the request's organisation must not publish AUTH_BEGIN for the ceremony's other organisation. */
-    @Test
-    void ceremonyOfAnotherOrganisationFailsWithoutEmittingACommand() {
-        givenStepBegun();
-        when(securityHelper.canUserAccessOrg(any())).thenReturn(false);
-        when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
-
-        service.submitAuthBegin(CEREMONY_ID, USER_ID, false, false);
-
-        verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
-                eq(KeriAttestationProblems.CEREMONY_FORBIDDEN), any());
         verifyNoInteractions(eventPublisher, identityLinkRepository);
     }
 
@@ -165,7 +147,7 @@ class KeriAuthBeginServiceTest {
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.empty());
         when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
 
-        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, false, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, ORGANISATION_ID, USER_ID, false, false);
 
         assertTrue(result.isRight());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
@@ -178,11 +160,11 @@ class KeriAuthBeginServiceTest {
     void ceremonyWithoutOrganisationFailsWithoutEmittingACommand() {
         KeriAttestationCeremonyEntity orgless = ceremony();
         orgless.setOrganisationId(null);
-        when(ceremonyService.beginStep(any(), any(), any(), any(), eq(false))).thenReturn(Either.right(orgless));
+        when(ceremonyService.beginStep(any(), any(), any(), any(), any(), eq(false))).thenReturn(Either.right(orgless));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkedWithCredential()));
         when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
 
-        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, false, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, ORGANISATION_ID, USER_ID, false, false);
 
         assertTrue(result.isRight());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
@@ -201,7 +183,7 @@ class KeriAuthBeginServiceTest {
         when(ceremonyService.get(CEREMONY_ID, USER_ID))
                 .thenReturn(Either.right(ceremonyView(CeremonyState.AUTH_BEGIN_CONFIRMED)));
 
-        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, true, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, ORGANISATION_ID, USER_ID, true, false);
 
         assertTrue(result.isRight());
         assertEquals(CeremonyState.AUTH_BEGIN_CONFIRMED, result.get().state());
@@ -219,7 +201,7 @@ class KeriAuthBeginServiceTest {
         when(ceremonyService.get(CEREMONY_ID, USER_ID))
                 .thenReturn(Either.right(ceremonyView(CeremonyState.AUTH_BEGIN_SUBMITTED)));
 
-        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, false, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, ORGANISATION_ID, USER_ID, false, false);
 
         assertTrue(result.isRight());
         // The step is NOT completed here — the publisher's ledger update does that.
@@ -243,7 +225,7 @@ class KeriAuthBeginServiceTest {
         when(cesrFetcher.fetch(CREDENTIAL_SAID)).thenReturn(Optional.empty());
         when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
 
-        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, false, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, ORGANISATION_ID, USER_ID, false, false);
 
         assertTrue(result.isRight());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
@@ -261,7 +243,7 @@ class KeriAuthBeginServiceTest {
                 ProblemDetail.forStatusAndDetail(org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "revoked")));
         when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
 
-        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, false, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, ORGANISATION_ID, USER_ID, false, false);
 
         assertTrue(result.isRight());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),
@@ -276,7 +258,7 @@ class KeriAuthBeginServiceTest {
         when(cesrFetcher.fetch(CREDENTIAL_SAID)).thenThrow(new RuntimeException("keria down"));
         when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.FAILED)));
 
-        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, USER_ID, false, false);
+        Either<ProblemDetail, CeremonyView> result = service.submitAuthBegin(CEREMONY_ID, ORGANISATION_ID, USER_ID, false, false);
 
         assertTrue(result.isRight());
         verify(ceremonyService).failStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.AUTH_BEGIN_SUBMITTED),

@@ -27,7 +27,7 @@ import org.cardanofoundation.lob.app.keri_attestation.service.AttestationTargetP
  * </pre>
  *
  * <p>That deployment previously returned {@code 422 TARGET_MISMATCH — "No provider for target type
- * DOCUMENT."} on {@code POST /api/v1/keri-attestation/ceremonies}, because the sole
+ * DOCUMENT."} on {@code POST /api/v1/keri-attestation/organisations/{organisationId}/ceremonies}, because the sole
  * {@link AttestationTargetProvider} was registered from a {@code blockchain_publisher} configuration
  * class whose package is never component-scanned when that module is off. Relocating the provider is
  * necessary but not sufficient: it also has to stop needing an {@code IpfsPublisher} and a chain tip,
@@ -66,7 +66,7 @@ class ApiPodDocumentAttestationContextTest {
     void aDocumentAttestationProviderIsRegisteredWithoutBlockchainPublisher() {
         assertThat(registry.forType("DOCUMENT"))
                 .as("api pod must resolve a DOCUMENT AttestationTargetProvider; its absence is the "
-                        + "TARGET_MISMATCH 422 on POST /ceremonies")
+                        + "TARGET_MISMATCH 422 on POST .../ceremonies")
                 .isPresent();
     }
 

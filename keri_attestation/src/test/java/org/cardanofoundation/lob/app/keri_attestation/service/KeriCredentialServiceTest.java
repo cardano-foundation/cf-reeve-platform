@@ -78,6 +78,8 @@ import org.cardanofoundation.lob.app.keri_attestation.service.KeriNotificationCo
 class KeriCredentialServiceTest {
 
     private static final String CEREMONY_ID = "cer-1";
+
+    private static final String ORGANISATION_ID = "org-1";
     private static final String USER_ID = "user-1";
     private static final int GENERATION = 2;
     private static final String LINKED_AID = "ELINKEDAID000000000000000000000000000";
@@ -281,7 +283,7 @@ class KeriCredentialServiceTest {
      *  {@code retry} value), which would otherwise trip Mockito's strict-stubbing "unnecessary
      *  stubbing" check. */
     private void stubHappyPath(KeriAttestationCeremonyEntity ceremony) throws Exception {
-        lenient().when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+        lenient().when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
         lenient().when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
         Serder applyExn = serderWithSaid(APPLY_SAID);
@@ -321,7 +323,7 @@ class KeriCredentialServiceTest {
         stubHappyPath(ceremony);
         when(identityLinkRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(freshLink));
 
-        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isRight());
         assertEquals(CeremonyState.CREDENTIAL_RECEIVED, result.get().state());
@@ -364,7 +366,7 @@ class KeriCredentialServiceTest {
         KeriAttestationCeremonyEntity ceremony = ceremony(null);
         stubHappyPath(ceremony);
 
-        service.presentCredential(CEREMONY_ID, USER_ID, false);
+        service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, Object>> payloadCaptor = ArgumentCaptor.forClass(Map.class);
@@ -379,10 +381,10 @@ class KeriCredentialServiceTest {
     @Test
     void presentCredentialBeginStepFailureReturnsLeftWithoutOtherInteractions() {
         ProblemDetail problem = KeriAttestationProblems.conflict(KeriAttestationProblems.CEREMONY_INVALID_STATE, "x");
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.left(problem));
 
-        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(problem, result.getLeft());
@@ -391,11 +393,11 @@ class KeriCredentialServiceTest {
 
     @Test
     void presentCredentialWithNoIdentityLinkFailsWithIdentityNotLinked() {
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony(null)));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.empty());
 
-        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.IDENTITY_NOT_LINKED, result.getLeft().getTitle());
@@ -410,7 +412,7 @@ class KeriCredentialServiceTest {
         String walletOobiUrl = "https://keria-ext.dev.example.org/oobi/" + LINKED_AID + "/agent/EAGENT";
         KeriIdentityLinkEntity linkWithOobi = link(LINKED_AID);
         linkWithOobi.setOobiUrl(walletOobiUrl);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony(null)));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkWithOobi));
         // Fail the apply build right after, so the flow stops early — we only care that the re-resolve
@@ -418,7 +420,7 @@ class KeriCredentialServiceTest {
         when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
                 .thenThrow(new RuntimeException("agent unreachable"));
 
-        service.presentCredential(CEREMONY_ID, USER_ID, false);
+        service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         InOrder inOrder = inOrder(oobiService, exchanges);
         inOrder.verify(oobiService).refreshResolve(USER_ID, walletOobiUrl, LINKED_AID);
@@ -431,7 +433,7 @@ class KeriCredentialServiceTest {
         String walletOobiUrl = "https://keria-ext.dev.example.org/oobi/" + LINKED_AID + "/agent/EAGENT";
         KeriIdentityLinkEntity linkWithOobi = link(LINKED_AID);
         linkWithOobi.setOobiUrl(walletOobiUrl);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony(null)));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkWithOobi));
         when(oobiService.refreshResolve(USER_ID, walletOobiUrl, LINKED_AID))
@@ -441,7 +443,7 @@ class KeriCredentialServiceTest {
         when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
                 .thenThrow(new RuntimeException("stop here"));
 
-        service.presentCredential(CEREMONY_ID, USER_ID, false);
+        service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         verify(exchanges).createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(),
                 eq(LINKED_AID), any(), any());
@@ -449,13 +451,13 @@ class KeriCredentialServiceTest {
 
     @Test
     void presentCredentialApplyBuildFailureFailsWithCredentialRequestFailed() throws Exception {
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony(null)));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
         when(exchanges.createExchangeMessage(any(), eq("/ipex/apply"), anyMap(), anyMap(), eq(LINKED_AID), any(), any()))
                 .thenThrow(new RuntimeException("agent unreachable"));
 
-        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED, result.getLeft().getTitle());
@@ -467,7 +469,7 @@ class KeriCredentialServiceTest {
     @Test
     void presentCredentialSubmitApplyFailureFailsWithCredentialRequestFailedButStillPersistsRequestExnSaid()
             throws Exception {
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony(null)));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
         Serder exn = serderWithSaid(APPLY_SAID);
@@ -478,7 +480,7 @@ class KeriCredentialServiceTest {
         KeriAttestationCeremonyEntity ceremony = ceremony(null);
         stubGuardedUpdateSuccess(ceremony);
 
-        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED, result.getLeft().getTitle());
@@ -492,7 +494,7 @@ class KeriCredentialServiceTest {
         // -- NOT InterruptedException. A handler that tests only the checked type therefore matches
         // nothing the client throws, reports the interrupt as an ordinary step failure, and drops the
         // flag; the caller's next poll or sleep then runs to its full timeout after being told to stop.
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony(null)));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
         Serder exn = serderWithSaid(APPLY_SAID);
@@ -503,7 +505,7 @@ class KeriCredentialServiceTest {
         stubGuardedUpdateSuccess(ceremony(null));
 
         try {
-            Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+            Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
             assertTrue(result.isLeft());
             assertTrue(Thread.currentThread().isInterrupted(), "the interrupt flag must survive the failure");
@@ -516,7 +518,7 @@ class KeriCredentialServiceTest {
     @Test
     void presentCredentialOfferOrGrantTimeoutFailsWithKeriWalletTimeoutAndNeverBuildsAgreeOrAdmits() throws Exception {
         KeriAttestationCeremonyEntity ceremony = ceremony(null);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
         Serder exn = serderWithSaid(APPLY_SAID);
@@ -526,7 +528,7 @@ class KeriCredentialServiceTest {
         // Neither an offer nor a grant ever arrives.
         when(correlator.awaitByRoute(eq(OFFER_OR_GRANT_ROUTES), any())).thenReturn(Optional.empty());
 
-        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.KERI_WALLET_TIMEOUT, result.getLeft().getTitle());
@@ -541,7 +543,7 @@ class KeriCredentialServiceTest {
     @Test
     void presentCredentialGrantTimeoutFailsWithKeriWalletTimeoutAndNeverAdmits() throws Exception {
         KeriAttestationCeremonyEntity ceremony = ceremony(null);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
         Serder applyExn = serderWithSaid(APPLY_SAID);
@@ -554,7 +556,7 @@ class KeriCredentialServiceTest {
         when(ipex.agree(any())).thenReturn(new ExchangeMessageResult(agreeExn, List.of("sig2"), "atc2"));
         when(correlator.awaitByRoute(eq(GRANT_ROUTES), any())).thenReturn(Optional.empty());
 
-        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.KERI_WALLET_TIMEOUT, result.getLeft().getTitle());
@@ -577,7 +579,7 @@ class KeriCredentialServiceTest {
         when(validator.validate("FULL-CESR-STREAM", LINKED_AID, CREDENTIAL_SAID, null))
                 .thenReturn(Either.left(rejection));
 
-        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CREDENTIAL_REJECTED, result.getLeft().getTitle());
@@ -600,7 +602,7 @@ class KeriCredentialServiceTest {
         when(validator.validate("FULL-CESR-STREAM", LINKED_AID, CREDENTIAL_SAID, null))
                 .thenThrow(new RuntimeException("null issuer somewhere in the chain"));
 
-        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CREDENTIAL_REJECTED, result.getLeft().getTitle());
@@ -617,7 +619,7 @@ class KeriCredentialServiceTest {
                 .thenReturn(Either.right(new ValidatedCredential(someOtherCredentialSaid, RESULT_SCHEMA_SAID, "Foundation Employee", ROOT_AID, ROOT_AID,
                         TrustModel.STANDALONE, Map.of(), "fingerprint")));
 
-        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CREDENTIAL_REJECTED, result.getLeft().getTitle());
@@ -632,7 +634,7 @@ class KeriCredentialServiceTest {
         when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.CREDENTIAL_REQUESTED),
                 eq(CeremonyState.CREDENTIAL_RECEIVED), any())).thenReturn(false);
 
-        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CEREMONY_INVALID_STATE, result.getLeft().getTitle());
@@ -650,7 +652,7 @@ class KeriCredentialServiceTest {
         relinkedLink.setBindingVersion(2);
         when(identityLinkRepository.findByUserIdForUpdate(USER_ID)).thenReturn(Optional.of(relinkedLink));
 
-        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isRight());
         verify(ceremonyService, never()).failStep(any(), anyInt(), any(), any(), any());
@@ -668,7 +670,7 @@ class KeriCredentialServiceTest {
     @Test
     void presentCredentialRetryWithLateArrivedOfferSkipsResendAndProceedsThroughTheRestOfTheFlow() throws Exception {
         KeriAttestationCeremonyEntity ceremony = ceremony(APPLY_SAID);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, true)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
         when(correlator.awaitByRoute(eq(OFFER_OR_GRANT_ROUTES), any()))
@@ -689,7 +691,7 @@ class KeriCredentialServiceTest {
         when(ceremonyService.get(CEREMONY_ID, USER_ID))
                 .thenReturn(Either.right(ceremonyView(CeremonyState.CREDENTIAL_RECEIVED)));
 
-        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, true);
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, true);
 
         assertTrue(result.isRight());
         verify(exchanges, never()).createExchangeMessage(any(), eq("/ipex/apply"), any(), any(), any(), any(), any());
@@ -703,7 +705,7 @@ class KeriCredentialServiceTest {
         String oldApplySaid = "EOLDAPPLYSAID000000000000000000000000000";
         KeriAttestationCeremonyEntity ceremony = ceremony(oldApplySaid);
         stubHappyPath(ceremony);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, true)).thenReturn(Either.right(ceremony));
         // The FIRST awaitByRoute(OFFER_OR_GRANT_ROUTES, ...) call is the short retry pre-check (must
         // find nothing, so the apply actually gets resent); the SECOND is the normal post-apply wait
@@ -712,7 +714,7 @@ class KeriCredentialServiceTest {
                 .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
 
-        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, true);
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, true);
 
         assertTrue(result.isRight());
         verify(ipex).submitApply(eq(AGENT_NAME), any(), eq(List.of("sig1")), eq(List.of(LINKED_AID)));
@@ -723,7 +725,7 @@ class KeriCredentialServiceTest {
     @Test
     void presentCredentialGrantArrivesDirectlyAdmitsWithoutOfferOrAgreeUsingTheAdmitsOwnAtc() throws Exception {
         KeriAttestationCeremonyEntity ceremony = ceremony(null);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
         Serder applyExn = serderWithSaid(APPLY_SAID);
@@ -752,7 +754,7 @@ class KeriCredentialServiceTest {
         when(ceremonyService.get(CEREMONY_ID, USER_ID))
                 .thenReturn(Either.right(ceremonyView(CeremonyState.CREDENTIAL_RECEIVED)));
 
-        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isRight());
         assertEquals(CeremonyState.CREDENTIAL_RECEIVED, result.get().state());
@@ -793,7 +795,7 @@ class KeriCredentialServiceTest {
     void presentCredentialGrantArrivesDirectlyButValidatorRejectsFailsWithCredentialRejectedAndDoesNotMarkTheGrantNotification()
             throws Exception {
         KeriAttestationCeremonyEntity ceremony = ceremony(null);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
         Serder applyExn = serderWithSaid(APPLY_SAID);
@@ -811,7 +813,7 @@ class KeriCredentialServiceTest {
         when(validator.validate("FULL-CESR-STREAM", LINKED_AID, CREDENTIAL_SAID, null))
                 .thenReturn(Either.left(rejection));
 
-        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CREDENTIAL_REJECTED, result.getLeft().getTitle());
@@ -830,7 +832,7 @@ class KeriCredentialServiceTest {
     @Test
     void presentCredentialGrantArrivesDirectlyOnRetryPrecheckSkipsResendAndAdmitsWithoutAgree() throws Exception {
         KeriAttestationCeremonyEntity ceremony = ceremony(APPLY_SAID);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, true)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
         when(correlator.awaitByRoute(eq(OFFER_OR_GRANT_ROUTES), any()))
@@ -847,7 +849,7 @@ class KeriCredentialServiceTest {
         when(ceremonyService.get(CEREMONY_ID, USER_ID))
                 .thenReturn(Either.right(ceremonyView(CeremonyState.CREDENTIAL_RECEIVED)));
 
-        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, true);
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, true);
 
         assertTrue(result.isRight());
         verify(exchanges, never()).createExchangeMessage(any(), eq("/ipex/apply"), any(), any(), any(), any(), any());
@@ -864,7 +866,7 @@ class KeriCredentialServiceTest {
         // all here, so the branch decision must fall back to the notification's own claimed route
         // rather than default to (incorrectly) treating this as an offer.
         KeriAttestationCeremonyEntity ceremony = ceremony(null);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
         Serder applyExn = serderWithSaid(APPLY_SAID);
@@ -885,7 +887,7 @@ class KeriCredentialServiceTest {
         when(ceremonyService.get(CEREMONY_ID, USER_ID))
                 .thenReturn(Either.right(ceremonyView(CeremonyState.CREDENTIAL_RECEIVED)));
 
-        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isRight());
         verify(ipex, never()).agree(any());
@@ -899,7 +901,7 @@ class KeriCredentialServiceTest {
     void presentCredentialGrantArrivesDirectlyWithoutAnEmbeddedAcdcFailsWithCredentialRequestFailedAndNeverAdmits()
             throws Exception {
         KeriAttestationCeremonyEntity ceremony = ceremony(null);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
         Serder applyExn = serderWithSaid(APPLY_SAID);
@@ -911,7 +913,7 @@ class KeriCredentialServiceTest {
                 .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID, grantExnWithoutAcdc,
                         "/exn/ipex/grant")));
 
-        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED, result.getLeft().getTitle());
@@ -934,8 +936,8 @@ class KeriCredentialServiceTest {
         KeriAttestationCeremonyEntity ceremony = ceremony(null);
         stubHappyPath(ceremony);
 
-        Either<ProblemDetail, CeremonyView> first = service.presentCredential(CEREMONY_ID, USER_ID, false);
-        Either<ProblemDetail, CeremonyView> second = service.presentCredential(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> first = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> second = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(first.isRight());
         assertTrue(second.isRight());
@@ -949,7 +951,7 @@ class KeriCredentialServiceTest {
         String schemaUrl = SCHEMA_BASE_URL + "/" + SCHEMA_SAID;
         when(oobis.resolve(schemaUrl, null)).thenThrow(new RuntimeException("agent unreachable"));
 
-        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.KERI_AGENT_UNAVAILABLE, result.getLeft().getTitle());

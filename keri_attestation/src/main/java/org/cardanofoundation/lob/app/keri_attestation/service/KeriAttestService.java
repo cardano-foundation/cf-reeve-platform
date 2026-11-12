@@ -97,9 +97,10 @@ public class KeriAttestService {
      *         terminal ({@code FAILED}) or successfully-advanced ({@code ATTEST_ANCHORED}) state before
      *         this method returns, never stuck at {@code ATTEST_REQUESTED}.
      */
-    public Either<ProblemDetail, CeremonyView> attest(String ceremonyId, String userId, boolean retry) {
-        Either<ProblemDetail, KeriAttestationCeremonyEntity> begun = ceremonyService.beginStep(ceremonyId, userId,
-                CeremonyState.AUTH_BEGIN_CONFIRMED, CeremonyState.ATTEST_REQUESTED, retry);
+    public Either<ProblemDetail, CeremonyView> attest(String ceremonyId, String organisationId, String userId,
+            boolean retry) {
+        Either<ProblemDetail, KeriAttestationCeremonyEntity> begun = ceremonyService.beginStep(ceremonyId, organisationId,
+                userId, CeremonyState.AUTH_BEGIN_CONFIRMED, CeremonyState.ATTEST_REQUESTED, retry);
         if (begun.isLeft()) {
             return Either.left(begun.getLeft());
         }

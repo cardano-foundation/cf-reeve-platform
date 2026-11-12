@@ -145,7 +145,8 @@ public class KeriCredentialService {
      *         terminal ({@code FAILED}) or successfully-advanced ({@code CREDENTIAL_RECEIVED}) state
      *         before this method returns, never stuck at {@code CREDENTIAL_REQUESTED}.
      */
-    public Either<ProblemDetail, CeremonyView> presentCredential(String ceremonyId, String userId, boolean retry) {
+    public Either<ProblemDetail, CeremonyView> presentCredential(String ceremonyId, String organisationId, String userId,
+            boolean retry) {
         // Live-testing fix: resolved BEFORE beginStep, i.e. before any ceremony state is touched at
         // all — a resolution failure here must surface as a plain problem, not a failed/rolled-back
         // ceremony step. See ensureSchemasResolved's javadoc for why this has to happen at all.
@@ -157,8 +158,8 @@ public class KeriCredentialService {
             return Either.left(schemasResolved.getLeft());
         }
 
-        Either<ProblemDetail, KeriAttestationCeremonyEntity> begun = ceremonyService.beginStep(ceremonyId, userId,
-                CeremonyState.OOBI_RESOLVED, CeremonyState.CREDENTIAL_REQUESTED, retry);
+        Either<ProblemDetail, KeriAttestationCeremonyEntity> begun = ceremonyService.beginStep(ceremonyId, organisationId,
+                userId, CeremonyState.OOBI_RESOLVED, CeremonyState.CREDENTIAL_REQUESTED, retry);
         if (begun.isLeft()) {
             return Either.left(begun.getLeft());
         }

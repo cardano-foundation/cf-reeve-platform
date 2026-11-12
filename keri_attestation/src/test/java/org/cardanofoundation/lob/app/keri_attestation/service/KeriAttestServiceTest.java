@@ -75,6 +75,8 @@ import org.cardanofoundation.lob.app.keri_attestation.service.KeriNotificationCo
 class KeriAttestServiceTest {
 
     private static final String CEREMONY_ID = "cer-1";
+
+    private static final String ORGANISATION_ID = "org-1";
     private static final String USER_ID = "user-1";
     private static final int GENERATION = 2;
     private static final String WALLET_AID = "EWALLETAID00000000000000000000000000000";
@@ -295,7 +297,7 @@ class KeriAttestServiceTest {
      *  re-stubs {@code beginStep}/{@code correlator.awaitByRoute} for {@code retry=true} — which would
      *  otherwise trip Mockito's strict-stubbing "unnecessary stubbing" check on the unused ones. */
     private void stubHappyPath(KeriAttestationCeremonyEntity ceremony) throws Exception {
-        lenient().when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
+        lenient().when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, false)).thenReturn(Either.right(ceremony));
         lenient().when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         lenient().when(providerRegistry.forType(TARGET_TYPE)).thenReturn(Optional.of(provider));
@@ -333,7 +335,7 @@ class KeriAttestServiceTest {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, null);
         stubHappyPath(ceremony);
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isRight());
         assertEquals(CeremonyState.ATTEST_ANCHORED, result.get().state());
@@ -370,7 +372,7 @@ class KeriAttestServiceTest {
         stubHappyPath(ceremony);
         when(correlator.outstandingNoteIds(REMOTESIGN_REF_ROUTES)).thenReturn(Set.of(staleNoteId));
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isRight());
         // The snapshot happens before the request is sent, and the same set is handed to the wait.
@@ -404,7 +406,7 @@ class KeriAttestServiceTest {
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(linkWithOobi));
         when(oobiService.refreshResolve(USER_ID, oobiUrl, WALLET_AID)).thenReturn(Either.right(null));
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isRight());
         assertEquals(CeremonyState.ATTEST_ANCHORED, result.get().state());
@@ -421,7 +423,7 @@ class KeriAttestServiceTest {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, null);
         stubHappyPath(ceremony);
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isRight());
         verifyNoInteractions(oobiService);
@@ -432,10 +434,10 @@ class KeriAttestServiceTest {
     @Test
     void attestBeginStepFailureReturnsLeftWithoutOtherInteractions() {
         ProblemDetail problem = KeriAttestationProblems.conflict(KeriAttestationProblems.CEREMONY_INVALID_STATE, "x");
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, false)).thenReturn(Either.left(problem));
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(problem, result.getLeft());
@@ -445,11 +447,11 @@ class KeriAttestServiceTest {
     @Test
     void attestWithNoIdentityLinkFailsWithIdentityNotLinked() {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, null);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, false)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.empty());
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.IDENTITY_NOT_LINKED, result.getLeft().getTitle());
@@ -461,12 +463,12 @@ class KeriAttestServiceTest {
     @Test
     void attestWithNoProviderRegisteredFailsWithAttestRequestFailed() {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, null);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, false)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         when(providerRegistry.forType(TARGET_TYPE)).thenReturn(Optional.empty());
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.ATTEST_REQUEST_FAILED, result.getLeft().getTitle());
@@ -477,14 +479,14 @@ class KeriAttestServiceTest {
     @Test
     void attestProviderAuthorizeRejectionFailsWithTheProvidersProblem() {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, null);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, false)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         when(providerRegistry.forType(TARGET_TYPE)).thenReturn(Optional.of(provider));
         ProblemDetail authProblem = KeriAttestationProblems.forbidden("not your document");
         when(provider.authorize(TARGET_ID, USER_ID)).thenReturn(Optional.of(authProblem));
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(authProblem, result.getLeft());
@@ -495,7 +497,7 @@ class KeriAttestServiceTest {
     @Test
     void attestStaleGuardedUpdateOnDigestWriteReturnsInvalidStateAndNeverSends() {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, null);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, false)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         when(providerRegistry.forType(TARGET_TYPE)).thenReturn(Optional.of(provider));
@@ -505,7 +507,7 @@ class KeriAttestServiceTest {
         when(ceremonyService.updateWaitingStepData(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
                 any())).thenReturn(false);
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CEREMONY_INVALID_STATE, result.getLeft().getTitle());
@@ -516,7 +518,7 @@ class KeriAttestServiceTest {
     @Test
     void attestPrepareDigestFailureFailsWithTheProvidersProblemAndNeverPersistsDigest() {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, null);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, false)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         when(providerRegistry.forType(TARGET_TYPE)).thenReturn(Optional.of(provider));
@@ -524,7 +526,7 @@ class KeriAttestServiceTest {
         ProblemDetail digestProblem = KeriAttestationProblems.unprocessable("FREEZE_FAILED", "could not freeze");
         when(provider.prepareDigest(TARGET_ID, CEREMONY_ID)).thenReturn(Either.left(digestProblem));
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(digestProblem, result.getLeft());
@@ -536,7 +538,7 @@ class KeriAttestServiceTest {
     @Test
     void attestExchangeSendFailureFailsWithAttestRequestFailedButStillPersistsTheDigest() throws Exception {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, null);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, false)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         when(providerRegistry.forType(TARGET_TYPE)).thenReturn(Optional.of(provider));
@@ -550,7 +552,7 @@ class KeriAttestServiceTest {
         stubKeyStateSequence(FLOOR_SEQUENCE);
         stubGuardedUpdateSuccess(ceremony);
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.ATTEST_REQUEST_FAILED, result.getLeft().getTitle());
@@ -569,7 +571,7 @@ class KeriAttestServiceTest {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
         ceremony.setKelFloorSequence(FLOOR_SEQUENCE);
         ceremony.setPayloadSaid(PAYLOAD_SAID);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, true)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
 
@@ -583,7 +585,7 @@ class KeriAttestServiceTest {
                 eq(CeremonyState.ATTEST_ANCHORED), any())).thenReturn(true);
         when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.ATTEST_ANCHORED)));
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, true);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, true);
 
         assertTrue(result.isRight());
         verifyNoInteractions(providerRegistry, kedFactory);
@@ -604,14 +606,14 @@ class KeriAttestServiceTest {
     void attestRetryWithNoLateRefFallsThroughToTheNormalSendFlow() throws Exception {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
         stubHappyPath(ceremony);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, true)).thenReturn(Either.right(ceremony));
         // The retry pre-check (answering the persisted request) finds no late ref, so the flow re-sends and
         // the main wait (answering the new request, stubbed by stubHappyPath) returns the fresh ref.
         when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any(), argThat(answering(OLD_REQUEST_EXN_SAID))))
                 .thenReturn(Optional.empty());
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, true);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, true);
 
         assertTrue(result.isRight());
         verify(exchanges).createExchangeMessage(any(), eq("/remotesign/ixn/req"), anyMap(), anyMap(), eq(WALLET_AID),
@@ -628,7 +630,7 @@ class KeriAttestServiceTest {
         ceremony.setKelFloorSequence(FLOOR_SEQUENCE);
         ceremony.setPayloadSaid(PAYLOAD_SAID);
         stubHappyPath(ceremony);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, true)).thenReturn(Either.right(ceremony));
         // Pre-check (answering the persisted request) claims a STALE ref whose explicit candidate names an
         // event not in the KEL, so locateAnchoringEvent returns empty for it (the KEL, stubbed by
@@ -640,7 +642,7 @@ class KeriAttestServiceTest {
         when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any(), argThat(answering(OLD_REQUEST_EXN_SAID))))
                 .thenReturn(Optional.of(new CorrelatedNotification(staleNoteId, "ESTALEEXN000000000000000000000", staleRef)));
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, true);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, true);
 
         assertTrue(result.isRight());
         assertEquals(CeremonyState.ATTEST_ANCHORED, result.get().state());
@@ -657,7 +659,7 @@ class KeriAttestServiceTest {
     @Test
     void attestTimeoutFailsWithKeriWalletTimeout() throws Exception {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, null);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, false)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         when(providerRegistry.forType(TARGET_TYPE)).thenReturn(Optional.of(provider));
@@ -670,7 +672,7 @@ class KeriAttestServiceTest {
         stubGuardedUpdateSuccess(ceremony);
         when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any(), argThat(answering(NEW_REQUEST_EXN_SAID)))).thenReturn(Optional.empty());
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.KERI_WALLET_TIMEOUT, result.getLeft().getTitle());
@@ -690,7 +692,7 @@ class KeriAttestServiceTest {
         Object wrongSeal = List.of(Map.of("d", "EWRONGDIGEST"));
         when(keyEvents.get(WALLET_AID)).thenReturn(List.of(kelEvent("ixn", SEQUENCE, EVENT_SAID, wrongSeal)));
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.ATTEST_SEAL_MISMATCH, result.getLeft().getTitle());
@@ -704,7 +706,7 @@ class KeriAttestServiceTest {
     @Test
     void attestFallsBackToKeyStateQueryWhenRefExnCarriesNoCandidate() throws Exception {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, null);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, false)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         when(providerRegistry.forType(TARGET_TYPE)).thenReturn(Optional.of(provider));
@@ -731,7 +733,7 @@ class KeriAttestServiceTest {
                 eq(CeremonyState.ATTEST_ANCHORED), any())).thenReturn(true);
         when(ceremonyService.get(CEREMONY_ID, USER_ID)).thenReturn(Either.right(ceremonyView(CeremonyState.ATTEST_ANCHORED)));
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isRight());
         verify(keyStates, times(2)).query(eq(WALLET_AID), any());
@@ -745,7 +747,7 @@ class KeriAttestServiceTest {
     @Test
     void attestRejectsAnOldEventWithTheSameDigestBelowTheFloor() throws Exception {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, null);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, false)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         when(providerRegistry.forType(TARGET_TYPE)).thenReturn(Optional.of(provider));
@@ -771,7 +773,7 @@ class KeriAttestServiceTest {
         KeyEventRecord oldEvent = kelEvent("ixn", "2", "EOLDEVENT00000000000000000000000000000", seal);
         when(keyEvents.get(WALLET_AID)).thenReturn(List.of(oldEvent));
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.ATTEST_SEAL_MISMATCH, result.getLeft().getTitle());
@@ -782,7 +784,7 @@ class KeriAttestServiceTest {
     @Test
     void attestWithMismatchedExplicitCandidateDoesNotFallBackToScanningTheKel() throws Exception {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, null);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, false)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         when(providerRegistry.forType(TARGET_TYPE)).thenReturn(Optional.of(provider));
@@ -804,7 +806,7 @@ class KeriAttestServiceTest {
         KeyEventRecord otherEvent = kelEvent("ixn", SEQUENCE, EVENT_SAID, seal);
         when(keyEvents.get(WALLET_AID)).thenReturn(List.of(otherEvent));
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.ATTEST_SEAL_MISMATCH, result.getLeft().getTitle());
@@ -827,14 +829,14 @@ class KeriAttestServiceTest {
         // falling back to the bounded scan.
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
         assertNull(ceremony.getKelFloorSequence());
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, true)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         Map<String, Object> refExn = refExnAnswering(OLD_REQUEST_EXN_SAID, REF_EXN_SAID, WALLET_AID, null, null);
         when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any(), argThat(answering(OLD_REQUEST_EXN_SAID))))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, true);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, true);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.ATTEST_SEAL_MISMATCH, result.getLeft().getTitle());
@@ -847,7 +849,7 @@ class KeriAttestServiceTest {
     void attestWithNullFloorStillFailsEvenWithAValidExplicitCandidate() throws Exception {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
         assertNull(ceremony.getKelFloorSequence());
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, true)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(WALLET_AID)));
         // A well-formed explicit candidate that WOULD resolve to a real, digest-matching KEL event if
@@ -856,7 +858,7 @@ class KeriAttestServiceTest {
         when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any(), argThat(answering(OLD_REQUEST_EXN_SAID))))
                 .thenReturn(Optional.of(new CorrelatedNotification(NOTIF_ID, REF_EXN_SAID, refExn)));
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, true);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, true);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.ATTEST_SEAL_MISMATCH, result.getLeft().getTitle());
@@ -872,7 +874,7 @@ class KeriAttestServiceTest {
         when(ceremonyService.completeStep(eq(CEREMONY_ID), eq(GENERATION), eq(CeremonyState.ATTEST_REQUESTED),
                 eq(CeremonyState.ATTEST_ANCHORED), any())).thenReturn(false);
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CEREMONY_INVALID_STATE, result.getLeft().getTitle());
