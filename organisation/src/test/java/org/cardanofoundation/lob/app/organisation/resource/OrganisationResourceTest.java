@@ -31,8 +31,8 @@ import org.cardanofoundation.lob.app.organisation.domain.view.OrganisationView;
 import org.cardanofoundation.lob.app.organisation.domain.view.ValidationView;
 import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
-import org.cardanofoundation.lob.app.support.security.access.PermissionChecker;
 import org.cardanofoundation.lob.app.support.security.access.OrganisationAccessProvisioner;
+import org.cardanofoundation.lob.app.support.security.access.PermissionChecker;
 
 @ExtendWith(MockitoExtension.class)
 class OrganisationResourceTest {
