@@ -124,8 +124,8 @@ class KeriAuthBeginServiceTest {
     }
 
     private void givenStepBegun() {
-        when(ceremonyService.beginStep(eq(CEREMONY_ID), eq(ORGANISATION_ID), eq(USER_ID), eq(CeremonyState.CREDENTIAL_RECEIVED),
-                eq(CeremonyState.AUTH_BEGIN_SUBMITTED), eq(false))).thenReturn(Either.right(ceremony()));
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.CREDENTIAL_RECEIVED,
+                CeremonyState.AUTH_BEGIN_SUBMITTED, false)).thenReturn(Either.right(ceremony()));
     }
 
     // ==================== guards ====================
