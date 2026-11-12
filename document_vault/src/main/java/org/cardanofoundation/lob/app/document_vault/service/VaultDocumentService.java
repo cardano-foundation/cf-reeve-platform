@@ -298,7 +298,7 @@ public class VaultDocumentService {
 
     /**
      * Read-only load for the KERI wallet-attestation flow: the same existence, org-membership and
-     * DRAFT checks as {@link #publish(String)}, but with none of its side effects — no status flip
+     * DRAFT checks as {@link #publish(String, String)}, but with none of its side effects — no status flip
      * and no {@link DocumentPublishCommand}. {@link DocumentAttestationTargetProvider} calls it both
      * to authorise a ceremony and, immediately before freezing, to load the exact row the envelope is
      * built from.
@@ -340,7 +340,7 @@ public class VaultDocumentService {
 
     /**
      * Builds the PII-free {@link DocumentPublishCommand} handed to blockchain_publisher. Shared by
-     * both emission sites so the mapping cannot drift: {@link #publish(String)} and
+     * both emission sites so the mapping cannot drift: {@link #publish(String, String)} and
      * {@code DocumentDispatchRetryJob}, which re-emits the command for any document left stuck after
      * a crash dropped the first emission.
      */

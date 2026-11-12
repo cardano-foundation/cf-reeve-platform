@@ -53,7 +53,7 @@ import org.cardanofoundation.lob.app.support.security.OrgAccessDenied;
  * no null-checking) never fails to find a bean. A request to any path here 404s at the dispatcher —
  * before this class is ever involved — whenever either flag is off, which is exactly the "is the module
  * up" probe the frontend needs; a user who simply hasn't linked their identity yet still gets a normal
- * {@code 200} from {@link #identity()} with {@code linked=false}.
+ * {@code 200} from {@link #identity(String)} with {@code linked=false}.
  */
 @RestController
 @RequestMapping("/api/v1/keri-attestation")

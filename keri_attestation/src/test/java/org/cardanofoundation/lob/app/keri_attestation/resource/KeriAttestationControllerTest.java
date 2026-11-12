@@ -415,11 +415,11 @@ class KeriAttestationControllerTest {
 
         mockMvc.perform(post(base, "org-other").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"targetType\":\"DOCUMENT\",\"targetId\":\"doc-1\"}"))
-                .andExpect(status().isUnauthorized());
-        mockMvc.perform(get(base + "/{id}", "org-other", CEREMONY_ID)).andExpect(status().isUnauthorized());
-        mockMvc.perform(post(base + "/{id}/credential/request", "org-other", CEREMONY_ID)).andExpect(status().isUnauthorized());
-        mockMvc.perform(post(base + "/{id}/auth-begin", "org-other", CEREMONY_ID)).andExpect(status().isUnauthorized());
-        mockMvc.perform(post(base + "/{id}/attest", "org-other", CEREMONY_ID)).andExpect(status().isUnauthorized());
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get(base + "/{id}", "org-other", CEREMONY_ID)).andExpect(status().isForbidden());
+        mockMvc.perform(post(base + "/{id}/credential/request", "org-other", CEREMONY_ID)).andExpect(status().isForbidden());
+        mockMvc.perform(post(base + "/{id}/auth-begin", "org-other", CEREMONY_ID)).andExpect(status().isForbidden());
+        mockMvc.perform(post(base + "/{id}/attest", "org-other", CEREMONY_ID)).andExpect(status().isForbidden());
 
         verifyNoInteractions(ceremonyService, credentialService, authBeginService, attestService);
     }

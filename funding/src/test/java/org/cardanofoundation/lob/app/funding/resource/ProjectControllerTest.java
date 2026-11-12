@@ -73,11 +73,11 @@ class ProjectControllerTest {
     @Test
     void listProjects_propagatesErrorStatus() {
         when(projectService.listProjects(eq("org1"), any(), eq(PAGEABLE)))
-                .thenReturn(PagedResponse.error(problem(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED")));
+                .thenReturn(PagedResponse.error(problem(HttpStatus.FORBIDDEN, "UNAUTHORIZED")));
 
         ResponseEntity<?> response = projectController.listProjects("org1", null, null, null, null, null, PAGEABLE);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(((PagedResponse<?>) response.getBody()).getError()).isPresent();
     }
 

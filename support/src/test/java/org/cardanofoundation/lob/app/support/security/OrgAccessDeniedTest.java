@@ -15,16 +15,16 @@ class OrgAccessDeniedTest {
     void problem_setsUnauthorizedStatusTitleAndDetail() {
         ProblemDetail problem = OrgAccessDenied.problem();
 
-        assertEquals(HttpStatus.UNAUTHORIZED.value(), problem.getStatus());
+        assertEquals(HttpStatus.FORBIDDEN.value(), problem.getStatus());
         assertEquals("NO_ACCESS_TO_ORG", problem.getTitle());
         assertEquals("The user doesn't have access to this org", problem.getDetail());
     }
 
     @Test
-    void response_returns401WithProblemBody() {
+    void response_returns403WithProblemBody() {
         ResponseEntity<Object> response = OrgAccessDenied.response();
 
-        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
         assertNotNull(response.getBody());
         assertEquals(ProblemDetail.class, response.getBody().getClass());
 

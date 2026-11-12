@@ -128,13 +128,13 @@ class FundingBulkImportControllerTest {
 
     @Test
     void exportProjectsMilestones_returnsErrorStatus_withoutStreaming_whenValidationFails() {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "User does not have access to this organisation");
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, "User does not have access to this organisation");
         problem.setTitle(ErrorTitleConstants.UNAUTHORIZED);
         when(fundingCsvExportService.validateExport(ORG_ID)).thenReturn(Optional.of(problem));
 
         ResponseEntity<?> response = controller.exportProjectsMilestones(ORG_ID, null, PAGEABLE);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(response.getBody()).isSameAs(problem);
         verify(fundingCsvExportService, never()).writeProjectsMilestonesExport(any(), any(), any(), any());
     }
