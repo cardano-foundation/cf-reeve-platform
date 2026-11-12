@@ -375,8 +375,8 @@ public class ReportTemplateService {
     }
 
     @Transactional(readOnly = true)
-    public Optional<ReportTemplateResponseDto> findById(String id) {
-        return reportTemplateRepository.findById(id)
+    public Optional<ReportTemplateResponseDto> findByOrganisationIdAndId(String organisationId, String id) {
+        return reportTemplateRepository.findByOrganisationIdAndId(organisationId, id)
                 .map(reportTemplateMapper::toResponseDto);
     }
 
@@ -406,10 +406,10 @@ public class ReportTemplateService {
                 .build();
     }
 
-    public Either<ProblemDetail, Void> delete(String id) {
+    public Either<ProblemDetail, Void> delete(String organisationId, String id) {
         log.info("Deleting report template id: {}", id);
 
-        Optional<ReportTemplateEntity> templateOpt = reportTemplateRepository.findById(id);
+        Optional<ReportTemplateEntity> templateOpt = reportTemplateRepository.findByOrganisationIdAndId(organisationId, id);
         if (templateOpt.isEmpty()) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Report template with ID " + id + " does not exist");
             problem.setTitle("TEMPLATE_NOT_FOUND");

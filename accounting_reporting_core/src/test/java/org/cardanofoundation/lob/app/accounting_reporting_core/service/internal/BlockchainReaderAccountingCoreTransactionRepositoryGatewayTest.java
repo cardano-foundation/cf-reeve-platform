@@ -25,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.TxValidationStatus;
+import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Organisation;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Rejection;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.RejectionReason;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.TransactionEntity;
@@ -37,6 +38,8 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests
 import org.cardanofoundation.lob.app.support.problem_support.IdentifiableProblem;
 
 class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
+
+    private static final String ORGANISATION_ID = "org-a";
 
     @Mock
     private TransactionItemRepository transactionItemRepository;
@@ -63,6 +66,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         // Arrange
         TransactionId transactionId = new TransactionId("nonexistent_tx_id");
         TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setOrganisationId(ORGANISATION_ID);
         transactionsRequest.setTransactionIds(Set.of(transactionId));
         when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(
                 transactionsRequest.getTransactionIds().stream().map(TransactionId::getId).collect(Collectors.toSet())))
@@ -79,13 +83,43 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
     }
 
     @Test
+    void approveTransactions_transactionOfAnotherOrganisation_isNotFoundAndLeftUntouched() {
+        // the permission was checked in the request's organisation: another organisation's transaction id must not be
+        // approved or published through it
+        TransactionId transactionId = new TransactionId("tx_of_org_b");
+        TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setOrganisationId(ORGANISATION_ID);
+        transactionsRequest.setTransactionIds(Set.of(transactionId));
+
+        TransactionEntity otherOrganisationsTransaction = new TransactionEntity();
+        otherOrganisationsTransaction.setId(transactionId.getId());
+        otherOrganisationsTransaction.setOrganisation(Organisation.builder().id("org-b").build());
+        otherOrganisationsTransaction.setOverallStatus(OK);
+        otherOrganisationsTransaction.setTransactionApproved(true);
+        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
+                .thenReturn(List.of(otherOrganisationsTransaction));
+
+        List<Either<IdentifiableProblem, TransactionEntity>> approved = transactionRepositoryGateway.approveTransactions(transactionsRequest);
+        List<Either<IdentifiableProblem, TransactionEntity>> published = transactionRepositoryGateway.approveTransactionsDispatch(transactionsRequest);
+
+        assertThat(approved).singleElement().satisfies(result ->
+                assertThat(result.getLeft().getProblem().getTitle()).isEqualTo("TX_NOT_FOUND"));
+        assertThat(published).singleElement().satisfies(result ->
+                assertThat(result.getLeft().getProblem().getTitle()).isEqualTo("TX_NOT_FOUND"));
+        assertThat(otherOrganisationsTransaction.getLedgerDispatchApproved()).isNotEqualTo(Boolean.TRUE);
+    }
+
+    @Test
     void approveTransactions_shouldReturnFailure_whenTransactionIsFailed() {
         // Arrange
         TransactionId transactionId = new TransactionId("failed_tx_id");
         TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setOrganisationId(ORGANISATION_ID);
         transactionsRequest.setTransactionIds(Set.of(transactionId));
 
         TransactionEntity failedTransaction = new TransactionEntity();
+
+        failedTransaction.setOrganisation(Organisation.builder().id(ORGANISATION_ID).build());
         failedTransaction.setId(transactionId.getId());
         failedTransaction.setAutomatedValidationStatus(TxValidationStatus.FAILED);
         when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
@@ -106,9 +140,12 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         // Arrange
         TransactionId transactionId = new TransactionId("valid_tx_id");
         TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setOrganisationId(ORGANISATION_ID);
         transactionsRequest.setTransactionIds(Set.of(transactionId));
 
         TransactionEntity validTransaction = new TransactionEntity();
+
+        validTransaction.setOrganisation(Organisation.builder().id(ORGANISATION_ID).build());
         validTransaction.setId(transactionId.getId());
         validTransaction.setOverallStatus(OK);
         when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
@@ -134,9 +171,13 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         val failedTransactionId = new TransactionId("failed_tx_id");
 
         TransactionsRequest transactionsRequest = new TransactionsRequest();
+
+        transactionsRequest.setOrganisationId(ORGANISATION_ID);
         transactionsRequest.setTransactionIds(Set.of(validTransactionId, failedTransactionId));
 
         TransactionEntity validTransaction = new TransactionEntity();
+
+        validTransaction.setOrganisation(Organisation.builder().id(ORGANISATION_ID).build());
         validTransaction.setId(validTransactionId.getId());
         validTransaction.setOverallStatus(OK);
 
@@ -172,9 +213,12 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         // Arrange
         val transactionId = new TransactionId("valid_tx_id");
         TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setOrganisationId(ORGANISATION_ID);
         transactionsRequest.setTransactionIds(Set.of(transactionId));
 
         TransactionEntity validTransaction = new TransactionEntity();
+
+        validTransaction.setOrganisation(Organisation.builder().id(ORGANISATION_ID).build());
         validTransaction.setId(transactionId.getId());
         validTransaction.setOverallStatus(OK);
         validTransaction.setTransactionApproved(true);
@@ -206,6 +250,8 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         rejectionRequest.setTransactionItemsRejections(Set.of(new TransactionItemsRejectionRequest.TxItemRejectionRequest(transactionItemId, INCORRECT_AMOUNT)));
 
         TransactionEntity transactionEntity = new TransactionEntity();
+
+        transactionEntity.setOrganisation(Organisation.builder().id(ORGANISATION_ID).build());
         transactionEntity.setId(transactionId);
         when(accountingCoreTransactionRepository.findById(transactionId)).thenReturn(Optional.of(transactionEntity));
 
@@ -234,6 +280,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         // Arrange
         String transactionId = "tx_id";
         TransactionEntity transactionEntity = new TransactionEntity();
+        transactionEntity.setOrganisation(Organisation.builder().id(ORGANISATION_ID).build());
         when(accountingCoreTransactionRepository.findById(transactionId)).thenReturn(Optional.of(transactionEntity));
 
         // Act
@@ -263,9 +310,12 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         // Arrange
         TransactionId transactionId = new TransactionId("rejected_tx_id");
         TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setOrganisationId(ORGANISATION_ID);
         transactionsRequest.setTransactionIds(Set.of(transactionId));
 
         TransactionEntity rejectedTransaction = new TransactionEntity();
+
+        rejectedTransaction.setOrganisation(Organisation.builder().id(ORGANISATION_ID).build());
         rejectedTransaction.setId(transactionId.getId());
         rejectedTransaction.setOverallStatus(OK);
         rejectedTransaction.setTransactionApproved(false);
@@ -296,9 +346,12 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         // Arrange
         val transactionId = new TransactionId("unapproved_tx_id");
         TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setOrganisationId(ORGANISATION_ID);
         transactionsRequest.setTransactionIds(Set.of(transactionId));
 
         TransactionEntity unapprovedTransaction = new TransactionEntity();
+
+        unapprovedTransaction.setOrganisation(Organisation.builder().id(ORGANISATION_ID).build());
         unapprovedTransaction.setId(transactionId.getId());
         unapprovedTransaction.setOverallStatus(OK);
         unapprovedTransaction.setTransactionApproved(false); // Not approved
@@ -328,6 +381,8 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         rejectionRequest.setTransactionItemsRejections(Set.of(new TransactionItemsRejectionRequest.TxItemRejectionRequest(transactionItemId, INCORRECT_AMOUNT)));
 
         TransactionEntity transactionEntity = new TransactionEntity();
+
+        transactionEntity.setOrganisation(Organisation.builder().id(ORGANISATION_ID).build());
         when(accountingCoreTransactionRepository.findById(transactionId)).thenReturn(Optional.of(transactionEntity));
 
         when(transactionItemRepository.findById(transactionItemId)).thenReturn(Optional.empty());
@@ -355,6 +410,8 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         rejectionRequest.setTransactionItemsRejections(Set.of(new TransactionItemsRejectionRequest.TxItemRejectionRequest(transactionItemId, INCORRECT_AMOUNT)));
 
         TransactionEntity transactionEntity = new TransactionEntity();
+
+        transactionEntity.setOrganisation(Organisation.builder().id(ORGANISATION_ID).build());
         transactionEntity.setId(transactionId);
         transactionEntity.setLedgerDispatchApproved(true); // Transaction already approved for dispatch
         when(accountingCoreTransactionRepository.findById(transactionId)).thenReturn(Optional.of(transactionEntity));
@@ -381,9 +438,12 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         // Arrange
         val transactionId = new TransactionId("tx_id");
         TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setOrganisationId(ORGANISATION_ID);
         transactionsRequest.setTransactionIds(Set.of(transactionId));
 
         TransactionEntity transaction = new TransactionEntity();
+
+        transaction.setOrganisation(Organisation.builder().id(ORGANISATION_ID).build());
         transaction.setId(transactionId.getId());
         transaction.setOverallStatus(OK);
 
@@ -412,9 +472,12 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         // Arrange
         val transactionId = new TransactionId("tx_id");
         TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setOrganisationId(ORGANISATION_ID);
         transactionsRequest.setTransactionIds(Set.of(transactionId));
 
         TransactionEntity validTransaction = new TransactionEntity();
+
+        validTransaction.setOrganisation(Organisation.builder().id(ORGANISATION_ID).build());
         validTransaction.setId(transactionId.getId());
         validTransaction.setOverallStatus(OK);
         validTransaction.setTransactionApproved(true);
@@ -446,9 +509,12 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         // Arrange
         TransactionId transactionId = new TransactionId("rejected_tx_id");
         TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setOrganisationId(ORGANISATION_ID);
         transactionsRequest.setTransactionIds(Set.of(transactionId));
 
         TransactionEntity transaction = new TransactionEntity();
+
+        transaction.setOrganisation(Organisation.builder().id(ORGANISATION_ID).build());
         transaction.setId(transactionId.getId());
         transaction.setOverallStatus(OK);
 
@@ -482,9 +548,12 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         // Arrange
         TransactionId transactionId = new TransactionId("valid_tx_id");
         TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setOrganisationId(ORGANISATION_ID);
         transactionsRequest.setTransactionIds(Set.of(transactionId));
 
         TransactionEntity transaction = new TransactionEntity();
+
+        transaction.setOrganisation(Organisation.builder().id(ORGANISATION_ID).build());
         transaction.setId(transactionId.getId());
         transaction.setOverallStatus(OK);
 
@@ -520,9 +589,12 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         // Arrange
         val transactionId = new TransactionId("tx_id");
         TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setOrganisationId(ORGANISATION_ID);
         transactionsRequest.setTransactionIds(Set.of(transactionId));
 
         TransactionEntity transaction = new TransactionEntity();
+
+        transaction.setOrganisation(Organisation.builder().id(ORGANISATION_ID).build());
         transaction.setId(transactionId.getId());
         transaction.setOverallStatus(OK);
         transaction.setTransactionApproved(true);
@@ -552,9 +624,12 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         // Arrange
         val transactionId = new TransactionId("valid_tx_id");
         TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setOrganisationId(ORGANISATION_ID);
         transactionsRequest.setTransactionIds(Set.of(transactionId));
 
         TransactionEntity transaction = new TransactionEntity();
+
+        transaction.setOrganisation(Organisation.builder().id(ORGANISATION_ID).build());
         transaction.setId(transactionId.getId());
         transaction.setOverallStatus(OK);
         transaction.setTransactionApproved(true);

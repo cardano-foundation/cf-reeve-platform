@@ -1,6 +1,6 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
-import static org.springframework.http.HttpStatus.UNAUTHORIZED;
+import static org.springframework.http.HttpStatus.FORBIDDEN;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
 import java.util.Map;
@@ -18,6 +18,8 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import io.swagger.v3.oas.annotations.Parameter;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -60,10 +62,10 @@ public class AccountingCoreResourceReconciliation {
             )
     })
     @PostMapping(value = "/reconcile/trigger", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('transactions', 'reconcilate')")
+    @PreAuthorize("@permissions.can(#body?.organisationId, 'transactions', 'reconcilate')")
     public ResponseEntity<ReconcileResponseView> reconcileTriggerAction(@Valid @RequestBody ReconciliationRequest body) {
         if (!keycloakSecurityHelper.canUserAccessOrg(body.getOrganisationId())) {
-            return ResponseEntity.status(UNAUTHORIZED.value())
+            return ResponseEntity.status(FORBIDDEN.value())
                     .body(ReconcileResponseView.createFail("NO_ACCESS_TO_ORG", body.getDateFrom(), body.getDateTo(), OrgAccessDenied.problem()));
         }
         return accountingCoreService.scheduleReconcilation(body.getOrganisationId(), body.getDateFrom(), body.getDateTo(), body.getExtractorType(), Optional.ofNullable(body.getFile()), body.getParameters()).fold(
@@ -73,7 +75,7 @@ public class AccountingCoreResourceReconciliation {
     }
 
     @PostMapping(value = "/reconcile/triggercsv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("@permissions.can('transactions', 'reconcilate')")
+    @PreAuthorize("@permissions.can(#body?.organisationId, 'transactions', 'reconcilate')")
     public ResponseEntity<ReconcileResponseView> reconcileTriggerCsvAction(@ModelAttribute ReconciliationRequest body) {
         return reconcileTriggerAction(body);
     }
@@ -85,7 +87,7 @@ public class AccountingCoreResourceReconciliation {
     })
     @Tag(name = "Reconciliation", description = "Reconciliation API")
     @PostMapping(value = "/transactions-reconcile", produces = "application/json")
-    @PreAuthorize("@permissions.can('transactions', 'reconcilate_view')")
+    @PreAuthorize("@permissions.can(#body?.organisationId, 'transactions', 'reconcilate_view')")
     public ResponseEntity<?> reconcileStart(@Valid @RequestBody ReconciliationFilterRequest body,
                                             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         Either<ProblemDetail, Pageable> pageableEither = jpaSortFieldValidator.convertPageable(pageable,
@@ -105,8 +107,8 @@ public class AccountingCoreResourceReconciliation {
     })
     @Tag(name = "Reconciliation", description = "Reconciliation API")
     @GetMapping(value = "/transactions-rejection-codes", produces = "application/json")
-    @PreAuthorize("@permissions.can('transactions', 'view')")
-    public ResponseEntity<ReconciliationRejectionCodeRequest[]> reconciliationRejectionCode() {
+    @PreAuthorize("@permissions.can(#organisationId, 'transactions', 'view')")
+    public ResponseEntity<ReconciliationRejectionCodeRequest[]> reconciliationRejectionCode(@RequestParam @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String organisationId) {
         return ResponseEntity.ok().body(ReconciliationRejectionCodeRequest.values());
     }
 
@@ -117,7 +119,7 @@ public class AccountingCoreResourceReconciliation {
             )
     })
     @PostMapping(value = "/reconciliation-statistic", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('transactions', 'reconcilate_view')")
+    @PreAuthorize("@permissions.can(#body?.organisationId, 'transactions', 'reconcilate_view')")
     public ResponseEntity<Map<String, ReconciliationStatisticView>> reconciliationStatistic(@Valid @RequestBody ReconciliationStatisticRequest body) {
         Map<String, ReconciliationStatisticView> result = accountingCorePresentationService.getReconciliationStatisticByDateRange(body);
         return ResponseEntity.ok().body(result);

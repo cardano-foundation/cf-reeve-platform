@@ -50,7 +50,7 @@ public class AccountEventController {
             ),
     })
     @GetMapping(value = "/{orgId}/event-codes", produces = "application/json")
-    @PreAuthorize("@permissions.can('event_codes', 'view')")
+    @PreAuthorize("@permissions.can(#orgId, 'event_codes', 'view')")
     public ResponseEntity<?> getReferenceCodes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                @RequestParam(value = "customerCode", required = false) String customerCode,
                                                @RequestParam(value = "name", required = false) String name,
@@ -70,7 +70,7 @@ public class AccountEventController {
 
     @Operation(summary = "Download event codes CSV file", description = "Download event codes as a CSV file")
     @GetMapping(value = "/{orgId}/event-codes/download", produces = "test/csv")
-    @PreAuthorize("@permissions.can('export_setup_data', 'download')")
+    @PreAuthorize("@permissions.can(#orgId, 'export_setup_data', 'download')")
     public ResponseEntity<StreamingResponseBody> downloadEventCodesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                                        @RequestParam(value = "customerCode", required = false) String customerCode,
                                                                        @RequestParam(value = "name", required = false) String name,
@@ -93,7 +93,7 @@ public class AccountEventController {
             ),
     })
     @PostMapping(value = "/{orgId}/event-codes", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('event_codes', 'create')")
+    @PreAuthorize("@permissions.can(#orgId, 'event_codes', 'create')")
     public ResponseEntity<?> insertReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @Valid @RequestBody EventCodeUpdate eventCodeUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
@@ -114,7 +114,7 @@ public class AccountEventController {
             ),
     })
     @PostMapping(value = "/{orgId}/event-codes", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("@permissions.can('event_codes', 'create')")
+    @PreAuthorize("@permissions.can(#orgId, 'event_codes', 'create')")
     public ResponseEntity<?> insertReferenceCodeByCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                       @RequestParam(value = "file") MultipartFile file) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
@@ -135,7 +135,7 @@ public class AccountEventController {
             ),
     })
     @PutMapping(value = "/{orgId}/event-codes", produces = "application/json")
-    @PreAuthorize("@permissions.can('event_codes', 'edit')")
+    @PreAuthorize("@permissions.can(#orgId, 'event_codes', 'edit')")
     public ResponseEntity<?> updateReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @Valid @RequestBody EventCodeUpdate eventCodeUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {

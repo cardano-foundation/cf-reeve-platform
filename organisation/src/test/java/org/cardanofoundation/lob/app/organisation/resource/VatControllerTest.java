@@ -65,7 +65,7 @@ class VatControllerTest {
 
         ResponseEntity<?> response = vatController.getVatCodes(orgId, null, null, null, null, null, null, Pageable.unpaged());
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(vatService);
     }
 
@@ -75,7 +75,7 @@ class VatControllerTest {
 
         ResponseEntity<?> response = vatController.downloadVatCodesCsv(orgId, null, null, null, null, null, null);
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(vatService);
     }
 
@@ -99,7 +99,7 @@ class VatControllerTest {
 
         ResponseEntity<?> response = vatController.insertVatCode(orgId, update);
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(vatService);
     }
 
@@ -123,7 +123,7 @@ class VatControllerTest {
 
         ResponseEntity<?> response = vatController.updateReferenceCode(orgId, update);
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(vatService);
     }
 
@@ -158,7 +158,7 @@ class VatControllerTest {
 
         ResponseEntity<?> response = vatController.insertVatCodesCsv(orgId, file);
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(vatService);
     }
 }

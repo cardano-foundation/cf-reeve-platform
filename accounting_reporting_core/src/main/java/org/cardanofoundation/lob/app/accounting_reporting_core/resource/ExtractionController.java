@@ -2,7 +2,7 @@ package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
-import static org.springframework.http.HttpStatus.UNAUTHORIZED;
+import static org.springframework.http.HttpStatus.FORBIDDEN;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 
@@ -68,7 +68,7 @@ public class ExtractionController {
                                         mediaType = APPLICATION_JSON_VALUE,
                                         array = @ArraySchema(schema = @Schema(
                                                         implementation = ExtractionTransactionItemView.class)))})})
-        @PreAuthorize("@permissions.can('data_explorer', 'search_view')")
+        @PreAuthorize("@permissions.can(#transactionsRequest?.organisationId, 'data_explorer', 'search_view')")
         public ResponseEntity<?> transactionSearch(
                         @Valid @RequestBody ExtractionTransactionsRequest transactionsRequest,
                         @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
@@ -100,7 +100,7 @@ public class ExtractionController {
                                         schema = @Schema(
                                                         example = "{\"event\": \"EXTRACTION\",\"message\":\"We have received your extraction request now. Please review imported transactions from the batch list.\"}"))},
                                         responseCode = "202")})
-        @PreAuthorize("@permissions.can('transactions', 'import')")
+        @PreAuthorize("@permissions.can(#body?.organisationId, 'transactions', 'import')")
         public ResponseEntity<?> extractionTrigger(@Valid @RequestBody ExtractionRequest body) {
                 return extractTriggerProcessing(body);
         }
@@ -156,7 +156,7 @@ public class ExtractionController {
                                         schema = @Schema(
                                                         example = "{\"event\": \"EXTRACTION\",\"message\":\"We have received your extraction request now. Please review imported transactions from the batch list.\"}"))},
                                         responseCode = "202")})
-        @PreAuthorize("@permissions.can('transactions', 'import')")
+        @PreAuthorize("@permissions.can(#body?.organisationId, 'transactions', 'import')")
         public ResponseEntity<?> extractionTriggerForm(@ModelAttribute ExtractionRequest body) {
                 return extractTriggerProcessing(body);
         }
@@ -168,7 +168,7 @@ public class ExtractionController {
                         content = {@Content(mediaType = APPLICATION_JSON_VALUE, schema = @Schema(
                                         implementation = ExtractionValidationResponse.class))},
                         responseCode = "202")})
-        @PreAuthorize("@permissions.can('transactions', 'import')")
+        @PreAuthorize("@permissions.can(#body?.organisationId, 'transactions', 'import')")
         public ResponseEntity<ExtractionValidationResponse> extractionValidation(
                         @Valid @RequestBody ExtractionRequest body) {
                 return extractionValidationProcessing(body);
@@ -177,7 +177,7 @@ public class ExtractionController {
         private ResponseEntity<ExtractionValidationResponse> extractionValidationProcessing(
                         ExtractionRequest body) {
                 if (!keycloakSecurityHelper.canUserAccessOrg(body.getOrganisationId())) {
-                        return ResponseEntity.status(UNAUTHORIZED.value())
+                        return ResponseEntity.status(FORBIDDEN.value())
                                         .body(new ExtractionValidationResponse(false, List.of(OrgAccessDenied.problem())));
                 }
                 Either<List<ProblemDetail>, Void> extractionValidation =
@@ -199,7 +199,7 @@ public class ExtractionController {
                         content = {@Content(mediaType = APPLICATION_JSON_VALUE, schema = @Schema(
                                         implementation = ExtractionValidationResponse.class))},
                         responseCode = "202")})
-        @PreAuthorize("@permissions.can('transactions', 'import')")
+        @PreAuthorize("@permissions.can(#body?.organisationId, 'transactions', 'import')")
         public ResponseEntity<ExtractionValidationResponse> extractionValidationForm(
                         @ModelAttribute ExtractionRequest body) {
                 return extractionValidationProcessing(body);

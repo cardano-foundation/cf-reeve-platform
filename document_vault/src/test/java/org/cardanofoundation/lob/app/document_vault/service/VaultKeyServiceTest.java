@@ -151,7 +151,7 @@ class VaultKeyServiceTest {
         VaultKeyEntity key = orgKey("key1", "acc1"); // same as securityHelper.getCurrentUserId()
         when(keyRepository.findById("key1")).thenReturn(Optional.of(key));
 
-        Optional<ProblemDetail> problem = service.delete("key1");
+        Optional<ProblemDetail> problem = service.delete("org1", "key1");
 
         assertTrue(problem.isEmpty());
         verify(keyRepository).delete(key);
@@ -162,7 +162,7 @@ class VaultKeyServiceTest {
         VaultKeyEntity key = orgKey("key1", "acc2"); // not the current user
         when(keyRepository.findById("key1")).thenReturn(Optional.of(key));
 
-        Optional<ProblemDetail> problem = service.delete("key1");
+        Optional<ProblemDetail> problem = service.delete("org1", "key1");
 
         assertTrue(problem.isPresent());
         assertEquals(VaultProblems.NOT_KEY_OWNER, problem.get().getTitle());
@@ -171,12 +171,11 @@ class VaultKeyServiceTest {
 
     @Test
     void deleteOthersKeyWithDeleteAnySucceeds() {
-        when(securityHelper.canUserAccessOrg("org1")).thenReturn(true);
-        when(permissionChecker.can("document_vault", "delete_any")).thenReturn(true);
+        when(permissionChecker.can("org1", "document_vault", "delete_any")).thenReturn(true);
         VaultKeyEntity key = orgKey("key1", "acc2"); // not the current user ("acc1")
         when(keyRepository.findById("key1")).thenReturn(Optional.of(key));
 
-        Optional<ProblemDetail> problem = service.delete("key1");
+        Optional<ProblemDetail> problem = service.delete("org1", "key1");
 
         assertTrue(problem.isEmpty());
         verify(keyRepository).delete(key);
@@ -184,11 +183,10 @@ class VaultKeyServiceTest {
 
     @Test
     void deleteOthersKeyAsMemberWithoutDeleteAnyIsRejected() {
-        when(securityHelper.canUserAccessOrg("org1")).thenReturn(true);
         VaultKeyEntity key = orgKey("key1", "acc2");
         when(keyRepository.findById("key1")).thenReturn(Optional.of(key));
 
-        Optional<ProblemDetail> problem = service.delete("key1");
+        Optional<ProblemDetail> problem = service.delete("org1", "key1");
 
         assertEquals(VaultProblems.NOT_KEY_OWNER, problem.orElseThrow().getTitle());
         verify(keyRepository, never()).delete(any(VaultKeyEntity.class));
@@ -196,15 +194,14 @@ class VaultKeyServiceTest {
 
     /** delete_any held in another organisation must not reach this organisation's keys. */
     @Test
-    void deleteOthersKeyOfAnotherOrganisationIsRejectedEvenWithDeleteAny() {
-        lenient().when(permissionChecker.can("document_vault", "delete_any")).thenReturn(true);
-        when(securityHelper.canUserAccessOrg("org1")).thenReturn(false);
-        VaultKeyEntity key = orgKey("key1", "acc2");
+    void deleteOthersKeyOfAnotherOrganisationIsNotFoundEvenWithDeleteAny() {
+        lenient().when(permissionChecker.can("org2", "document_vault", "delete_any")).thenReturn(true);
+        VaultKeyEntity key = orgKey("key1", "acc2"); // a key of org1
         when(keyRepository.findById("key1")).thenReturn(Optional.of(key));
 
-        Optional<ProblemDetail> problem = service.delete("key1");
+        Optional<ProblemDetail> problem = service.delete("org2", "key1");
 
-        assertEquals(VaultProblems.NOT_KEY_OWNER, problem.orElseThrow().getTitle());
+        assertEquals(VaultProblems.KEY_NOT_FOUND, problem.orElseThrow().getTitle());
         verify(keyRepository, never()).delete(any(VaultKeyEntity.class));
     }
 
@@ -212,7 +209,7 @@ class VaultKeyServiceTest {
     void deleteMissingKeyIsNotFound() {
         when(keyRepository.findById("nope")).thenReturn(Optional.empty());
 
-        Optional<ProblemDetail> problem = service.delete("nope");
+        Optional<ProblemDetail> problem = service.delete("org1", "nope");
 
         assertTrue(problem.isPresent());
         assertEquals(VaultProblems.KEY_NOT_FOUND, problem.get().getTitle());

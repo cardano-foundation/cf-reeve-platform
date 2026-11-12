@@ -78,7 +78,7 @@ class FundingBulkImportControllerTest {
 
     @Test
     void downloadTemplate_streamsFromTemplateService() throws Exception {
-        ResponseEntity<StreamingResponseBody> response = controller.downloadTemplate(FundingCsvFileType.PROJECTS_MILESTONES);
+        ResponseEntity<StreamingResponseBody> response = controller.downloadTemplate(FundingCsvFileType.PROJECTS_MILESTONES, "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getHeaders().getFirst("Content-Disposition"))
@@ -92,7 +92,7 @@ class FundingBulkImportControllerTest {
 
     @Test
     void downloadTemplate_usesFileTypeSpecificFilename() {
-        ResponseEntity<StreamingResponseBody> response = controller.downloadTemplate(FundingCsvFileType.EVENTS);
+        ResponseEntity<StreamingResponseBody> response = controller.downloadTemplate(FundingCsvFileType.EVENTS, "org1");
 
         assertThat(response.getHeaders().getFirst("Content-Disposition"))
                 .isEqualTo("attachment; filename=\"funding_events_template.csv\"");

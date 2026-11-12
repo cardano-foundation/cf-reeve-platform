@@ -88,7 +88,7 @@ public class ReportingController {
         }
     )
     @PostMapping(produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('reports', 'create')")
+    @PreAuthorize("@permissions.can(#report?.organisationId, 'reports', 'create')")
     public ResponseEntity<ReportResponseDto> create(
         @Valid @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "Report data. For GENERATED dataMode, fields are auto-calculated. For USER dataMode, provide fields manually.",
@@ -111,7 +111,7 @@ public class ReportingController {
 
     @Tag(name = "Reporting", description = "Create Report from CSV")
     @PostMapping(produces = APPLICATION_JSON_VALUE, consumes = MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("@permissions.can('reports', 'create')")
+    @PreAuthorize("@permissions.can(#csvReportRequest?.organisationId, 'reports', 'create')")
     public ResponseEntity<List<ReportResponseDto>> templateCreateCsv(
             @Valid @ModelAttribute CreateCsvReportRequest csvReportRequest) {
         if (!keycloakSecurityHelper.canUserAccessOrg(csvReportRequest.getOrganisationId())) {
@@ -142,45 +142,20 @@ public class ReportingController {
         }
     )
     @GetMapping(value = "/{id}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('reports', 'view')")
+    @PreAuthorize("@permissions.can(#organisationId, 'reports', 'view')")
     public ResponseEntity<?> findById(
         @PathVariable @Parameter(description = "Report ID (hash-based)", example = "b1c2d3e4f5g6h7i8j9k0l1m2n3o4p5q6r7s8t9u0v1w2x3y4z5a6b7c8d9e0f1g2") String id,
-        @RequestParam(value = "organisationId", required = false)
+        @RequestParam(value = "organisationId")
         @Parameter(
-            description = "Organisation ID for ownership validation",
+            description = "Organisation the report belongs to",
             example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94"
         ) String organisationId
     ) {
         log.debug("GET /api/reports/{} - organisationId: {}", id, organisationId);
 
-        // If organisationId is provided, check access
-        if (organisationId != null && !keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
-        }
-
-        if (organisationId != null) {
-            return reportService.findByOrganisationIdAndId(organisationId, id)
-                .map(report -> {
-                    // Verify access to the report's organisation
-                    if (!keycloakSecurityHelper.canUserAccessOrg(report.getOrganisationId())) {
-                        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                            .<ReportResponseDto>body(null);
-                    }
-                    return ResponseEntity.ok(report);
-                })
-                .orElse(ResponseEntity.notFound().build());
-        }
-
-        return reportService.findById(id)
-            .map(report -> {
-                // Verify access to the report's organisation
-                if (!keycloakSecurityHelper.canUserAccessOrg(report.getOrganisationId())) {
-                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .<ReportResponseDto>body(null);
-                }
-                return ResponseEntity.ok(report);
-            })
+        // Only found within the organisation the permission was checked in
+        return reportService.findByOrganisationIdAndId(organisationId, id)
+            .<ResponseEntity<?>>map(ResponseEntity::ok)
             .orElse(ResponseEntity.notFound().build());
     }
 
@@ -200,7 +175,7 @@ public class ReportingController {
         }
     )
     @GetMapping(produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('reports', 'view')")
+    @PreAuthorize("@permissions.can(#organisationId, 'reports', 'view')")
     public ResponseEntity<?> findAll(
             @RequestParam(value = "organisationId", required = true)
         @Parameter(
@@ -250,32 +225,24 @@ public class ReportingController {
         }
     )
     @DeleteMapping("/{id}")
-    @PreAuthorize("@permissions.can('reports', 'delete')")
+    @PreAuthorize("@permissions.can(#organisationId, 'reports', 'delete')")
     public ResponseEntity<?> delete(
-        @PathVariable @Parameter(description = "Report ID (hash-based)", example = "b1c2d3e4f5g6h7i8j9k0l1m2n3o4p5q6r7s8t9u0v1w2x3y4z5a6b7c8d9e0f1g2") String id
+        @PathVariable @Parameter(description = "Report ID (hash-based)", example = "b1c2d3e4f5g6h7i8j9k0l1m2n3o4p5q6r7s8t9u0v1w2x3y4z5a6b7c8d9e0f1g2") String id,
+        @RequestParam(value = "organisationId")
+        @Parameter(
+            description = "Organisation the report belongs to",
+            example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94"
+        ) String organisationId
     ) {
         log.debug("DELETE /api/reports/{}", id);
 
-        // First, get the report to check organisation access
-        return reportService.findById(id)
-            .map(report -> {
-                // Check organisation access
-                if (!keycloakSecurityHelper.canUserAccessOrg(report.getOrganisationId())) {
-                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
-                }
-
-                // Proceed with deletion
-                Either<ProblemDetail, Void> result = reportService.delete(id);
-
-                if (result.isLeft()) {
-                    ProblemDetail problem = result.getLeft();
-                    return ResponseEntity.status(problem.getStatus()).body(problem);
-                }
-
-                return ResponseEntity.noContent().build();
-            })
-            .orElse(ResponseEntity.notFound().build());
+        // Only found within the organisation the permission was checked in
+        Either<ProblemDetail, Void> result = reportService.delete(organisationId, id);
+        if (result.isLeft()) {
+            ProblemDetail problem = result.getLeft();
+            return ResponseEntity.status(problem.getStatus()).body(problem);
+        }
+        return ResponseEntity.noContent().build();
     }
 
     @Operation(
@@ -296,7 +263,7 @@ public class ReportingController {
         }
     )
     @PostMapping(value = "/generate", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('reports', 'create')")
+    @PreAuthorize("@permissions.can(#request?.organisationId, 'reports', 'create')")
     public ResponseEntity<?> generate(
         @Valid @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "Request containing template ID, organisation ID, interval type, year and period. Fields will be auto-generated.",
@@ -338,7 +305,7 @@ public class ReportingController {
                     @ApiResponse(responseCode = "404", description = "Report not found")})
     @PostMapping(value = "/publish", produces = APPLICATION_JSON_VALUE,
             consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('reports', 'publish')")
+    @PreAuthorize("@permissions.can(#request?.organisationId, 'reports', 'publish')")
     public ResponseEntity<?> publish(
             @Valid @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     description = "Request containing report id and organisation ID",
@@ -375,7 +342,7 @@ public class ReportingController {
         }
     )
     @PostMapping(value = "/{id}/reprocess", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('reports', 'edit')")
+    @PreAuthorize("@permissions.can(#organisationId, 'reports', 'edit')")
     public ResponseEntity<?> reprocess(
         @PathVariable @Parameter(description = "Report ID (hash-based)", example = "b1c2d3e4f5g6h7i8j9k0l1m2n3o4p5q6r7s8t9u0v1w2x3y4z5a6b7c8d9e0f1g2") String id,
         @RequestParam(value = "organisationId", required = true)
@@ -404,7 +371,7 @@ public class ReportingController {
 
     @Operation(summary = "Download report as CSV", description = "Downloads the report data as a CSV file. Only available for published reports.")
     @GetMapping(value = "/download", produces = "text/csv")
-    @PreAuthorize("@permissions.can('reports', 'view')")
+    @PreAuthorize("@permissions.can(#organisationId, 'reports', 'view')")
     public ResponseEntity<StreamingResponseBody> downloadReports(@RequestParam(value = "organisationId", required = true)
                                                                     @Parameter(
                                                                             description = "Filter by organisation ID",
@@ -449,7 +416,7 @@ public class ReportingController {
                     @ApiResponse(responseCode = "404", description = "Report not found")})
     @PostMapping(value = "/reject", produces = APPLICATION_JSON_VALUE,
             consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('reports', 'reject')")
+    @PreAuthorize("@permissions.can(#request?.organisationId, 'reports', 'reject')")
     public ResponseEntity<?> reject(
             @RequestBody @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     description = "Request containing report id and organisation ID",

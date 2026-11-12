@@ -129,6 +129,7 @@ class AccountingCoreResourceReconciliationTest extends WebBaseIntegrationTest{
         given()
                 .contentType("application/json")
                 .when()
+                .queryParam("organisationId", "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
                 .get("/api/v1/transactions-rejection-codes")
                 .then()
                 .statusCode(200)

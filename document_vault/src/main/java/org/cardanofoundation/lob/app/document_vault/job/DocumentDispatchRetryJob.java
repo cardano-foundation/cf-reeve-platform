@@ -21,7 +21,7 @@ import org.cardanofoundation.lob.app.document_vault.repository.VaultDocumentRepo
 import org.cardanofoundation.lob.app.document_vault.service.VaultDocumentService;
 
 /**
- * Recovery sweep for the publish handoff. {@link VaultDocumentService#publish(String)} commits the
+ * Recovery sweep for the publish handoff. {@link VaultDocumentService#publish(String, String)} commits the
  * vault row to {@code PUBLISHED}/{@code MARK_DISPATCH} and then fires an in-memory
  * {@code DocumentPublishCommand}. If the process crashes, or the async executor rejects the task,
  * between that commit and the publisher storing its row, the document is stuck: {@code PUBLISHED} is

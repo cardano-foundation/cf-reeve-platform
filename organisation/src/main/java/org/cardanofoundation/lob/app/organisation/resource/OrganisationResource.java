@@ -35,6 +35,7 @@ import org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 import org.cardanofoundation.lob.app.support.security.OrgAccessDenied;
 import org.cardanofoundation.lob.app.support.security.access.OrganisationAccessProvisioner;
+import org.cardanofoundation.lob.app.support.security.access.PermissionChecker;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -46,6 +47,7 @@ public class OrganisationResource {
     private final OrganisationService organisationService;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
     private final OrganisationAccessProvisioner organisationAccessProvisioner;
+    private final PermissionChecker permissions;
 
     @Operation(description = "Organisations",
             parameters = {
@@ -61,17 +63,19 @@ public class OrganisationResource {
             ),
     })
     @GetMapping(value = "/organisations", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('organization', 'view')")
+    // The user's own organisations: there is no single organisation to check, so each one is listed only where the user
+    // can view it
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<OrganisationView>> organisationList(@RequestParam(value = "orgIds", required = false) Optional<String[]> orgIds) {
         return ResponseEntity.ok().body(
                 orgIds.map(orgs -> Arrays.stream(orgs)
-                        .filter(keycloakSecurityHelper::isMemberOfOrg)
+                        .filter(this::canViewOrganisation)
                         .map(organisationService::findById)
                         .filter(Optional::isPresent)
                         .map(Optional::get)
                         .map(organisationService::getOrganisationView)
                         .toList()).orElse(organisationService.findAll().stream()
-                        .filter(organisation -> keycloakSecurityHelper.isMemberOfOrg(organisation.getId()))
+                        .filter(organisation -> canViewOrganisation(organisation.getId()))
                         .map(organisationService::getOrganisationView)
                         .toList())
         );
@@ -92,7 +96,7 @@ public class OrganisationResource {
             ))})
     })
     @GetMapping(value = "/organisations/{orgId}", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('organization_details', 'view')")
+    @PreAuthorize("@permissions.can(#orgId, 'organization_details', 'view')")
     public ResponseEntity<?> organisationDetailSpecific(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();
@@ -114,7 +118,7 @@ public class OrganisationResource {
             ),
     })
     @GetMapping(value = "/organisations/{orgId}/events", produces = "application/json")
-    @PreAuthorize("@permissions.can('event_codes', 'view')")
+    @PreAuthorize("@permissions.can(#orgId, 'event_codes', 'view')")
     public ResponseEntity<List<EventView>> organisationEvent(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();
@@ -194,7 +198,7 @@ public class OrganisationResource {
                             """
             ))})
     })
-    @PreAuthorize("@permissions.can('organization_details', 'edit')")
+    @PreAuthorize("@permissions.can(#orgId, 'organization_details', 'edit')")
     @PutMapping(value = "/organisations/{orgId}", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     public ResponseEntity<?> organisationUpdate(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody OrganisationUpdate organisationUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
@@ -239,7 +243,7 @@ public class OrganisationResource {
                             """
             ))})
     })
-    @PreAuthorize("@permissions.can('organization_setup', 'view')")
+    @PreAuthorize("@permissions.can(#orgId, 'organization_setup', 'view')")
     @GetMapping(value = "/organisations/{orgId}/validate", produces = APPLICATION_JSON_VALUE)
     public ResponseEntity<?> validateOrganisation(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")  String orgId) {
         if (keycloakSecurityHelper.canUserAccessOrg(orgId)) {
@@ -255,6 +259,10 @@ public class OrganisationResource {
         } else {
             return OrgAccessDenied.response();
         }
+    }
+
+    private boolean canViewOrganisation(String organisationId) {
+        return permissions.can(organisationId, "organization", "view");
     }
 
 }

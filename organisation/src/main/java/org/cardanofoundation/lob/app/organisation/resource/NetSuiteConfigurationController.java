@@ -53,7 +53,7 @@ public class NetSuiteConfigurationController {
                             {@Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = NetSuiteConfigurationStatusView.class))})
             })
     @GetMapping(value = "/organisations/{orgId}/netsuite-configuration/status", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('netsuite_configuration', 'view')")
+    @PreAuthorize("@permissions.can(#orgId, 'netsuite_configuration', 'view')")
     public ResponseEntity<?> status(@PathVariable("orgId") String orgId) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return forbidden(orgId);
@@ -71,7 +71,7 @@ public class NetSuiteConfigurationController {
             })
     @PostMapping(value = "/organisations/{orgId}/netsuite-configuration",
             produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('netsuite_configuration', 'create')")
+    @PreAuthorize("@permissions.can(#orgId, 'netsuite_configuration', 'create')")
     public ResponseEntity<?> create(@PathVariable("orgId") String orgId,
                                     @Valid @RequestBody NetSuiteConfigurationCreate body) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
@@ -92,7 +92,7 @@ public class NetSuiteConfigurationController {
             })
     @PutMapping(value = "/organisations/{orgId}/netsuite-configuration",
             produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('netsuite_configuration', 'edit')")
+    @PreAuthorize("@permissions.can(#orgId, 'netsuite_configuration', 'edit')")
     public ResponseEntity<?> update(@PathVariable("orgId") String orgId,
                                     @Valid @RequestBody NetSuiteConfigurationUpdate body) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {

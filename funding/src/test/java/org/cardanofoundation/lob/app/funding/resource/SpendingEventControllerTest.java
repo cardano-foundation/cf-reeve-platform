@@ -124,7 +124,7 @@ class SpendingEventControllerTest {
 
     @Test
     void eventTypes_returnsEnumNames() {
-        ResponseEntity<List<String>> response = spendingEventController.eventTypes();
+        ResponseEntity<List<String>> response = spendingEventController.eventTypes("org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).contains("FUNDING", "SPENDING", "REFUND");
@@ -132,7 +132,7 @@ class SpendingEventControllerTest {
 
     @Test
     void eventStatuses_returnsEnumNames() {
-        ResponseEntity<List<String>> response = spendingEventController.eventStatuses();
+        ResponseEntity<List<String>> response = spendingEventController.eventStatuses("org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).contains("DRAFT", "PUBLISHED");

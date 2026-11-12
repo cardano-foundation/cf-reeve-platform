@@ -18,10 +18,10 @@ class VaultDocumentControllerSecurityTest {
     @Test
     void publishNeedsThePublishPermission() throws NoSuchMethodException {
         PreAuthorize annotation = VaultDocumentController.class
-                .getMethod("publish", String.class, PublishDocumentRequest.class)
+                .getMethod("publish", String.class, String.class, PublishDocumentRequest.class)
                 .getAnnotation(PreAuthorize.class);
 
         assertNotNull(annotation, "publish must be permission-gated: anchoring on-chain is irreversible");
-        assertEquals("@permissions.can('document_vault', 'publish')", annotation.value());
+        assertEquals("@permissions.can(#organisationId, 'document_vault', 'publish')", annotation.value());
     }
 }

@@ -53,7 +53,7 @@ class AccountingRegimeControllerTest {
 
         ResponseEntity<List<AccountingRegimeView>> response = accountingRegimeController.getAllAccountingRegimes("org123");
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(accountingRegimeService);
     }
 
@@ -63,7 +63,7 @@ class AccountingRegimeControllerTest {
 
         ResponseEntity<AccountingRegimeView> response = accountingRegimeController.insertAccountingRegime("org123", mock(AccountingRegimeUpdate.class));
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(accountingRegimeService);
     }
 
@@ -73,7 +73,7 @@ class AccountingRegimeControllerTest {
 
         ResponseEntity<AccountingRegimeView> response = accountingRegimeController.updateAccountingRegime("org123", mock(AccountingRegimeUpdate.class));
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(accountingRegimeService);
     }
 
@@ -83,7 +83,7 @@ class AccountingRegimeControllerTest {
 
         ResponseEntity<Object> response = accountingRegimeController.insertAccountingRegimesCsv("org123", mock(MultipartFile.class));
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(accountingRegimeService);
     }
 

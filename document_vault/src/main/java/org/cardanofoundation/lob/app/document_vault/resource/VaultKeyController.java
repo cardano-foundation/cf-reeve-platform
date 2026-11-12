@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -49,29 +50,29 @@ public class VaultKeyController {
     @Operation(description = "Register a new X25519 public key for the current account. No e-mail: the "
             + "Keycloak account is already the contact.")
     @PostMapping(value = "/keys", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('document_vault', 'create')")
+    @PreAuthorize("@permissions.can(#request?.organisationId, 'document_vault', 'create')")
     public ResponseEntity<Object> registerKey(@Valid @RequestBody RegisterKeyRequest request) {
         return Responses.respond(keyService.registerKey(request), HttpStatus.CREATED);
     }
 
     @Operation(description = "Delete a key. The owner may delete their own; an admin may delete any.")
     @DeleteMapping(value = "/keys/{keyId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('document_vault', 'delete')")
-    public ResponseEntity<Object> deleteKey(@PathVariable String keyId) {
-        return Responses.respondDelete(keyService.delete(keyId));
+    @PreAuthorize("@permissions.can(#organisationId, 'document_vault', 'delete')")
+    public ResponseEntity<Object> deleteKey(@PathVariable String keyId, @RequestParam String organisationId) {
+        return Responses.respondDelete(keyService.delete(organisationId, keyId));
     }
 
-    @Operation(description = "List the current account's keys across organisations (paged)")
+    @Operation(description = "List the current account's keys in the organisation (paged)")
     @GetMapping(value = "/keys/me", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('document_vault', 'view')")
-    public ResponseEntity<PagedResponse<VaultKeyView>> listMyKeys(
+    @PreAuthorize("@permissions.can(#organisationId, 'document_vault', 'view')")
+    public ResponseEntity<PagedResponse<VaultKeyView>> listMyKeys(@RequestParam String organisationId,
             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-        return ResponseEntity.ok(keyService.listMyKeys(pageable));
+        return ResponseEntity.ok(keyService.listMyKeys(organisationId, pageable));
     }
 
     @Operation(description = "List every key registered in an organisation with its mapped user (member-only, paged)")
     @GetMapping(value = "/organisations/{organisationId}/keys", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('document_vault', 'view')")
+    @PreAuthorize("@permissions.can(#organisationId, 'document_vault', 'view')")
     public ResponseEntity<Object> listOrganisationKeys(@PathVariable String organisationId,
                                                        @PageableDefault(size = 20) Pageable pageable) {
         return Responses.respond(keyService.listOrganisationKeys(organisationId, pageable), HttpStatus.OK);
@@ -81,7 +82,7 @@ public class VaultKeyController {
             + "addressbook contacts, in one list. Each carries a `kind` saying which it is. Render "
             + "`assurance` and `homeOrganisationId`: trust here is the sender's out-of-band judgement.")
     @GetMapping(value = "/organisations/{organisationId}/recipients", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('document_vault', 'view')")
+    @PreAuthorize("@permissions.can(#organisationId, 'document_vault', 'view')")
     public ResponseEntity<Object> listRecipients(@PathVariable String organisationId,
                                                  @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         return Responses.respond(keyService.listRecipients(organisationId, pageable), HttpStatus.OK);
@@ -91,7 +92,7 @@ public class VaultKeyController {
             + "(sender auto-included). Colleagues go in `recipientAccountIds`, addressbook contacts in "
             + "`recipientEntryIds` — both taken from the `recipientId` of the recipients listing.")
     @PostMapping(value = "/recipients/resolve", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('document_vault', 'view')")
+    @PreAuthorize("@permissions.can(#request?.organisationId, 'document_vault', 'view')")
     public ResponseEntity<Object> resolveRecipients(@Valid @RequestBody ResolveRecipientsRequest request) {
         return Responses.respond(recipientResolutionService.resolve(request), HttpStatus.OK);
     }

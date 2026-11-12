@@ -14,17 +14,12 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 /**
- * Access of the user behind the current request, and the organisation the request is made for.
- * <p>
- * The frontend sends the selected organisation in the {@value #ORGANISATION_HEADER} header. Permissions are
- * evaluated against that organisation, and organisation ids in request bodies/paths must match it, so a role
- * held in one organisation can never be used in another.
+ * Access of the user behind the current request. The organisation a request acts on is not part of it: endpoints pass
+ * their own {@code organisationId} to {@link PermissionChecker#can}.
  */
 @Component
 @RequiredArgsConstructor
 public class CurrentUserAccess {
-
-    public static final String ORGANISATION_HEADER = "X-Organisation-Id";
 
     private static final String REQUEST_ATTRIBUTE = CurrentUserAccess.class.getName();
 
@@ -55,32 +50,6 @@ public class CurrentUserAccess {
     public void evict() {
         jwt().ifPresent(userAccessResolver::evict);
         currentRequest().ifPresent(request -> request.removeAttribute(REQUEST_ATTRIBUTE));
-    }
-
-    /**
-     * @return the organisation id sent in the {@value #ORGANISATION_HEADER} header, if any
-     */
-    public Optional<String> requestedOrganisationId() {
-        return currentRequest()
-                .map(request -> request.getHeader(ORGANISATION_HEADER))
-                .map(String::trim)
-                .filter(value -> !value.isEmpty());
-    }
-
-    /**
-     * The organisation the current request acts on: the one in the header, or the user's only organisation
-     * when the header is missing.
-     */
-    public Optional<OrganisationAccess> currentOrganisation() {
-        UserAccess access = get();
-        Optional<String> requested = requestedOrganisationId();
-        if (requested.isPresent()) {
-            return access.organisation(requested.get());
-        }
-        if (access.organisations().size() == 1) {
-            return access.organisations().values().stream().findFirst();
-        }
-        return Optional.empty();
     }
 
     private static Optional<HttpServletRequest> currentRequest() {

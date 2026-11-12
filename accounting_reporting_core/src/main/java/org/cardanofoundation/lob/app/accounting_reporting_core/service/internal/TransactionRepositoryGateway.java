@@ -102,8 +102,12 @@ public class TransactionRepositoryGateway {
             return errorResults;
         }
 
-        // Create lookup map for O(1) access
+        // Create lookup map for O(1) access. Only transactions of the requested organisation, the one the permission was
+        // checked in: an id of any other organisation is reported as not found and left untouched.
+        String organisationId = transactionsRequest.getOrganisationId();
         Map<String, TransactionEntity> transactionMap = lockedTransactions.stream()
+                .filter(tx -> tx.getOrganisation() != null && organisationId != null
+                        && organisationId.equals(tx.getOrganisation().getId()))
                 .collect(Collectors.toMap(tx -> tx.getId().trim(), tx -> tx));
 
         ArrayList<Either<IdentifiableProblem, TransactionEntity>> transactionsApprovalResponseListE = new ArrayList<>();

@@ -120,7 +120,7 @@ class ReportingServiceTest {
     @Test
     void create_Success() {
         // Given
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(templateEntity));
         lenient().when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(any())).thenReturn(new HashSet<>());
         lenient().when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
                 any(), any(), any())).thenReturn(new ArrayList<>());
@@ -153,7 +153,7 @@ class ReportingServiceTest {
         when(validationRule.isActive()).thenReturn(false);
         templateEntity.setValidationRules(List.of(validationRule));
 
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(templateEntity));
         lenient().when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(any())).thenReturn(new HashSet<>());
         lenient().when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
                 any(), any(), any())).thenReturn(new ArrayList<>());
@@ -202,7 +202,7 @@ class ReportingServiceTest {
                 ValidationRuleTermEntity.builder().id(2L).side(TermSide.RIGHT).field(templateField2).termOrder(2).operation(TermOperation.ADD).build()));
         templateEntity.setValidationRules(List.of(validationRule));
 
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(templateEntity));
         lenient().when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(any())).thenReturn(new HashSet<>());
         lenient().when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
                 any(), any(), any())).thenReturn(new ArrayList<>());
@@ -245,7 +245,7 @@ class ReportingServiceTest {
         reportDto.setDataMode("USER");
         templateEntity.setDataMode(DataMode.USER);
         // Given
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(templateEntity));
         lenient().when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(any())).thenReturn(new HashSet<>());
         lenient().when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
                 any(), any(), any())).thenReturn(new ArrayList<>());
@@ -262,7 +262,7 @@ class ReportingServiceTest {
     void create_dataModeMismatch() {
         reportDto.setDataMode("USER");
         // Given
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(templateEntity));
         lenient().when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(any())).thenReturn(new HashSet<>());
         lenient().when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
                 any(), any(), any())).thenReturn(new ArrayList<>());
@@ -298,7 +298,7 @@ class ReportingServiceTest {
         ReportFieldDto field = new ReportFieldDto();
         reportDto.setFields(List.of(field));
 
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(templateEntity));
         ReportResponseDto response = reportingService.create(reportDto);
 
         assertTrue(response.getError().isPresent());
@@ -308,7 +308,7 @@ class ReportingServiceTest {
     @Test
     void create_generateOrValidateFailed() {
         reportDto.setFields(List.of(new ReportFieldDto()));
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(templateEntity));
         ReportResponseDto response = reportingService.create(reportDto);
 
         assertTrue(response.getError().isPresent());
@@ -319,7 +319,7 @@ class ReportingServiceTest {
     void create_timeValidationFailedWrongIntervalType() {
         reportDto.setIntervalType("WRONG_INTERVALTYPE");
 
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(templateEntity));
 
         ReportResponseDto response = reportingService.create(reportDto);
 
@@ -332,7 +332,7 @@ class ReportingServiceTest {
         reportDto.setIntervalType("MONTH");
         reportDto.setPeriod((short) 13); // Invalid month
 
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(templateEntity));
 
         ReportResponseDto response = reportingService.create(reportDto);
 
@@ -388,7 +388,7 @@ class ReportingServiceTest {
         reportDto.setPeriod((short) 12); // Invalid month
         reportDto.setYear((short) now.getYear());
 
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(templateEntity));
 
         ReportResponseDto response = reportingService.create(reportDto);
 
@@ -398,7 +398,7 @@ class ReportingServiceTest {
         reportDto.setIntervalType("QUARTER");
         reportDto.setPeriod((short) 4); // Invalid month
 
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(templateEntity));
 
         response = reportingService.create(reportDto);
 
@@ -409,7 +409,7 @@ class ReportingServiceTest {
     @Test
     void create_TemplateNotFound() {
         // Given
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.empty());
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.empty());
 
         // When
         ReportResponseDto result = reportingService.create(reportDto);
@@ -421,17 +421,16 @@ class ReportingServiceTest {
     }
 
     @Test
-    void create_OrganisationMismatch() {
-        // Given
-        templateEntity.setOrganisationId("different-org");
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+    void create_templateOfAnotherOrganisation_isNotFound() {
+        // Given: the template is only looked up in the report's organisation
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.empty());
 
         // When
         ReportResponseDto result = reportingService.create(reportDto);
 
         // Then
         assertTrue(result.getError().isPresent());
-        assertEquals("ORGANISATION_MISMATCH", result.getError().get().getTitle());
+        assertEquals("REPORT_TEMPLATE_NOT_FOUND", result.getError().get().getTitle());
         verify(reportRepository, never()).save(any());
     }
 
@@ -439,7 +438,7 @@ class ReportingServiceTest {
     void create_ReportTemplateInActive() {
         // Given
         templateEntity.setActive(false);
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(templateEntity));
 
         // When
         ReportResponseDto result = reportingService.create(reportDto);
@@ -459,7 +458,7 @@ class ReportingServiceTest {
         existingReport.setVer(1L);
         existingReport.setReportTemplate(templateEntity);
 
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(templateEntity));
         lenient().when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(any())).thenReturn(new HashSet<>());
         lenient().when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
                 any(), any(), any())).thenReturn(new ArrayList<>());
@@ -492,7 +491,7 @@ class ReportingServiceTest {
         ReportEntity newReport = new ReportEntity();
         newReport.setReportTemplate(templateEntity);
 
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(templateEntity));
         lenient().when(chartOfAccountRepository.findAllByOrganisationIdSubTypeIds(any())).thenReturn(new HashSet<>());
         lenient().when(transactionItemRepository.findTransactionItemsByAccountCodeAndDateRange(
                 any(), any(), any())).thenReturn(new ArrayList<>());
@@ -521,10 +520,10 @@ class ReportingServiceTest {
         report.setId("abc");
         report.setLedgerDispatchApproved(false);
 
-        when(reportRepository.findById("abc")).thenReturn(Optional.of(report));
+        when(reportRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(report));
 
         // When
-        Either<ProblemDetail, Void> result = reportingService.delete("abc");
+        Either<ProblemDetail, Void> result = reportingService.delete("org123", "abc");
 
         // Then
         assertTrue(result.isRight());
@@ -534,10 +533,10 @@ class ReportingServiceTest {
     @Test
     void delete_ReportNotFound() {
         // Given
-        when(reportRepository.findById("abc")).thenReturn(Optional.empty());
+        when(reportRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.empty());
 
         // When
-        Either<ProblemDetail, Void> result = reportingService.delete("abc");
+        Either<ProblemDetail, Void> result = reportingService.delete("org123", "abc");
 
         // Then
         assertTrue(result.isLeft());
@@ -552,10 +551,10 @@ class ReportingServiceTest {
         publishedReport.setId("abc");
         publishedReport.setLedgerDispatchApproved(true);
 
-        when(reportRepository.findById("abc")).thenReturn(Optional.of(publishedReport));
+        when(reportRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(publishedReport));
 
         // When
-        Either<ProblemDetail, Void> result = reportingService.delete("abc");
+        Either<ProblemDetail, Void> result = reportingService.delete("org123", "abc");
 
         // Then
         assertTrue(result.isLeft());
@@ -566,11 +565,11 @@ class ReportingServiceTest {
     @Test
     void findById_Success() {
         // Given
-        when(reportRepository.findById("abc")).thenReturn(Optional.of(reportEntity));
+        when(reportRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(reportEntity));
         when(reportMapper.toResponseDto(reportEntity)).thenReturn(reportResponseDto);
 
         // When
-        Optional<ReportResponseDto> result = reportingService.findById("abc");
+        Optional<ReportResponseDto> result = reportingService.findByOrganisationIdAndId("org123", "abc");
 
         // Then
         assertTrue(result.isPresent());
@@ -580,10 +579,10 @@ class ReportingServiceTest {
     @Test
     void findById_NotFound() {
         // Given
-        when(reportRepository.findById("abc")).thenReturn(Optional.empty());
+        when(reportRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.empty());
 
         // When
-        Optional<ReportResponseDto> result = reportingService.findById("abc");
+        Optional<ReportResponseDto> result = reportingService.findByOrganisationIdAndId("org123", "abc");
 
         // Then
         assertFalse(result.isPresent());
@@ -629,7 +628,7 @@ class ReportingServiceTest {
         request.setYear((short) 2024);
         request.setPeriod((short) 1);
 
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(templateEntity));
         when(reportMapper.toEntity(any(ReportDto.class), isNull(), eq(templateEntity))).thenReturn(reportEntity);
         when(reportMapper.toResponseDto(any(ReportEntity.class))).thenReturn(reportResponseDto);
 
@@ -654,7 +653,7 @@ class ReportingServiceTest {
 
         templateEntity.setActive(false);
 
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(templateEntity));
 
         // When
         Either<ProblemDetail, ReportResponseDto> result = reportingService.generate(request);
@@ -672,7 +671,7 @@ class ReportingServiceTest {
         request.setReportTemplateId("abc");
         request.setOrganisationId("org123");
 
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.empty());
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.empty());
 
         // When
         Either<ProblemDetail, ReportResponseDto> result = reportingService.generate(request);
@@ -711,7 +710,7 @@ class ReportingServiceTest {
 
         templateEntity.setFields(List.of(fieldEntity));
 
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(templateEntity));
         when(transactionItemRepository.aggregateTransactionItemsDebitByAccountCodeAndDateRange(
                 "org123", List.of("4000"), LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 31)))
                 .thenReturn(List.of(new AccountCodeTotal("4000", new BigDecimal("1000.00"))));

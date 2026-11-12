@@ -177,13 +177,13 @@ public class VaultDocumentService {
         return Either.right(new DocumentUploadedView(saved.getId(), saved.getContentHash(), saved.getCreatedAt()));
     }
 
-    public Either<ProblemDetail, DocumentView> publish(String documentId) {
-        return publish(documentId, null);
+    public Either<ProblemDetail, DocumentView> publish(String organisationId, String documentId) {
+        return publish(organisationId, documentId, null);
     }
 
     /**
      * With a null {@code attestationCeremonyId} — no body at all, an empty JSON object, or the field
-     * absent — this is exactly {@link #publish(String)}: the attested branch is skipped, so the
+     * absent — this is exactly {@link #publish(String, String)}: the attested branch is skipped, so the
      * attestation providers are never consulted, not even to probe whether they are wired up.
      *
      * <p>A present-but-blank ceremony id is rejected with {@code ATTESTATION_CEREMONY_ID_BLANK}
@@ -204,7 +204,8 @@ public class VaultDocumentService {
      * Only once all three pass is the ceremony persisted on the document row and carried into the
      * emitted {@link DocumentPublishCommand}.
      */
-    public Either<ProblemDetail, DocumentView> publish(String documentId, @Nullable String attestationCeremonyIdOrBlank) {
+    public Either<ProblemDetail, DocumentView> publish(String organisationId, String documentId,
+            @Nullable String attestationCeremonyIdOrBlank) {
         // Pure input validation, so it runs before any database access.
         if (attestationCeremonyIdOrBlank != null && attestationCeremonyIdOrBlank.isBlank()) {
             return Either.left(VaultProblems.unprocessable(VaultProblems.ATTESTATION_CEREMONY_ID_BLANK,
@@ -214,16 +215,14 @@ public class VaultDocumentService {
         // Row lock first: two concurrent publishes must not both observe DRAFT and both fire the
         // irreversible DocumentPublishCommand. The second caller blocks here until the first commits,
         // then reads PUBLISHED below and returns ALREADY_PUBLISHED.
-        Optional<VaultDocumentEntity> documentM = documentRepository.findByIdForUpdate(documentId);
+        // Only found within the organisation the permission was checked in
+        Optional<VaultDocumentEntity> documentM = documentRepository.findByIdForUpdate(documentId)
+                .filter(found -> found.getOrganisationId().equals(organisationId));
         if (documentM.isEmpty()) {
             return Either.left(VaultProblems.notFound(VaultProblems.DOCUMENT_NOT_FOUND,
                     "No document %s.".formatted(documentId)));
         }
         VaultDocumentEntity document = documentM.get();
-        if (!securityHelper.canUserAccessOrg(document.getOrganisationId())) {
-            return Either.left(VaultProblems.forbidden(
-                    "Current user is not a member of organisation %s.".formatted(document.getOrganisationId())));
-        }
         if (document.getStatus() != VaultDocumentStatus.DRAFT) {
             return Either.left(VaultProblems.conflict(VaultProblems.ALREADY_PUBLISHED,
                     "Document %s is already published.".formatted(documentId)));
@@ -412,11 +411,13 @@ public class VaultDocumentService {
      * Decryption is strictly client-side — the backend cannot decrypt and never tries.
      */
     @Transactional(readOnly = true)
-    public Either<ProblemDetail, DocumentEnvelopeView> fetch(String documentId) {
+    public Either<ProblemDetail, DocumentEnvelopeView> fetch(String organisationId, String documentId) {
         String accountId = securityHelper.getCurrentUserId();
-        Optional<VaultDocumentEntity> documentM = documentRepository.findById(documentId);
-        // 404 for a missing document AND for a non-member: to an outsider the two are the same thing.
-        if (documentM.isEmpty() || !securityHelper.canUserAccessOrg(documentM.get().getOrganisationId())) {
+        // Only found within the organisation the permission was checked in: another organisation's document,
+        // even one the user also belongs to, is the same as a missing one.
+        Optional<VaultDocumentEntity> documentM = documentRepository.findById(documentId)
+                .filter(found -> found.getOrganisationId().equals(organisationId));
+        if (documentM.isEmpty()) {
             return Either.left(VaultProblems.notFound(VaultProblems.DOCUMENT_NOT_FOUND,
                     "No document %s accessible to the current account.".formatted(documentId)));
         }
@@ -462,27 +463,25 @@ public class VaultDocumentService {
                 document.getCreatedByName(), document.getCreatedAt()));
     }
 
-    public Optional<ProblemDetail> delete(String documentId) {
+    public Optional<ProblemDetail> delete(String organisationId, String documentId) {
         // Row lock, for the same reason as publish(): without it, delete could read DRAFT while a
         // concurrent publish holds the lock and then destroy a document that publish just committed
         // as PUBLISHED. With it, delete blocks, re-reads PUBLISHED and rejects below.
-        Optional<VaultDocumentEntity> documentM = documentRepository.findByIdForUpdate(documentId);
+        // Only found within the organisation the permission was checked in, so "delete any" below is evaluated in
+        // the document's own organisation
+        Optional<VaultDocumentEntity> documentM = documentRepository.findByIdForUpdate(documentId)
+                .filter(found -> found.getOrganisationId().equals(organisationId));
         if (documentM.isEmpty()) {
             return Optional.of(VaultProblems.notFound(VaultProblems.DOCUMENT_NOT_FOUND,
                     "No document %s.".formatted(documentId)));
         }
         VaultDocumentEntity document = documentM.get();
-        // Membership first: it ties the permission below (checked in the request's organisation) to the document's.
-        if (!securityHelper.canUserAccessOrg(document.getOrganisationId())) {
-            return Optional.of(VaultProblems.forbidden(
-                    "Current user is not a member of organisation %s.".formatted(document.getOrganisationId())));
-        }
         if (document.getStatus() != VaultDocumentStatus.DRAFT) {
             return Optional.of(VaultProblems.conflict(VaultProblems.DOCUMENT_PUBLISHED_IMMUTABLE,
                     "Document %s is published and can never be edited or deleted.".formatted(documentId)));
         }
         boolean isCreator = document.getCreatedByAccount().equals(securityHelper.getCurrentUserId());
-        if (!isCreator && !permissionChecker.can("document_vault", "delete_any")) {
+        if (!isCreator && !permissionChecker.can(organisationId, "document_vault", "delete_any")) {
             return Optional.of(VaultProblems.of403NotCreator());
         }
         documentRepository.delete(document);

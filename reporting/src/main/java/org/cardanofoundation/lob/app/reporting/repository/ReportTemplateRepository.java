@@ -20,6 +20,8 @@ public interface ReportTemplateRepository extends JpaRepository<ReportTemplateEn
 
     List<ReportTemplateEntity> findByOrganisationId(String organisationId);
 
+    Optional<ReportTemplateEntity> findByOrganisationIdAndId(String organisationId, String id);
+
     Optional<ReportTemplateEntity> findByOrganisationIdAndName(String organisationId, String name);
 
     boolean existsByOrganisationIdAndName(String organisationId, String name);

@@ -131,9 +131,8 @@ public class SpendingEventService {
 
     @Transactional
     public SpendingEventView updateEvent(String eventId, SpendingEventCreateRequest request) {
-        Optional<ProblemDetail> denied = denyIfCallerCannotAccessEvent(eventId);
-        if (denied.isPresent()) {
-            return SpendingEventView.error(denied.get());
+        if (!keycloakSecurityHelper.canUserAccessOrg(request.getOrganisationId())) {
+            return SpendingEventView.error(Problems.unauthorized());
         }
         return update(eventId, request).fold(this::rollbackAndError, this::toView);
     }
@@ -246,23 +245,13 @@ public class SpendingEventService {
         return OrphanEventsCleanupView.success(FundingCascadeDeleteService.toAffectedEventViews(orphans));
     }
 
-    /** 401 when the caller cannot access the organisation, 404 when no event exists for that id within it. */
+    /** 403 when the caller cannot access the organisation, 404 when no event exists for that id within it. */
     private Optional<ProblemDetail> denyIfNoEventAccess(String eventId, String organisationId) {
         if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
             return Optional.of(Problems.unauthorized());
         }
         if (fundingEventRepository.findByIdAndOrganisationId(eventId, organisationId).isEmpty()) {
             return Optional.of(Problems.eventNotFound(eventId));
-        }
-        return Optional.empty();
-    }
-
-    /** 401 when the event exists and the caller cannot access its organisation; empty otherwise (used by update, whose
-     *  request body carries its own organisationId that is checked separately against the event's actual organisation). */
-    private Optional<ProblemDetail> denyIfCallerCannotAccessEvent(String eventId) {
-        Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);
-        if (eventM.isPresent() && !keycloakSecurityHelper.canUserAccessOrg(eventM.get().getOrganisationId())) {
-            return Optional.of(Problems.unauthorized());
         }
         return Optional.empty();
     }
@@ -331,10 +320,15 @@ public class SpendingEventService {
 
     @Transactional
     public Either<ProblemDetail, FundingEventEntity> update(String eventId, SpendingEventCreateRequest request) {
-        Either<ProblemDetail, FundingEventEntity> eventOrError = findEventOrError(eventId);
-        if (eventOrError.isLeft()) return eventOrError;
-
-        FundingEventEntity event = eventOrError.get();
+        // The event's organisation is fixed at creation, and the permission was checked in the request's: an event of
+        // any other organisation is not found, so the update can't target another organisation's projects either
+        Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId)
+                .filter(found -> found.getOrganisationId().equals(request.getOrganisationId()));
+        if (eventM.isEmpty()) {
+            log.warn("Event not found: {}", eventId);
+            return Either.left(Problems.eventNotFound(eventId));
+        }
+        FundingEventEntity event = eventM.get();
 
         Optional<ProblemDetail> draftProblem = requireDraft(event, "Cannot update event with Funding ID %s: it is already published");
         if (draftProblem.isPresent()) return Either.left(draftProblem.get());
@@ -350,13 +344,7 @@ public class SpendingEventService {
             event.setStatus(EventStatus.DRAFT);
         }
 
-        // The event's identity — organisation and type — is fixed at creation; the update payload
-        // must not silently target another organisation's projects or change the event's semantics.
-        if (!event.getOrganisationId().equals(request.getOrganisationId())) {
-            return Either.left(Problems.badRequest(
-                    "organisationId %s does not match the event's organisation".formatted(request.getOrganisationId()),
-                    ErrorTitleConstants.ORGANISATION_MISMATCH));
-        }
+        // The event's type is fixed at creation; the update payload must not change the event's semantics.
         if (event.getEventType() != request.getEventType()) {
             return Either.left(Problems.badRequest(
                     "eventType cannot be changed on update (event is %s)".formatted(event.getEventType()),

@@ -138,7 +138,7 @@ class VaultPublishIntegrationTest {
         String documentId = documentService.upload(upload).get().documentId();
 
         // publish
-        DocumentView published = documentService.publish(documentId).get();
+        DocumentView published = documentService.publish(ORG_ID, documentId).get();
         assertEquals(VaultDocumentStatus.PUBLISHED, published.status());
         assertEquals(LedgerDispatchStatus.MARK_DISPATCH, published.ledgerDispatchStatus());
 
@@ -151,8 +151,8 @@ class VaultPublishIntegrationTest {
         assertFalse(serialisedCommand.contains(keyId));
 
         // republish rejected, delete locked
-        assertTrue(documentService.publish(documentId).isLeft());
-        assertTrue(documentService.delete(documentId).isPresent());
+        assertTrue(documentService.publish(ORG_ID, documentId).isLeft());
+        assertTrue(documentService.delete(ORG_ID, documentId).isPresent());
 
         // commit for real before simulating the publisher's status-back: handleLedgerUpdatedEvent
         // now runs in its own REQUIRES_NEW transaction (see

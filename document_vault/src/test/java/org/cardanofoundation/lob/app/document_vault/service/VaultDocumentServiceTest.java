@@ -297,7 +297,7 @@ class VaultDocumentServiceTest {
         doc.setCreatedByAccount("someone-else");
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
 
-        Optional<ProblemDetail> problem = service.delete("doc1");
+        Optional<ProblemDetail> problem = service.delete("org1", "doc1");
 
         assertTrue(problem.isPresent());
         assertEquals(VaultProblems.NOT_DOCUMENT_CREATOR, problem.get().getTitle());
@@ -305,7 +305,7 @@ class VaultDocumentServiceTest {
 
     @Test
     void deleteByNonCreatorWithDeleteAnySucceeds() {
-        when(permissionChecker.can("document_vault", "delete_any")).thenReturn(true);
+        when(permissionChecker.can("org1", "document_vault", "delete_any")).thenReturn(true);
 
         VaultDocumentEntity doc = new VaultDocumentEntity();
         doc.setId("doc1");
@@ -313,26 +313,26 @@ class VaultDocumentServiceTest {
         doc.setCreatedByAccount("someone-else"); // securityHelper.getCurrentUserId() stubbed to "sender"
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
 
-        Optional<ProblemDetail> problem = service.delete("doc1");
+        Optional<ProblemDetail> problem = service.delete("org1", "doc1");
 
         assertTrue(problem.isEmpty());
         verify(documentRepository).delete(doc);
     }
 
     @Test
-    void deleteOutsideOwnOrganisationIsRejectedEvenForCreator() {
+    void deleteOfAnotherOrganisationsDocumentIsNotFoundEvenForCreator() {
         // The request's organisation decides the permissions, so the document must belong to it
         VaultDocumentEntity doc = new VaultDocumentEntity();
         doc.setId("doc1");
         doc.setOrganisationId("other-org");
         doc.setCreatedByAccount("sender");
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
-        when(securityHelper.canUserAccessOrg("other-org")).thenReturn(false);
 
-        Optional<ProblemDetail> problem = service.delete("doc1");
+        Optional<ProblemDetail> problem = service.delete("org1", "doc1");
 
         assertTrue(problem.isPresent());
-        assertEquals(403, problem.get().getStatus());
+        assertEquals(404, problem.get().getStatus());
+        verify(documentRepository, never()).delete(any(VaultDocumentEntity.class));
     }
 
     @Test
@@ -343,7 +343,7 @@ class VaultDocumentServiceTest {
         doc.setCreatedByAccount("sender");
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
 
-        Optional<ProblemDetail> problem = service.delete("doc1");
+        Optional<ProblemDetail> problem = service.delete("org1", "doc1");
 
         assertTrue(problem.isEmpty());
         verify(documentRepository).delete(doc);
@@ -358,7 +358,7 @@ class VaultDocumentServiceTest {
         doc.setStatus(VaultDocumentStatus.PUBLISHED);
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
 
-        Optional<ProblemDetail> problem = service.delete("doc1");
+        Optional<ProblemDetail> problem = service.delete("org1", "doc1");
 
         assertTrue(problem.isPresent());
         assertEquals(VaultProblems.DOCUMENT_PUBLISHED_IMMUTABLE, problem.get().getTitle());
@@ -372,10 +372,10 @@ class VaultDocumentServiceTest {
         doc.setOrganisationId("org1");
         doc.setCreatedByAccount("someone-else");
         doc.setStatus(VaultDocumentStatus.PUBLISHED);
-        lenient().when(permissionChecker.can("document_vault", "delete_any")).thenReturn(true);
+        lenient().when(permissionChecker.can("org1", "document_vault", "delete_any")).thenReturn(true);
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
 
-        Optional<ProblemDetail> problem = service.delete("doc1");
+        Optional<ProblemDetail> problem = service.delete("org1", "doc1");
 
         assertEquals(VaultProblems.DOCUMENT_PUBLISHED_IMMUTABLE, problem.orElseThrow().getTitle());
         verify(documentRepository, never()).delete(any(VaultDocumentEntity.class));
@@ -387,7 +387,7 @@ class VaultDocumentServiceTest {
         when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
         when(keyLookupService.findAllById(any())).thenReturn(keyRefs(orgKey("k-s", "sender", "org1")));
 
-        Either<ProblemDetail, DocumentEnvelopeView> result = service.fetch("doc1");
+        Either<ProblemDetail, DocumentEnvelopeView> result = service.fetch("org1", "doc1");
 
         assertTrue(result.isRight());
         assertTrue(result.get().envelopeAccessible());
@@ -404,7 +404,7 @@ class VaultDocumentServiceTest {
         when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
         when(keyLookupService.findAllById(any())).thenReturn(keyRefs(orgKey("k-s", "recipient", "org1")));
 
-        Either<ProblemDetail, DocumentEnvelopeView> result = service.fetch("doc1");
+        Either<ProblemDetail, DocumentEnvelopeView> result = service.fetch("org1", "doc1");
 
         assertTrue(result.isRight());
         assertTrue(result.get().envelopeAccessible());
@@ -424,7 +424,7 @@ class VaultDocumentServiceTest {
         when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
         when(keyLookupService.findAllById(any())).thenReturn(keyRefs(orgKey("k-s", "sender", "org1")));
 
-        Either<ProblemDetail, DocumentEnvelopeView> result = service.fetch("doc1");
+        Either<ProblemDetail, DocumentEnvelopeView> result = service.fetch("org1", "doc1");
 
         assertTrue(result.isRight());
         assertFalse(result.get().envelopeAccessible());
@@ -438,13 +438,12 @@ class VaultDocumentServiceTest {
     }
 
     @Test
-    void fetchOutsideOwnOrganisationIs404() {
+    void fetchOfAnotherOrganisationsDocumentIs404() {
         VaultDocumentEntity doc = draftDoc();
         doc.setOrganisationId("other-org");
         when(documentRepository.findById("doc1")).thenReturn(Optional.of(doc));
-        when(securityHelper.canUserAccessOrg("other-org")).thenReturn(false);
 
-        Either<ProblemDetail, DocumentEnvelopeView> result = service.fetch("doc1");
+        Either<ProblemDetail, DocumentEnvelopeView> result = service.fetch("org1", "doc1");
 
         assertTrue(result.isLeft());
         assertEquals(404, result.getLeft().getStatus());
@@ -454,7 +453,7 @@ class VaultDocumentServiceTest {
     void fetchUnknownDocumentIs404() {
         when(documentRepository.findById("nope")).thenReturn(Optional.empty());
 
-        Either<ProblemDetail, DocumentEnvelopeView> result = service.fetch("nope");
+        Either<ProblemDetail, DocumentEnvelopeView> result = service.fetch("org1", "nope");
 
         assertTrue(result.isLeft());
         assertEquals(VaultProblems.DOCUMENT_NOT_FOUND, result.getLeft().getTitle());
@@ -466,7 +465,7 @@ class VaultDocumentServiceTest {
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
         when(documentRepository.save(any(VaultDocumentEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Either<ProblemDetail, DocumentView> result = service.publish("doc1");
+        Either<ProblemDetail, DocumentView> result = service.publish("org1", "doc1");
 
         assertTrue(result.isRight());
         assertEquals(VaultDocumentStatus.PUBLISHED, result.get().status());
@@ -487,22 +486,23 @@ class VaultDocumentServiceTest {
         doc.setStatus(VaultDocumentStatus.PUBLISHED);
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
 
-        Either<ProblemDetail, DocumentView> result = service.publish("doc1");
+        Either<ProblemDetail, DocumentView> result = service.publish("org1", "doc1");
 
         assertTrue(result.isLeft());
         assertEquals(VaultProblems.ALREADY_PUBLISHED, result.getLeft().getTitle());
     }
 
     @Test
-    void publishRejectedForNonMember() {
+    void publishOfAnotherOrganisationsDocumentIsNotFound() {
         VaultDocumentEntity doc = draftDoc();
         doc.setOrganisationId("org-not-mine");
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
 
-        Either<ProblemDetail, DocumentView> result = service.publish("doc1");
+        Either<ProblemDetail, DocumentView> result = service.publish("org1", "doc1");
 
         assertTrue(result.isLeft());
-        assertEquals(403, result.getLeft().getStatus());
+        assertEquals(404, result.getLeft().getStatus());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     // ==================== attested publish ====================
@@ -514,7 +514,7 @@ class VaultDocumentServiceTest {
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
         when(documentRepository.save(any(VaultDocumentEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Either<ProblemDetail, DocumentView> result = service.publish("doc1");
+        Either<ProblemDetail, DocumentView> result = service.publish("org1", "doc1");
 
         assertTrue(result.isRight());
         verifyNoInteractions(attestationFreezeGuardProvider, attestationConsumptionApiProvider, permissionChecker);
@@ -527,7 +527,7 @@ class VaultDocumentServiceTest {
      *  up: this is pure request-shape validation. */
     @Test
     void publishWithBlankCeremonyIdIsRejectedWithoutTouchingTheDocumentOrAttestationProviders() {
-        Either<ProblemDetail, DocumentView> result = service.publish("doc1", "   ");
+        Either<ProblemDetail, DocumentView> result = service.publish("org1", "doc1", "   ");
 
         assertTrue(result.isLeft());
         assertEquals(VaultProblems.ATTESTATION_CEREMONY_ID_BLANK, result.getLeft().getTitle());
@@ -541,7 +541,7 @@ class VaultDocumentServiceTest {
         when(documentRepository.findByIdForUpdate("doc1")).thenReturn(Optional.of(doc));
         // attestationFreezeGuardProvider/attestationConsumptionApiProvider.getIfAvailable() unstubbed -> null
 
-        Either<ProblemDetail, DocumentView> result = service.publish("doc1", "cer-1");
+        Either<ProblemDetail, DocumentView> result = service.publish("org1", "doc1", "cer-1");
 
         assertTrue(result.isLeft());
         assertEquals(422, result.getLeft().getStatus());
@@ -558,7 +558,7 @@ class VaultDocumentServiceTest {
         when(attestationFreezeGuardProvider.getIfAvailable()).thenReturn(attestationFreezeGuard);
         // attestationConsumptionApiProvider.getIfAvailable() unstubbed -> null
 
-        Either<ProblemDetail, DocumentView> result = service.publish("doc1", "cer-1");
+        Either<ProblemDetail, DocumentView> result = service.publish("org1", "doc1", "cer-1");
 
         assertTrue(result.isLeft());
         assertEquals(VaultProblems.ATTESTATION_UNAVAILABLE, result.getLeft().getTitle());
@@ -582,7 +582,7 @@ class VaultDocumentServiceTest {
         contentChanged.setTitle(VaultProblems.ATTESTED_CONTENT_CHANGED);
         when(attestationFreezeGuard.verifyFreshness(doc, "cer-1")).thenReturn(Optional.of(contentChanged));
 
-        Either<ProblemDetail, DocumentView> result = service.publish("doc1", "cer-1");
+        Either<ProblemDetail, DocumentView> result = service.publish("org1", "doc1", "cer-1");
 
         assertTrue(result.isLeft());
         assertEquals(VaultProblems.ATTESTED_CONTENT_CHANGED, result.getLeft().getTitle());
@@ -611,7 +611,7 @@ class VaultDocumentServiceTest {
         when(attestationConsumptionApi.validateAndConsume("cer-1", "DOCUMENT", "doc1", "sender"))
                 .thenReturn(Either.left(ceremonyExpired));
 
-        Either<ProblemDetail, DocumentView> result = service.publish("doc1", "cer-1");
+        Either<ProblemDetail, DocumentView> result = service.publish("org1", "doc1", "cer-1");
 
         assertTrue(result.isLeft());
         assertEquals("CEREMONY_EXPIRED", result.getLeft().getTitle());
@@ -638,7 +638,7 @@ class VaultDocumentServiceTest {
         when(attestationConsumptionApi.validateAndConsume("cer-1", "DOCUMENT", "doc1", "sender"))
                 .thenReturn(Either.left(ceremonyNotFound));
 
-        Either<ProblemDetail, DocumentView> result = service.publish("doc1", "cer-1");
+        Either<ProblemDetail, DocumentView> result = service.publish("org1", "doc1", "cer-1");
 
         assertTrue(result.isLeft());
         assertEquals("CEREMONY_NOT_FOUND", result.getLeft().getTitle());
@@ -661,7 +661,7 @@ class VaultDocumentServiceTest {
         agentUnavailable.setTitle("KERI_AGENT_UNAVAILABLE");
         when(attestationFreezeGuard.verifyFreshness(doc, "cer-1")).thenReturn(Optional.of(agentUnavailable));
 
-        Either<ProblemDetail, DocumentView> result = service.publish("doc1", "cer-1");
+        Either<ProblemDetail, DocumentView> result = service.publish("org1", "doc1", "cer-1");
 
         assertTrue(result.isLeft());
         assertEquals("KERI_AGENT_UNAVAILABLE", result.getLeft().getTitle());
@@ -688,7 +688,7 @@ class VaultDocumentServiceTest {
         when(attestationConsumptionApi.validateAndConsume("cer-1", "DOCUMENT", "doc1", "sender"))
                 .thenReturn(Either.left(linkStoreDown));
 
-        Either<ProblemDetail, DocumentView> result = service.publish("doc1", "cer-1");
+        Either<ProblemDetail, DocumentView> result = service.publish("org1", "doc1", "cer-1");
 
         assertTrue(result.isLeft());
         assertEquals("IDENTITY_STORE_UNAVAILABLE", result.getLeft().getTitle());
@@ -712,7 +712,7 @@ class VaultDocumentServiceTest {
                 .thenReturn(Either.right(
                         new ConsumedAttestation("cer-1", "aid-1", "Edigest", "Epayloadsaid", "1447", "0")));
 
-        Either<ProblemDetail, DocumentView> result = service.publish("doc1", "cer-1");
+        Either<ProblemDetail, DocumentView> result = service.publish("org1", "doc1", "cer-1");
 
         assertTrue(result.isRight());
         assertEquals(VaultDocumentStatus.PUBLISHED, result.get().status());

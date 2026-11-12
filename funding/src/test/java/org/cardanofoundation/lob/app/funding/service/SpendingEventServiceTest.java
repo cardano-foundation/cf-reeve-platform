@@ -1082,8 +1082,8 @@ class SpendingEventServiceTest {
     }
 
     @Test
-    void update_returnsLeft_whenOrganisationMismatch() {
-        // The body claims a different organisation than the event's — must not re-target its projects.
+    void update_eventOfAnotherOrganisation_isNotFound() {
+        // The body names a different organisation than the event's — must not re-target its projects.
         when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.FUNDING, EventStatus.DRAFT)));
 
         SpendingEventCreateRequest request = fundingRequest(fundingMilestone("MS-1", ALLOCATED));
@@ -1091,7 +1091,7 @@ class SpendingEventServiceTest {
 
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.update("e1", request);
 
-        assertThat(result.getLeft().getTitle()).isEqualTo(ErrorTitleConstants.ORGANISATION_MISMATCH);
+        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.NOT_FOUND.value());
         verify(fundingEventRepository, never()).saveAndFlush(any());
     }
 
@@ -1282,12 +1282,12 @@ class SpendingEventServiceTest {
     }
 
     @Test
-    void publishEvents_returns401_whenUserCannotAccessOrg() {
+    void publishEvents_returns403_whenUserCannotAccessOrg() {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
         SpendingEventBulkPublishView view = spendingEventService.publishEvents("org1", List.of("e1"));
 
-        assertThat(view.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(view.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
         verify(fundingEventRepository, never()).findByIdForUpdate(any());
     }
 
@@ -1518,13 +1518,13 @@ class SpendingEventServiceTest {
     // --- view-returning API + org access ---
 
     @Test
-    void listEvents_returns401_whenUserCannotAccessOrg() {
+    void listEvents_returns403_whenUserCannotAccessOrg() {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
         PagedResponse<SpendingEventView> result = spendingEventService.listEvents(
                 "org1", new SpendingEventFilterRequest(), PAGEABLE);
 
-        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
     }
 
     @Test
@@ -1618,13 +1618,13 @@ class SpendingEventServiceTest {
     }
 
     @Test
-    void listEventsByProject_returns401_whenUserCannotAccessOrg() {
+    void listEventsByProject_returns403_whenUserCannotAccessOrg() {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
         PagedResponse<SpendingEventView> result = spendingEventService.listEventsByProject(
                 "p1", "org1", Optional.empty(), Optional.empty(), PAGEABLE);
 
-        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
         verify(projectRepository, never()).findByIdAndOrganisationId(any(), any());
     }
 
@@ -1638,11 +1638,11 @@ class SpendingEventServiceTest {
     }
 
     @Test
-    void getEvent_returns401_whenUserCannotAccessOrg() {
+    void getEvent_returns403_whenUserCannotAccessOrg() {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
         assertThat(spendingEventService.getEvent("e1", "org1").getError().orElseThrow().getStatus())
-                .isEqualTo(HttpStatus.UNAUTHORIZED.value());
+                .isEqualTo(HttpStatus.FORBIDDEN.value());
     }
 
     @Test
@@ -1684,7 +1684,7 @@ class SpendingEventServiceTest {
         Either<ProblemDetail, FundingEventEntity> result = spendingEventService.create(request);
 
         assertThat(result.isLeft()).isTrue();
-        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
         verify(fundingEventRepository, never()).saveAndFlush(any());
     }
 
@@ -1703,30 +1703,29 @@ class SpendingEventServiceTest {
     }
 
     @Test
-    void updateEvent_returns401_whenUserCannotAccessOrg() {
-        when(fundingEventRepository.findById("e1")).thenReturn(Optional.of(eventEntity(EventType.SPENDING, EventStatus.DRAFT)));
+    void updateEvent_returns403_whenUserCannotAccessOrg() {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
         SpendingEventView result = spendingEventService.updateEvent("e1", fundingRequest(fundingMilestone("MS-1", ALLOCATED)));
 
-        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
     }
 
     @Test
-    void publishEvent_returns401_whenUserCannotAccessOrg() {
+    void publishEvent_returns403_whenUserCannotAccessOrg() {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
         assertThat(spendingEventService.publishEvent("e1", "org1").getError().orElseThrow().getStatus())
-                .isEqualTo(HttpStatus.UNAUTHORIZED.value());
+                .isEqualTo(HttpStatus.FORBIDDEN.value());
     }
 
     @Test
-    void deleteEvent_returns401_whenUserCannotAccessOrg() {
+    void deleteEvent_returns403_whenUserCannotAccessOrg() {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
         Optional<ProblemDetail> result = spendingEventService.deleteEvent("e1", "org1");
 
-        assertThat(result.orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(result.orElseThrow().getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
         verify(fundingEventRepository, never()).delete(any());
     }
 
@@ -1744,12 +1743,12 @@ class SpendingEventServiceTest {
     // --- deleteOrphanedErrorEvents (LOB-2365 follow-up) ---
 
     @Test
-    void deleteOrphanedErrorEvents_returns401_whenUserCannotAccessOrg() {
+    void deleteOrphanedErrorEvents_returns403_whenUserCannotAccessOrg() {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
         OrphanEventsCleanupView result = spendingEventService.deleteOrphanedErrorEvents("org1");
 
-        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
         verify(fundingEventRepository, never()).deleteAll(any());
     }
 
