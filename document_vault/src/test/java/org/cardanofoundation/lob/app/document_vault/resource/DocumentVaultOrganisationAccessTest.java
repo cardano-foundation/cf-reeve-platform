@@ -1,15 +1,21 @@
 package org.cardanofoundation.lob.app.document_vault.resource;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -17,12 +23,18 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 
+import io.vavr.control.Either;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import org.cardanofoundation.lob.app.document_vault.domain.request.RegisterKeyRequest;
+import org.cardanofoundation.lob.app.document_vault.domain.request.UpdateAddressbookEntryRequest;
 import org.cardanofoundation.lob.app.document_vault.domain.request.UploadDocumentRequest;
+import org.cardanofoundation.lob.app.document_vault.domain.view.PagedResponse;
+import org.cardanofoundation.lob.app.document_vault.service.AddressbookService;
+import org.cardanofoundation.lob.app.document_vault.service.CardImportService;
 import org.cardanofoundation.lob.app.document_vault.service.RecipientResolutionService;
 import org.cardanofoundation.lob.app.document_vault.service.VaultDocumentService;
 import org.cardanofoundation.lob.app.document_vault.service.VaultKeyService;
@@ -43,7 +55,7 @@ class DocumentVaultOrganisationAccessTest {
 
     // Not a @Configuration, so the module's integration tests don't pick it up through their component scan
     @EnableMethodSecurity
-    @Import({VaultDocumentController.class, VaultKeyController.class, PermissionChecker.class})
+    @Import({VaultDocumentController.class, VaultKeyController.class, AddressbookController.class, PermissionChecker.class})
     static class MethodSecurity {
     }
 
@@ -60,11 +72,17 @@ class DocumentVaultOrganisationAccessTest {
     private VaultKeyService vaultKeyService;
     @MockitoBean
     private RecipientResolutionService recipientResolutionService;
+    @MockitoBean
+    private AddressbookService addressbookService;
+    @MockitoBean
+    private CardImportService cardImportService;
 
     @Autowired
     private VaultDocumentController vaultDocumentController;
     @Autowired
     private VaultKeyController vaultKeyController;
+    @Autowired
+    private AddressbookController addressbookController;
 
     @BeforeEach
     void signIn() {
@@ -92,6 +110,30 @@ class DocumentVaultOrganisationAccessTest {
         assertDenied(() -> vaultKeyController.deleteKey("key", ORG_B));
         // reading is what the auditor holds in B
         assertAllowed(() -> vaultDocumentController.fetch("document", ORG_B));
+    }
+
+    @Test
+    void addressbookChangesNeedTheManagerRights() {
+        assertDenied(() -> addressbookController.updateEntry("entry", ORG_B, new UpdateAddressbookEntryRequest()));
+        assertDenied(() -> addressbookController.deleteEntry("entry", ORG_B));
+    }
+
+    @Test
+    void allowedCalls_reachTheServiceInTheCheckedOrganisation() {
+        when(vaultKeyService.delete(ORG_A, "key")).thenReturn(Optional.empty());
+        when(vaultKeyService.listMyKeys(ORG_B, Pageable.unpaged())).thenReturn(PagedResponse.ofList(List.of(), Pageable.unpaged()));
+        when(vaultDocumentService.fetch(ORG_B, "document")).thenReturn(Either.right(null));
+        when(addressbookService.update(any(), any(), any())).thenReturn(Either.right(null));
+        when(addressbookService.delete(ORG_A, "entry")).thenReturn(Optional.empty());
+
+        assertThat(vaultKeyController.deleteKey("key", ORG_A).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(vaultKeyController.listMyKeys(ORG_B, Pageable.unpaged()).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(vaultDocumentController.fetch("document", ORG_B).getStatusCode()).isEqualTo(HttpStatus.OK);
+        UpdateAddressbookEntryRequest update = new UpdateAddressbookEntryRequest();
+        assertThat(addressbookController.updateEntry("entry", ORG_A, update).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(addressbookController.deleteEntry("entry", ORG_A).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+
+        verify(addressbookService).update(ORG_A, "entry", update);
     }
 
     @Test

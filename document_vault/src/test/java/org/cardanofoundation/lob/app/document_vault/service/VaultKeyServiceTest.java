@@ -242,6 +242,19 @@ class VaultKeyServiceTest {
         assertEquals(403, result.getLeft().getStatus());
     }
 
+    @Test
+    void listMyKeysReadsOnlyTheCallersKeysOfTheOrganisation() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(keyRepository.findByAccountIdAndOrganisationId("acc1", "org1", pageable))
+                .thenReturn(new PageImpl<>(List.of(orgKey("k1", "acc1"))));
+
+        PagedResponse<VaultKeyView> result = service.listMyKeys("org1", pageable);
+
+        assertEquals(1, result.total());
+        assertEquals("k1", result.content().get(0).keyId());
+        assertEquals("acc1", result.content().get(0).accountId());
+    }
+
     private VaultKeyEntity orgKey(String keyId, String accountId) {
         VaultKeyEntity key = new VaultKeyEntity();
         key.setId(keyId);

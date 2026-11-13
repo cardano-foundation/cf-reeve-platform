@@ -1338,6 +1338,15 @@ class SpendingEventServiceTest {
         verify(fundingEventRepository, never()).delete(any());
     }
 
+    @Test
+    void delete_returnsNotFound_whenEventMissing() {
+        when(fundingEventRepository.findById("e-missing")).thenReturn(Optional.empty());
+
+        assertThat(spendingEventService.delete("e-missing").getLeft().getTitle())
+                .isEqualTo(ErrorTitleConstants.SPENDING_EVENT_NOT_FOUND);
+        verify(fundingEventRepository, never()).delete(any());
+    }
+
     // --- toView / toPublishView ---
 
     @Test

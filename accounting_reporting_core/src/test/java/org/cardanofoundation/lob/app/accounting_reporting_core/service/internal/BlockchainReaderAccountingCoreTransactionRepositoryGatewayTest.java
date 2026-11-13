@@ -434,6 +434,57 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
     }
 
     @Test
+    void approveTransactions_transactionWithoutOrganisation_isNotFound() {
+        TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setOrganisationId(ORGANISATION_ID);
+        transactionsRequest.setTransactionIds(Set.of(new TransactionId("tx_without_org")));
+
+        TransactionEntity transaction = new TransactionEntity();
+        transaction.setId("tx_without_org");
+        transaction.setOverallStatus(OK);
+        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of("tx_without_org")))
+                .thenReturn(List.of(transaction));
+
+        assertThat(transactionRepositoryGateway.approveTransactions(transactionsRequest)).singleElement().satisfies(result ->
+                assertThat(result.getLeft().getProblem().getTitle()).isEqualTo("TX_NOT_FOUND"));
+        assertThat(transaction.getTransactionApproved()).isNotEqualTo(Boolean.TRUE);
+    }
+
+    @Test
+    void approveTransactions_requestWithoutOrganisation_findsNothing() {
+        TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setTransactionIds(Set.of(new TransactionId("tx_id")));
+
+        TransactionEntity transaction = new TransactionEntity();
+        transaction.setId("tx_id");
+        transaction.setOrganisation(Organisation.builder().id(ORGANISATION_ID).build());
+        transaction.setOverallStatus(OK);
+        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of("tx_id")))
+                .thenReturn(List.of(transaction));
+
+        assertThat(transactionRepositoryGateway.approveTransactions(transactionsRequest)).singleElement().satisfies(result ->
+                assertThat(result.getLeft().getProblem().getTitle()).isEqualTo("TX_NOT_FOUND"));
+        assertThat(transaction.getTransactionApproved()).isNotEqualTo(Boolean.TRUE);
+    }
+
+    @Test
+    void approveTransactions_lockFailure_returnsDbErrorForEveryTransaction() {
+        TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setOrganisationId(ORGANISATION_ID);
+        transactionsRequest.setTransactionIds(Set.of(new TransactionId("tx_1"), new TransactionId("tx_2")));
+        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of("tx_1", "tx_2")))
+                .thenThrow(new DataAccessException("Lock timeout") {
+                });
+
+        List<Either<IdentifiableProblem, TransactionEntity>> results = transactionRepositoryGateway.approveTransactions(transactionsRequest);
+
+        assertThat(results).hasSize(2).allSatisfy(result ->
+                assertThat(result.getLeft().getProblem().getTitle()).isEqualTo("DB_ERROR"));
+        assertThat(results).extracting(result -> result.getLeft().getId()).containsExactly("tx_1", "tx_2");
+        verify(accountingCoreTransactionRepository, never()).saveAll(anyList());
+    }
+
+    @Test
     void approveTransactions_shouldHandleDataAccessExceptionDuringApproval() {
         // Arrange
         val transactionId = new TransactionId("tx_id");
