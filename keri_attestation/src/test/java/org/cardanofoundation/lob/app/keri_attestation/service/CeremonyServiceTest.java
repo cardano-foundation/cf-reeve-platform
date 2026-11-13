@@ -80,6 +80,10 @@ class CeremonyServiceTest {
         // The ceremony records its target's organisation so blockchain_publisher's organisation-scoped
         // dispatcher can pick up the AUTH_BEGIN transaction later.
         lenient().when(targetProvider.organisationId(anyString())).thenReturn(Optional.of(ORGANISATION_ID));
+        // The organisation-scoped finder answers like its query: the row stubbed by id, if it is in that organisation
+        lenient().when(ceremonyRepository.findByIdAndOrganisationIdForUpdate(anyString(), anyString())).thenAnswer(invocation ->
+                ceremonyRepository.findByIdForUpdate(invocation.getArgument(0))
+                        .filter(ceremony -> invocation.getArgument(1).equals(ceremony.getOrganisationId())));
     }
 
     private KeriAttestationCeremonyEntity ceremony(CeremonyState state) {
@@ -89,6 +93,7 @@ class CeremonyServiceTest {
         ceremony.setBindingVersion(1);
         ceremony.setTargetType("DOCUMENT");
         ceremony.setTargetId("doc-1");
+        ceremony.setOrganisationId(ORGANISATION_ID);
         ceremony.setState(state);
         ceremony.setAttemptGeneration(0);
         ceremony.setUpdatedAt(LocalDateTime.now());
@@ -114,7 +119,7 @@ class CeremonyServiceTest {
         when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.empty());
         when(ceremonyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        Either<ProblemDetail, CeremonyView> result = service.create(USER, "DOCUMENT", "doc-1");
+        Either<ProblemDetail, CeremonyView> result = service.create(USER, ORGANISATION_ID, "DOCUMENT", "doc-1");
 
         assertTrue(result.isRight());
         CeremonyView view = result.get();
@@ -129,7 +134,7 @@ class CeremonyServiceTest {
         when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.of(link(1, "Eaid", null, null)));
         when(ceremonyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        CeremonyView view = service.create(USER, "DOCUMENT", "doc-1").get();
+        CeremonyView view = service.create(USER, ORGANISATION_ID, "DOCUMENT", "doc-1").get();
 
         assertEquals(CeremonyState.OOBI_RESOLVED, view.state());
         assertFalse(view.requiredSteps().oobi());
@@ -142,7 +147,7 @@ class CeremonyServiceTest {
         when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.of(link(1, "Eaid", "Ecred", null)));
         when(ceremonyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        CeremonyView view = service.create(USER, "DOCUMENT", "doc-1").get();
+        CeremonyView view = service.create(USER, ORGANISATION_ID, "DOCUMENT", "doc-1").get();
 
         assertEquals(CeremonyState.CREDENTIAL_RECEIVED, view.state());
         assertFalse(view.requiredSteps().oobi());
@@ -156,7 +161,7 @@ class CeremonyServiceTest {
                 .thenReturn(Optional.of(link(1, "Eaid", "Ecred", "a".repeat(64))));
         when(ceremonyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        CeremonyView view = service.create(USER, "DOCUMENT", "doc-1").get();
+        CeremonyView view = service.create(USER, ORGANISATION_ID, "DOCUMENT", "doc-1").get();
 
         assertEquals(CeremonyState.AUTH_BEGIN_CONFIRMED, view.state());
         assertFalse(view.requiredSteps().oobi());
@@ -174,7 +179,7 @@ class CeremonyServiceTest {
         when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.of(assertedLink));
         when(ceremonyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        CeremonyView view = service.create(USER, "DOCUMENT", "doc-1").get();
+        CeremonyView view = service.create(USER, ORGANISATION_ID, "DOCUMENT", "doc-1").get();
 
         assertEquals(CeremonyState.AUTH_BEGIN_CONFIRMED, view.state());
         assertFalse(view.requiredSteps().authBegin());
@@ -185,7 +190,7 @@ class CeremonyServiceTest {
     void createRejectsWhenActiveCeremonyLimitReached() {
         when(ceremonyRepository.countByUserIdAndStateNotIn(USER, TERMINAL)).thenReturn(3L);
 
-        Either<ProblemDetail, CeremonyView> result = service.create(USER, "DOCUMENT", "doc-1");
+        Either<ProblemDetail, CeremonyView> result = service.create(USER, ORGANISATION_ID, "DOCUMENT", "doc-1");
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CEREMONY_LIMIT_REACHED, result.getLeft().getTitle());
@@ -197,7 +202,7 @@ class CeremonyServiceTest {
     void createRejectsAnUnknownTargetTypeWithNoRegisteredProvider() {
         when(targetProviderRegistry.forType("UNKNOWN")).thenReturn(Optional.empty());
 
-        Either<ProblemDetail, CeremonyView> result = service.create(USER, "UNKNOWN", "target-1");
+        Either<ProblemDetail, CeremonyView> result = service.create(USER, ORGANISATION_ID, "UNKNOWN", "target-1");
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.TARGET_MISMATCH, result.getLeft().getTitle());
@@ -210,7 +215,7 @@ class CeremonyServiceTest {
         ProblemDetail authProblem = KeriAttestationProblems.forbidden("user may not publish document doc-1");
         when(targetProvider.authorize("doc-1", USER)).thenReturn(Optional.of(authProblem));
 
-        Either<ProblemDetail, CeremonyView> result = service.create(USER, "DOCUMENT", "doc-1");
+        Either<ProblemDetail, CeremonyView> result = service.create(USER, ORGANISATION_ID, "DOCUMENT", "doc-1");
 
         assertTrue(result.isLeft());
         assertEquals(authProblem, result.getLeft());
@@ -223,7 +228,7 @@ class CeremonyServiceTest {
         when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.empty());
         when(ceremonyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        Either<ProblemDetail, CeremonyView> result = service.create(USER, "DOCUMENT", "doc-1");
+        Either<ProblemDetail, CeremonyView> result = service.create(USER, ORGANISATION_ID, "DOCUMENT", "doc-1");
 
         assertTrue(result.isRight());
         verify(targetProvider).authorize("doc-1", USER);
@@ -241,7 +246,7 @@ class CeremonyServiceTest {
         when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.empty());
         when(ceremonyRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        Either<ProblemDetail, CeremonyView> result = service.create(USER, "DOCUMENT", "doc-1");
+        Either<ProblemDetail, CeremonyView> result = service.create(USER, ORGANISATION_ID, "DOCUMENT", "doc-1");
 
         assertTrue(result.isRight());
         verify(identityLinkRepository).findByUserIdForUpdate(USER);
@@ -292,7 +297,7 @@ class CeremonyServiceTest {
         when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony(CeremonyState.CREATED)));
 
         Either<ProblemDetail, KeriAttestationCeremonyEntity> result = service.beginStep(
-                CEREMONY_ID, USER, CeremonyState.OOBI_RESOLVED, CeremonyState.CREDENTIAL_REQUESTED, false);
+                CEREMONY_ID, ORGANISATION_ID, USER, CeremonyState.OOBI_RESOLVED, CeremonyState.CREDENTIAL_REQUESTED, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CEREMONY_INVALID_STATE, result.getLeft().getTitle());
@@ -303,11 +308,45 @@ class CeremonyServiceTest {
         when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony(CeremonyState.OOBI_RESOLVED)));
 
         Either<ProblemDetail, KeriAttestationCeremonyEntity> result = service.beginStep(
-                CEREMONY_ID, USER, CeremonyState.OOBI_RESOLVED, CeremonyState.CREDENTIAL_REQUESTED, false);
+                CEREMONY_ID, ORGANISATION_ID, USER, CeremonyState.OOBI_RESOLVED, CeremonyState.CREDENTIAL_REQUESTED, false);
 
         assertTrue(result.isRight());
         assertEquals(CeremonyState.CREDENTIAL_REQUESTED, result.get().getState());
         assertEquals(0, result.get().getAttemptGeneration());
+    }
+
+    @Test
+    void beginStepOnACeremonyOfAnotherOrganisationIsNotFoundAndChangesNothing() {
+        KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.OOBI_RESOLVED);
+        when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
+
+        Either<ProblemDetail, KeriAttestationCeremonyEntity> result = service.beginStep(
+                CEREMONY_ID, "org-other", USER, CeremonyState.OOBI_RESOLVED, CeremonyState.CREDENTIAL_REQUESTED, false);
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.CEREMONY_NOT_FOUND, result.getLeft().getTitle());
+        assertEquals(CeremonyState.OOBI_RESOLVED, ceremony.getState());
+        assertEquals(0, ceremony.getAttemptGeneration());
+        verify(ceremonyRepository, never()).save(any());
+    }
+
+    @Test
+    void getOfACeremonyOfAnotherOrganisationIsNotFound() {
+        when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony(CeremonyState.OOBI_RESOLVED)));
+
+        Either<ProblemDetail, CeremonyView> result = service.get(CEREMONY_ID, "org-other", USER);
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.CEREMONY_NOT_FOUND, result.getLeft().getTitle());
+    }
+
+    @Test
+    void createForATargetOfAnotherOrganisationIsRefused() {
+        Either<ProblemDetail, CeremonyView> result = service.create(USER, "org-other", "DOCUMENT", "doc-1");
+
+        assertTrue(result.isLeft());
+        assertEquals(KeriAttestationProblems.TARGET_MISMATCH, result.getLeft().getTitle());
+        verify(ceremonyRepository, never()).save(any());
     }
 
     @Test
@@ -317,7 +356,7 @@ class CeremonyServiceTest {
         when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
 
         Either<ProblemDetail, KeriAttestationCeremonyEntity> result = service.beginStep(
-                CEREMONY_ID, USER, CeremonyState.OOBI_RESOLVED, CeremonyState.CREDENTIAL_REQUESTED, true);
+                CEREMONY_ID, ORGANISATION_ID, USER, CeremonyState.OOBI_RESOLVED, CeremonyState.CREDENTIAL_REQUESTED, true);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.STEP_COOLDOWN, result.getLeft().getTitle());
@@ -331,7 +370,7 @@ class CeremonyServiceTest {
         when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
 
         Either<ProblemDetail, KeriAttestationCeremonyEntity> result = service.beginStep(
-                CEREMONY_ID, USER, CeremonyState.OOBI_RESOLVED, CeremonyState.CREDENTIAL_REQUESTED, true);
+                CEREMONY_ID, ORGANISATION_ID, USER, CeremonyState.OOBI_RESOLVED, CeremonyState.CREDENTIAL_REQUESTED, true);
 
         assertTrue(result.isRight());
         assertEquals(1, result.get().getAttemptGeneration());
@@ -343,7 +382,7 @@ class CeremonyServiceTest {
         when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony(CeremonyState.OOBI_RESOLVED)));
 
         Either<ProblemDetail, KeriAttestationCeremonyEntity> result = service.beginStep(
-                CEREMONY_ID, USER, CeremonyState.OOBI_RESOLVED, CeremonyState.CREDENTIAL_REQUESTED, true);
+                CEREMONY_ID, ORGANISATION_ID, USER, CeremonyState.OOBI_RESOLVED, CeremonyState.CREDENTIAL_REQUESTED, true);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CEREMONY_INVALID_STATE, result.getLeft().getTitle());
@@ -356,7 +395,7 @@ class CeremonyServiceTest {
         when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
 
         Either<ProblemDetail, KeriAttestationCeremonyEntity> result = service.beginStep(
-                CEREMONY_ID, USER, CeremonyState.CREATED, CeremonyState.OOBI_RESOLVED, false);
+                CEREMONY_ID, ORGANISATION_ID, USER, CeremonyState.CREATED, CeremonyState.OOBI_RESOLVED, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CEREMONY_EXPIRED, result.getLeft().getTitle());
@@ -391,7 +430,7 @@ class CeremonyServiceTest {
         when(identityLinkRepository.findById(USER)).thenReturn(Optional.of(link(1, "Eaid", null, null)));
 
         Either<ProblemDetail, KeriAttestationCeremonyEntity> result = service.beginStep(
-                CEREMONY_ID, USER, CeremonyState.OOBI_RESOLVED, CeremonyState.CREDENTIAL_REQUESTED, false);
+                CEREMONY_ID, ORGANISATION_ID, USER, CeremonyState.OOBI_RESOLVED, CeremonyState.CREDENTIAL_REQUESTED, false);
 
         assertTrue(result.isRight());
         assertEquals(CeremonyState.CREDENTIAL_REQUESTED, result.get().getState());
@@ -419,7 +458,7 @@ class CeremonyServiceTest {
         when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
 
         Either<ProblemDetail, KeriAttestationCeremonyEntity> result = service.beginStep(
-                CEREMONY_ID, USER, CeremonyState.CREDENTIAL_RECEIVED, CeremonyState.AUTH_BEGIN_SUBMITTED, true);
+                CEREMONY_ID, ORGANISATION_ID, USER, CeremonyState.CREDENTIAL_RECEIVED, CeremonyState.AUTH_BEGIN_SUBMITTED, true);
 
         assertTrue(result.isRight());
         assertEquals(CeremonyState.AUTH_BEGIN_SUBMITTED, result.get().getState());
@@ -614,7 +653,7 @@ class CeremonyServiceTest {
 
         // Step B begins: CREDENTIAL_RECEIVED -> AUTH_BEGIN_SUBMITTED, still generation 0 (non-retry).
         Either<ProblemDetail, KeriAttestationCeremonyEntity> beginResult = service.beginStep(
-                CEREMONY_ID, USER, CeremonyState.CREDENTIAL_RECEIVED, CeremonyState.AUTH_BEGIN_SUBMITTED, false);
+                CEREMONY_ID, ORGANISATION_ID, USER, CeremonyState.CREDENTIAL_RECEIVED, CeremonyState.AUTH_BEGIN_SUBMITTED, false);
         assertTrue(beginResult.isRight());
         assertEquals(CeremonyState.AUTH_BEGIN_SUBMITTED, ceremony.getState());
         assertEquals(0, ceremony.getAttemptGeneration());
@@ -701,7 +740,7 @@ class CeremonyServiceTest {
         when(ceremonyRepository.findByIdForUpdate(CEREMONY_ID)).thenReturn(Optional.of(ceremony));
 
         Either<ProblemDetail, KeriAttestationCeremonyEntity> begun = service.beginStep(
-                CEREMONY_ID, USER, CeremonyState.ATTEST_REQUESTED, CeremonyState.ATTEST_REQUESTED, true);
+                CEREMONY_ID, ORGANISATION_ID, USER, CeremonyState.ATTEST_REQUESTED, CeremonyState.ATTEST_REQUESTED, true);
         assertTrue(begun.isRight());
         int staleGeneration = 0;
         assertEquals(1, ceremony.getAttemptGeneration());

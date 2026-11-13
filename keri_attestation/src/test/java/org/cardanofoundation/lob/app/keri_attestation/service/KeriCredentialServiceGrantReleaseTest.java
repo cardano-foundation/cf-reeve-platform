@@ -75,6 +75,8 @@ import org.cardanofoundation.lob.app.keri_attestation.service.KeriNotificationCo
 class KeriCredentialServiceGrantReleaseTest {
 
     private static final String CEREMONY_ID = "cer-1";
+
+    private static final String ORGANISATION_ID = "org-1";
     private static final String USER_ID = "user-1";
     private static final int GENERATION = 2;
     private static final String LINKED_AID = "ELINKEDAID000000000000000000000000000";
@@ -223,7 +225,7 @@ class KeriCredentialServiceGrantReleaseTest {
     }
 
     private void beginFreshStep() {
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony()));
     }
 
@@ -254,7 +256,7 @@ class KeriCredentialServiceGrantReleaseTest {
                 .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
                         Map.of("i", LINKED_AID, "r", "/exn/ipex/grant", "e", Map.of()), "/exn/ipex/grant")));
 
-        assertFailedThenReleased(service(mockCorrelator).presentCredential(CEREMONY_ID, USER_ID, false),
+        assertFailedThenReleased(service(mockCorrelator).presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false),
                 KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED);
     }
 
@@ -264,7 +266,7 @@ class KeriCredentialServiceGrantReleaseTest {
         acceptedDirectGrant();
         when(ipex.admit(any())).thenThrow(new IllegalStateException("admit refused"));
 
-        assertFailedThenReleased(service(mockCorrelator).presentCredential(CEREMONY_ID, USER_ID, false),
+        assertFailedThenReleased(service(mockCorrelator).presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false),
                 KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED);
     }
 
@@ -275,7 +277,7 @@ class KeriCredentialServiceGrantReleaseTest {
         admitSucceeds();
         when(cesrFetcher.fetch(CREDENTIAL_SAID)).thenReturn(Optional.empty());
 
-        assertFailedThenReleased(service(mockCorrelator).presentCredential(CEREMONY_ID, USER_ID, false),
+        assertFailedThenReleased(service(mockCorrelator).presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false),
                 KeriAttestationProblems.CREDENTIAL_REQUEST_FAILED);
     }
 
@@ -289,7 +291,7 @@ class KeriCredentialServiceGrantReleaseTest {
                 .thenReturn(Either.left(ProblemDetail.forStatusAndDetail(
                         org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "untrusted issuer")));
 
-        assertFailedThenReleased(service(mockCorrelator).presentCredential(CEREMONY_ID, USER_ID, false),
+        assertFailedThenReleased(service(mockCorrelator).presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false),
                 KeriAttestationProblems.CREDENTIAL_REJECTED);
     }
 
@@ -301,7 +303,7 @@ class KeriCredentialServiceGrantReleaseTest {
         when(cesrFetcher.fetch(CREDENTIAL_SAID)).thenReturn(Optional.of("cesr"));
         when(validator.validate(any(), any(), any(), any())).thenThrow(new IllegalArgumentException("bad chain"));
 
-        assertFailedThenReleased(service(mockCorrelator).presentCredential(CEREMONY_ID, USER_ID, false),
+        assertFailedThenReleased(service(mockCorrelator).presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false),
                 KeriAttestationProblems.CREDENTIAL_REJECTED);
     }
 
@@ -317,7 +319,7 @@ class KeriCredentialServiceGrantReleaseTest {
         when(validator.validate(any(), any(), any(), any())).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(
                 org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "untrusted issuer")));
 
-        assertFailedThenReleased(service(mockCorrelator).presentCredential(CEREMONY_ID, USER_ID, false),
+        assertFailedThenReleased(service(mockCorrelator).presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false),
                 KeriAttestationProblems.CREDENTIAL_REJECTED);
     }
 
@@ -339,12 +341,12 @@ class KeriCredentialServiceGrantReleaseTest {
         when(validator.validate(any(), any(), any(), any())).thenReturn(Either.left(ProblemDetail.forStatusAndDetail(
                 org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "untrusted issuer")));
         KeriCredentialService service = service(new KeriNotificationCorrelator(keriClient, properties()));
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony()))
                 .thenReturn(Either.right(ceremony()));
 
-        Either<ProblemDetail, CeremonyView> first = service.presentCredential(CEREMONY_ID, USER_ID, false);
-        Either<ProblemDetail, CeremonyView> second = service.presentCredential(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> first = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> second = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertEquals(KeriAttestationProblems.CREDENTIAL_REJECTED, first.getLeft().getTitle());
         assertTrue(queue.isEmpty(), "the rejected grant must be gone from the agent's queue");

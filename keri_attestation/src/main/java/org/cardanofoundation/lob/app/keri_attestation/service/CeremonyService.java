@@ -81,7 +81,8 @@ public class CeremonyService implements AttestationConsumptionApi {
      * only inserts a new one — so it cannot participate in the ceremony-before-link ordering
      * {@link #completeStep} documents.
      */
-    public Either<ProblemDetail, CeremonyView> create(String userId, String targetType, String targetId) {
+    public Either<ProblemDetail, CeremonyView> create(String userId, String organisationId, String targetType,
+            String targetId) {
         // Unlocked read-then-write: two concurrent creates for the same user can both pass this check
         // before either inserts, so the limit can be exceeded by one. Accepted — a soft per-user cap is
         // not worth a row lock on every create.
@@ -107,10 +108,15 @@ public class CeremonyService implements AttestationConsumptionApi {
         // dispatcher is organisation-scoped, and by then this module can no longer ask the provider
         // (the ceremony may be resumed from another request). Refuse rather than create a ceremony
         // whose AUTH_BEGIN could never be dispatched.
-        Optional<String> organisationId = providerOpt.get().organisationId(targetId);
-        if (organisationId.isEmpty()) {
+        Optional<String> targetOrganisationId = providerOpt.get().organisationId(targetId);
+        if (targetOrganisationId.isEmpty()) {
             return Either.left(KeriAttestationProblems.unprocessable(KeriAttestationProblems.TARGET_MISMATCH,
                     "Target %s/%s has no resolvable organisation.".formatted(targetType, targetId)));
+        }
+        // The endpoint checked the caller's access to the organisation in the path, so the target must be in it
+        if (!targetOrganisationId.get().equals(organisationId)) {
+            return Either.left(KeriAttestationProblems.unprocessable(KeriAttestationProblems.TARGET_MISMATCH,
+                    "Target %s/%s is not in organisation %s.".formatted(targetType, targetId, organisationId)));
         }
 
         // The locked finder, not a plain findById — see this method's javadoc.
@@ -125,7 +131,7 @@ public class CeremonyService implements AttestationConsumptionApi {
         ceremony.setBindingVersion(bindingVersion);
         ceremony.setTargetType(targetType);
         ceremony.setTargetId(targetId);
-        ceremony.setOrganisationId(organisationId.get());
+        ceremony.setOrganisationId(organisationId);
         ceremony.setState(initialState);
         ceremony.setAttemptGeneration(0);
         ceremony.setExpiresAt(now.plus(properties.ceremonyTtl()));
@@ -135,8 +141,23 @@ public class CeremonyService implements AttestationConsumptionApi {
         return Either.right(toView(ceremony, authBeginTxHash));
     }
 
+    /**
+     * The endpoint's read: the ceremony must be in {@code organisationId}, the organisation the caller's access was
+     * checked in.
+     */
+    public Either<ProblemDetail, CeremonyView> get(String ceremonyId, String organisationId, String userId) {
+        return get(ceremonyRepository.findByIdAndOrganisationIdForUpdate(ceremonyId, organisationId), ceremonyId, userId);
+    }
+
+    /**
+     * Re-read of a ceremony a step already loaded through {@link #beginStep}, so its organisation was checked there.
+     */
     public Either<ProblemDetail, CeremonyView> get(String ceremonyId, String userId) {
-        Optional<KeriAttestationCeremonyEntity> found = ceremonyRepository.findByIdForUpdate(ceremonyId);
+        return get(ceremonyRepository.findByIdForUpdate(ceremonyId), ceremonyId, userId);
+    }
+
+    private Either<ProblemDetail, CeremonyView> get(Optional<KeriAttestationCeremonyEntity> found, String ceremonyId,
+            String userId) {
         if (found.isEmpty()) {
             return Either.left(notFoundProblem(ceremonyId));
         }
@@ -166,9 +187,12 @@ public class CeremonyService implements AttestationConsumptionApi {
      * that a late completion/failure from the superseded attempt is discarded by {@link #completeStep}
      * / {@link #failStep}'s generation check.
      */
-    public Either<ProblemDetail, KeriAttestationCeremonyEntity> beginStep(String ceremonyId, String userId,
-            CeremonyState expectedState, CeremonyState waitingState, boolean retry) {
-        Optional<KeriAttestationCeremonyEntity> found = ceremonyRepository.findByIdForUpdate(ceremonyId);
+    public Either<ProblemDetail, KeriAttestationCeremonyEntity> beginStep(String ceremonyId, String organisationId,
+            String userId, CeremonyState expectedState, CeremonyState waitingState, boolean retry) {
+        // Limited to the organisation the endpoint checked the caller's access in: another organisation's ceremony
+        // is not found, before anything on it changes
+        Optional<KeriAttestationCeremonyEntity> found =
+                ceremonyRepository.findByIdAndOrganisationIdForUpdate(ceremonyId, organisationId);
         if (found.isEmpty()) {
             return Either.left(notFoundProblem(ceremonyId));
         }

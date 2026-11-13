@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentityLinkEntity;
@@ -37,6 +38,7 @@ import org.cardanofoundation.lob.app.keri_attestation.service.KeriAuthBeginServi
 import org.cardanofoundation.lob.app.keri_attestation.service.KeriCredentialService;
 import org.cardanofoundation.lob.app.keri_attestation.service.KeriOobiService;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
+import org.cardanofoundation.lob.app.support.security.OrgAccessDenied;
 
 /**
  * REST surface for the KERI attestation module: identity linking, the platform agent's
@@ -62,6 +64,8 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 public class KeriAttestationController {
 
     // Every endpoint either anchors on-chain or feeds a ceremony that will, so all of them need the permission to publish.
+    // Ceremonies belong to an organisation (their target's): their endpoints take it in the path, check the caller's
+    // access to it, and only find ceremonies of that organisation. The identity endpoints are the user's own.
 
     private final KeycloakSecurityHelper securityHelper;
     private final CeremonyService ceremonyService;
@@ -115,53 +119,70 @@ public class KeriAttestationController {
     }
 
     @Operation(description = "Start a new attestation ceremony for a target (design §4.2). Fast-forwards past identity-level steps the user has already completed.")
-    @PostMapping(value = "/ceremonies", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/organisations/{organisationId}/ceremonies", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("@permissions.can('document_vault', 'publish')")
-    public ResponseEntity<Object> createCeremony(@Valid @RequestBody CreateCeremonyRequest request) {
+    public ResponseEntity<Object> createCeremony(@PathVariable("organisationId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String organisationId,
+            @Valid @RequestBody CreateCeremonyRequest request) {
+        if (!securityHelper.canUserAccessOrg(organisationId)) {
+            return OrgAccessDenied.response();
+        }
         String userId = securityHelper.getCurrentUserId();
-        return Responses.respond(ceremonyService.create(userId, request.getTargetType(), request.getTargetId()),
+        return Responses.respond(ceremonyService.create(userId, organisationId, request.getTargetType(), request.getTargetId()),
                 HttpStatus.CREATED);
     }
 
     @Operation(description = "Begin (or retry) the credential-presentation step: runs the IPEX apply/offer/agree/grant/admit exchange with the linked wallet synchronously and returns the final ceremony state.")
-    @PostMapping(value = "/ceremonies/{id}/credential/request", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/organisations/{organisationId}/ceremonies/{id}/credential/request", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("@permissions.can('document_vault', 'publish')")
-    public ResponseEntity<Object> requestCredential(@PathVariable String id,
-            @RequestBody(required = false) StepRetryRequest request) {
+    public ResponseEntity<Object> requestCredential(@PathVariable("organisationId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String organisationId,
+            @PathVariable String id, @RequestBody(required = false) StepRetryRequest request) {
+        if (!securityHelper.canUserAccessOrg(organisationId)) {
+            return OrgAccessDenied.response();
+        }
         String userId = securityHelper.getCurrentUserId();
         boolean retry = request != null && request.isRetry();
-        return Responses.respond(credentialService.presentCredential(id, userId, retry), HttpStatus.OK);
+        return Responses.respond(credentialService.presentCredential(id, organisationId, userId, retry), HttpStatus.OK);
     }
 
     @Operation(description = "Begin (or retry) the AUTH_BEGIN step: either accepts an unverified 'already published' assertion, "
             + "or hands a fresh AUTH_BEGIN transaction to blockchain_publisher. Publication is asynchronous — the ceremony rests in "
             + "AUTH_BEGIN_SUBMITTED and reaches AUTH_BEGIN_CONFIRMED once the publisher reports the transaction dispatched.")
-    @PostMapping(value = "/ceremonies/{id}/auth-begin", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/organisations/{organisationId}/ceremonies/{id}/auth-begin", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("@permissions.can('document_vault', 'publish')")
-    public ResponseEntity<Object> submitAuthBegin(@PathVariable String id,
-            @RequestBody(required = false) AuthBeginRequest request) {
+    public ResponseEntity<Object> submitAuthBegin(@PathVariable("organisationId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String organisationId,
+            @PathVariable String id, @RequestBody(required = false) AuthBeginRequest request) {
+        if (!securityHelper.canUserAccessOrg(organisationId)) {
+            return OrgAccessDenied.response();
+        }
         String userId = securityHelper.getCurrentUserId();
         boolean assumePublished = request != null && request.isAssumePublished();
         boolean retry = request != null && request.isRetry();
-        return Responses.respond(authBeginService.submitAuthBegin(id, userId, assumePublished, retry), HttpStatus.OK);
+        return Responses.respond(authBeginService.submitAuthBegin(id, organisationId, userId, assumePublished, retry), HttpStatus.OK);
     }
 
     @Operation(description = "Begin (or retry) the ATTEST step: sends a remotesign anchoring request to the linked wallet and waits, synchronously, for the wallet's confirmed anchor, returning the final ceremony state.")
-    @PostMapping(value = "/ceremonies/{id}/attest", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/organisations/{organisationId}/ceremonies/{id}/attest", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     @PreAuthorize("@permissions.can('document_vault', 'publish')")
-    public ResponseEntity<Object> attest(@PathVariable String id,
-            @RequestBody(required = false) StepRetryRequest request) {
+    public ResponseEntity<Object> attest(@PathVariable("organisationId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String organisationId,
+            @PathVariable String id, @RequestBody(required = false) StepRetryRequest request) {
+        if (!securityHelper.canUserAccessOrg(organisationId)) {
+            return OrgAccessDenied.response();
+        }
         String userId = securityHelper.getCurrentUserId();
         boolean retry = request != null && request.isRetry();
-        return Responses.respond(attestService.attest(id, userId, retry), HttpStatus.OK);
+        return Responses.respond(attestService.attest(id, organisationId, userId, retry), HttpStatus.OK);
     }
 
     @Operation(description = "Fetch a ceremony's current state (design §4.2/§4.6). Useful for the wizard's step derivation without re-driving a step.")
-    @GetMapping(value = "/ceremonies/{id}", produces = APPLICATION_JSON_VALUE)
+    @GetMapping(value = "/organisations/{organisationId}/ceremonies/{id}", produces = APPLICATION_JSON_VALUE)
     @PreAuthorize("@permissions.can('document_vault', 'publish')")
-    public ResponseEntity<Object> getCeremony(@PathVariable String id) {
+    public ResponseEntity<Object> getCeremony(@PathVariable("organisationId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String organisationId,
+            @PathVariable String id) {
+        if (!securityHelper.canUserAccessOrg(organisationId)) {
+            return OrgAccessDenied.response();
+        }
         String userId = securityHelper.getCurrentUserId();
-        return Responses.respond(ceremonyService.get(id, userId), HttpStatus.OK);
+        return Responses.respond(ceremonyService.get(id, organisationId, userId), HttpStatus.OK);
     }
 
     // --- internals ---

@@ -22,7 +22,6 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriAttestat
 import org.cardanofoundation.lob.app.keri_attestation.domain.entity.KeriIdentityLinkEntity;
 import org.cardanofoundation.lob.app.keri_attestation.domain.view.CeremonyView;
 import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository;
-import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 /**
  * Drives the AUTH_BEGIN step. This module never touches the chain: it validates the linked credential
@@ -62,29 +61,21 @@ public class KeriAuthBeginService {
     private final CeremonyService ceremonyService;
     private final KeriIdentityLinkRepository identityLinkRepository;
     private final CredentialChainValidator chainValidator;
-    private final KeycloakSecurityHelper securityHelper;
 
     /**
      * Moves the ceremony from {@code CREDENTIAL_RECEIVED} to {@code AUTH_BEGIN_SUBMITTED} and then
      * either records the caller's "already published" assertion or hands the publication to
      * {@code blockchain_publisher}. See the class javadoc for the return-value convention.
      */
-    public Either<ProblemDetail, CeremonyView> submitAuthBegin(String ceremonyId, String userId,
+    public Either<ProblemDetail, CeremonyView> submitAuthBegin(String ceremonyId, String organisationId, String userId,
             boolean assumePublished, boolean retry) {
-        Either<ProblemDetail, KeriAttestationCeremonyEntity> begun = ceremonyService.beginStep(ceremonyId, userId,
-                CeremonyState.CREDENTIAL_RECEIVED, CeremonyState.AUTH_BEGIN_SUBMITTED, retry);
+        Either<ProblemDetail, KeriAttestationCeremonyEntity> begun = ceremonyService.beginStep(ceremonyId, organisationId,
+                userId, CeremonyState.CREDENTIAL_RECEIVED, CeremonyState.AUTH_BEGIN_SUBMITTED, retry);
         if (begun.isLeft()) {
             return Either.left(begun.getLeft());
         }
         KeriAttestationCeremonyEntity ceremony = begun.get();
         int generation = ceremony.getAttemptGeneration();
-
-        // The endpoint's permission is checked in the request's organisation; AUTH_BEGIN is published for the
-        // ceremony's, so they must be the same one and the user must still belong to it.
-        if (ceremony.getOrganisationId() != null && !securityHelper.canUserAccessOrg(ceremony.getOrganisationId())) {
-            return failAuthBegin(ceremonyId, userId, generation, KeriAttestationProblems.CEREMONY_FORBIDDEN,
-                    "Current user can't act on organisation %s.".formatted(ceremony.getOrganisationId()));
-        }
 
         Optional<KeriIdentityLinkEntity> linkOpt = identityLinkRepository.findById(userId);
         if (linkOpt.isEmpty() || linkOpt.get().getAid() == null) {

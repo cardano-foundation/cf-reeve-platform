@@ -62,6 +62,8 @@ import org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLin
 class KeriAttestServiceRemotesignCorrelationTest {
 
     private static final String CEREMONY_ID = "cer-1";
+
+    private static final String ORGANISATION_ID = "org-1";
     private static final String USER_ID = "user-1";
     private static final int GENERATION = 2;
     private static final String WALLET_AID = "EWALLETAID00000000000000000000000000000";
@@ -181,7 +183,7 @@ class KeriAttestServiceRemotesignCorrelationTest {
     }
 
     private void stubUpToTheMainWait(KeriAttestationCeremonyEntity ceremony) {
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, false)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link()));
         when(providerRegistry.forType(TARGET_TYPE)).thenReturn(Optional.of(provider));
@@ -218,7 +220,7 @@ class KeriAttestServiceRemotesignCorrelationTest {
         when(correlator.awaitByRoute(eq(REMOTESIGN_REF_ROUTES), any(), any(), predicate.capture()))
                 .thenReturn(Optional.empty());
 
-        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> result = service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         // Nothing answered our request, so the step times out rather than resolving someone else's ref.
         assertTrue(result.isLeft());
@@ -244,7 +246,7 @@ class KeriAttestServiceRemotesignCorrelationTest {
         KeriAttestationCeremonyEntity ceremony = ceremony(OLD_REQUEST_EXN_SAID);
         ceremony.setKelFloorSequence("2");
         ceremony.setPayloadSaid(PAYLOAD_SAID);
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
                 CeremonyState.ATTEST_REQUESTED, true)).thenReturn(Either.right(ceremony));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link()));
         ArgumentCaptor<Predicate<Map<String, Object>>> predicate = predicateCaptor();
@@ -253,7 +255,7 @@ class KeriAttestServiceRemotesignCorrelationTest {
         // Stop right after the pre-check: this test is about what the pre-check accepts.
         when(providerRegistry.forType(TARGET_TYPE)).thenReturn(Optional.empty());
 
-        service.attest(CEREMONY_ID, USER_ID, true);
+        service.attest(CEREMONY_ID, ORGANISATION_ID, USER_ID, true);
 
         Predicate<Map<String, Object>> answersPersisted = predicate.getValue();
         assertTrue(answersPersisted.test(refTo(OLD_REQUEST_EXN_SAID)), "the late ref to the persisted request");

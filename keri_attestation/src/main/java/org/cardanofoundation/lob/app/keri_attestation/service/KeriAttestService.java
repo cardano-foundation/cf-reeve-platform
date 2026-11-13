@@ -97,9 +97,10 @@ public class KeriAttestService {
      *         terminal ({@code FAILED}) or successfully-advanced ({@code ATTEST_ANCHORED}) state before
      *         this method returns, never stuck at {@code ATTEST_REQUESTED}.
      */
-    public Either<ProblemDetail, CeremonyView> attest(String ceremonyId, String userId, boolean retry) {
-        Either<ProblemDetail, KeriAttestationCeremonyEntity> begun = ceremonyService.beginStep(ceremonyId, userId,
-                CeremonyState.AUTH_BEGIN_CONFIRMED, CeremonyState.ATTEST_REQUESTED, retry);
+    public Either<ProblemDetail, CeremonyView> attest(String ceremonyId, String organisationId, String userId,
+            boolean retry) {
+        Either<ProblemDetail, KeriAttestationCeremonyEntity> begun = ceremonyService.beginStep(ceremonyId, organisationId,
+                userId, CeremonyState.AUTH_BEGIN_CONFIRMED, CeremonyState.ATTEST_REQUESTED, retry);
         if (begun.isLeft()) {
             return Either.left(begun.getLeft());
         }
@@ -111,106 +112,23 @@ public class KeriAttestService {
             return failAttest(ceremonyId, generation, KeriAttestationProblems.IDENTITY_NOT_LINKED,
                     "User %s has no linked identity to attest with.".formatted(userId));
         }
-        String walletAid = linkOpt.get().getAid();
-        String walletOobiUrl = linkOpt.get().getOobiUrl();
+        WalletContact wallet = new WalletContact(userId, linkOpt.get().getAid(), linkOpt.get().getOobiUrl());
 
-        // Retry pre-check: before re-sending, look for a late-arriving ref for whatever was
-        // sent on a previous attempt. Only a ref answering THAT persisted request is claimed (see
-        // answersRemotesignRequest), but — unlike the main wait below — it cannot be given an exclude
-        // snapshot, because the late ref it is looking for is itself pre-existing. So it is still resumed
-        // ONLY IF it actually anchors THIS ceremony's payload.
-        // A non-anchoring ref must not fail the ceremony: that would loop forever on the same undeleted
-        // debris (a failed resolve never marks/deletes it), so it falls through to re-sending below. A
-        // fresh (non-retry) call, or a retry whose previous attempt never sent anything, has no
-        // requestExnSaid yet and skips straight to rebuilding + sending below.
         if (retry && ceremony.getRequestExnSaid() != null) {
-            Optional<CorrelatedNotification> lateRef = correlator.awaitByRoute(REMOTESIGN_REF_ROUTES,
-                    RETRY_PRECHECK_TIMEOUT, Set.of(), answersRemotesignRequest(ceremony.getRequestExnSaid(), walletAid));
-            if (lateRef.isPresent()) {
-                if (ceremony.getKelFloorSequence() == null) {
-                    // F4: a pre-upgrade ceremony with no floor must hard-fail, never resume or re-send.
-                    return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
-                            "no sequence floor recorded — re-attest");
-                }
-                Optional<Map<String, Object>> anchor = Optional.empty();
-                try {
-                    refreshWalletContact(userId, walletAid, walletOobiUrl);
-                    anchor = locateAnchoringEvent(walletAid, ceremony.getPayloadSaid(),
-                            ceremony.getKelFloorSequence(), lateRef.get());
-                } catch (InterruptedException e) {
-                    // Match the rest of this class's interrupt convention: abort promptly rather than
-                    // falling through into a fresh send + long main wait.
-                    Thread.currentThread().interrupt();
-                    return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_REQUEST_FAILED,
-                            "Interrupted during the ATTEST retry pre-check.");
-                } catch (Exception e) {
-                    log.warn("retry pre-check verification errored for ceremony {}: {} — re-sending", ceremonyId,
-                            e.getMessage());
-                }
-                if (anchor.isPresent()) {
-                    log.info("remotesign ref received {} (late, resumed from retry)", lateRef.get().exnSaid());
-                    return completeAnchored(ceremonyId, userId, generation, walletAid, anchor.get(), lateRef.get());
-                }
-                log.info("retry pre-check: a claimed ref did not anchor payload {} — re-sending",
-                        ceremony.getPayloadSaid());
+            Optional<Either<ProblemDetail, CeremonyView>> resumed = resumeFromLateRef(ceremony, ceremonyId, generation, wallet);
+            if (resumed.isPresent()) {
+                return resumed.get();
             }
         }
 
-        Optional<AttestationTargetProvider> providerOpt = providerRegistry.forType(ceremony.getTargetType());
-        if (providerOpt.isEmpty()) {
-            return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_REQUEST_FAILED,
-                    "No AttestationTargetProvider registered for target type %s."
-                            .formatted(ceremony.getTargetType()));
-        }
-        AttestationTargetProvider provider = providerOpt.get();
-
-        Optional<ProblemDetail> authFailure = provider.authorize(ceremony.getTargetId(), userId);
-        if (authFailure.isPresent()) {
-            ProblemDetail problem = authFailure.get();
-            ceremonyService.failStep(ceremonyId, generation, CeremonyState.ATTEST_REQUESTED, problem.getTitle(),
-                    problem.getDetail());
-            return Either.left(problem);
+        Either<ProblemDetail, AttestationDigest> digest = prepareDigest(ceremony, ceremonyId, generation, userId);
+        if (digest.isLeft()) {
+            return Either.left(digest.getLeft());
         }
 
-        Either<ProblemDetail, AttestationDigest> digestResult =
-                provider.prepareDigest(ceremony.getTargetId(), ceremonyId);
-        if (digestResult.isLeft()) {
-            ProblemDetail problem = digestResult.getLeft();
-            ceremonyService.failStep(ceremonyId, generation, CeremonyState.ATTEST_REQUESTED, problem.getTitle(),
-                    problem.getDetail());
-            return Either.left(problem);
-        }
-        AttestationDigest digest = digestResult.get();
-        boolean digestPersisted = ceremonyService.updateWaitingStepData(ceremonyId, generation,
-                CeremonyState.ATTEST_REQUESTED, c -> {
-                    c.setMetadataDigest(digest.digestQb64());
-                    c.setMetadataLabel(digest.metadataLabel());
-                });
-        if (!digestPersisted) {
-            return Either.left(staleCeremonyProblem(ceremonyId));
-        }
-
-        // Re-resolve the wallet's OOBI before BOTH the floor query and the send below. A contact
-        // resolved once at pairing goes stale when the wallet rotates keys or its KERIA endpoints
-        // change; KERIA then accepts the exn but has nowhere to route it, so the wallet never shows
-        // the signing request and this step can only time out. Credential presentation already does
-        // this before its own send — the ATTEST send is the one path that did not.
-        refreshWalletContact(userId, walletAid, walletOobiUrl);
-
-        // query the wallet's CURRENT KEL sequence and persist it as a floor BEFORE the
-        // remotesign request is sent. resolveAndComplete requires any accepted anchoring event to be
-        // strictly after this floor — without it, an old KEL event that happens to carry the same
-        // metadata digest (e.g. left over from a prior attestation of identical content) could satisfy a
-        // fresh request that the wallet never actually acted on.
-        Optional<String> floorSequence = queryLatestSequenceWithRetries(walletAid);
-        if (floorSequence.isEmpty()) {
-            return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_REQUEST_FAILED,
-                    "Failed to query the wallet's current KEL sequence to establish an anchor floor.");
-        }
-        boolean floorPersisted = ceremonyService.updateWaitingStepData(ceremonyId, generation,
-                CeremonyState.ATTEST_REQUESTED, c -> c.setKelFloorSequence(floorSequence.get()));
-        if (!floorPersisted) {
-            return Either.left(staleCeremonyProblem(ceremonyId));
+        Either<ProblemDetail, String> floorSequence = establishKelFloor(ceremonyId, generation, wallet);
+        if (floorSequence.isLeft()) {
+            return Either.left(floorSequence.getLeft());
         }
 
         // Snapshot the remotesign-ref notifications already sitting in the agent's queue BEFORE sending
@@ -221,30 +139,173 @@ public class KeriAttestService {
         // before the wallet has even signed.
         Set<String> preexistingRefs = correlator.outstandingNoteIds(REMOTESIGN_REF_ROUTES);
 
-        String payloadSaid;
-        String requestExnSaid;
+        Either<ProblemDetail, SentRequest> sent = sendRemotesignRequest(ceremonyId, generation, wallet.aid(), digest.get());
+        if (sent.isLeft()) {
+            return Either.left(sent.getLeft());
+        }
+
+        log.info("waiting for remotesign ref (routes {})", REMOTESIGN_REF_ROUTES);
+        Optional<CorrelatedNotification> ref = correlator.awaitByRoute(REMOTESIGN_REF_ROUTES,
+                properties.remotesignTimeout(), preexistingRefs,
+                answersRemotesignRequest(sent.get().requestExnSaid(), wallet.aid()));
+        if (ref.isEmpty()) {
+            return failAttest(ceremonyId, generation, KeriAttestationProblems.KERI_WALLET_TIMEOUT,
+                    "Timed out waiting for the wallet's remotesign ref." + walletDeliveryHint());
+        }
+        log.info("remotesign ref received {}", ref.get().exnSaid());
+
+        return resolveAndComplete(ceremonyId, userId, generation, wallet.aid(), wallet.oobiUrl(),
+                sent.get().payloadSaid(), floorSequence.get(), ref.get());
+    }
+
+    /** The linked wallet being attested with: its owner, AID and (possibly absent) OOBI URL. */
+    private record WalletContact(String userId, String aid, String oobiUrl) {
+    }
+
+    /** The SAIDs of a remotesign request that has been sent: the request exn's and its payload's. */
+    private record SentRequest(String payloadSaid, String requestExnSaid) {
+    }
+
+    /**
+     * Retry pre-check: before re-sending, look for a late-arriving ref for whatever was
+     * sent on a previous attempt. Only a ref answering THAT persisted request is claimed (see
+     * answersRemotesignRequest), but — unlike the main wait in {@link #attest} — it cannot be given an
+     * exclude snapshot, because the late ref it is looking for is itself pre-existing. So it is still
+     * resumed ONLY IF it actually anchors THIS ceremony's payload.
+     * A non-anchoring ref must not fail the ceremony: that would loop forever on the same undeleted
+     * debris (a failed resolve never marks/deletes it), so it falls through to re-sending. A fresh
+     * (non-retry) call, or a retry whose previous attempt never sent anything, has no requestExnSaid yet
+     * and never gets here.
+     *
+     * @return the result to return from {@link #attest}, or empty to fall through to re-sending
+     */
+    private Optional<Either<ProblemDetail, CeremonyView>> resumeFromLateRef(KeriAttestationCeremonyEntity ceremony,
+            String ceremonyId, int generation, WalletContact wallet) {
+        Optional<CorrelatedNotification> lateRef = correlator.awaitByRoute(REMOTESIGN_REF_ROUTES,
+                RETRY_PRECHECK_TIMEOUT, Set.of(), answersRemotesignRequest(ceremony.getRequestExnSaid(), wallet.aid()));
+        if (lateRef.isEmpty()) {
+            return Optional.empty();
+        }
+        if (ceremony.getKelFloorSequence() == null) {
+            // F4: a pre-upgrade ceremony with no floor must hard-fail, never resume or re-send.
+            return Optional.of(failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
+                    "no sequence floor recorded — re-attest"));
+        }
+        Optional<Map<String, Object>> anchor = Optional.empty();
+        try {
+            refreshWalletContact(wallet.userId(), wallet.aid(), wallet.oobiUrl());
+            anchor = locateAnchoringEvent(wallet.aid(), ceremony.getPayloadSaid(),
+                    ceremony.getKelFloorSequence(), lateRef.get());
+        } catch (InterruptedException e) {
+            // Match the rest of this class's interrupt convention: abort promptly rather than
+            // falling through into a fresh send + long main wait.
+            Thread.currentThread().interrupt();
+            return Optional.of(failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_REQUEST_FAILED,
+                    "Interrupted during the ATTEST retry pre-check."));
+        } catch (Exception e) {
+            log.warn("retry pre-check verification errored for ceremony {}: {} — re-sending", ceremonyId,
+                    e.getMessage());
+        }
+        if (anchor.isPresent()) {
+            log.info("remotesign ref received {} (late, resumed from retry)", lateRef.get().exnSaid());
+            return Optional.of(completeAnchored(ceremonyId, wallet.userId(), generation, wallet.aid(), anchor.get(),
+                    lateRef.get()));
+        }
+        log.info("retry pre-check: a claimed ref did not anchor payload {} — re-sending", ceremony.getPayloadSaid());
+        return Optional.empty();
+    }
+
+    /**
+     * Authorizes the target via its {@link AttestationTargetProvider}, freezes its metadata into a
+     * digest and persists that digest on the ceremony.
+     */
+    private Either<ProblemDetail, AttestationDigest> prepareDigest(KeriAttestationCeremonyEntity ceremony,
+            String ceremonyId, int generation, String userId) {
+        Optional<AttestationTargetProvider> providerOpt = providerRegistry.forType(ceremony.getTargetType());
+        if (providerOpt.isEmpty()) {
+            return Either.left(failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_REQUEST_FAILED,
+                    "No AttestationTargetProvider registered for target type %s."
+                            .formatted(ceremony.getTargetType())).getLeft());
+        }
+        AttestationTargetProvider provider = providerOpt.get();
+
+        Optional<ProblemDetail> authFailure = provider.authorize(ceremony.getTargetId(), userId);
+        if (authFailure.isPresent()) {
+            return Either.left(failAttestWith(ceremonyId, generation, authFailure.get()));
+        }
+
+        Either<ProblemDetail, AttestationDigest> digestResult =
+                provider.prepareDigest(ceremony.getTargetId(), ceremonyId);
+        if (digestResult.isLeft()) {
+            return Either.left(failAttestWith(ceremonyId, generation, digestResult.getLeft()));
+        }
+        AttestationDigest digest = digestResult.get();
+        boolean digestPersisted = ceremonyService.updateWaitingStepData(ceremonyId, generation,
+                CeremonyState.ATTEST_REQUESTED, c -> {
+                    c.setMetadataDigest(digest.digestQb64());
+                    c.setMetadataLabel(digest.metadataLabel());
+                });
+        if (!digestPersisted) {
+            return Either.left(staleCeremonyProblem(ceremonyId));
+        }
+        return Either.right(digest);
+    }
+
+    /**
+     * Refreshes the wallet contact, then queries the wallet's CURRENT KEL sequence and persists it as the
+     * ceremony's floor.
+     */
+    private Either<ProblemDetail, String> establishKelFloor(String ceremonyId, int generation, WalletContact wallet) {
+        // Re-resolve the wallet's OOBI before BOTH the floor query and the send. A contact
+        // resolved once at pairing goes stale when the wallet rotates keys or its KERIA endpoints
+        // change; KERIA then accepts the exn but has nowhere to route it, so the wallet never shows
+        // the signing request and this step can only time out. Credential presentation already does
+        // this before its own send — the ATTEST send is the one path that did not.
+        refreshWalletContact(wallet.userId(), wallet.aid(), wallet.oobiUrl());
+
+        // query the wallet's CURRENT KEL sequence and persist it as a floor BEFORE the
+        // remotesign request is sent. resolveAndComplete requires any accepted anchoring event to be
+        // strictly after this floor — without it, an old KEL event that happens to carry the same
+        // metadata digest (e.g. left over from a prior attestation of identical content) could satisfy a
+        // fresh request that the wallet never actually acted on.
+        Optional<String> floorSequence = queryLatestSequenceWithRetries(wallet.aid());
+        if (floorSequence.isEmpty()) {
+            return Either.left(failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_REQUEST_FAILED,
+                    "Failed to query the wallet's current KEL sequence to establish an anchor floor.").getLeft());
+        }
+        boolean floorPersisted = ceremonyService.updateWaitingStepData(ceremonyId, generation,
+                CeremonyState.ATTEST_REQUESTED, c -> c.setKelFloorSequence(floorSequence.get()));
+        if (!floorPersisted) {
+            return Either.left(staleCeremonyProblem(ceremonyId));
+        }
+        return Either.right(floorSequence.get());
+    }
+
+    /** Builds the saidified remotesign KED, persists its SAIDs on the ceremony, then sends it. */
+    private Either<ProblemDetail, SentRequest> sendRemotesignRequest(String ceremonyId, int generation,
+            String walletAid, AttestationDigest digest) {
         try {
             Optional<HabState> senderOpt = client.client().identifiers().get(agentService.agentName());
             if (senderOpt.isEmpty()) {
-                return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_REQUEST_FAILED,
-                        "No local HabState found for agent identifier %s.".formatted(agentService.agentName()));
+                return Either.left(failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_REQUEST_FAILED,
+                        "No local HabState found for agent identifier %s.".formatted(agentService.agentName()))
+                        .getLeft());
             }
 
             // Wallet contract: the payload itself is saidified before it is ever
             // sent, and that payload SAID (not the raw metadataDigest) is what the wallet is expected to
             // anchor as the interaction-event seal — see RemotesignRequestFactory's javadoc.
             Map<String, Object> ked = kedFactory.anchorRequestKed(walletAid, digest.metadataLabel(), digest.digestQb64());
-            payloadSaid = (String) ked.get("d");
+            String payloadSaid = (String) ked.get("d");
             ExchangeMessageResult built = client.client().exchanges().createExchangeMessage(senderOpt.get(),
                     REMOTESIGN_REQUEST_ROUTE, ked, Map.of(), walletAid, nowKeriTimestamp(), null);
 
             // Persist BEFORE the send completes: the SAID is deterministic from
             // the built (not-yet-sent) exn, matching KeriCredentialService#sendApply's idiom.
-            requestExnSaid = (String) built.exn().getKed().get("d");
-            String persistedRequestExnSaid = requestExnSaid;
+            String requestExnSaid = (String) built.exn().getKed().get("d");
             boolean exnPersisted = ceremonyService.updateWaitingStepData(ceremonyId, generation,
                     CeremonyState.ATTEST_REQUESTED, c -> {
-                        c.setRequestExnSaid(persistedRequestExnSaid);
+                        c.setRequestExnSaid(requestExnSaid);
                         c.setPayloadSaid(payloadSaid);
                     });
             if (!exnPersisted) {
@@ -254,27 +315,23 @@ public class KeriAttestService {
             client.client().exchanges().sendFromEvents(agentService.agentName(), REMOTESIGN_TOPIC, built.exn(),
                     built.sigs(), built.atc(), List.of(walletAid));
             log.info("remotesign request sent to {}", walletAid);
+            return Either.right(new SentRequest(payloadSaid, requestExnSaid));
         } catch (SignifyInterruptedException e) {
             Thread.currentThread().interrupt();
-            return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_REQUEST_FAILED,
-                    "Interrupted while sending the ATTEST remotesign request: " + e.getMessage());
+            return Either.left(failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_REQUEST_FAILED,
+                    "Interrupted while sending the ATTEST remotesign request: " + e.getMessage()).getLeft());
         } catch (Exception e) {
             log.warn("Failed to send ATTEST remotesign request for ceremony {}: {}", ceremonyId, e.getMessage());
-            return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_REQUEST_FAILED,
-                    "Failed to send the ATTEST remotesign request: " + e.getMessage());
+            return Either.left(failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_REQUEST_FAILED,
+                    "Failed to send the ATTEST remotesign request: " + e.getMessage()).getLeft());
         }
+    }
 
-        log.info("waiting for remotesign ref (routes {})", REMOTESIGN_REF_ROUTES);
-        Optional<CorrelatedNotification> ref = correlator.awaitByRoute(REMOTESIGN_REF_ROUTES,
-                properties.remotesignTimeout(), preexistingRefs, answersRemotesignRequest(requestExnSaid, walletAid));
-        if (ref.isEmpty()) {
-            return failAttest(ceremonyId, generation, KeriAttestationProblems.KERI_WALLET_TIMEOUT,
-                    "Timed out waiting for the wallet's remotesign ref." + walletDeliveryHint());
-        }
-        log.info("remotesign ref received {}", ref.get().exnSaid());
-
-        return resolveAndComplete(ceremonyId, userId, generation, walletAid, walletOobiUrl, payloadSaid,
-                floorSequence.get(), ref.get());
+    /** Fails the step with a problem the target provider produced, returning that same problem. */
+    private ProblemDetail failAttestWith(String ceremonyId, int generation, ProblemDetail problem) {
+        ceremonyService.failStep(ceremonyId, generation, CeremonyState.ATTEST_REQUESTED, problem.getTitle(),
+                problem.getDetail());
+        return problem;
     }
 
     /**

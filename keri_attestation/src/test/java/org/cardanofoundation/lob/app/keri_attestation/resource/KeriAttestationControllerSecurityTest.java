@@ -43,29 +43,29 @@ class KeriAttestationControllerSecurityTest {
 
     @Test
     void createCeremonyIsRoleGated() throws NoSuchMethodException {
-        assertGated(KeriAttestationController.class.getMethod("createCeremony", CreateCeremonyRequest.class));
+        assertGated(KeriAttestationController.class.getMethod("createCeremony", String.class, CreateCeremonyRequest.class));
     }
 
     @Test
     void requestCredentialIsRoleGated() throws NoSuchMethodException {
-        assertGated(KeriAttestationController.class.getMethod("requestCredential", String.class,
+        assertGated(KeriAttestationController.class.getMethod("requestCredential", String.class, String.class,
                 StepRetryRequest.class));
     }
 
     @Test
     void submitAuthBeginIsRoleGated() throws NoSuchMethodException {
-        assertGated(KeriAttestationController.class.getMethod("submitAuthBegin", String.class,
+        assertGated(KeriAttestationController.class.getMethod("submitAuthBegin", String.class, String.class,
                 AuthBeginRequest.class));
     }
 
     @Test
     void attestIsRoleGated() throws NoSuchMethodException {
-        assertGated(KeriAttestationController.class.getMethod("attest", String.class, StepRetryRequest.class));
+        assertGated(KeriAttestationController.class.getMethod("attest", String.class, String.class, StepRetryRequest.class));
     }
 
     @Test
     void getCeremonyIsRoleGated() throws NoSuchMethodException {
-        assertGated(KeriAttestationController.class.getMethod("getCeremony", String.class));
+        assertGated(KeriAttestationController.class.getMethod("getCeremony", String.class, String.class));
     }
 
     private static void assertGated(java.lang.reflect.Method method) {

@@ -40,6 +40,15 @@ public interface KeriAttestationCeremonyRepository extends JpaRepository<KeriAtt
     Optional<KeriAttestationCeremonyEntity> findByIdForUpdate(@Param("id") String id);
 
     /**
+     * {@link #findByIdForUpdate} limited to one organisation: what the endpoints use, so a ceremony of another
+     * organisation is not found, like any other record looked up by id and organisation.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from keri_attestation.KeriAttestationCeremonyEntity c where c.id = :id and c.organisationId = :organisationId")
+    Optional<KeriAttestationCeremonyEntity> findByIdAndOrganisationIdForUpdate(@Param("id") String id,
+            @Param("organisationId") String organisationId);
+
+    /**
      * Candidates for {@code CeremonyCleanupJob}'s lazy-expiry sweep: still open, but past their TTL.
      * Unlocked — {@code CeremonyCleanupJob} re-checks each candidate under {@link #findByIdForUpdate}
      * before writing, so this discovery read racing a legitimate concurrent transition never causes a

@@ -75,6 +75,8 @@ import org.cardanofoundation.lob.app.keri_attestation.service.KeriNotificationCo
 class KeriCredentialServiceSchemaGuardTest {
 
     private static final String CEREMONY_ID = "cer-1";
+
+    private static final String ORGANISATION_ID = "org-1";
     private static final String USER_ID = "user-1";
     private static final int GENERATION = 2;
     private static final String LINKED_AID = "ELINKEDAID000000000000000000000000000";
@@ -223,7 +225,7 @@ class KeriCredentialServiceSchemaGuardTest {
     }
 
     private void beginFreshStep() {
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony()));
     }
 
@@ -235,7 +237,7 @@ class KeriCredentialServiceSchemaGuardTest {
                         grantExn(FOREIGN_SCHEMA_SAID), "/exn/ipex/grant")));
 
         Either<ProblemDetail, CeremonyView> result = service(mockCorrelator)
-                .presentCredential(CEREMONY_ID, USER_ID, false);
+                .presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CREDENTIAL_REJECTED, result.getLeft().getTitle());
@@ -259,7 +261,7 @@ class KeriCredentialServiceSchemaGuardTest {
                         grantExn(FOREIGN_SCHEMA_SAID))));
 
         Either<ProblemDetail, CeremonyView> result = service(mockCorrelator)
-                .presentCredential(CEREMONY_ID, USER_ID, false);
+                .presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CREDENTIAL_REJECTED, result.getLeft().getTitle());
@@ -280,7 +282,7 @@ class KeriCredentialServiceSchemaGuardTest {
                                 "e", Map.of("acdc", Map.of("d", CREDENTIAL_SAID))), "/exn/ipex/grant")));
 
         Either<ProblemDetail, CeremonyView> result = service(mockCorrelator)
-                .presentCredential(CEREMONY_ID, USER_ID, false);
+                .presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.CREDENTIAL_REJECTED, result.getLeft().getTitle());
@@ -299,7 +301,7 @@ class KeriCredentialServiceSchemaGuardTest {
         Serder admitExn = serderWithSaid("EADMIT");
         when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "atc3"));
 
-        service(mockCorrelator).presentCredential(CEREMONY_ID, USER_ID, false);
+        service(mockCorrelator).presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         verify(ipex).admit(any());
         verify(ceremonyService, never()).failStep(any(), anyInt(), any(),
@@ -321,12 +323,12 @@ class KeriCredentialServiceSchemaGuardTest {
                 .d(GRANT_SAID).i(LINKED_AID).r("/ipex/grant").a(Map.of())
                 .e(Map.of("acdc", Map.of("d", CREDENTIAL_SAID, "s", FOREIGN_SCHEMA_SAID))))));
         KeriCredentialService service = service(new KeriNotificationCorrelator(keriClient, properties()));
-        when(ceremonyService.beginStep(CEREMONY_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
+        when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony()))
                 .thenReturn(Either.right(ceremony()));
 
-        Either<ProblemDetail, CeremonyView> first = service.presentCredential(CEREMONY_ID, USER_ID, false);
-        Either<ProblemDetail, CeremonyView> second = service.presentCredential(CEREMONY_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> first = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
+        Either<ProblemDetail, CeremonyView> second = service.presentCredential(CEREMONY_ID, ORGANISATION_ID, USER_ID, false);
 
         assertEquals(KeriAttestationProblems.CREDENTIAL_REJECTED, first.getLeft().getTitle());
         assertTrue(queue.isEmpty(), "the rejected grant must be gone from the agent's queue");
