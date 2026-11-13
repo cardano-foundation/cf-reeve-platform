@@ -49,6 +49,8 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 @Transactional(readOnly = true)
 public class SpendingEventService {
 
+    private static final String EVENT_NOT_FOUND_LOG = "Event not found: {}";
+
     private final FundingEventRepository fundingEventRepository;
     private final FundingProjectRepository projectRepository;
     private final EventMilestoneAllocationRepository milestoneAllocationRepository;
@@ -325,7 +327,7 @@ public class SpendingEventService {
         Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId)
                 .filter(found -> found.getOrganisationId().equals(request.getOrganisationId()));
         if (eventM.isEmpty()) {
-            log.warn("Event not found: {}", eventId);
+            log.warn(EVENT_NOT_FOUND_LOG, eventId);
             return Either.left(Problems.eventNotFound(eventId));
         }
         FundingEventEntity event = eventM.get();
@@ -589,7 +591,7 @@ public class SpendingEventService {
     private Either<ProblemDetail, FundingEventEntity> findEventForUpdateOrError(String eventId) {
         Optional<FundingEventEntity> eventM = fundingEventRepository.findByIdForUpdate(eventId);
         if (eventM.isEmpty()) {
-            log.warn("Event not found: {}", eventId);
+            log.warn(EVENT_NOT_FOUND_LOG, eventId);
             return Either.left(Problems.eventNotFound(eventId));
         }
         return Either.right(eventM.get());
@@ -598,7 +600,7 @@ public class SpendingEventService {
     private Either<ProblemDetail, FundingEventEntity> findEventOrError(String eventId) {
         Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);
         if (eventM.isEmpty()) {
-            log.warn("Event not found: {}", eventId);
+            log.warn(EVENT_NOT_FOUND_LOG, eventId);
             return Either.left(Problems.eventNotFound(eventId));
         }
         return Either.right(eventM.get());

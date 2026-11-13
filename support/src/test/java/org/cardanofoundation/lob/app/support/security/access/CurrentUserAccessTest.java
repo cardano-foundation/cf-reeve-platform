@@ -8,6 +8,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.Set;
 
@@ -113,7 +114,7 @@ class CurrentUserAccessTest {
         // an endpoint left on the old expression must fail, never grant access
         assertThat(java.util.Arrays.stream(PermissionChecker.class.getMethods())
                 .filter(method -> method.getName().equals("can"))
-                .map(method -> method.getParameterCount()))
+                .map(Method::getParameterCount))
                 .containsExactly(3);
     }
 

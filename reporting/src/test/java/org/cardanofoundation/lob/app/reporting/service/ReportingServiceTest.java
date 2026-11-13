@@ -11,6 +11,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -428,9 +429,10 @@ class ReportingServiceTest {
         // When
         ReportResponseDto result = reportingService.create(reportDto);
 
-        // Then
-        assertTrue(result.getError().isPresent());
-        assertEquals("REPORT_TEMPLATE_NOT_FOUND", result.getError().get().getTitle());
+        // Then: no lookup by id alone, which would find another organisation's template
+        assertEquals("REPORT_TEMPLATE_NOT_FOUND", result.getError().orElseThrow().getTitle());
+        verify(reportTemplateRepository).findByOrganisationIdAndId("org123", "abc");
+        verifyNoMoreInteractions(reportTemplateRepository);
         verify(reportRepository, never()).save(any());
     }
 
