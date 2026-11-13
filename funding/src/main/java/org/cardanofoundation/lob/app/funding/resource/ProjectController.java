@@ -57,7 +57,7 @@ public class ProjectController {
                     content = {@Content(mediaType = APPLICATION_JSON_VALUE, schema = @Schema(implementation = PagedResponse.class))}),
     })
     @GetMapping(value = "/projects", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('project_management', 'view')")
+    @PreAuthorize("@permissions.can(#organisationId, 'project_management', 'view')")
     public ResponseEntity<PagedResponse<ProjectView>> listProjects(
             @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
             @RequestParam String organisationId,
@@ -88,7 +88,7 @@ public class ProjectController {
                     schema = @Schema(implementation = ProjectView.class))})
     })
     @GetMapping(value = "/projects/{projectId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('project_management', 'view')")
+    @PreAuthorize("@permissions.can(#organisationId, 'project_management', 'view')")
     public ResponseEntity<ProjectView> getProject(
             @PathVariable String projectId,
             @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
@@ -101,7 +101,7 @@ public class ProjectController {
                     schema = @Schema(implementation = PagedResponse.class))})
     })
     @GetMapping(value = "/projects/{parentProjectId}/subprojects", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('project_management', 'view')")
+    @PreAuthorize("@permissions.can(#organisationId, 'project_management', 'view')")
     public ResponseEntity<PagedResponse<ProjectView>> listSubProjects(
             @PathVariable String parentProjectId,
             @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
@@ -221,7 +221,7 @@ public class ProjectController {
                             schema = @Schema(implementation = ProjectView.class))})
             })
     @PostMapping(value = "/projects", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('project_management', 'create_project')")
+    @PreAuthorize("@permissions.can(#request?.organisationId, 'project_management', 'create_project')")
     public ResponseEntity<ProjectView> createProjectWithMilestones(@Valid @RequestBody ProjectWithMilestonesCreateRequest request) {
         return Responses.respond(projectService.createWithMilestones(request), HttpStatus.CREATED);
     }
@@ -355,7 +355,7 @@ public class ProjectController {
                             schema = @Schema(implementation = ProjectView.class))})
             })
     @PutMapping(value = "/projects/{projectId}", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('project_management', 'create_project')")
+    @PreAuthorize("@permissions.can(#request?.organisationId, 'project_management', 'create_project')")
     public ResponseEntity<ProjectView> updateProject(
             // "Project Orion"'s own internal id: SHA3(organisationId :: proId) is deterministic, so
             // this is always what the walkthrough's POST /projects example (org
@@ -375,7 +375,7 @@ public class ProjectController {
                     schema = @Schema(implementation = ProjectDraftStatusView.class))})
     })
     @GetMapping(value = "/projects/{projectId}/has-draft-event", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('project_management', 'view')")
+    @PreAuthorize("@permissions.can(#organisationId, 'project_management', 'view')")
     public ResponseEntity<ProjectDraftStatusView> hasDraftEvent(
             @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
             @RequestParam String organisationId,
@@ -392,7 +392,7 @@ public class ProjectController {
                     schema = @Schema(implementation = ProblemDetail.class))})
     })
     @DeleteMapping(value = "/projects/{projectId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('project_management', 'delete')")
+    @PreAuthorize("@permissions.can(#organisationId, 'project_management', 'delete')")
     public ResponseEntity<CascadeDeletionView> deleteProject(
             @PathVariable String projectId,
             @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")

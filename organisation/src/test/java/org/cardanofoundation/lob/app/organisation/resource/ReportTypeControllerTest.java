@@ -71,7 +71,7 @@ class ReportTypeControllerTest {
 
         ResponseEntity<?> response = controller.getReferenceCodes("orgId");
 
-        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
         verifyNoInteractions(reportTypeService);
     }
 
@@ -82,7 +82,7 @@ class ReportTypeControllerTest {
 
         ResponseEntity<?> response = controller.addMappingToReportTypeField("orgId", update);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
         verifyNoInteractions(reportTypeService);
     }
 
@@ -93,7 +93,7 @@ class ReportTypeControllerTest {
 
         ResponseEntity<?> response = controller.addMappingToReportTypeField("orgId", file);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
         verifyNoInteractions(reportTypeService);
     }
 }

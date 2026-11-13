@@ -131,7 +131,7 @@ class AddressbookServiceTest {
         request.setEmail("bob@acme.example");
         request.setDescription("auditor, 2026 engagement");
 
-        Either<ProblemDetail, AddressbookEntryView> result = service.update("entry1", request);
+        Either<ProblemDetail, AddressbookEntryView> result = service.update("org1", "entry1", request);
 
         assertTrue(result.isRight());
         ArgumentCaptor<AddressbookEntryEntity> saved = ArgumentCaptor.forClass(AddressbookEntryEntity.class);
@@ -150,7 +150,7 @@ class AddressbookServiceTest {
         AddressbookEntryEntity entry = existing("entry1");
         when(entryRepository.findById("entry1")).thenReturn(Optional.of(entry));
 
-        Optional<ProblemDetail> problem = service.delete("entry1");
+        Optional<ProblemDetail> problem = service.delete("org1", "entry1");
 
         assertTrue(problem.isEmpty());
         verify(entryRepository).delete(entry);
@@ -160,7 +160,7 @@ class AddressbookServiceTest {
     void deletingAMissingContactIsNotFound() {
         when(entryRepository.findById("nope")).thenReturn(Optional.empty());
 
-        Optional<ProblemDetail> problem = service.delete("nope");
+        Optional<ProblemDetail> problem = service.delete("org1", "nope");
 
         assertTrue(problem.isPresent());
         assertEquals(VaultProblems.ADDRESSBOOK_ENTRY_NOT_FOUND, problem.get().getTitle());
@@ -168,20 +168,19 @@ class AddressbookServiceTest {
     }
 
     /**
-     * The entry decides its own organisation. A caller outside it is refused even though they hold a
-     * valid entry id — the id is a handle, never an authorisation.
+     * The entry is only looked up in the requested organisation. Another organisation's entry is not found, even
+     * with a valid entry id — the id is a handle, never an authorisation.
      */
     @Test
     void aContactInAnotherOrganisationCannotBeTouched() {
         AddressbookEntryEntity foreign = existing("entry1");
         foreign.setOrganisationId("org2");
         when(entryRepository.findById("entry1")).thenReturn(Optional.of(foreign));
-        when(securityHelper.canUserAccessOrg("org2")).thenReturn(false);
 
-        Optional<ProblemDetail> problem = service.delete("entry1");
+        Optional<ProblemDetail> problem = service.delete("org1", "entry1");
 
         assertTrue(problem.isPresent());
-        assertEquals(403, problem.get().getStatus());
+        assertEquals(404, problem.get().getStatus());
         verify(entryRepository, never()).delete(any());
     }
 

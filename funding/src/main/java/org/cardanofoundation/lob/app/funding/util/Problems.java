@@ -28,7 +28,7 @@ public final class Problems {
     }
 
     public static ProblemDetail unauthorized() {
-        return of(HttpStatus.UNAUTHORIZED, "User does not have access to this organisation", ErrorTitleConstants.UNAUTHORIZED);
+        return of(HttpStatus.FORBIDDEN, "User does not have access to this organisation", ErrorTitleConstants.UNAUTHORIZED);
     }
 
     // --- Shared not-found factories, so every service reports the same title and message shape ---

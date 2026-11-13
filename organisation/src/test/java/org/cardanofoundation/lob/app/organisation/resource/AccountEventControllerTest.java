@@ -138,7 +138,7 @@ class AccountEventControllerTest {
 
         ResponseEntity<?> response = controller.getReferenceCodes(orgId, null, null, null, null, null, Pageable.unpaged());
 
-        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
         verifyNoInteractions(accountEventService);
     }
 
@@ -148,7 +148,7 @@ class AccountEventControllerTest {
 
         ResponseEntity<?> response = controller.downloadEventCodesCsv(orgId, null, null, null, null, null);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
         verifyNoInteractions(accountEventService);
     }
 
@@ -159,7 +159,7 @@ class AccountEventControllerTest {
 
         ResponseEntity<?> response = controller.insertReferenceCode(orgId, update);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
         verifyNoInteractions(accountEventService);
     }
 
@@ -169,7 +169,7 @@ class AccountEventControllerTest {
 
         ResponseEntity<?> response = controller.insertReferenceCodeByCsv(orgId, null);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
         verifyNoInteractions(accountEventService);
     }
 
@@ -180,7 +180,7 @@ class AccountEventControllerTest {
 
         ResponseEntity<?> response = controller.updateReferenceCode(orgId, update);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
         verifyNoInteractions(accountEventService);
     }
 

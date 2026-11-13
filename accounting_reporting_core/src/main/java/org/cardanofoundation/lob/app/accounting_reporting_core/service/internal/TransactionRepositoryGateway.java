@@ -93,17 +93,15 @@ public class TransactionRepositoryGateway {
             log.info("Acquired pessimistic locks for {} transactions", lockedTransactions.size());
         } catch (DataAccessException dae) {
             log.error("Error acquiring locks for transactions: {}", sortedTransactionIds, dae);
-            // Create error responses for all transactions
-            List<Either<IdentifiableProblem, TransactionEntity>> errorResults = new ArrayList<>();
-            for (String transactionId : sortedTransactionIds) {
-                ProblemDetail problem = createTransactionDBError(transactionId, dae);
-                errorResults.add(Either.left(new IdentifiableProblem(transactionId, problem, TRANSACTION)));
-            }
-            return errorResults;
+            return transactionDBErrors(sortedTransactionIds, dae);
         }
 
-        // Create lookup map for O(1) access
+        // Create lookup map for O(1) access. Only transactions of the requested organisation, the one the permission was
+        // checked in: an id of any other organisation is reported as not found and left untouched.
+        String organisationId = transactionsRequest.getOrganisationId();
         Map<String, TransactionEntity> transactionMap = lockedTransactions.stream()
+                .filter(tx -> tx.getOrganisation() != null && organisationId != null
+                        && organisationId.equals(tx.getOrganisation().getId()))
                 .collect(Collectors.toMap(tx -> tx.getId().trim(), tx -> tx));
 
         ArrayList<Either<IdentifiableProblem, TransactionEntity>> transactionsApprovalResponseListE = new ArrayList<>();
@@ -151,16 +149,20 @@ public class TransactionRepositoryGateway {
                     .invokeUpdateTransactionBatchStatusAndStats(batchId, Optional.empty(), Optional.empty()));
         } catch (DataAccessException dae) {
             log.error("Error saving approved transactions: {}", sortedTransactionIds, dae);
-            // Return error responses for all transactions
-            List<Either<IdentifiableProblem, TransactionEntity>> errorResults = new ArrayList<>();
-            for (String transactionId : sortedTransactionIds) {
-                ProblemDetail problem = createTransactionDBError(transactionId, dae);
-                errorResults.add(Either.left(new IdentifiableProblem(transactionId, problem, TRANSACTION)));
-            }
-            return errorResults;
+            return transactionDBErrors(sortedTransactionIds, dae);
         }
 
         return transactionsApprovalResponseListE;
+    }
+
+    private List<Either<IdentifiableProblem, TransactionEntity>> transactionDBErrors(List<String> transactionIds, DataAccessException dae) {
+        // One error response per transaction
+        List<Either<IdentifiableProblem, TransactionEntity>> errorResults = new ArrayList<>();
+        for (String transactionId : transactionIds) {
+            ProblemDetail problem = createTransactionDBError(transactionId, dae);
+            errorResults.add(Either.left(new IdentifiableProblem(transactionId, problem, TRANSACTION)));
+        }
+        return errorResults;
     }
 
     @Transactional

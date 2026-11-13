@@ -19,26 +19,26 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.request.StepRetryRe
  */
 class KeriAttestationControllerSecurityTest {
 
-    private static final String PUBLISH = "@permissions.can('document_vault', 'publish')";
+    private static final String PUBLISH = "@permissions.can(#organisationId, 'document_vault', 'publish')";
 
     @Test
     void identityIsRoleGated() throws NoSuchMethodException {
-        assertGated(KeriAttestationController.class.getMethod("identity"));
+        assertGated(KeriAttestationController.class.getMethod("identity", String.class));
     }
 
     @Test
     void agentOobiIsRoleGated() throws NoSuchMethodException {
-        assertGated(KeriAttestationController.class.getMethod("agentOobi"));
+        assertGated(KeriAttestationController.class.getMethod("agentOobi", String.class));
     }
 
     @Test
     void resolveOobiIsRoleGated() throws NoSuchMethodException {
-        assertGated(KeriAttestationController.class.getMethod("resolveOobi", ResolveOobiRequest.class));
+        assertGated(KeriAttestationController.class.getMethod("resolveOobi", String.class, ResolveOobiRequest.class));
     }
 
     @Test
     void resetIdentityIsRoleGated() throws NoSuchMethodException {
-        assertGated(KeriAttestationController.class.getMethod("resetIdentity"));
+        assertGated(KeriAttestationController.class.getMethod("resetIdentity", String.class));
     }
 
     @Test

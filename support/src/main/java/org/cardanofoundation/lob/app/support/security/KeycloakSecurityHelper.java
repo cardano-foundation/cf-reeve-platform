@@ -20,21 +20,15 @@ public class KeycloakSecurityHelper {
     private final CurrentUserAccess currentUserAccess;
 
     /**
-     * The user must be a member of the organisation, and when the request names its organisation
-     * ({@link CurrentUserAccess#ORGANISATION_HEADER}) it must be the same one, so permissions checked for the
-     * header organisation can't be used on another organisation's data.
+     * The user must be a member of the organisation. Endpoints check it for the {@code organisationId} of the request,
+     * the same value their permission is checked in and their data is read with.
      */
     public boolean canUserAccessOrg(String orgId) {
-        if (orgId == null || !isMemberOfOrg(orgId)) {
-            return false;
-        }
-        return currentUserAccess.requestedOrganisationId()
-                .map(orgId::equals)
-                .orElse(true);
+        return orgId != null && isMemberOfOrg(orgId);
     }
 
     /**
-     * Membership only, regardless of the organisation selected for the request (e.g. to list the user's organisations).
+     * Membership of the organisation (e.g. to list the user's organisations).
      */
     public boolean isMemberOfOrg(String orgId) {
         return currentUserAccess.get().isMemberOf(orgId);

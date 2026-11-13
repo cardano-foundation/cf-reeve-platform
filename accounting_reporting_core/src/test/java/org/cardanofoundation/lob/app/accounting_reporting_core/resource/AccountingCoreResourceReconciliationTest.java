@@ -84,7 +84,7 @@ class AccountingCoreResourceReconciliationTest {
 
         ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconcileTriggerAction(new ReconciliationRequest());
 
-        Assertions.assertEquals(401, responseEntity.getStatusCode().value());
+        Assertions.assertEquals(403, responseEntity.getStatusCode().value());
         verifyNoInteractions(accountingCoreService);
         verifyNoInteractions(accountingCorePresentationViewService);
     }
@@ -123,7 +123,7 @@ class AccountingCoreResourceReconciliationTest {
 
     @Test
     void testReconciliationRejectionCode() {
-        ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconciliationRejectionCode();
+        ResponseEntity<?> responseEntity = accountingCoreResourceReconciliation.reconciliationRejectionCode("org1");
         Assertions.assertEquals(200, responseEntity.getStatusCode().value());
         ReconciliationRejectionCodeRequest[] body = (ReconciliationRejectionCodeRequest[])responseEntity.getBody();
         Assertions.assertNotNull(body);
@@ -182,7 +182,7 @@ class AccountingCoreResourceReconciliationTest {
                 .getMethod("reconcileTriggerCsvAction", org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRequest.class)
                 .getAnnotation(org.springframework.security.access.prepost.PreAuthorize.class);
 
-        org.junit.jupiter.api.Assertions.assertEquals("@permissions.can('transactions', 'reconcilate')", annotation.value());
+        org.junit.jupiter.api.Assertions.assertEquals("@permissions.can(#body?.organisationId, 'transactions', 'reconcilate')", annotation.value());
     }
 
 }

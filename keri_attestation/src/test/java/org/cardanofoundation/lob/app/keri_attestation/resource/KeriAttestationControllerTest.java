@@ -98,7 +98,7 @@ class KeriAttestationControllerTest {
     void identityReturnsLinkedFalseWhenNoLinkExists() throws Exception {
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.empty());
 
-        mockMvc.perform(get("/api/v1/keri-attestation/identity"))
+        mockMvc.perform(get("/api/v1/keri-attestation/identity").param("organisationId", ORGANISATION_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.linked").value(false))
                 .andExpect(jsonPath("$.aid").doesNotExist())
@@ -117,7 +117,7 @@ class KeriAttestationControllerTest {
         link.setAuthBeginAt(Instant.parse("2026-01-01T00:00:00Z"));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link));
 
-        mockMvc.perform(get("/api/v1/keri-attestation/identity"))
+        mockMvc.perform(get("/api/v1/keri-attestation/identity").param("organisationId", ORGANISATION_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.linked").value(true))
                 .andExpect(jsonPath("$.aid").value("EAID000000000000000000000000000000000000"))
@@ -134,7 +134,7 @@ class KeriAttestationControllerTest {
         link.setAid("EAID000000000000000000000000000000000000");
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link));
 
-        mockMvc.perform(get("/api/v1/keri-attestation/identity"))
+        mockMvc.perform(get("/api/v1/keri-attestation/identity").param("organisationId", ORGANISATION_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.linked").value(true))
                 .andExpect(jsonPath("$.credential").doesNotExist())
@@ -154,7 +154,7 @@ class KeriAttestationControllerTest {
         link.setAuthBeginAt(Instant.parse("2026-01-01T00:00:00Z"));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link));
 
-        mockMvc.perform(get("/api/v1/keri-attestation/identity"))
+        mockMvc.perform(get("/api/v1/keri-attestation/identity").param("organisationId", ORGANISATION_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.linked").value(true))
                 .andExpect(jsonPath("$.authBegin.txHash").doesNotExist())
@@ -167,7 +167,7 @@ class KeriAttestationControllerTest {
     void agentOobiReturnsTheCachedAgentOobiUrl() throws Exception {
         when(agentService.agentOobi()).thenReturn("https://agent.example.org/oobi/EAGENT/agent/EAGENT");
 
-        mockMvc.perform(get("/api/v1/keri-attestation/agent/oobi"))
+        mockMvc.perform(get("/api/v1/keri-attestation/agent/oobi").param("organisationId", ORGANISATION_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.oobiUrl").value("https://agent.example.org/oobi/EAGENT/agent/EAGENT"));
     }
@@ -179,7 +179,7 @@ class KeriAttestationControllerTest {
         when(oobiService.resolveUserOobi(eq(USER_ID), anyString(), eq(false)))
                 .thenReturn(Either.right("EAID000000000000000000000000000000000000"));
 
-        mockMvc.perform(post("/api/v1/keri-attestation/identity/oobi/resolve")
+        mockMvc.perform(post("/api/v1/keri-attestation/identity/oobi/resolve").param("organisationId", ORGANISATION_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"oobiUrl":"https://example.org/oobi/EAID/witness/EWIT"}
@@ -190,7 +190,7 @@ class KeriAttestationControllerTest {
 
     @Test
     void resolveOobiMissingOobiUrlIsRejectedWithBadRequestBeforeReachingTheService() throws Exception {
-        mockMvc.perform(post("/api/v1/keri-attestation/identity/oobi/resolve")
+        mockMvc.perform(post("/api/v1/keri-attestation/identity/oobi/resolve").param("organisationId", ORGANISATION_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest());
@@ -204,7 +204,7 @@ class KeriAttestationControllerTest {
                 "already linked to a different AID");
         when(oobiService.resolveUserOobi(eq(USER_ID), anyString(), eq(false))).thenReturn(Either.left(problem));
 
-        mockMvc.perform(post("/api/v1/keri-attestation/identity/oobi/resolve")
+        mockMvc.perform(post("/api/v1/keri-attestation/identity/oobi/resolve").param("organisationId", ORGANISATION_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"oobiUrl":"https://example.org/oobi/EAID/witness/EWIT"}
@@ -219,7 +219,7 @@ class KeriAttestationControllerTest {
     void resetIdentityHappyPathReturns200WithResetTrue() throws Exception {
         when(oobiService.resetIdentity(USER_ID)).thenReturn(Either.right(null));
 
-        mockMvc.perform(delete("/api/v1/keri-attestation/identity"))
+        mockMvc.perform(delete("/api/v1/keri-attestation/identity").param("organisationId", ORGANISATION_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reset").value(true));
 
@@ -231,7 +231,7 @@ class KeriAttestationControllerTest {
         // Idempotent: no link present is not an error -- the service itself always returns Right.
         when(oobiService.resetIdentity(USER_ID)).thenReturn(Either.right(null));
 
-        mockMvc.perform(delete("/api/v1/keri-attestation/identity"))
+        mockMvc.perform(delete("/api/v1/keri-attestation/identity").param("organisationId", ORGANISATION_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reset").value(true));
     }
@@ -415,11 +415,11 @@ class KeriAttestationControllerTest {
 
         mockMvc.perform(post(base, "org-other").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"targetType\":\"DOCUMENT\",\"targetId\":\"doc-1\"}"))
-                .andExpect(status().isUnauthorized());
-        mockMvc.perform(get(base + "/{id}", "org-other", CEREMONY_ID)).andExpect(status().isUnauthorized());
-        mockMvc.perform(post(base + "/{id}/credential/request", "org-other", CEREMONY_ID)).andExpect(status().isUnauthorized());
-        mockMvc.perform(post(base + "/{id}/auth-begin", "org-other", CEREMONY_ID)).andExpect(status().isUnauthorized());
-        mockMvc.perform(post(base + "/{id}/attest", "org-other", CEREMONY_ID)).andExpect(status().isUnauthorized());
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get(base + "/{id}", "org-other", CEREMONY_ID)).andExpect(status().isForbidden());
+        mockMvc.perform(post(base + "/{id}/credential/request", "org-other", CEREMONY_ID)).andExpect(status().isForbidden());
+        mockMvc.perform(post(base + "/{id}/auth-begin", "org-other", CEREMONY_ID)).andExpect(status().isForbidden());
+        mockMvc.perform(post(base + "/{id}/attest", "org-other", CEREMONY_ID)).andExpect(status().isForbidden());
 
         verifyNoInteractions(ceremonyService, credentialService, authBeginService, attestService);
     }

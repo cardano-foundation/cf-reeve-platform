@@ -14,6 +14,8 @@ public interface VaultKeyRepository extends JpaRepository<VaultKeyEntity, String
 
     Page<VaultKeyEntity> findByAccountId(String accountId, Pageable pageable);
 
+    Page<VaultKeyEntity> findByAccountIdAndOrganisationId(String accountId, String organisationId, Pageable pageable);
+
     Optional<VaultKeyEntity> findByIdAndAccountId(String id, String accountId);
 
     boolean existsByAccountIdAndOrganisationIdAndPublicKey(String accountId, String organisationId, String publicKey);

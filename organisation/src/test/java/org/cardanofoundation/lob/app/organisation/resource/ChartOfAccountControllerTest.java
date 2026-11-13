@@ -130,7 +130,7 @@ class ChartOfAccountControllerTest {
 
         ResponseEntity<?> response = controller.getChartOfAccountTypes("org-1");
 
-        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
         verifyNoInteractions(chartOfAccountsService);
     }
 
@@ -140,7 +140,7 @@ class ChartOfAccountControllerTest {
 
         ResponseEntity<?> response = controller.getChartOfAccounts("org-1", null, null, null, null, null, null, null, null, Pageable.unpaged());
 
-        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
         verifyNoInteractions(chartOfAccountsService);
     }
 
@@ -150,7 +150,7 @@ class ChartOfAccountControllerTest {
 
         ResponseEntity<?> response = controller.downloadChartOfAccountsCsv("org-1", null, null, null, null, null, null, null, null);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
         verifyNoInteractions(chartOfAccountsService);
     }
 
@@ -161,7 +161,7 @@ class ChartOfAccountControllerTest {
 
         ResponseEntity<?> response = controller.insertChartOfAccount("org-1", update);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
         verifyNoInteractions(chartOfAccountsService);
     }
 
@@ -171,7 +171,7 @@ class ChartOfAccountControllerTest {
 
         ResponseEntity<?> response = controller.insertChartOfAccountByCsv("org-1", null);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
         verifyNoInteractions(chartOfAccountsService);
     }
 
@@ -182,7 +182,7 @@ class ChartOfAccountControllerTest {
 
         ResponseEntity<?> response = controller.updateChartOfAccount("org-1", update);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
         verifyNoInteractions(chartOfAccountsService);
     }
 

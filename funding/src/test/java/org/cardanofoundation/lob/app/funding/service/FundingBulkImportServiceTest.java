@@ -165,7 +165,7 @@ class FundingBulkImportServiceTest {
 
         FundingBulkImportResult result = bulkImportService.importFiles(request);
 
-        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
         verifyNoInteractions(projectMilestoneCsvParser, eventCsvParser, projectService, spendingEventService);
     }
 
