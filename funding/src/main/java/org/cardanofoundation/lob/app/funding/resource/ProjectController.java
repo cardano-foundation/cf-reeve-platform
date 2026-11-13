@@ -2,6 +2,9 @@ package org.cardanofoundation.lob.app.funding.resource;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
+import java.math.BigDecimal;
+import java.util.List;
+
 import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
@@ -23,6 +26,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
+import org.cardanofoundation.lob.app.funding.domain.enums.ProjectAmountTarget;
+import org.cardanofoundation.lob.app.funding.domain.request.ProjectFilterRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.CascadeDeletionView;
 import org.cardanofoundation.lob.app.funding.domain.view.PagedResponse;
@@ -42,17 +47,40 @@ public class ProjectController {
     private final ProjectService projectService;
     private final ProjectTreeUpdateService projectTreeUpdateService;
 
-    @Operation(description = "List all projects for an organisation", responses = {
-            @ApiResponse(content = {@Content(mediaType = APPLICATION_JSON_VALUE,
+    @Operation(description = "List all projects for an organisation, with optional filters. "
+            + "Without filters every project (roots and sub-projects) is listed. Filters are combined with AND and select "
+            + "root projects: each matching root is returned followed by all of its sub-projects, and pagination and the "
+            + "total count apply to the matching root projects.", responses = {
+            @ApiResponse(responseCode = "200", content = {@Content(mediaType = APPLICATION_JSON_VALUE,
                     schema = @Schema(implementation = PagedResponse.class))}),
+            @ApiResponse(responseCode = "400", description = "Invalid amount range (minimum above maximum, negative amount)",
+                    content = {@Content(mediaType = APPLICATION_JSON_VALUE, schema = @Schema(implementation = PagedResponse.class))}),
     })
     @GetMapping(value = "/projects", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'view')")
     public ResponseEntity<PagedResponse<ProjectView>> listProjects(
             @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
             @RequestParam String organisationId,
+            @Parameter(description = "Case-insensitive partial match on the root project title or any sub-project or milestone title beneath it, at any level", example = "Education")
+            @RequestParam(required = false) String search,
+            @Parameter(description = "One or more base currency codes of the root project; repeat the parameter or comma-separate values")
+            @RequestParam(required = false) List<String> currency,
+            @Parameter(description = "Amount the minAmount/maxAmount range applies to; defaults to BUDGETED. "
+                    + "FUNDED = allocated FUNDING minus REFUND, SPENT = allocated SPENDING, both rolled up over the whole project structure")
+            @RequestParam(required = false) ProjectAmountTarget amountTarget,
+            @Parameter(description = "Minimum target amount, inclusive; must not be negative", example = "1000")
+            @RequestParam(required = false) BigDecimal minAmount,
+            @Parameter(description = "Maximum target amount, inclusive; must not be negative", example = "50000")
+            @RequestParam(required = false) BigDecimal maxAmount,
             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-        return Responses.respond(projectService.listProjects(organisationId, pageable), HttpStatus.OK);
+        ProjectFilterRequest filter = ProjectFilterRequest.builder()
+                .search(search)
+                .currencies(currency)
+                .amountTarget(amountTarget)
+                .minAmount(minAmount)
+                .maxAmount(maxAmount)
+                .build();
+        return Responses.respond(projectService.listProjects(organisationId, filter, pageable), HttpStatus.OK);
     }
 
     @Operation(description = "Get a project by ID (also serves sub-projects, which are projects)", responses = {
@@ -60,9 +88,12 @@ public class ProjectController {
                     schema = @Schema(implementation = ProjectView.class))})
     })
     @GetMapping(value = "/projects/{projectId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<ProjectView> getProject(@PathVariable String projectId) {
-        return Responses.respond(projectService.getProject(projectId), HttpStatus.OK);
+    @PreAuthorize("@permissions.can('project_management', 'view')")
+    public ResponseEntity<ProjectView> getProject(
+            @PathVariable String projectId,
+            @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
+            @RequestParam String organisationId) {
+        return Responses.respond(projectService.getProject(projectId, organisationId), HttpStatus.OK);
     }
 
     @Operation(description = "List sub-projects of a parent project. Use GET /projects/{id} to fetch a single sub-project.", responses = {
@@ -70,11 +101,13 @@ public class ProjectController {
                     schema = @Schema(implementation = PagedResponse.class))})
     })
     @GetMapping(value = "/projects/{parentProjectId}/subprojects", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'view')")
     public ResponseEntity<PagedResponse<ProjectView>> listSubProjects(
             @PathVariable String parentProjectId,
+            @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
+            @RequestParam String organisationId,
             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-        return Responses.respond(projectService.listSubProjects(parentProjectId, pageable), HttpStatus.OK);
+        return Responses.respond(projectService.listSubProjects(parentProjectId, organisationId, pageable), HttpStatus.OK);
     }
 
     @Operation(
@@ -188,7 +221,7 @@ public class ProjectController {
                             schema = @Schema(implementation = ProjectView.class))})
             })
     @PostMapping(value = "/projects", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'create_project')")
     public ResponseEntity<ProjectView> createProjectWithMilestones(@Valid @RequestBody ProjectWithMilestonesCreateRequest request) {
         return Responses.respond(projectService.createWithMilestones(request), HttpStatus.CREATED);
     }
@@ -322,7 +355,7 @@ public class ProjectController {
                             schema = @Schema(implementation = ProjectView.class))})
             })
     @PutMapping(value = "/projects/{projectId}", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'create_project')")
     public ResponseEntity<ProjectView> updateProject(
             // "Project Orion"'s own internal id: SHA3(organisationId :: proId) is deterministic, so
             // this is always what the walkthrough's POST /projects example (org
@@ -342,7 +375,7 @@ public class ProjectController {
                     schema = @Schema(implementation = ProjectDraftStatusView.class))})
     })
     @GetMapping(value = "/projects/{projectId}/has-draft-event", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'view')")
     public ResponseEntity<ProjectDraftStatusView> hasDraftEvent(
             @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
             @RequestParam String organisationId,
@@ -359,9 +392,12 @@ public class ProjectController {
                     schema = @Schema(implementation = ProblemDetail.class))})
     })
     @DeleteMapping(value = "/projects/{projectId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<CascadeDeletionView> deleteProject(@PathVariable String projectId) {
-        return Responses.respond(projectService.deleteProject(projectId), HttpStatus.OK);
+    @PreAuthorize("@permissions.can('project_management', 'delete')")
+    public ResponseEntity<CascadeDeletionView> deleteProject(
+            @PathVariable String projectId,
+            @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
+            @RequestParam String organisationId) {
+        return Responses.respond(projectService.deleteProject(projectId, organisationId), HttpStatus.OK);
     }
 
 }

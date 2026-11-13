@@ -43,11 +43,12 @@ public class MilestoneController {
                     schema = @Schema(implementation = PagedResponse.class))})
     })
     @GetMapping(value = "/projects/{projectId}/milestones", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'view')")
     public ResponseEntity<PagedResponse<MilestoneView>> listMilestones(
             @PathVariable String projectId,
+            @RequestParam String organisationId,
             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
-        return Responses.respond(milestoneService.listMilestones(projectId, pageable), HttpStatus.OK);
+        return Responses.respond(milestoneService.listMilestones(projectId, organisationId, pageable), HttpStatus.OK);
     }
 
     @Operation(description = "Get a single milestone", responses = {
@@ -55,11 +56,12 @@ public class MilestoneController {
                     schema = @Schema(implementation = MilestoneView.class))})
     })
     @GetMapping(value = "/projects/{projectId}/milestones/{milestoneId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'view')")
     public ResponseEntity<MilestoneView> getMilestone(
             @PathVariable String projectId,
-            @PathVariable String milestoneId) {
-        return Responses.respond(milestoneService.getMilestone(projectId, milestoneId), HttpStatus.OK);
+            @PathVariable String milestoneId,
+            @RequestParam String organisationId) {
+        return Responses.respond(milestoneService.getMilestone(projectId, milestoneId, organisationId), HttpStatus.OK);
     }
 
     @Operation(description = "Create a milestone for a project", responses = {
@@ -67,11 +69,12 @@ public class MilestoneController {
                     schema = @Schema(implementation = MilestoneView.class))})
     })
     @PostMapping(value = "/projects/{projectId}/milestones", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'create_project')")
     public ResponseEntity<MilestoneView> createMilestone(
             @PathVariable String projectId,
+            @RequestParam String organisationId,
             @Valid @RequestBody MilestoneCreateRequest request) {
-        return Responses.respond(milestoneService.createMilestone(projectId, request), HttpStatus.CREATED);
+        return Responses.respond(milestoneService.createMilestone(projectId, organisationId, request), HttpStatus.CREATED);
     }
 
     @Operation(description = "Update a milestone", responses = {
@@ -79,12 +82,13 @@ public class MilestoneController {
                     schema = @Schema(implementation = MilestoneView.class))})
     })
     @PutMapping(value = "/projects/{projectId}/milestones/{milestoneId}", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'create_project')")
     public ResponseEntity<MilestoneView> updateMilestone(
             @PathVariable String projectId,
             @PathVariable String milestoneId,
+            @RequestParam String organisationId,
             @Valid @RequestBody MilestoneUpdateRequest request) {
-        return Responses.respond(milestoneService.updateMilestone(projectId, milestoneId, request), HttpStatus.OK);
+        return Responses.respond(milestoneService.updateMilestone(projectId, milestoneId, organisationId, request), HttpStatus.OK);
     }
 
     @Operation(description = "Delete a milestone. On success, lists any non-published events that had an "
@@ -96,11 +100,12 @@ public class MilestoneController {
                     schema = @Schema(implementation = ProblemDetail.class))})
     })
     @DeleteMapping(value = "/projects/{projectId}/milestones/{milestoneId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('project_management', 'delete')")
     public ResponseEntity<CascadeDeletionView> deleteMilestone(
             @PathVariable String projectId,
-            @PathVariable String milestoneId) {
-        return Responses.respond(milestoneService.deleteMilestone(projectId, milestoneId), HttpStatus.OK);
+            @PathVariable String milestoneId,
+            @RequestParam String organisationId) {
+        return Responses.respond(milestoneService.deleteMilestone(projectId, milestoneId, organisationId), HttpStatus.OK);
     }
 
 }

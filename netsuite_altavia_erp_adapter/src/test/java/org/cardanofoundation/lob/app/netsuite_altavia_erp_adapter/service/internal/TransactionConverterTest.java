@@ -57,17 +57,42 @@ class TransactionConverterTest {
     }
 
     @Test
-    void testConvert_OrganisationIdFailed() {
+    void testConvert_unmappedSubsidiaryIsIgnored() {
         TxLine mockTxLine = mock(TxLine.class);
         when(codesMappingService.getCodeMapping(netsuiteInstanceId, 10L, CodeMappingType.ORGANISATION)).thenReturn(Optional.empty());
         when(mockTxLine.subsidiary()).thenReturn(10L);
 
         Either<FatalError, Transactions> org = transactionConverter.convert("org", "10", List.of(mockTxLine));
 
-        assertThat(org.isLeft()).isTrue();
-        Map<String, Object> error = (Map<String, Object>) org.getLeft().getBag().get("error");
-        Assertions.assertEquals("ORGANISATION_NOT_IMPORTED", error.get("code"));
-        Assertions.assertEquals("Organisation not imported: no organisation mapping for NetSuite subsidiary 10", error.get("message"));
+        assertThat(org.isRight()).isTrue();
+        Assertions.assertEquals("org", org.get().organisationId());
+        Assertions.assertTrue(org.get().transactions().isEmpty());
+    }
+
+    @Test
+    void testConvert_unmappedSubsidiaryIsIgnoredAlongsideMappedOne() {
+        TxLine unmappedLine = mock(TxLine.class);
+        when(codesMappingService.getCodeMapping(netsuiteInstanceId, 2L, CodeMappingType.ORGANISATION)).thenReturn(Optional.empty());
+        when(unmappedLine.subsidiary()).thenReturn(2L);
+
+        TxLine mappedLine = mock(TxLine.class);
+        when(codesMappingService.getCodeMapping(netsuiteInstanceId, 1L, CodeMappingType.ORGANISATION)).thenReturn(Optional.of("orgID"));
+        when(mappedLine.subsidiary()).thenReturn(1L);
+        when(mappedLine.transactionNumber()).thenReturn("transactionID");
+        when(mappedLine.type()).thenReturn("type");
+        when(transactionTypeMapper.apply("type")).thenReturn(Optional.of(TransactionType.Transfer));
+        when(mappedLine.date()).thenReturn(LocalDate.now());
+        when(mappedLine.exchangeRate()).thenReturn(BigDecimal.ONE);
+        when(mappedLine.accountMain()).thenReturn("accountMain");
+        when(validator.validate(mappedLine)).thenReturn(Set.of());
+        when(preprocessorService.preProcess("accountMain", FieldType.CHART_OF_ACCOUNT)).thenReturn(Either.right("Success"));
+        when(preprocessorService.preProcess("accountMain", FieldType.ACCOUNT_CREDIT_NAME)).thenReturn(Either.right("Success"));
+
+        Either<FatalError, Transactions> org = transactionConverter.convert("orgID", "10", List.of(unmappedLine, mappedLine));
+
+        assertThat(org.isRight()).isTrue();
+        Assertions.assertEquals(1, org.get().transactions().size());
+        Assertions.assertEquals("transactionID", org.get().transactions().iterator().next().getInternalTransactionNumber());
     }
 
     @Test

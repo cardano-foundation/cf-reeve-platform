@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -33,6 +34,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.JpaSort;
 
+import io.vavr.control.Either;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -67,12 +69,15 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.repository.Reconc
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionBatchRepositoryGateway;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionItemRepository;
 import org.cardanofoundation.lob.app.accounting_reporting_core.repository.TransactionReconcilationRepository;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.BatchFilterRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterSource;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationFilterStatusRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRejectionCodeRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationStatisticRequest;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.TransactionItemsRejectionRequest;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.response.FilteringOptionsListResponse;
+import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.BatchReprocessView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReconciliationResponseView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.ReconciliationStatisticView;
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionReconciliationTransactionsView;
@@ -81,6 +86,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.
 import org.cardanofoundation.lob.app.organisation.OrganisationPublicApiIF;
 import org.cardanofoundation.lob.app.organisation.repository.CostCenterRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ProjectRepository;
+import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
 
 @ExtendWith(MockitoExtension.class)
 class AccountingCorePresentationViewServiceTest {
@@ -105,15 +111,17 @@ class AccountingCorePresentationViewServiceTest {
     private CostCenterRepository costCenterRepository;
     @Mock
     private ProjectRepository projectRepository;
+    @Mock
+    private JpaSortFieldValidator jpaSortFieldValidator;
 
     @InjectMocks
     private AccountingCorePresentationViewService accountingCorePresentationViewService;
 
     @Test
     void testAllReconiciliationTransaction_successfulUnprocessed() {
-        when(reconcilationRepository.findCalcReconciliationStatistic(any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconcilation(any(), eq(null), eq(null), eq(null),
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any())).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconcilation(any(), any(), eq(null), eq(null), eq(null),
                 eq(null), eq(null), eq(Pageable.unpaged()))).thenReturn(Page.empty());
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
         when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNPROCESSED);
@@ -137,25 +145,25 @@ class AccountingCorePresentationViewServiceTest {
         Assertions.assertEquals(Optional.empty(), responseView.getLastReconciledDate());
 
 
-        verify(reconcilationRepository).findCalcReconciliationStatistic(any());
-        verify(transactionReconcilationRepository).findTopByOrderByCreatedAtDesc();
+        verify(reconcilationRepository).findCalcReconciliationStatistic(any(), any());
+        verify(transactionReconcilationRepository).findTopByOrganisationIdOrderByCreatedAtDesc(any());
         verifyNoMoreInteractions(accountingCoreTransactionRepository, transactionReconcilationRepository, transactionRepositoryGateway);
         verifyNoInteractions(accountingCoreService, transactionBatchRepositoryGateway);
     }
 
     @Test
     void testAllReconiciliationTransaction_successfulUnReconciled() {
-        when(reconcilationRepository.findCalcReconciliationStatistic(any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any())).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
         when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNRECONCILED);
 
         accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
 
-        verify(reconcilationRepository).findCalcReconciliationStatistic(any());
-        verify(transactionReconcilationRepository).findTopByOrderByCreatedAtDesc();
+        verify(reconcilationRepository).findCalcReconciliationStatistic(any(), any());
+        verify(transactionReconcilationRepository).findTopByOrganisationIdOrderByCreatedAtDesc(any());
         verifyNoMoreInteractions(accountingCoreTransactionRepository, transactionReconcilationRepository);
         verifyNoInteractions(accountingCoreService, transactionBatchRepositoryGateway, transactionRepositoryGateway);
     }
@@ -163,10 +171,10 @@ class AccountingCorePresentationViewServiceTest {
     @Test
     void testAllReconiciliationTransaction_excludedFieldAndTotalIncludeExcludedCount() {
         // result[9] is the excluded count; it is added to TOTAL and mapped to the excluded field
-        when(reconcilationRepository.findCalcReconciliationStatistic(any()))
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any()))
                 .thenReturn(new Object[]{0L, 0L, 0L, 0L, 0L, 0L, 10L, 5L, 3L, 7L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconcilation(any(), eq(null), eq(null), eq(null),
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any())).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconcilation(any(), any(), eq(null), eq(null), eq(null),
                 eq(null), eq(null), eq(Pageable.unpaged()))).thenReturn(Page.empty());
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
         when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNPROCESSED);
@@ -186,10 +194,10 @@ class AccountingCorePresentationViewServiceTest {
     @Test
     void testAllReconiciliationTransaction_zeroExcluded_totalOnlyCountsOkNokNever() {
         // When excluded = 0, TOTAL = OK + NOK + NEVER (same as old behaviour)
-        when(reconcilationRepository.findCalcReconciliationStatistic(any()))
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any()))
                 .thenReturn(new Object[]{0L, 0L, 0L, 0L, 0L, 0L, 6L, 7L, 8L, 0L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconcilation(any(), eq(null), eq(null), eq(null),
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any())).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconcilation(any(), any(), eq(null), eq(null), eq(null),
                 eq(null), eq(null), eq(Pageable.unpaged()))).thenReturn(Page.empty());
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
         when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNPROCESSED);
@@ -250,7 +258,7 @@ class AccountingCorePresentationViewServiceTest {
     @Test
     void getFilterOptions_AllOptions() {
         when(transactionBatchRepositoryGateway.findBatchUsersList("org123")).thenReturn(List.of("user1", "user2"));
-        when(transactionItemRepository.getAllDocumentNumbers()).thenReturn(List.of("Doc12"));
+        when(transactionItemRepository.getAllDocumentNumbers("org123")).thenReturn(List.of("Doc12"));
 
 
         when(transactionItemRepository.getAllCounterParty("org123")).thenReturn(List.of(
@@ -272,11 +280,19 @@ class AccountingCorePresentationViewServiceTest {
 
         verify(transactionBatchRepositoryGateway).findBatchUsersList("org123");
         verifyNoMoreInteractions(transactionBatchRepositoryGateway);
-        verify(transactionItemRepository).getAllDocumentNumbers();
+        verify(transactionItemRepository).getAllDocumentNumbers("org123");
         verify(transactionItemRepository, times(2)).getAllCounterParty("org123");
         verifyNoMoreInteractions(transactionItemRepository);
         verifyNoMoreInteractions(organisationPublicApiIF);
 
+    }
+
+    private static final String ORG_ID = "org123";
+
+    private static BatchFilterRequest orgFilter() {
+        BatchFilterRequest batchFilterRequest = new BatchFilterRequest();
+        batchFilterRequest.setOrganisationId(ORG_ID);
+        return batchFilterRequest;
     }
 
     @Test
@@ -286,8 +302,8 @@ class AccountingCorePresentationViewServiceTest {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
 
-        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged())).thenReturn(Page.empty());
-        accountingCorePresentationViewService.downloadCsvTransactions("org123", null, null, null,outputStream);
+        when(accountingCoreTransactionRepository.findAllByBatchId(isNull(), eq(ORG_ID), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(Page.empty());
+        accountingCorePresentationViewService.downloadCsvTransactions(null, null, orgFilter(), outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] lines = csv.split("\n");
@@ -316,10 +332,10 @@ class AccountingCorePresentationViewServiceTest {
         when(itemEntity.getProject()).thenReturn(Optional.empty());
         when(itemEntity.getDocument()).thenReturn(Optional.empty());
 
-        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged())).thenReturn(new PageImpl<>(List.of(transactionEntity)));
+        when(accountingCoreTransactionRepository.findAllByBatchId(isNull(), eq(ORG_ID), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(new PageImpl<>(List.of(transactionEntity)));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        accountingCorePresentationViewService.downloadCsvTransactions("org123", null, null, null,outputStream);
+        accountingCorePresentationViewService.downloadCsvTransactions(null, null, orgFilter(), outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] lines = csv.split("\n");
@@ -364,11 +380,11 @@ class AccountingCorePresentationViewServiceTest {
 
         when(projectRepository.findById(new org.cardanofoundation.lob.app.organisation.domain.entity.Project.Id("ORG01", "PROJ01")))
                 .thenReturn(Optional.of(orgProject));
-        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged()))
+        when(accountingCoreTransactionRepository.findAllByBatchId(isNull(), eq(ORG_ID), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transactionEntity)));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        accountingCorePresentationViewService.downloadCsvTransactions("ORG01", null, null, null, outputStream);
+        accountingCorePresentationViewService.downloadCsvTransactions(null, null, orgFilter(), outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] lines = csv.split("\n");
@@ -414,11 +430,11 @@ class AccountingCorePresentationViewServiceTest {
 
         when(costCenterRepository.findById(new org.cardanofoundation.lob.app.organisation.domain.entity.CostCenter.Id("ORG01", "CC01")))
                 .thenReturn(Optional.of(orgCostCenter));
-        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged()))
+        when(accountingCoreTransactionRepository.findAllByBatchId(isNull(), eq(ORG_ID), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transactionEntity)));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        accountingCorePresentationViewService.downloadCsvTransactions("ORG01", null, null, null, outputStream);
+        accountingCorePresentationViewService.downloadCsvTransactions(null, null, orgFilter(), outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] lines = csv.split("\n");
@@ -464,11 +480,11 @@ class AccountingCorePresentationViewServiceTest {
 
         when(projectRepository.findById(new org.cardanofoundation.lob.app.organisation.domain.entity.Project.Id("ORG01", "PROJ02")))
                 .thenReturn(Optional.of(orgProject));
-        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged()))
+        when(accountingCoreTransactionRepository.findAllByBatchId(isNull(), eq(ORG_ID), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transactionEntity)));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        accountingCorePresentationViewService.downloadCsvTransactions("ORG01", null, null, null, outputStream);
+        accountingCorePresentationViewService.downloadCsvTransactions(null, null, orgFilter(), outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] lines = csv.split("\n");
@@ -513,11 +529,11 @@ class AccountingCorePresentationViewServiceTest {
         when(itemEntity.getProject()).thenReturn(Optional.empty());
         when(itemEntity.getDocument()).thenReturn(Optional.empty());
 
-        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged()))
+        when(accountingCoreTransactionRepository.findAllByBatchId(isNull(), eq(ORG_ID), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transactionEntity)));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        accountingCorePresentationViewService.downloadCsvTransactions("org123", null, null, null, outputStream);
+        accountingCorePresentationViewService.downloadCsvTransactions(null, null, orgFilter(), outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] columns = csv.split("\n")[1].split(",", -1);
@@ -545,11 +561,11 @@ class AccountingCorePresentationViewServiceTest {
         when(itemEntity.getProject()).thenReturn(Optional.empty());
         when(itemEntity.getDocument()).thenReturn(Optional.empty());
 
-        when(accountingCoreTransactionRepository.findAllByBatchId(null, null, Pageable.unpaged()))
+        when(accountingCoreTransactionRepository.findAllByBatchId(isNull(), eq(ORG_ID), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(transactionEntity)));
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        accountingCorePresentationViewService.downloadCsvTransactions("org123", null, null, null, outputStream);
+        accountingCorePresentationViewService.downloadCsvTransactions(null, null, orgFilter(), outputStream);
 
         String csv = outputStream.toString(StandardCharsets.UTF_8);
         String[] columns = csv.split("\n")[1].split(",", -1);
@@ -969,9 +985,9 @@ class AccountingCorePresentationViewServiceTest {
 
     @Test
     void testAllReconciliationTransaction_reconciledFilter_withTransactionId() {
-        when(reconcilationRepository.findCalcReconciliationStatistic(any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconcilation(eq("RECONCILED"), eq(null), eq(null), eq(null), eq("TXN-123"), eq(null), any(Pageable.class))).thenReturn(Page.empty());
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any())).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconcilation(any(), eq("RECONCILED"), eq(null), eq(null), eq(null), eq("TXN-123"), eq(null), any(Pageable.class))).thenReturn(Page.empty());
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
         when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.RECONCILED);
@@ -979,15 +995,38 @@ class AccountingCorePresentationViewServiceTest {
 
         accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
 
-        verify(reconcilationRepository).findAllReconcilation(eq("RECONCILED"), eq(null), eq(null), eq(null), eq("TXN-123"), eq(null), any(Pageable.class));
+        verify(reconcilationRepository).findAllReconcilation(any(), eq("RECONCILED"), eq(null), eq(null), eq(null), eq("TXN-123"), eq(null), any(Pageable.class));
         verifyNoInteractions(accountingCoreService, transactionBatchRepositoryGateway, transactionRepositoryGateway);
     }
 
     @Test
+    void allReconciliationTransaction_scopesEveryQueryToTheRequestOrganisation() {
+        when(reconcilationRepository.findCalcReconciliationStatistic(eq("org123"), any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc("org123")).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconciliationSpecial(eq("org123"), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
+        when(reconcilationRepository.findAllReconcilation(eq("org123"), any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
+
+        ReconciliationFilterRequest unreconciled = mock(ReconciliationFilterRequest.class);
+        when(unreconciled.getOrganisationId()).thenReturn("org123");
+        when(unreconciled.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNRECONCILED);
+        accountingCorePresentationViewService.allReconciliationTransaction(unreconciled, Pageable.unpaged());
+
+        ReconciliationFilterRequest reconciled = mock(ReconciliationFilterRequest.class);
+        when(reconciled.getOrganisationId()).thenReturn("org123");
+        when(reconciled.getFilter()).thenReturn(ReconciliationFilterStatusRequest.RECONCILED);
+        accountingCorePresentationViewService.allReconciliationTransaction(reconciled, Pageable.unpaged());
+
+        verify(reconcilationRepository, times(2)).findCalcReconciliationStatistic(eq("org123"), any());
+        verify(transactionReconcilationRepository, times(2)).findTopByOrganisationIdOrderByCreatedAtDesc("org123");
+        verify(reconcilationRepository).findAllReconciliationSpecial(eq("org123"), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class));
+        verify(reconcilationRepository).findAllReconcilation(eq("org123"), any(), any(), any(), any(), any(), any(), any(Pageable.class));
+    }
+
+    @Test
     void testAllReconciliationTransaction_unreconciledFilter_withTransactionId() {
-        when(reconcilationRepository.findCalcReconciliationStatistic(any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconciliationSpecial(eq(null), eq(null), eq(null), eq(null), eq(null), eq("TXN-123"), any(), any(Pageable.class))).thenReturn(Page.empty());
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any())).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), eq(null), eq(null), eq(null), eq(null), eq(null), eq("TXN-123"), any(), any(Pageable.class))).thenReturn(Page.empty());
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
         when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNRECONCILED);
@@ -995,7 +1034,7 @@ class AccountingCorePresentationViewServiceTest {
 
         accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
 
-        verify(reconcilationRepository).findAllReconciliationSpecial(eq(null), eq(null), eq(null), eq(null), eq(null), eq("TXN-123"), any(), any(Pageable.class));
+        verify(reconcilationRepository).findAllReconciliationSpecial(any(), eq(null), eq(null), eq(null), eq(null), eq(null), eq("TXN-123"), any(), any(Pageable.class));
         verifyNoInteractions(accountingCoreService, transactionBatchRepositoryGateway, transactionRepositoryGateway);
     }
 
@@ -1004,10 +1043,10 @@ class AccountingCorePresentationViewServiceTest {
         LocalDate dateFrom = LocalDate.of(2024, 1, 1);
         LocalDate dateTo = LocalDate.of(2024, 12, 31);
 
-        when(reconcilationRepository.findCalcReconciliationStatistic(any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any())).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconcilation(
-                eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("ERP"), any(Pageable.class))
+                any(), eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("ERP"), any(Pageable.class))
         ).thenReturn(Page.empty());
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
@@ -1019,7 +1058,7 @@ class AccountingCorePresentationViewServiceTest {
         accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
 
         verify(reconcilationRepository).findAllReconcilation(
-                eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("ERP"), any(Pageable.class));
+                any(), eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("ERP"), any(Pageable.class));
         verifyNoInteractions(accountingCoreService, transactionBatchRepositoryGateway, transactionRepositoryGateway);
     }
 
@@ -1028,10 +1067,10 @@ class AccountingCorePresentationViewServiceTest {
         LocalDate dateFrom = LocalDate.of(2024, 1, 1);
         LocalDate dateTo = LocalDate.of(2024, 12, 31);
 
-        when(reconcilationRepository.findCalcReconciliationStatistic(any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any())).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconcilation(
-                eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("CSV"), any(Pageable.class))
+                any(), eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("CSV"), any(Pageable.class))
         ).thenReturn(Page.empty());
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
@@ -1045,7 +1084,7 @@ class AccountingCorePresentationViewServiceTest {
         accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
 
         verify(reconcilationRepository).findAllReconcilation(
-                eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("CSV"), any(Pageable.class));
+                any(), eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("CSV"), any(Pageable.class));
         verifyNoInteractions(accountingCoreService, transactionBatchRepositoryGateway, transactionRepositoryGateway);
     }
 
@@ -1054,10 +1093,10 @@ class AccountingCorePresentationViewServiceTest {
         LocalDate dateFrom = LocalDate.of(2024, 1, 1);
         LocalDate dateTo = LocalDate.of(2024, 12, 31);
 
-        when(reconcilationRepository.findCalcReconciliationStatistic(any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any())).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconciliationSpecial(
-                eq(null), eq(dateFrom), eq(dateTo), eq("CSV"), eq(null), eq(null), any(), any(Pageable.class))
+                any(), eq(null), eq(dateFrom), eq(dateTo), eq("CSV"), eq(null), eq(null), any(), any(Pageable.class))
         ).thenReturn(Page.empty());
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
@@ -1072,15 +1111,15 @@ class AccountingCorePresentationViewServiceTest {
         accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
 
         verify(reconcilationRepository).findAllReconciliationSpecial(
-                eq(null), eq(dateFrom), eq(dateTo), eq("CSV"), eq(null), eq(null), any(), any(Pageable.class));
+                any(), eq(null), eq(dateFrom), eq(dateTo), eq("CSV"), eq(null), eq(null), any(), any(Pageable.class));
         verifyNoInteractions(accountingCoreService, transactionBatchRepositoryGateway, transactionRepositoryGateway);
     }
 
     @Test
     void allReconciliationTransaction_unreconciledFilter_withNonEmptyRejectionCodesAndTypes() {
-        when(reconcilationRepository.findCalcReconciliationStatistic(any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any())).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
         when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNRECONCILED);
@@ -1094,7 +1133,7 @@ class AccountingCorePresentationViewServiceTest {
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Set<TransactionType>> typesCaptor = ArgumentCaptor.forClass(Set.class);
         verify(reconcilationRepository).findAllReconciliationSpecial(
-                rejectionCodesCaptor.capture(), any(), any(), any(), typesCaptor.capture(), any(), any(), any(Pageable.class));
+                any(), rejectionCodesCaptor.capture(), any(), any(), any(), typesCaptor.capture(), any(), any(), any(Pageable.class));
 
         assertEquals(Set.of(ReconcilationRejectionCode.TX_NOT_IN_ERP), rejectionCodesCaptor.getValue());
         assertEquals(Set.of(TransactionType.Journal), typesCaptor.getValue());
@@ -1103,9 +1142,9 @@ class AccountingCorePresentationViewServiceTest {
 
     @Test
     void allReconciliationTransaction_reconciledFilter_withSortedPageable_expandsSort() {
-        when(reconcilationRepository.findCalcReconciliationStatistic(any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconcilation(any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any())).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconcilation(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
         when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.RECONCILED);
@@ -1114,7 +1153,7 @@ class AccountingCorePresentationViewServiceTest {
         accountingCorePresentationViewService.allReconciliationTransaction(body, pageable);
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        verify(reconcilationRepository).findAllReconcilation(any(), any(), any(), any(), any(), any(), pageableCaptor.capture());
+        verify(reconcilationRepository).findAllReconcilation(any(), any(), any(), any(), any(), any(), any(), pageableCaptor.capture());
 
         List<Sort.Order> orders = pageableCaptor.getValue().getSort().stream().toList();
         assertEquals(1, orders.size());
@@ -1124,9 +1163,9 @@ class AccountingCorePresentationViewServiceTest {
 
     @Test
     void allReconciliationTransaction_unreconciledFilter_withSortedPageable_expandsSortWithRvMapping() {
-        when(reconcilationRepository.findCalcReconciliationStatistic(any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any())).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
         when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.UNRECONCILED);
@@ -1135,7 +1174,7 @@ class AccountingCorePresentationViewServiceTest {
         accountingCorePresentationViewService.allReconciliationTransaction(body, pageable);
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        verify(reconcilationRepository).findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), pageableCaptor.capture());
+        verify(reconcilationRepository).findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(), pageableCaptor.capture());
 
         List<Sort.Order> orders = pageableCaptor.getValue().getSort().stream().toList();
         assertEquals(2, orders.size());
@@ -1147,9 +1186,9 @@ class AccountingCorePresentationViewServiceTest {
 
     @Test
     void allReconciliationTransaction_reconciledFilter_resultsPreserveInsertionOrder() {
-        when(reconcilationRepository.findCalcReconciliationStatistic(any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconcilation(any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any())).thenReturn(Optional.empty());
+        when(reconcilationRepository.findAllReconcilation(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class))).thenReturn(Page.empty());
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
         when(body.getFilter()).thenReturn(ReconciliationFilterStatusRequest.RECONCILED);
@@ -1181,11 +1220,11 @@ class AccountingCorePresentationViewServiceTest {
 
         TransactionWithViolationDto dto = new TransactionWithViolationDto(txEntity, violation, lastReconciledDate);
 
-        when(reconcilationRepository.findCalcReconciliationStatistic(any()))
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any()))
                 .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any()))
                 .thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(dto)));
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
@@ -1218,11 +1257,11 @@ class AccountingCorePresentationViewServiceTest {
 
         TransactionWithViolationDto dto = new TransactionWithViolationDto(txEntity, violation, null);
 
-        when(reconcilationRepository.findCalcReconciliationStatistic(any()))
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any()))
                 .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any()))
                 .thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(dto)));
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
@@ -1256,11 +1295,11 @@ class AccountingCorePresentationViewServiceTest {
         TransactionWithViolationDto dto = new TransactionWithViolationDto(
                 txEntity, null, LocalDateTime.of(2024, 6, 15, 10, 30, 0));
 
-        when(reconcilationRepository.findCalcReconciliationStatistic(any()))
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any()))
                 .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any()))
                 .thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(dto)));
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
@@ -1295,11 +1334,11 @@ class AccountingCorePresentationViewServiceTest {
 
         TransactionWithViolationDto dto = new TransactionWithViolationDto(txEntity, violation, lastReconciledDate);
 
-        when(reconcilationRepository.findCalcReconciliationStatistic(any()))
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any()))
                 .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any()))
                 .thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(dto)));
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
@@ -1324,11 +1363,11 @@ class AccountingCorePresentationViewServiceTest {
 
         TransactionWithViolationDto dto = new TransactionWithViolationDto(txEntity, null, LocalDateTime.of(2024, 6, 15, 10, 30, 0));
 
-        when(reconcilationRepository.findCalcReconciliationStatistic(any()))
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any()))
                 .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any()))
                 .thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(dto)));
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
@@ -1375,11 +1414,11 @@ class AccountingCorePresentationViewServiceTest {
         TransactionWithViolationDto dto1 = new TransactionWithViolationDto(txEntity, violation1, LocalDateTime.of(2025, 3, 3, 10, 0, 0));
         TransactionWithViolationDto dto2 = new TransactionWithViolationDto(txEntity, violation2, LocalDateTime.of(2025, 3, 3, 10, 0, 0));
 
-        when(reconcilationRepository.findCalcReconciliationStatistic(any()))
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any()))
                 .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any()))
                 .thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(dto1, dto2)));
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
@@ -1409,11 +1448,11 @@ class AccountingCorePresentationViewServiceTest {
 
         TransactionWithViolationDto dto = new TransactionWithViolationDto(null, violation, lastReconciledDate);
 
-        when(reconcilationRepository.findCalcReconciliationStatistic(any()))
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any()))
                 .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any()))
                 .thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(dto)));
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
@@ -1433,11 +1472,11 @@ class AccountingCorePresentationViewServiceTest {
         // tx is null and no violation either — both guard conditions skip, fallback view is returned.
         TransactionWithViolationDto dto = new TransactionWithViolationDto(null, null, null);
 
-        when(reconcilationRepository.findCalcReconciliationStatistic(any()))
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any()))
                 .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any()))
                 .thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(dto)));
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
@@ -1457,10 +1496,10 @@ class AccountingCorePresentationViewServiceTest {
         LocalDate dateFrom = LocalDate.of(2024, 1, 1);
         LocalDate dateTo = LocalDate.of(2024, 12, 31);
 
-        when(reconcilationRepository.findCalcReconciliationStatistic(any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any())).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconcilation(
-                eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("BLOCKCHAIN"), any(Pageable.class))
+                any(), eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("BLOCKCHAIN"), any(Pageable.class))
         ).thenReturn(Page.empty());
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
@@ -1474,7 +1513,7 @@ class AccountingCorePresentationViewServiceTest {
         accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
 
         verify(reconcilationRepository).findAllReconcilation(
-                eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("BLOCKCHAIN"), any(Pageable.class));
+                any(), eq("RECONCILED"), eq(dateFrom), eq(dateTo), eq(null), eq(null), eq("BLOCKCHAIN"), any(Pageable.class));
     }
 
     @Test
@@ -1482,10 +1521,10 @@ class AccountingCorePresentationViewServiceTest {
         LocalDate dateFrom = LocalDate.of(2024, 1, 1);
         LocalDate dateTo = LocalDate.of(2024, 12, 31);
 
-        when(reconcilationRepository.findCalcReconciliationStatistic(any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc()).thenReturn(Optional.empty());
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any())).thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any())).thenReturn(Optional.empty());
         when(reconcilationRepository.findAllReconciliationSpecial(
-                eq(null), eq(dateFrom), eq(dateTo), eq("BLOCKCHAIN"), eq(null), eq(null), any(), any(Pageable.class))
+                any(), eq(null), eq(dateFrom), eq(dateTo), eq("BLOCKCHAIN"), eq(null), eq(null), any(), any(Pageable.class))
         ).thenReturn(Page.empty());
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
@@ -1500,7 +1539,7 @@ class AccountingCorePresentationViewServiceTest {
         accountingCorePresentationViewService.allReconciliationTransaction(body, Pageable.unpaged());
 
         verify(reconcilationRepository).findAllReconciliationSpecial(
-                eq(null), eq(dateFrom), eq(dateTo), eq("BLOCKCHAIN"), eq(null), eq(null), any(), any(Pageable.class));
+                any(), eq(null), eq(dateFrom), eq(dateTo), eq("BLOCKCHAIN"), eq(null), eq(null), any(), any(Pageable.class));
     }
 
     @Test
@@ -1522,11 +1561,11 @@ class AccountingCorePresentationViewServiceTest {
 
         TransactionWithViolationDto dto = new TransactionWithViolationDto(txEntity, null, null);
 
-        when(reconcilationRepository.findCalcReconciliationStatistic(any()))
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any()))
                 .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any()))
                 .thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(dto)));
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
@@ -1585,11 +1624,11 @@ class AccountingCorePresentationViewServiceTest {
         TransactionWithViolationDto dto1 = new TransactionWithViolationDto(txEntity, erpViolation, null);
         TransactionWithViolationDto dto2 = new TransactionWithViolationDto(txEntity, indexerViolation, null);
 
-        when(reconcilationRepository.findCalcReconciliationStatistic(any()))
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any()))
                 .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any()))
                 .thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(dto1, dto2)));
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
@@ -1629,11 +1668,11 @@ class AccountingCorePresentationViewServiceTest {
 
         TransactionWithViolationDto dto = new TransactionWithViolationDto(txEntity, null, null);
 
-        when(reconcilationRepository.findCalcReconciliationStatistic(any()))
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any()))
                 .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any()))
                 .thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(dto)));
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
@@ -1676,11 +1715,11 @@ class AccountingCorePresentationViewServiceTest {
 
         TransactionWithViolationDto dto = new TransactionWithViolationDto(txEntity, violationWithoutDiff, null);
 
-        when(reconcilationRepository.findCalcReconciliationStatistic(any()))
+        when(reconcilationRepository.findCalcReconciliationStatistic(any(), any()))
                 .thenReturn(new Object[]{0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L});
-        when(transactionReconcilationRepository.findTopByOrderByCreatedAtDesc())
+        when(transactionReconcilationRepository.findTopByOrganisationIdOrderByCreatedAtDesc(any()))
                 .thenReturn(Optional.empty());
-        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
+        when(reconcilationRepository.findAllReconciliationSpecial(any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(dto)));
 
         ReconciliationFilterRequest body = mock(ReconciliationFilterRequest.class);
@@ -1692,5 +1731,68 @@ class AccountingCorePresentationViewServiceTest {
         TransactionReconciliationTransactionsView view = result.getTransactions().iterator().next();
         assertTrue(view.getSourceDiff().isEmpty());
         assertEquals(Set.of(ReconciliationRejectionCodeRequest.MISSING_IN_ERP), view.getReconciliationRejectionCode());
+    }
+
+    @Test
+    void transactionDetailSpecific_notFound_whenTransactionDoesNotBelongToOrganisation() {
+        when(transactionRepositoryGateway.findByIdAndOrganisationId("tx-1", "org-1")).thenReturn(Set.of());
+
+        Optional<org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.TransactionView> result =
+                accountingCorePresentationViewService.transactionDetailSpecific("tx-1", "org-1");
+
+        assertTrue(result.isEmpty());
+        verify(transactionRepositoryGateway).findByIdAndOrganisationId("tx-1", "org-1");
+    }
+
+    @Test
+    void rejectTransactionItems_notFound_whenTransactionDoesNotBelongToOrganisation() {
+        TransactionItemsRejectionRequest request = mock(TransactionItemsRejectionRequest.class);
+        when(request.getTransactionId()).thenReturn("tx-1");
+        when(request.getOrganisationId()).thenReturn("org-1");
+        when(transactionRepositoryGateway.findByIdAndOrganisationId("tx-1", "org-1")).thenReturn(Set.of());
+
+        var result = accountingCorePresentationViewService.rejectTransactionItems(request);
+
+        assertTrue(result.getError().isPresent());
+        assertEquals("tx-1", result.getTransactionId());
+        verify(transactionRepositoryGateway).findByIdAndOrganisationId("tx-1", "org-1");
+        verify(transactionRepositoryGateway, org.mockito.Mockito.never()).rejectTransactionItems(any(), any());
+    }
+
+    @Test
+    void scheduleReIngestionForFailed_delegatesToAccountingCoreServiceWithOrganisationId() {
+        when(accountingCoreService.scheduleReIngestionForFailed("batch-1", "org-1")).thenReturn(Either.right(null));
+
+        BatchReprocessView result = accountingCorePresentationViewService.scheduleReIngestionForFailed("batch-1", "org-1");
+
+        assertFalse(result.getError().isPresent());
+        verify(accountingCoreService).scheduleReIngestionForFailed("batch-1", "org-1");
+    }
+
+    @Test
+    void scheduleReIngestionForFailed_returnsFail_whenAccountingCoreServiceReturnsProblem() {
+        org.springframework.http.ProblemDetail problem = org.springframework.http.ProblemDetail.forStatus(org.springframework.http.HttpStatus.NOT_FOUND);
+        when(accountingCoreService.scheduleReIngestionForFailed("batch-1", "org-1")).thenReturn(Either.left(problem));
+
+        BatchReprocessView result = accountingCorePresentationViewService.scheduleReIngestionForFailed("batch-1", "org-1");
+
+        assertTrue(result.getError().isPresent());
+        assertEquals(problem, result.getError().get());
+    }
+
+    @Test
+    void batchDetail_notFound_whenBatchDoesNotBelongToOrganisation() {
+        BatchFilterRequest batchFilterRequest = new BatchFilterRequest();
+        batchFilterRequest.setOrganisationId("org-1");
+        when(jpaSortFieldValidator.convertPageable(any(Pageable.class), any(), eq(TransactionEntity.class)))
+                .thenReturn(Either.right(Pageable.unpaged()));
+        when(transactionBatchRepositoryGateway.findByIdAndOrganisationId("batch-1", "org-1")).thenReturn(List.of());
+
+        var result = accountingCorePresentationViewService.batchDetail("batch-1", null, Pageable.unpaged(), batchFilterRequest);
+
+        assertTrue(result.isRight());
+        assertTrue(result.get().isEmpty());
+        verify(transactionBatchRepositoryGateway).findByIdAndOrganisationId("batch-1", "org-1");
+        verifyNoInteractions(accountingCoreTransactionRepository);
     }
 }

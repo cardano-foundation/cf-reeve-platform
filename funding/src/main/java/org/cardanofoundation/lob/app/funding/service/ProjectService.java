@@ -1,12 +1,15 @@
 package org.cardanofoundation.lob.app.funding.service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
@@ -19,8 +22,10 @@ import io.vavr.control.Either;
 import org.cardanofoundation.lob.app.funding.domain.entity.MilestoneEntity;
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 import org.cardanofoundation.lob.app.funding.domain.enums.EventStatus;
+import org.cardanofoundation.lob.app.funding.domain.enums.ProjectAmountTarget;
 import org.cardanofoundation.lob.app.funding.domain.enums.ProjectLockStatus;
 import org.cardanofoundation.lob.app.funding.domain.request.MilestoneCreateRequest;
+import org.cardanofoundation.lob.app.funding.domain.request.ProjectFilterRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectTreeNodeRequest;
 import org.cardanofoundation.lob.app.funding.domain.request.ProjectWithMilestonesCreateRequest;
 import org.cardanofoundation.lob.app.funding.domain.view.CascadeDeletionView;
@@ -56,23 +61,101 @@ public class ProjectService {
     // View-returning API (used by the controller — carries the ProblemDetail)
     // -------------------------------------------------------------------------
 
-    public PagedResponse<ProjectView> listProjects(String organisationId, Pageable pageable) {
+    public PagedResponse<ProjectView> listProjects(String organisationId, ProjectFilterRequest filter, Pageable pageable) {
         if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
             return PagedResponse.error(Problems.unauthorized());
         }
         if (organisationPublicApi.findByOrganisationId(organisationId).isEmpty()) {
             return PagedResponse.error(Problems.organisationNotFound(organisationId));
         }
-        return PagedResponse.of(projectRepository.findByOrganisationId(organisationId, pageable), this::toView);
+        Optional<ProblemDetail> invalidFilter = validateFilter(filter);
+        if (invalidFilter.isPresent()) {
+            return PagedResponse.error(invalidFilter.get());
+        }
+        String search = blankToNull(filter.getSearch());
+        List<String> currencies = lowerCaseCurrencies(filter.getCurrencies());
+        boolean structureFiltered = search != null || filter.getMinAmount() != null || filter.getMaxAmount() != null;
+        if (!structureFiltered && currencies.isEmpty()) {
+            // No filters: unchanged flat listing of every project (roots and sub-projects) of the organisation.
+            return PagedResponse.of(projectRepository.findByOrganisationId(organisationId, pageable), this::toView);
+        }
+        return listFilteredRoots(organisationId, search, currencies, filter, structureFiltered, pageable);
     }
 
-    public ProjectView getProject(String projectId) {
-        Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
+    /**
+     * Filtered listing: filters select root projects, and pagination/total count are over those roots. Each
+     * returned root is followed by every sub-project beneath it, so the response keeps the unfiltered list's
+     * flat roots-plus-sub-projects shape the client builds its tree from.
+     */
+    private PagedResponse<ProjectView> listFilteredRoots(String organisationId, String search, List<String> currencies,
+            ProjectFilterRequest filter, boolean structureFiltered, Pageable pageable) {
+        List<String> rootIds = null;
+        if (structureFiltered) {
+            ProjectAmountTarget target = Optional.ofNullable(filter.getAmountTarget()).orElse(ProjectAmountTarget.BUDGETED);
+            rootIds = projectRepository.findRootProjectIdsByStructureFilter(
+                    organisationId, search, target.name(), filter.getMinAmount(), filter.getMaxAmount());
+        }
+        List<String> currencyFilter = currencies.isEmpty() ? null : currencies;
+        Page<ProjectEntity> roots = rootIds != null && rootIds.isEmpty()
+                ? new PageImpl<>(List.of(), pageable, 0)
+                : projectRepository.findRootsByOrganisationIdAndFilter(organisationId, rootIds, currencyFilter, pageable);
+
+        List<ProjectEntity> projects = new ArrayList<>(roots.getContent());
+        List<String> levelIds = roots.getContent().stream().map(ProjectEntity::getId).toList();
+        while (!levelIds.isEmpty()) {
+            List<ProjectEntity> children = projectRepository.findByParentProjectIdIn(levelIds);
+            projects.addAll(children);
+            levelIds = children.stream().map(ProjectEntity::getId).toList();
+        }
+        return PagedResponse.<ProjectView>builder()
+                .content(projects.stream().map(this::toView).toList())
+                .total(roots.getTotalElements())
+                .totalPages(roots.getTotalPages())
+                .page(roots.getNumber())
+                .size(roots.getSize())
+                .build();
+    }
+
+    /** Rejects amount ranges that can never match: negative bounds and a minimum above the maximum. */
+    private static Optional<ProblemDetail> validateFilter(ProjectFilterRequest filter) {
+        if (isNegative(filter.getMinAmount()) || isNegative(filter.getMaxAmount())) {
+            return Optional.of(Problems.badRequest(
+                    "Amount filters must not be negative.", ErrorTitleConstants.PROJECT_FILTER_INVALID));
+        }
+        if (filter.getMinAmount() != null && filter.getMaxAmount() != null
+                && filter.getMinAmount().compareTo(filter.getMaxAmount()) > 0) {
+            return Optional.of(Problems.badRequest(
+                    "Minimum amount (%s) must not be greater than maximum amount (%s).".formatted(
+                            filter.getMinAmount().toPlainString(), filter.getMaxAmount().toPlainString()),
+                    ErrorTitleConstants.PROJECT_FILTER_INVALID));
+        }
+        return Optional.empty();
+    }
+
+    private static boolean isNegative(BigDecimal amount) {
+        return amount != null && amount.signum() < 0;
+    }
+
+    // The repository queries treat null as "filter off"; an empty list or blank string must mean the same.
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    /** Trimmed, lower-cased non-blank currency codes; empty when the currency filter is off. */
+    private static List<String> lowerCaseCurrencies(List<String> values) {
+        if (values == null) {
+            return List.of();
+        }
+        return values.stream().filter(v -> v != null && !v.isBlank()).map(v -> v.trim().toLowerCase()).toList();
+    }
+
+    public ProjectView getProject(String projectId, String organisationId) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return ProjectView.error(Problems.unauthorized());
+        }
+        Optional<ProjectEntity> projectM = projectRepository.findByIdAndOrganisationId(projectId, organisationId).stream().findFirst();
         if (projectM.isEmpty()) {
             return ProjectView.error(Problems.projectNotFound(projectId));
-        }
-        if (!keycloakSecurityHelper.canUserAccessOrg(projectM.get().getOrganisationId())) {
-            return ProjectView.error(Problems.unauthorized());
         }
         // Get-by-id returns the full detail: milestones, sub-projects and the associated events.
         return toView(projectM.get(), true);
@@ -101,13 +184,13 @@ public class ProjectService {
         return ProjectDraftStatusView.builder().hasDraftEvent(hasDraft).build();
     }
 
-    public PagedResponse<ProjectView> listSubProjects(String parentProjectId, Pageable pageable) {
-        Optional<ProjectEntity> parentM = projectRepository.findById(parentProjectId);
+    public PagedResponse<ProjectView> listSubProjects(String parentProjectId, String organisationId, Pageable pageable) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return PagedResponse.error(Problems.unauthorized());
+        }
+        Optional<ProjectEntity> parentM = projectRepository.findByIdAndOrganisationId(parentProjectId, organisationId).stream().findFirst();
         if (parentM.isEmpty()) {
             return PagedResponse.error(Problems.projectNotFound(parentProjectId));
-        }
-        if (!keycloakSecurityHelper.canUserAccessOrg(parentM.get().getOrganisationId())) {
-            return PagedResponse.error(Problems.unauthorized());
         }
         return PagedResponse.of(projectRepository.findByParentProjectId(parentProjectId, pageable), this::toView);
     }
@@ -119,6 +202,9 @@ public class ProjectService {
      */
     @Transactional
     public ProjectView createWithMilestones(ProjectWithMilestonesCreateRequest request) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(request.getOrganisationId())) {
+            return ProjectView.error(Problems.unauthorized());
+        }
         Optional<ProblemDetail> xor = FundingValidations.milestonesXorSubProjects(
                 !request.getMilestones().isEmpty(), !request.getSubProjects().isEmpty());
         if (xor.isPresent()) {
@@ -286,13 +372,13 @@ public class ProjectService {
     }
 
     @Transactional
-    public CascadeDeletionView deleteProject(String projectId) {
-        Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
+    public CascadeDeletionView deleteProject(String projectId, String organisationId) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return CascadeDeletionView.error(Problems.unauthorized());
+        }
+        Optional<ProjectEntity> projectM = projectRepository.findByIdAndOrganisationId(projectId, organisationId).stream().findFirst();
         if (projectM.isEmpty()) {
             return CascadeDeletionView.error(Problems.projectNotFound(projectId));
-        }
-        if (!keycloakSecurityHelper.canUserAccessOrg(projectM.get().getOrganisationId())) {
-            return CascadeDeletionView.error(Problems.unauthorized());
         }
         // Cascade: fails when any published event is associated anywhere in the subtree; otherwise the
         // project, its sub-projects and milestones are removed, and every non-published event that had

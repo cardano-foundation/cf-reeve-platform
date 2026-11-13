@@ -67,7 +67,7 @@ public class ReportTemplateController {
     private final JpaSortFieldValidator jpaSortFieldValidator;
 
     @GetMapping(value = "/types", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('report_templates', 'view')")
     public ResponseEntity<List<String>> getReportTypes() {
         return ResponseEntity.ok(Arrays.stream(ReportTemplateType.values()).map(ReportTemplateType::name).toList());
     }
@@ -85,7 +85,7 @@ public class ReportTemplateController {
                     @ApiResponse(responseCode = "409", description = "Template already exists - use PUT to update")})
     @PostMapping(produces = MediaType.APPLICATION_JSON_VALUE,
             consumes = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
+    @PreAuthorize("@permissions.can('report_templates', 'create')")
     public ResponseEntity<ReportTemplateResponseDto> create(
             @RequestBody(required = true) ReportTemplateDto template) {
         log.debug("POST /api/report-templates - Creating template: {}", template.getName());
@@ -102,9 +102,13 @@ public class ReportTemplateController {
 
     @Tag(name = "Reporting", description = "Create Report Template from CSV")
     @PostMapping(produces = APPLICATION_JSON_VALUE, consumes = MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
+    @PreAuthorize("@permissions.can('report_templates', 'create')")
     public ResponseEntity<List<ReportTemplateResponseDto>> templateCreateCsv(
             @ModelAttribute CreateCsvTemplateRequest csvTemplateRequest) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(csvTemplateRequest.getOrganisationId())) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(List.of(ReportTemplateResponseDto.builder().error(Optional.of(problem)).build()));
+        }
 
         return csvReportTemplateService.createCsvTemplates(csvTemplateRequest)
                 .fold(
@@ -131,11 +135,10 @@ public class ReportTemplateController {
                     schema = @Schema(implementation = ReportTemplateDto.class)))
     @org.springframework.web.bind.annotation.PutMapping(produces = MediaType.APPLICATION_JSON_VALUE,
             consumes = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
+    @PreAuthorize("@permissions.can('report_templates', 'edit')")
     public ResponseEntity<?> update(
             @RequestBody(required = true) ReportTemplateDto template) {
         log.debug("PUT /api/report-templates - Updating template: {}", template.getName());
-
 
         Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.update(template);
 
@@ -157,7 +160,7 @@ public class ReportTemplateController {
                     @ApiResponse(responseCode = "403", description = Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION),
                     @ApiResponse(responseCode = "404", description = "Report template not found")})
     @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('report_templates', 'view')")
     public ResponseEntity<?> findById(
             @PathVariable @Parameter(description = "Report template ID (hash-based)", example = "a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2") String id) {
         log.debug("GET /api/report-templates/{}", id);
@@ -182,7 +185,7 @@ public class ReportTemplateController {
                                             implementation = ReportTemplateResponseDto.class)))),
                     @ApiResponse(responseCode = "403", description = Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION)})
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('report_templates', 'view')")
     public ResponseEntity<?> findAll(
             @RequestParam(value = "organisationId", required = true) @Parameter(
                     description = "Filter by organisation ID",
@@ -221,7 +224,7 @@ public class ReportTemplateController {
                     @ApiResponse(responseCode = "403", description = Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION),
                     @ApiResponse(responseCode = "404", description = "Report template not found")})
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole())")
+    @PreAuthorize("@permissions.can('report_templates', 'delete')")
     public ResponseEntity<?> delete(
             @PathVariable @Parameter(description = "Report template ID (hash-based)", example = "a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2") String id) {
         log.debug("DELETE /api/report-templates/{}", id);

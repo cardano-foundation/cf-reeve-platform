@@ -39,6 +39,8 @@ import org.cardanofoundation.lob.app.organisation.domain.request.ReferenceCodeUp
 import org.cardanofoundation.lob.app.organisation.domain.view.ReferenceCodeView;
 import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
 import org.cardanofoundation.lob.app.organisation.service.ReferenceCodeService;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
+import org.cardanofoundation.lob.app.support.security.OrgAccessDenied;
 
 @RestController
 @RequestMapping("/api/v1/organisations")
@@ -49,6 +51,7 @@ public class ReferenceCodeResource {
 
     private final ReferenceCodeService referenceCodeService;
     private final OrganisationService organisationService;
+    private final KeycloakSecurityHelper keycloakSecurityHelper;
 
     @Operation(description = "Reference Codes list", responses = {
             @ApiResponse(content =
@@ -56,12 +59,17 @@ public class ReferenceCodeResource {
             ),
     })
     @GetMapping(value = "/{orgId}/reference-codes", produces = MediaType.APPLICATION_JSON_VALUE)
+    // The chart of accounts filters use them too: roles that view the chart of accounts also have event_codes:view
+    @PreAuthorize("@permissions.can('event_codes', 'view')")
     public ResponseEntity<?> getReferenceCodes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                @RequestParam(value = "refCode", required = false) String referenceCode,
                                                @RequestParam(value = "name", required = false) String name,
                                                @RequestParam(value = "parentCodes", required = false) List<String> parentCodes,
                                                @RequestParam(value = "active", required = false) Boolean active,
                                                @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         return referenceCodeService.getAllReferenceCodes(orgId, referenceCode, name, parentCodes, active, pageable).fold(
                 problem -> ResponseEntity.status(Objects.requireNonNull(problem.getStatus())).body(problem),
                 ResponseEntity::ok
@@ -70,12 +78,15 @@ public class ReferenceCodeResource {
 
     @Operation(summary = "Download projects CSV file", description = "Download projects as a CSV file")
     @GetMapping(value = "/{orgId}/reference-codes/download", produces = "test/csv")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
+    @PreAuthorize("@permissions.can('export_setup_data', 'download')")
     public ResponseEntity<StreamingResponseBody> downloadRefCodesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                                      @RequestParam(value = "refCode", required = false) String referenceCode,
                                                                      @RequestParam(value = "name", required = false) String name,
                                                                      @RequestParam(value = "parentCodes", required = false) List<String> parentCodes,
                                                                      @RequestParam(value = "active", required = false) Boolean active) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         StreamingResponseBody responseBody = outputStream -> referenceCodeService.downloadCsv(orgId, referenceCode, name, parentCodes, active,outputStream);
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=\"ref-codes_%s.csv\"".formatted(orgId))
@@ -89,9 +100,12 @@ public class ReferenceCodeResource {
             ),
     })
     @PostMapping(value = "/{orgId}/reference-codes", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('event_codes', 'create')")
     public ResponseEntity<?> insertReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @Valid @RequestBody ReferenceCodeUpdate referenceCodeUpdate) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         ReferenceCodeView referenceCode = referenceCodeService.insertReferenceCode(orgId, referenceCodeUpdate, false);
         if (referenceCode.getError().isPresent()) {
             return ResponseEntity.status(referenceCode.getError().get().getStatus()).body(referenceCode);
@@ -105,9 +119,12 @@ public class ReferenceCodeResource {
             ),
     })
     @PostMapping(value = "/{orgId}/reference-codes", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('event_codes', 'create')")
     public ResponseEntity<?> insertRefCodeByCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                        @RequestParam(value = "file") MultipartFile file) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         Either<List<ProblemDetail>, List<ReferenceCodeView>> refCodeE = referenceCodeService.insertReferenceCodeByCsv(orgId, file);
         if (refCodeE.isLeft()) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(refCodeE.getLeft());
@@ -122,9 +139,12 @@ public class ReferenceCodeResource {
             ),
     })
     @PutMapping(value = "/{orgId}/reference-codes", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('event_codes', 'edit')")
     public ResponseEntity<?> updateReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @Valid @RequestBody ReferenceCodeUpdate referenceCodeUpdate) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         ReferenceCodeView referenceCode = referenceCodeService.updateReferenceCode(orgId, referenceCodeUpdate);
         if (referenceCode.getError().isPresent()) {
             return ResponseEntity.status(referenceCode.getError().get().getStatus()).body(referenceCode);

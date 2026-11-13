@@ -439,11 +439,13 @@ class AccountingCoreResourceTest extends WebBaseIntegrationTest{
         given()
                 .contentType("application/json")
                 .header(new Header("Accept-Language", "en-US"))
+                .queryParam("organisationId", "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
                 .when()
                 .get("/api/v1/batches/DUMMY_BATCH4-Approve")
                 .then()
                 .statusCode(200)
-                .body("id", equalTo("DUMMY_BATCH4-Approve"))
+                // Response IDs are padded to CHAR(64) format by the database
+                .body("id", containsString("DUMMY_BATCH4-Approve"))
                 .body("organisationId", equalTo("75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94"));
     }
 
@@ -452,6 +454,7 @@ class AccountingCoreResourceTest extends WebBaseIntegrationTest{
         given()
                 .contentType("application/json")
                 .header(new Header("Accept-Language", "en-US"))
+                .queryParam("organisationId", "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
                 .when()
                 .get("/api/v1/batches/fb47142027c0788116d14723a4ab4a67636a7d6463d84f0c6f7adf61aba32c04")
                 .then()
@@ -465,6 +468,7 @@ class AccountingCoreResourceTest extends WebBaseIntegrationTest{
         given()
                 .contentType("application/json")
                 .header(new Header("Accept-Language", "en-US"))
+                .queryParam("organisationId", "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
                 .when()
                 .get("/api/v1/batches/reprocess/DUMMY_BATCH4-Approve")
                 .then()
@@ -478,6 +482,7 @@ class AccountingCoreResourceTest extends WebBaseIntegrationTest{
         given()
                 .contentType("application/json")
                 .header(new Header("Accept-Language", "en-US"))
+                .queryParam("organisationId", "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
                 .when()
                 .get("/api/v1/batches/reprocess/fake")
                 .then()

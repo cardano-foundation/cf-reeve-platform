@@ -29,6 +29,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.cardanofoundation.lob.app.organisation.domain.request.VatUpdate;
 import org.cardanofoundation.lob.app.organisation.domain.view.VatView;
 import org.cardanofoundation.lob.app.organisation.service.VatService;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
+import org.cardanofoundation.lob.app.support.security.OrgAccessDenied;
 
 @RestController
 @RequestMapping("/api/v1/organisations")
@@ -38,6 +40,7 @@ import org.cardanofoundation.lob.app.organisation.service.VatService;
 public class VatController {
 
     private final VatService vatService;
+    private final KeycloakSecurityHelper keycloakSecurityHelper;
 
     @Operation(description = "Vat Codes", responses = {
             @ApiResponse(content =
@@ -45,6 +48,7 @@ public class VatController {
             ),
     })
     @GetMapping(value = "/{orgId}/vat-codes", produces = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("@permissions.can('vat_codes', 'view')")
     public ResponseEntity<?> getVatCodes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                      @RequestParam(value = "customerCode", required = false) String customerCode,
                                                      @RequestParam(value = "minRate", required = false) Double minRate,
@@ -53,6 +57,9 @@ public class VatController {
                                                      @RequestParam(value = "countryCodes", required = false) List<String> countryCodes,
                                                      @RequestParam(value = "active", required = false) Boolean active,
                                                      @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         return vatService.findAllByOrganisationId(orgId, customerCode, minRate, maxRate, description, countryCodes, active, pageable).fold(
                 problem -> ResponseEntity.status(problem.getStatus()).body(problem),
                 ResponseEntity::ok);
@@ -61,7 +68,7 @@ public class VatController {
 
     @Operation(summary = "Download vat CSV file", description = "Download vat codes as a CSV file")
     @GetMapping(value = "/{orgId}/vat-codes/download", produces = "test/csv")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
+    @PreAuthorize("@permissions.can('export_setup_data', 'download')")
     public ResponseEntity<StreamingResponseBody> downloadVatCodesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                                      @RequestParam(value = "customerCode", required = false) String customerCode,
                                                                      @RequestParam(value = "minRate", required = false) Double minRate,
@@ -69,6 +76,9 @@ public class VatController {
                                                                      @RequestParam(value = "description", required = false) String description,
                                                                      @RequestParam(value = "countryCodes", required = false) List<String> countryCodes,
                                                                      @RequestParam(value = "active", required = false) Boolean active) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         StreamingResponseBody responseBody = outputStream -> vatService.downloadCsv(orgId, customerCode, minRate, maxRate, description, countryCodes, active, outputStream);
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=\"vat-codes_%s.csv\"".formatted(orgId))
@@ -82,9 +92,12 @@ public class VatController {
             ),
     })
     @PostMapping(value = "/{orgId}/vat-codes", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('vat_codes', 'create')")
     public ResponseEntity<?> insertVatCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                            @Valid @RequestBody VatUpdate vatUpdate) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
 
         VatView vatView = vatService.insert(orgId, vatUpdate, false);
         return vatView.getError().map(error -> ResponseEntity.status(error.getStatus())
@@ -100,9 +113,12 @@ public class VatController {
             ),
     })
     @PutMapping(value = "/{orgId}/vat-codes", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('vat_codes', 'edit')")
     public ResponseEntity<?> updateReferenceCode(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                  @Valid @RequestBody VatUpdate vatUpdate) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
 
         VatView vatView = vatService.update(orgId, vatUpdate);
         return vatView.getError().map(error -> ResponseEntity.status(error.getStatus())
@@ -116,9 +132,12 @@ public class VatController {
             ),
     })
     @PostMapping(value = "/{orgId}/vat-codes", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can('vat_codes', 'create')")
     public ResponseEntity<?> insertVatCodesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                @RequestParam(value = "file") MultipartFile file) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
 
         return vatService.insertVatCodesCsv(orgId, file).fold(
                 problem -> ResponseEntity.status(BAD_REQUEST).body(problem),
