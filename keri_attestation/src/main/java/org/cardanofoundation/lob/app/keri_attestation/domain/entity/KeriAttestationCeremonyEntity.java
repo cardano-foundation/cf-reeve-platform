@@ -23,6 +23,8 @@ import lombok.Setter;
 import org.springframework.data.domain.Persistable;
 
 import org.hibernate.annotations.DynamicUpdate;
+import org.hibernate.envers.Audited;
+import org.hibernate.envers.NotAudited;
 
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
 
@@ -37,6 +39,7 @@ import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
 @Setter
 @NoArgsConstructor
 @DynamicUpdate
+@Audited
 @Entity(name = "keri_attestation.KeriAttestationCeremonyEntity")
 @Table(name = "keri_attestation_ceremony")
 public class KeriAttestationCeremonyEntity implements Persistable<String> {
@@ -162,6 +165,7 @@ public class KeriAttestationCeremonyEntity implements Persistable<String> {
      *  round-trip through this column. No longer written. Column intentionally left in place (harmless)
      *  rather than dropped, per the migration-safety note on {@link #stepPhase}. */
     @Nullable
+    @NotAudited
     @Column(name = "auth_begin_tx_hash")
     private String authBeginTxHash;
 
@@ -176,6 +180,7 @@ public class KeriAttestationCeremonyEntity implements Persistable<String> {
      *  (harmless) rather than dropped: dropping a column is a separate, independently-riskier migration
      *  than simply retiring the code that wrote it. */
     @Nullable
+    @NotAudited
     @Column(name = "step_phase", length = 32)
     private String stepPhase;
 
@@ -189,6 +194,7 @@ public class KeriAttestationCeremonyEntity implements Persistable<String> {
      *  never needs to survive past that call. No longer written; see {@link #stepPhase}'s javadoc for why
      *  the column stays. */
     @Nullable
+    @NotAudited
     @Column(name = "agree_atc")
     private String agreeAtc;
 

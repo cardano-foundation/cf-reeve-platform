@@ -25,12 +25,16 @@ import lombok.ToString;
 
 import org.springframework.data.domain.Persistable;
 
+import org.hibernate.envers.Audited;
+import org.hibernate.envers.NotAudited;
+
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.VaultDocumentStatus;
 
 @Getter
 @Setter
 @NoArgsConstructor
+@Audited
 @Entity(name = "document_vault.VaultDocumentEntity")
 @Table(name = "document_vault_document")
 public class VaultDocumentEntity extends VaultBaseEntity implements Persistable<String> {
@@ -62,7 +66,9 @@ public class VaultDocumentEntity extends VaultBaseEntity implements Persistable<
     @Column(name = "plaintext_hash", nullable = false, length = 64)
     private String plaintextHash;
 
+    /** Not audited: history keeps {@link #contentHash}, which identifies the ciphertext without copying it. */
     @ToString.Exclude
+    @NotAudited
     @Column(name = "ciphertext", nullable = false)
     private byte[] ciphertext;
 
