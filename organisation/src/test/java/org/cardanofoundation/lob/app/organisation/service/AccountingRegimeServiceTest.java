@@ -114,6 +114,7 @@ class AccountingRegimeServiceTest {
         assertEquals("IFRS", result.getCode());
         assertTrue(result.getError().isPresent());
         assertEquals("ACCOUNTING_REGIME_NOT_FOUND", result.getError().get().getTitle());
+        assertEquals("Standard with code IFRS not found", result.getError().get().getDetail());
         verify(accountingRegimeRepository, never()).save(any());
     }
 
@@ -143,6 +144,7 @@ class AccountingRegimeServiceTest {
 
         assertTrue(result.getError().isPresent());
         assertEquals("ACCOUNTING_REGIME_ALREADY_EXISTS", result.getError().get().getTitle());
+        assertEquals("Standard with code IFRS already exists", result.getError().get().getDetail());
         verify(accountingRegimeRepository, never()).save(any());
     }
 

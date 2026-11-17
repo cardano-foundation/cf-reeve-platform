@@ -121,7 +121,7 @@ The following columns are needed:
 - `Name`: Name of the report template (e.g. `Balance Sheet Template`)
 - `Report Type`: Type of the report template. Possible values are: `Balance sheet`, `Income statement`, `Custom`
 - `Generation Method`: How the report is generated. Possible values are: `Automatic`, `Manual`
-- `Accounting Regime`: The label of one of the organisation's active accounting regimes, or `Not applicable` (e.g. `IFRS`). Matching ignores case. Any other value fails the template, except when updating an existing template whose regime is unchanged
+- `Standard`: The label of one of the organisation's active standards, or `Not applicable` (e.g. `IFRS`). Matching ignores case. Any other value fails the template, except when updating an existing template whose standard is unchanged. The column's old name, `Accounting Regime`, is still accepted, so files prepared before the rename import unchanged; a file with both `Standard` and `Accounting Regime` columns is rejected
 - `Active`: Whether the template is available for use in reports. Possible values are: `true`, `false`
 - `Description`: Free text description of the template (optional)
 - `Field Name`: Name of the field (e.g. `TOTAL_ASSETS`)
@@ -130,7 +130,7 @@ The following columns are needed:
 - `Date Range`: Definition of the date range for the field. Possible values are: `Period-Only balance`, `End-of-Period balance`, `Year-to-Date balance`, `Previous-Year balance`, `Previous-Year-to-Date balance`, `End-of-Previous-Year balance`
 - `Sign`: Whether the field's amount should be shown as calculated or negated. Possible values are: `Positive`, `Negative`
 
-Rows sharing the same `Name` and `Report Type` are grouped into a single template; `Report Type`, `Generation Method`, `Accounting Regime`, `Active` and `Description` are read once from the first row of each group.
+Rows sharing the same `Name` and `Report Type` are grouped into a single template; `Report Type`, `Generation Method`, `Standard`, `Active` and `Description` are read once from the first row of each group.
 
 ### Report data structure
 An example can be found here: [Report CSV Example](./examples/reporting/report_example.csv)

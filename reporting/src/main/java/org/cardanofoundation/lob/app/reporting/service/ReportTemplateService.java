@@ -118,7 +118,7 @@ public class ReportTemplateService {
     Either<ProblemDetail, Void> checkAccountingRegimeImmutable(ReportTemplateEntity existing, ReportTemplateDto dto) {
         boolean regimeChanged = !Objects.equals(existing.getAccountingRegime(), dto.getAccountingRegime());
         if (regimeChanged && reportingRepository.existsByReportTemplateIdAndLedgerDispatchApprovedTrue(existing.getId())) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The accounting regime of template '" + existing.getName() + "' cannot be changed because it has at least one published report.");
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The standard of template '" + existing.getName() + "' cannot be changed because it has at least one published report.");
             problem.setTitle("ACCOUNTING_REGIME_IMMUTABLE_AFTER_PUBLISH");
             return Either.left(problem);
         }

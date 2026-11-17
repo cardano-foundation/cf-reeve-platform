@@ -58,7 +58,8 @@ public class ReportTemplateResponseDto {
     @Schema(description = "Data mode for the report. Options are: SYSTEM, USER", example = "SYSTEM")
     private String dataMode;
 
-    @Schema(description = "Accounting regime disclosure (free text)", example = "IFRS")
+    @Schema(description = "Standard (property name kept as accountingRegime): the label of one of the organisation's active standards, or \"Not applicable\". "
+            + "Null on templates created before the field existed.", example = "IFRS", nullable = true)
     private String accountingRegime;
 
     @Schema(description = "List of validation rules for report fields")

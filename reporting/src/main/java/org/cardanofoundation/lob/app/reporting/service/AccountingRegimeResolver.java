@@ -17,7 +17,7 @@ import org.cardanofoundation.lob.app.organisation.repository.AccountingRegimeRep
 import org.cardanofoundation.lob.app.reporting.util.Constants;
 
 /**
- * Checks a report template's accounting regime against what the template builder offers: the labels of
+ * Checks a report template's accounting regime (shown to users as "Standard") against what the template builder offers: the labels of
  * the organisation's active regimes plus "Not applicable". Shared by the API and the CSV import so both
  * accept exactly the same values with the same message.
  */
@@ -36,7 +36,7 @@ public class AccountingRegimeResolver {
      */
     public Either<ProblemDetail, String> resolve(String organisationId, String accountingRegime) {
         if (accountingRegime == null || accountingRegime.isBlank()) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Accounting regime is required");
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Standard is required");
             problem.setTitle(Constants.INVALID_ACCOUNTING_REGIME);
             return Either.left(problem);
         }
@@ -46,7 +46,7 @@ public class AccountingRegimeResolver {
                 .findFirst();
         if (match.isEmpty()) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
-                    "Accounting regime not found: " + accountingRegime + ". Options are: " + String.join(", ", options));
+                    "Standard not found: " + accountingRegime + ". Options are: " + String.join(", ", options));
             problem.setTitle(Constants.INVALID_ACCOUNTING_REGIME);
             return Either.left(problem);
         }

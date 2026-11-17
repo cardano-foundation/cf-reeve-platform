@@ -978,6 +978,7 @@ class ReportTemplateServiceTest {
 
         assertTrue(result.isLeft());
         assertEquals("ACCOUNTING_REGIME_IMMUTABLE_AFTER_PUBLISH", result.getLeft().getTitle());
+        assertEquals("The standard of template 'Test Template' cannot be changed because it has at least one published report.", result.getLeft().getDetail());
         assertEquals(409, result.getLeft().getStatus());
     }
 
@@ -1018,7 +1019,7 @@ class ReportTemplateServiceTest {
 
         assertTrue(result.isLeft());
         assertEquals("INVALID_ACCOUNTING_REGIME", result.getLeft().getTitle());
-        assertEquals("Accounting regime not found: test. Options are: GAAP, IFRS, Not applicable", result.getLeft().getDetail());
+        assertEquals("Standard not found: test. Options are: GAAP, IFRS, Not applicable", result.getLeft().getDetail());
         verify(reportTemplateRepository, never()).save(any());
     }
 
@@ -1043,7 +1044,7 @@ class ReportTemplateServiceTest {
 
         assertTrue(result.isLeft());
         assertEquals("INVALID_ACCOUNTING_REGIME", result.getLeft().getTitle());
-        assertEquals("Accounting regime is required", result.getLeft().getDetail());
+        assertEquals("Standard is required", result.getLeft().getDetail());
         verify(reportTemplateRepository, never()).save(any());
     }
 
@@ -1127,7 +1128,7 @@ class ReportTemplateServiceTest {
         Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
 
         assertTrue(result.isLeft());
-        assertEquals("Accounting regime is required", result.getLeft().getDetail());
+        assertEquals("Standard is required", result.getLeft().getDetail());
         verify(reportTemplateRepository, never()).save(any());
     }
 

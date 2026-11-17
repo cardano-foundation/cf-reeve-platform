@@ -60,7 +60,7 @@ public class AccountingRegimeService {
                     return AccountingRegimeView.createSuccess(updatedEntity.getId().getCode(), updatedEntity.getLabel(), updatedEntity.isActive());
                 })
                 .orElseGet(() -> {
-                    ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Accounting regime with code " + accountingRegimeUpdate.getCode() + " not found");
+                    ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Standard with code " + accountingRegimeUpdate.getCode() + " not found");
                     error.setTitle(ErrorTitleConstants.ACCOUNTING_REGIME_NOT_FOUND);
                     return AccountingRegimeView.createFail(error, accountingRegimeUpdate);
                 });
@@ -75,7 +75,7 @@ public class AccountingRegimeService {
                 regime.setLabel(accountingRegimeUpdate.getLabel());
                 regime.setActive(accountingRegimeUpdate.getActive());
             } else {
-                ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Accounting regime with code " + accountingRegimeUpdate.getCode() + " already exists");
+                ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Standard with code " + accountingRegimeUpdate.getCode() + " already exists");
                 error.setTitle(ErrorTitleConstants.ACCOUNTING_REGIME_ALREADY_EXISTS);
                 return AccountingRegimeView.createFail(error, accountingRegimeUpdate);
             }

@@ -6,7 +6,9 @@ import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -70,9 +72,23 @@ public class CsvParser<T> {
                 ? Set.of()
                 : Arrays.stream(csvHeader).map(String::trim).collect(Collectors.toSet());
 
+        Map<String, String> legacyHeaders = getLegacyHeaders(type);
+        for (Map.Entry<String, String> legacy : legacyHeaders.entrySet()) {
+            if (hasHeader(headerSet, legacy.getKey()) && hasHeader(headerSet, legacy.getValue())) {
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
+                        "Header row has both the %1$s and the %2$s column. %2$s is the old name of %1$s, keep only %1$s."
+                                .formatted(legacy.getValue(), legacy.getKey()));
+                problem.setTitle("CSV_HEADER_ERROR");
+                return Either.left(problem);
+            }
+        }
+
         Set<String> requiredHeaders = getRequiredHeaders(type);
         Set<String> missingHeaders = requiredHeaders.stream()
-                .filter(req -> headerSet.stream().noneMatch(h -> h.equalsIgnoreCase(req)))
+                .filter(req -> !hasHeader(headerSet, req))
+                // A required header is also satisfied by its old name
+                .filter(req -> legacyHeaders.entrySet().stream()
+                        .noneMatch(legacy -> legacy.getValue().equalsIgnoreCase(req) && hasHeader(headerSet, legacy.getKey())))
                 .collect(Collectors.toSet());
 
         if (!missingHeaders.isEmpty()) {
@@ -81,6 +97,25 @@ public class CsvParser<T> {
             return Either.left(problem);
         }
         return Either.right(null); // No missing headers, return success
+    }
+
+    private static boolean hasHeader(Set<String> headerSet, String header) {
+        return headerSet.stream().anyMatch(h -> h.equalsIgnoreCase(header));
+    }
+
+    /** Old header name to the current header that replaced it, from {@link CsvLegacyHeader} fields. */
+    private static Map<String, String> getLegacyHeaders(Class<?> type) {
+        Map<String, String> legacyHeaders = new LinkedHashMap<>();
+        for (Class<?> current = type; current != null; current = current.getSuperclass()) {
+            for (Field field : current.getDeclaredFields()) {
+                CsvLegacyHeader legacy = field.getAnnotation(CsvLegacyHeader.class);
+                CsvBindByName bind = field.getAnnotation(CsvBindByName.class);
+                if (legacy != null && bind != null) {
+                    legacyHeaders.put(bind.column().isEmpty() ? field.getName() : bind.column(), legacy.replacedBy());
+                }
+            }
+        }
+        return legacyHeaders;
     }
 
     private <T> Set<String> getRequiredHeaders(Class<T> type) {

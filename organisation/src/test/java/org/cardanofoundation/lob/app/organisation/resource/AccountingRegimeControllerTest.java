@@ -116,7 +116,7 @@ class AccountingRegimeControllerTest {
     @Test
     void insertAccountingRegime_error() {
         AccountingRegimeUpdate update = mock(AccountingRegimeUpdate.class);
-        ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Accounting regime with code IFRS already exists");
+        ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Standard with code IFRS already exists");
         AccountingRegimeView view = AccountingRegimeView.createFail(error, new AccountingRegimeUpdate("IFRS", "IFRS Label", true));
         when(accountingRegimeService.insertAccountingRegime("org123", update, false)).thenReturn(view);
 
@@ -143,7 +143,7 @@ class AccountingRegimeControllerTest {
     @Test
     void updateAccountingRegime_error() {
         AccountingRegimeUpdate update = mock(AccountingRegimeUpdate.class);
-        ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Accounting regime with code IFRS not found");
+        ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Standard with code IFRS not found");
         AccountingRegimeView view = AccountingRegimeView.createFail(error, new AccountingRegimeUpdate("IFRS", "IFRS Label", true));
         when(accountingRegimeService.updateAccountingRegime("org123", update)).thenReturn(view);
 
