@@ -21,9 +21,6 @@ public class TransactionBatchChunkCommittedEvent {
     @NotNull
     private String batchId;
 
-    @NotNull
-    private Integer processedTransactionCount;
-
     @Builder.Default
     private Set<String> batchesToBeUpdated = Set.of();
 

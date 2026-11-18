@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Set;
 
 import org.springframework.data.domain.Limit;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
@@ -36,6 +37,8 @@ class CardanoStatusWatcherTest {
     private BlockchainReaderPublicApiIF blockchainReaderPublicApi;
     @Mock
     private L1SubmissionDataUpdater l1SubmissionDataUpdater;
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     @InjectMocks
     private CardanoStatusWatcher watcher;

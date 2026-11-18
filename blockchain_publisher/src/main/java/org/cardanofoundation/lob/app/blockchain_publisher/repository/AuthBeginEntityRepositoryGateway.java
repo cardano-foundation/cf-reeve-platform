@@ -1,10 +1,16 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.repository;
 
+import static java.util.function.Function.identity;
+import static java.util.stream.Collectors.toCollection;
+import static java.util.stream.Collectors.toMap;
 import static org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus.notFinalisedButVisibleOnChain;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import lombok.RequiredArgsConstructor;
@@ -13,10 +19,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.BlockchainPublishStatus;
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.entity.authbegin.AuthBeginEntity;
+import org.cardanofoundation.lob.app.blockchain_publisher.service.dispatch.DispatchingStrategy;
 
 @Service
 @RequiredArgsConstructor
@@ -30,12 +38,39 @@ public class AuthBeginEntityRepositoryGateway {
     @Value("${lob.blockchain_publisher.dispatcher.lock_timeout:PT3H}")
     private Duration lockTimeoutDuration;
 
-    public Set<AuthBeginEntity> findAuthBeginsReadyToBeDispatched(String organisationId, int pullBatchSize) {
-        return authBeginEntityRepository.findFreeByStatus(
+    /**
+     * Atomically claims AUTH_BEGIN ceremonies ready for dispatch: the locking read (FOR UPDATE SKIP LOCKED) and the
+     * lockedAt write commit together, before this method returns (REQUIRES_NEW), so a concurrent dispatcher
+     * instance can never claim the same rows. Returns the claimed ids in dispatch order.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Set<String> claimAuthBeginsReadyToBeDispatched(String organisationId,
+            int pullBatchSize,
+            DispatchingStrategy<AuthBeginEntity> dispatchingStrategy) {
+        Set<AuthBeginEntity> free = authBeginEntityRepository.findFreeByStatus(
                 organisationId,
                 BlockchainPublishStatus.toDispatchStatuses(),
                 LocalDateTime.now(clock).minus(lockTimeoutDuration),
                 Limit.of(pullBatchSize));
+
+        Set<AuthBeginEntity> toDispatch = dispatchingStrategy.apply(organisationId, free);
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        toDispatch.forEach(entity -> entity.setLockedAt(now));
+
+        return toDispatch.stream()
+                .map(AuthBeginEntity::getId)
+                .collect(toCollection(LinkedHashSet::new));
+    }
+
+    public Set<AuthBeginEntity> findAllByIdsPreservingOrder(Set<String> ids) {
+        Map<String, AuthBeginEntity> byId = authBeginEntityRepository.findAllById(ids).stream()
+                .collect(toMap(AuthBeginEntity::getId, identity()));
+
+        return ids.stream()
+                .map(byId::get)
+                .filter(Objects::nonNull)
+                .collect(toCollection(LinkedHashSet::new));
     }
 
     public Set<AuthBeginEntity> findDispatchedAuthBeginsThatAreNotFinalizedYet(String organisationId, Limit limit) {
@@ -66,12 +101,6 @@ public class AuthBeginEntityRepositoryGateway {
     @Transactional
     public void storeAll(Set<AuthBeginEntity> entities) {
         authBeginEntityRepository.saveAll(entities);
-    }
-
-    @Transactional
-    public void lock(Set<AuthBeginEntity> batch) {
-        batch.forEach(entity -> entity.setLockedAt(LocalDateTime.now(clock)));
-        authBeginEntityRepository.saveAll(batch);
     }
 
     @Transactional

@@ -614,7 +614,6 @@ class DbSynchronisationUseCaseServiceTest {
         TransactionBatchChunkCommittedEvent event = eventCaptor.getValue();
         assertThat(event.getBatchId()).isEqualTo(batchId);
         assertThat(event.getBatchesToBeUpdated()).contains(existingBatchId);
-        assertThat(event.getProcessedTransactionCount()).isGreaterThan(0);
 
     }
 
