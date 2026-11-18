@@ -107,8 +107,8 @@ public class NetSuiteExtractionService {
                         .organisationId(organisationId)
                         .userExtractionParameters(userExtractionParameters)
                         // Use the problem's own title: an undecryptable configuration reports
-                        // CONFIGURATION_UNREADABLE, which needs a different remediation (restore the
-                        // encryption key) than a missing one (re-enter credentials).
+                        // CONFIGURATION_UNREADABLE, whose remediation is fixing the encryption key
+                        // pair or re-entering the NetSuite configuration including the private key.
                         .error(new FatalError(ADAPTER_ERROR, problem.getTitle(),
                                 ErrorUtils.getBag(problem, problem.getTitle())))
                         .build();

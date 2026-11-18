@@ -66,6 +66,12 @@ class ProjectTreeUpdateServiceTest {
         service = new ProjectTreeUpdateService(projectRepository, milestoneRepository, milestoneService,
                 projectService, projectStructureService, allocationRepository, cascadeDeleteService, keycloakSecurityHelper);
         lenient().when(keycloakSecurityHelper.canUserAccessOrg(anyString())).thenReturn(true);
+        // The root is resolved org-scoped; mirror the real query on top of each test's findById stub
+        // (only a project of the requested organisation is returned).
+        lenient().when(projectRepository.findByIdAndOrganisationId(anyString(), anyString())).thenAnswer(invocation ->
+                projectRepository.findById(invocation.getArgument(0))
+                        .filter(p -> invocation.getArgument(1).equals(p.getOrganisationId()))
+                        .stream().toList());
         lenient().when(allocationRepository.existsByMilestoneProjectIdInAndEventStatus(any(), eq(EventStatus.PUBLISHED))).thenReturn(false);
         lenient().when(projectService.toView(any(), eq(true))).thenReturn(ProjectView.builder().projectId("root").build());
         // applyExistingMilestone delegates the actual field mutation to milestoneService.applyChanges —
@@ -110,6 +116,18 @@ class ProjectTreeUpdateServiceTest {
         ProjectView result = service.updateWithMilestones("missing", request(null));
 
         assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.NOT_FOUND.value());
+    }
+
+    @Test
+    void update_returns404_whenRootBelongsToADifferentOrganisation() {
+        ProjectEntity otherOrgRoot = ProjectEntity.builder().id("root").organisationId("org2").proId("PRJ-1000")
+                .projectTitle("Updated Project Name").totalAmount(new BigDecimal("200000")).currency("USD").build();
+        when(projectRepository.findById("root")).thenReturn(Optional.of(otherOrgRoot));
+
+        ProjectView result = service.updateWithMilestones("root", request(null));
+
+        assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.PROJECT_NOT_FOUND);
+        verify(projectRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -437,13 +455,12 @@ class ProjectTreeUpdateServiceTest {
 
     @Test
     void update_returns401_whenOrgAccessDenied() {
-        ProjectEntity root = root(new BigDecimal("200000"));
-        when(projectRepository.findById("root")).thenReturn(Optional.of(root));
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
         ProjectView result = service.updateWithMilestones("root", request(null));
 
         assertThat(result.getError().orElseThrow().getTitle()).isEqualTo(ErrorTitleConstants.UNAUTHORIZED);
+        verify(projectRepository, never()).findByIdAndOrganisationId(any(), any());
     }
 
     @Test

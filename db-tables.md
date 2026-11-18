@@ -10,6 +10,8 @@
 ### Blockchain Publisher
 - `blockchain_publisher_transaction` - Transaction
 - `blockchain_publisher_transaction_item` - Transaction Item
+- `blockchain_publisher_document` - Encrypted document pending/after L1+IPFS publication
+- `blockchain_publisher_document_slot` - Envelope slot (ephemeral pub + wrapped DEK)
 
 ### Netsuite Adapter
 - `netsuite_adapter_ingestion` - NetSuite Adapter Ingestion
@@ -22,6 +24,12 @@
 - `organisation_currency` - Organisation Currency (AUDIT)
 - `organisation_project` - Organisation Project (AUDIT)
 - `organisation_vat` - Organisation VAT (AUDIT)
+
+### Document Vault
+- `document_vault_key` - Encryption public-key / addressbook entry (one organisation per entry; notification e-mail; origin + assurance tier)
+- `document_vault_wrapped_record` - Opaque wrapped-key record (multi-device sync)
+- `document_vault_document` - Encrypted envelope (ciphertext + metadata + publish status)
+- `document_vault_document_slot` - Per-recipient wrapped-DEK slot
 
 ### Spring Data Envers
 - `revinfo` - Rev Info

@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.funding.repository;
 
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -10,6 +11,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import org.cardanofoundation.lob.app.funding.domain.entity.ProjectEntity;
 
@@ -26,7 +29,86 @@ public interface FundingProjectRepository extends JpaRepository<ProjectEntity, S
 
     List<ProjectEntity> findByOrganisationId(String organisationId);
 
+    /** Resolves a project only when it actually belongs to the given organisation (ownership check). */
+    List<ProjectEntity> findByIdAndOrganisationId(String id, String organisationId);
+
     Page<ProjectEntity> findByOrganisationId(String organisationId, Pageable pageable);
+
+    /**
+     * Ids of the organisation's root projects that pass the projects-list filters which depend on a root's
+     * whole structure; a {@code null} argument disables its filter. Native because sub-projects nest to any
+     * depth — the recursive CTE maps every project to its root. Search matches the root, any sub-project or
+     * any milestone title beneath it; the amount range compares against the {@code amountTarget} value shown
+     * in the Projects table (BUDGETED = total amount, SPENT = allocated SPENDING, FUNDED = allocated FUNDING
+     * minus allocated REFUND, all event statuses, rolled up over the root's whole structure). Allocations to a
+     * deleted milestone drop out of the milestone join, same as in the project view.
+     */
+    @Query(nativeQuery = true, value = """
+            WITH RECURSIVE tree AS (
+                SELECT p.project_id AS root_id, p.project_id AS project_id
+                FROM funding_project p
+                WHERE p.organisation_id = :organisationId AND p.parent_project_id IS NULL
+                UNION ALL
+                SELECT t.root_id, c.project_id
+                FROM funding_project c
+                JOIN tree t ON c.parent_project_id = t.project_id
+            ),
+            root_amounts AS (
+                SELECT t.root_id,
+                       COALESCE(SUM(CASE WHEN e.event_type = 'SPENDING' THEN a.allocated_amount END), 0) AS spent,
+                       COALESCE(SUM(CASE WHEN e.event_type = 'FUNDING' THEN a.allocated_amount
+                                         WHEN e.event_type = 'REFUND' THEN -a.allocated_amount END), 0) AS funded
+                FROM tree t
+                LEFT JOIN funding_milestone m ON m.project_id = t.project_id
+                LEFT JOIN funding_event_milestone_allocation a ON a.milestone_id = m.milestone_id
+                LEFT JOIN funding_event e ON e.event_id = a.event_id
+                GROUP BY t.root_id
+            )
+            SELECT r.project_id
+            FROM funding_project r
+            JOIN root_amounts ra ON ra.root_id = r.project_id
+            WHERE (CAST(:search AS text) IS NULL
+                   OR EXISTS (
+                       SELECT 1 FROM tree t
+                       JOIN funding_project tp ON tp.project_id = t.project_id
+                       WHERE t.root_id = r.project_id
+                       AND LOWER(tp.project_title) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%')))
+                   OR EXISTS (
+                       SELECT 1 FROM tree t
+                       JOIN funding_milestone m ON m.project_id = t.project_id
+                       WHERE t.root_id = r.project_id
+                       AND LOWER(m.milestone_title) LIKE LOWER(CONCAT('%', CAST(:search AS text), '%'))))
+            AND (CAST(:minAmount AS numeric) IS NULL OR CASE CAST(:amountTarget AS text)
+                    WHEN 'FUNDED' THEN ra.funded WHEN 'SPENT' THEN ra.spent ELSE r.total_amount END >= CAST(:minAmount AS numeric))
+            AND (CAST(:maxAmount AS numeric) IS NULL OR CASE CAST(:amountTarget AS text)
+                    WHEN 'FUNDED' THEN ra.funded WHEN 'SPENT' THEN ra.spent ELSE r.total_amount END <= CAST(:maxAmount AS numeric))
+            """)
+    List<String> findRootProjectIdsByStructureFilter(
+            @Param("organisationId") String organisationId,
+            @Param("search") String search,
+            @Param("amountTarget") String amountTarget,
+            @Param("minAmount") BigDecimal minAmount,
+            @Param("maxAmount") BigDecimal maxAmount);
+
+    /**
+     * Paged root projects of the organisation, optionally restricted to the given ids (the result of
+     * {@link #findRootProjectIdsByStructureFilter}) and to the given lower-cased currencies; a {@code null}
+     * argument disables its filter. Pagination and sorting run here, on the entity, as for the unfiltered list.
+     */
+    @Query("""
+            SELECT p FROM funding.ProjectEntity p
+            WHERE p.organisationId = :organisationId
+            AND p.parentProject IS NULL
+            AND (:ids IS NULL OR p.id IN :ids)
+            AND (:currencies IS NULL OR LOWER(p.currency) IN :currencies)
+            """)
+    Page<ProjectEntity> findRootsByOrganisationIdAndFilter(
+            @Param("organisationId") String organisationId,
+            @Param("ids") Collection<String> ids,
+            @Param("currencies") List<String> currencies,
+            Pageable pageable);
+
+    List<ProjectEntity> findByParentProjectIdIn(Collection<String> parentProjectIds);
 
     // Root-only paged listing — same paginated-list convention as findByOrganisationId above (used by
     // ProjectService#listProjects), scoped to roots for FundingCsvExportService, which expands each

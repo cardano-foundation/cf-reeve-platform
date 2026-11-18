@@ -112,6 +112,12 @@ class ReportTypeServiceTest {
         when(subType.getId()).thenReturn(2L);
         when(chartOfAccountSubTypeRepository.findById("2")).thenReturn(Optional.of(subType));
 
+        // a sub type of another organisation is not found
+        when(subType.getOrganisationId()).thenReturn("other-org");
+        voids = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file);
+        Assertions.assertEquals("SUB_TYPE_NOT_FOUND", voids.getLeft().iterator().next().getTitle());
+
+        when(subType.getOrganisationId()).thenReturn(orgId);
         voids = reportTypeService.addMappingToReportTypeFieldCsv(orgId, file);
 
         Assertions.assertTrue(voids.isRight());

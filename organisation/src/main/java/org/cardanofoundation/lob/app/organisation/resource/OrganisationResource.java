@@ -11,7 +11,6 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.http.HttpStatus;
-import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -34,6 +33,9 @@ import org.cardanofoundation.lob.app.organisation.domain.view.*;
 import org.cardanofoundation.lob.app.organisation.service.OrganisationService;
 import org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
+import org.cardanofoundation.lob.app.support.security.OrgAccessDenied;
+import org.cardanofoundation.lob.app.support.security.access.OrganisationAccessProvisioner;
+import org.cardanofoundation.lob.app.support.security.access.PermissionChecker;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -44,6 +46,8 @@ public class OrganisationResource {
 
     private final OrganisationService organisationService;
     private final KeycloakSecurityHelper keycloakSecurityHelper;
+    private final OrganisationAccessProvisioner organisationAccessProvisioner;
+    private final PermissionChecker permissions;
 
     @Operation(description = "Organisations",
             parameters = {
@@ -59,14 +63,21 @@ public class OrganisationResource {
             ),
     })
     @GetMapping(value = "/organisations", produces = MediaType.APPLICATION_JSON_VALUE)
+    // The user's own organisations: there is no single organisation to check, so each one is listed only where the user
+    // can view it
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<OrganisationView>> organisationList(@RequestParam(value = "orgIds", required = false) Optional<String[]> orgIds) {
         return ResponseEntity.ok().body(
                 orgIds.map(orgs -> Arrays.stream(orgs)
+                        .filter(this::canViewOrganisation)
                         .map(organisationService::findById)
                         .filter(Optional::isPresent)
                         .map(Optional::get)
                         .map(organisationService::getOrganisationView)
-                        .toList()).orElse(organisationService.findAll().stream().map(organisationService::getOrganisationView).toList())
+                        .toList()).orElse(organisationService.findAll().stream()
+                        .filter(organisation -> canViewOrganisation(organisation.getId()))
+                        .map(organisationService::getOrganisationView)
+                        .toList())
         );
     }
 
@@ -85,7 +96,11 @@ public class OrganisationResource {
             ))})
     })
     @GetMapping(value = "/organisations/{orgId}", produces = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("@permissions.can(#orgId, 'organization_details', 'view')")
     public ResponseEntity<?> organisationDetailSpecific(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         Optional<OrganisationView> organisation = organisationService.findById(orgId).map(organisationService::getOrganisationView);
         if (organisation.isEmpty()) {
             ProblemDetail issue = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ErrorTitleConstants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId));
@@ -103,7 +118,11 @@ public class OrganisationResource {
             ),
     })
     @GetMapping(value = "/organisations/{orgId}/events", produces = "application/json")
+    @PreAuthorize("@permissions.can(#orgId, 'event_codes', 'view')")
     public ResponseEntity<List<EventView>> organisationEvent(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         return ResponseEntity.ok().body(
                 organisationService.getOrganisationEventCode(orgId).stream().map(accountEvent -> {
                     return new EventView(
@@ -130,7 +149,7 @@ public class OrganisationResource {
             ))})
     })
     @PostMapping(value = "/organisations", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.canPlatform('organisations', 'create')")
     public ResponseEntity<?> organisationCreate(@Valid @RequestBody OrganisationCreate organisationCreate) {
 
         Optional<Organisation> organisationChe = organisationService.findById(Organisation.id(organisationCreate.getCountryCode(), organisationCreate.getTaxIdNumber()));
@@ -151,9 +170,9 @@ public class OrganisationResource {
             return ResponseEntity.status(issue.getStatus()).body(issue);
         }
 
+        organisationAccessProvisioner.organisationCreated(organisation.get().getId(), organisation.get().getName());
+
         return ResponseEntity.ok().body(organisation.get());
-
-
     }
 
     @Operation(description = "Organistion update", responses = {
@@ -179,9 +198,12 @@ public class OrganisationResource {
                             """
             ))})
     })
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can(#orgId, 'organization_details', 'edit')")
     @PutMapping(value = "/organisations/{orgId}", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
     public ResponseEntity<?> organisationUpdate(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody OrganisationUpdate organisationUpdate) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
+            return OrgAccessDenied.response();
+        }
         Optional<Organisation> organisationChe = organisationService.findById(orgId);
         if (organisationChe.isEmpty()) {
             ProblemDetail issue = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ErrorTitleConstants.UNABLE_TO_FIND_ORGANISATION_BY_ID_S.formatted(orgId));
@@ -196,6 +218,10 @@ public class OrganisationResource {
             issue.setTitle("ORGANISATION_UPDATE_ERROR");
 
             return ResponseEntity.status(issue.getStatus()).body(issue);
+        }
+
+        if (organisationUpdate.getName() != null) {
+            organisationAccessProvisioner.organisationRenamed(orgId, organisation.get().getName());
         }
 
         return ResponseEntity.ok().body(organisation.get());
@@ -217,7 +243,7 @@ public class OrganisationResource {
                             """
             ))})
     })
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAdminRole()) or hasRole(@securityConfig.getAccountantRole())")
+    @PreAuthorize("@permissions.can(#orgId, 'organization_setup', 'view')")
     @GetMapping(value = "/organisations/{orgId}/validate", produces = APPLICATION_JSON_VALUE)
     public ResponseEntity<?> validateOrganisation(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")  String orgId) {
         if (keycloakSecurityHelper.canUserAccessOrg(orgId)) {
@@ -231,8 +257,12 @@ public class OrganisationResource {
                 return ResponseEntity.ok(organisationService.validateOrganisation(organisationOptional.get()));
             }
         } else {
-            return ResponseEntity.status(HttpStatusCode.valueOf(403)).body("User is not allowed to access this organisation");
+            return OrgAccessDenied.response();
         }
+    }
+
+    private boolean canViewOrganisation(String organisationId) {
+        return permissions.can(organisationId, "organization", "view");
     }
 
 }

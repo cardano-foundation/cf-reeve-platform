@@ -1,0 +1,106 @@
+# Permission catalogue of the Reeve platform, added to every application that uses the support module as its
+# lowest-precedence property source (PermissionCatalogueEnvironmentPostProcessor). An application can override any key,
+# but a list replaces the whole list, so applications normally don't set lob.permissions at all.
+#
+# Endpoints check resource:action permissions; Keycloak decides who has them: permissions are client roles of
+# reeve-api, roles are realm roles composed of them, and users get roles through groups. Which role holds which
+# permission is defined only in Keycloak (cf-lob keycloak-migrations and keycloak-config/realm-export.json): a new
+# permission here needs a Keycloak migration there.
+#
+# groups is the subgroup layout created under /organisations/<organisation name> for every new organisation. A member
+# of a subgroup also gets the roles of its parent groups; publisher sits next to reviewer so review and publish can go
+# to different people (four-eyes). Existing organisations don't get a changed layout: that needs a Keycloak migration.
+#
+# Entries are lists on purpose: Spring removes characters like "/" and "_" from map keys when binding.
+lob:
+  permissions:
+    modules: [transactions, reporting, funding, document_vault]
+    organisation-role: org_member
+    resources:
+      - name: organisations
+        actions: [create]
+      - name: transactions
+        modules: [transactions]
+        actions: [view, export, import_view, import, review_view, review_approve, review_reject, publish_view, publish_approve,
+          publish_reject, batches_view, batches_reprocess, reconcilate_view, reconcilate]
+      - name: data_explorer
+        modules: [transactions]
+        actions: [view, dashboard_view, dashboard_create, dashboard_edit, search_view]
+      - name: reports
+        modules: [reporting]
+        actions: [view, create, edit, delete, preview, publish, publish_view, reject]
+      - name: report_templates
+        modules: [reporting]
+        actions: [view, create, edit, delete]
+      - name: report_types
+        modules: [reporting]
+        actions: [view, edit]
+      - name: project_management
+        modules: [funding]
+        actions: [view, create, edit, delete, publish, create_project]
+      - name: document_vault
+        modules: [document_vault]
+        actions: [view, create, edit, delete, delete_any, publish]
+      - name: settings
+        actions: [view]
+      - name: organization
+        actions: [view]
+      - name: organization_details
+        actions: [view, edit]
+      - name: netsuite_configuration
+        modules: [transactions]
+        actions: [view, create, edit]
+      - name: organization_setup
+        modules: [transactions]
+        actions: [view, import]
+      - name: export_setup_data
+        modules: [transactions, funding]
+        actions: [view, download]
+      - name: chart_of_accounts
+        modules: [transactions, reporting]
+        actions: [view, create, edit]
+      - name: event_codes
+        modules: [transactions]
+        actions: [view, create, edit]
+      - name: cost_centers
+        modules: [transactions]
+        actions: [view, create, edit]
+      - name: projects
+        modules: [transactions]
+        actions: [view, create, edit]
+      - name: vat_codes
+        modules: [transactions, funding]
+        actions: [view, create, edit]
+      - name: currencies
+        modules: [transactions, funding]
+        actions: [view, create, edit]
+      - name: accounting_regimes
+        modules: [reporting]
+        actions: [view, create, edit]
+    groups:
+      - {path: org_admin, role: org_admin}
+      - {path: transactions, role: transactions_viewer}
+      - {path: transactions/reconciler, role: transactions_reconciler}
+      - {path: transactions/importer, role: transactions_importer}
+      - {path: transactions/reviewer, role: transactions_reviewer}
+      - {path: transactions/publisher, role: transactions_publisher}
+      - {path: transactions/publish_viewer, role: transactions_publish_viewer}
+      - {path: transactions/dashboard_editor, role: transactions_dashboard_editor}
+      - {path: transactions/setup, role: transactions_setup}
+      - {path: transactions/setup/erp, role: transactions_erp}
+      - {path: reporting, role: reports_viewer}
+      - {path: reporting/editor, role: reports_editor}
+      - {path: reporting/publisher, role: reports_publisher}
+      - {path: reporting/publish_viewer, role: reports_publish_viewer}
+      - {path: reporting/setup, role: reports_setup}
+      - {path: document_vault, role: document_vault_viewer}
+      - {path: document_vault/editor, role: document_vault_editor}
+      - {path: document_vault/publisher, role: document_vault_publisher}
+      - {path: document_vault/admin, role: document_vault_admin}
+      - {path: funding, role: funding_viewer}
+      - {path: funding/event_editor, role: funding_event_editor}
+      - {path: funding/project_manager, role: funding_project_manager}
+      - {path: funding/publisher, role: funding_publisher}
+      - {path: funding/setup, role: funding_setup}
+    platform:
+      group: platform

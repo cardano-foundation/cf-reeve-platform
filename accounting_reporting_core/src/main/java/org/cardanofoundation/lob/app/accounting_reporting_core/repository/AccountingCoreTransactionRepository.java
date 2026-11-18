@@ -76,9 +76,18 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
     Set<TransactionEntity> findAllByBatchId(String batchId);
 
     @Query("""
+            SELECT t FROM accounting_reporting_core.TransactionEntity t
+            WHERE t.id = :id
+            AND t.organisation.id = :organisationId
+            """)
+    Set<TransactionEntity> findByIdAndOrganisationId(@Param("id") String id,
+                                                       @Param("organisationId") String organisationId);
+
+    @Query("""
         SELECT t FROM accounting_reporting_core.TransactionEntity t
         JOIN t.batches b
         WHERE (:batchId IS NULL OR b.id = :batchId)
+        AND t.organisation.id = :organisationId
         AND (:txStatus IS NULL OR t.processingStatus IN :txStatus)
         AND (:types IS NULL OR t.transactionType IN :types)
         AND (:internalTransactionNumber IS NULL OR LOWER(t.internalTransactionNumber) LIKE LOWER(CONCAT('%', CAST(:internalTransactionNumber AS string), '%')))
@@ -127,6 +136,7 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
         """)
     Page<TransactionEntity> findAllByBatchId(
             @Param("batchId") String batchId,
+            @Param("organisationId") String organisationId,
             @Param("txStatus") List<TransactionProcessingStatus> txStatus,
             @Param("internalTransactionNumber") String internalTransactionNumber,
             @Param("types") List<TransactionType> types,
