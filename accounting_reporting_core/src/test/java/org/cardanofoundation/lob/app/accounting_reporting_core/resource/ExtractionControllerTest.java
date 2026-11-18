@@ -72,7 +72,7 @@ class ExtractionControllerTest {
 
         ResponseEntity<?> response = extractionController.extractionTriggerForm(request);
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(organisationPublicApi, accountingCorePresentationViewService);
     }
 
@@ -84,7 +84,7 @@ class ExtractionControllerTest {
 
         ResponseEntity<ExtractionValidationResponse> response = extractionController.extractionValidationForm(request);
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(accountingCorePresentationViewService);
     }
 

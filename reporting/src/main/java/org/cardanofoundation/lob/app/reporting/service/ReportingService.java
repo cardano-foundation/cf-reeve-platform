@@ -340,21 +340,15 @@ public class ReportingService {
     }
 
     private Either<ProblemDetail, ReportTemplateEntity> validateTemplate(String templateId, String organisationId) {
-        Optional<ReportTemplateEntity> templateOpt = reportTemplateRepository.findById(templateId);
+        // A template of another organisation is not found, like any other record looked up by id and organisation
+        Optional<ReportTemplateEntity> templateOpt = reportTemplateRepository.findByOrganisationIdAndId(organisationId, templateId);
         if (templateOpt.isEmpty()) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Report template with ID %s does not exist".formatted(templateId));
             problem.setTitle("REPORT_TEMPLATE_NOT_FOUND");
             return Either.left(problem);
         }
 
-        ReportTemplateEntity template = templateOpt.get();
-        if (!template.getOrganisationId().equals(organisationId)) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Report template belongs to a different organisation");
-            problem.setTitle("ORGANISATION_MISMATCH");
-            return Either.left(problem);
-        }
-
-        return Either.right(template);
+        return Either.right(templateOpt.get());
     }
 
     private Either<ProblemDetail, List<ReportFieldDto>> generateOrValidateFields(ReportDto dto, DataMode
@@ -560,13 +554,6 @@ public class ReportingService {
         return Either.right(null);
     }
 
-
-    @Transactional(readOnly = true)
-    public Optional<ReportResponseDto> findById(String id) {
-        return reportRepository.findById(id)
-                .map(reportMapper::toResponseDto);
-    }
-
     @Transactional(readOnly = true)
     public Optional<ReportResponseDto> findByOrganisationIdAndId(String organisationId, String id) {
         return reportRepository.findByOrganisationIdAndId(organisationId, id)
@@ -611,10 +598,10 @@ public class ReportingService {
                 .build();
     }
 
-    public Either<ProblemDetail, Void> delete(String id) {
+    public Either<ProblemDetail, Void> delete(String organisationId, String id) {
         log.info("Deleting report id: {}", id);
 
-        Optional<ReportEntity> reportOpt = reportRepository.findById(id);
+        Optional<ReportEntity> reportOpt = reportRepository.findByOrganisationIdAndId(organisationId, id);
         if (reportOpt.isEmpty()) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, Constants.REPORT_WITH_ID_S_DOES_NOT_EXIST.formatted(id));
             problem.setTitle(Constants.REPORT_NOT_FOUND);
@@ -709,7 +696,6 @@ public class ReportingService {
 
         return totalAmount.stripTrailingZeros();
     }
-
 
     private Map<DateRange, Map<String, BigDecimal>> fetchAccountCodesTotalsRange(
             String organisationId,

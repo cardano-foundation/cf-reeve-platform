@@ -85,8 +85,9 @@ public class VaultKeyService {
     }
 
     @Transactional(readOnly = true)
-    public PagedResponse<VaultKeyView> listMyKeys(Pageable pageable) {
-        Page<VaultKeyEntity> page = keyRepository.findByAccountId(securityHelper.getCurrentUserId(), pageable);
+    public PagedResponse<VaultKeyView> listMyKeys(String organisationId, Pageable pageable) {
+        Page<VaultKeyEntity> page = keyRepository.findByAccountIdAndOrganisationId(securityHelper.getCurrentUserId(),
+                organisationId, pageable);
         Map<String, CredentialAttestationView> verdicts = attestationsFor(page);
         return PagedResponse.of(page, key -> toView(key, verdicts.get(verdictKey(key.getOrganisationId(), key.getPublicKey()))));
     }
@@ -136,17 +137,18 @@ public class VaultKeyService {
      * slots are immutable and the recipient holds the private half off-device; deleting only removes
      * the directory entry, so the key stops being offered as a future recipient.
      */
-    public Optional<ProblemDetail> delete(String keyId) {
-        Optional<VaultKeyEntity> keyM = keyRepository.findById(keyId);
+    public Optional<ProblemDetail> delete(String organisationId, String keyId) {
+        // Only found within the organisation the permission was checked in, so "delete any" below is evaluated in
+        // the key's own organisation
+        Optional<VaultKeyEntity> keyM = keyRepository.findById(keyId)
+                .filter(found -> found.getOrganisationId().equals(organisationId));
         if (keyM.isEmpty()) {
             return Optional.of(VaultProblems.notFound(VaultProblems.KEY_NOT_FOUND,
                     "No key %s.".formatted(keyId)));
         }
         VaultKeyEntity key = keyM.get();
         boolean isOwner = key.getAccountId().equals(securityHelper.getCurrentUserId());
-        // canUserAccessOrg ties the permission (checked in the request's organisation) to the key's organisation
-        boolean canDeleteAny = securityHelper.canUserAccessOrg(key.getOrganisationId())
-                && permissionChecker.can("document_vault", "delete_any");
+        boolean canDeleteAny = permissionChecker.can(organisationId, "document_vault", "delete_any");
         if (!isOwner && !canDeleteAny) {
             return Optional.of(VaultProblems.of403NotKeyOwner());
         }

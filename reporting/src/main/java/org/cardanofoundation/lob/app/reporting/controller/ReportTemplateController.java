@@ -67,8 +67,11 @@ public class ReportTemplateController {
     private final JpaSortFieldValidator jpaSortFieldValidator;
 
     @GetMapping(value = "/types", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('report_templates', 'view')")
-    public ResponseEntity<List<String>> getReportTypes() {
+    @PreAuthorize("@permissions.can(#organisationId, 'report_templates', 'view')")
+    public ResponseEntity<List<String>> getReportTypes(
+            @RequestParam(value = "organisationId") @Parameter(
+                    description = "Organisation the report template belongs to",
+                    example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String organisationId) {
         return ResponseEntity.ok(Arrays.stream(ReportTemplateType.values()).map(ReportTemplateType::name).toList());
     }
 
@@ -85,7 +88,7 @@ public class ReportTemplateController {
                     @ApiResponse(responseCode = "409", description = "Template already exists - use PUT to update")})
     @PostMapping(produces = MediaType.APPLICATION_JSON_VALUE,
             consumes = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('report_templates', 'create')")
+    @PreAuthorize("@permissions.can(#template?.organisationId, 'report_templates', 'create')")
     public ResponseEntity<ReportTemplateResponseDto> create(
             @RequestBody(required = true) ReportTemplateDto template) {
         log.debug("POST /api/report-templates - Creating template: {}", template.getName());
@@ -102,7 +105,7 @@ public class ReportTemplateController {
 
     @Tag(name = "Reporting", description = "Create Report Template from CSV")
     @PostMapping(produces = APPLICATION_JSON_VALUE, consumes = MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("@permissions.can('report_templates', 'create')")
+    @PreAuthorize("@permissions.can(#csvTemplateRequest?.organisationId, 'report_templates', 'create')")
     public ResponseEntity<List<ReportTemplateResponseDto>> templateCreateCsv(
             @ModelAttribute CreateCsvTemplateRequest csvTemplateRequest) {
         if (!keycloakSecurityHelper.canUserAccessOrg(csvTemplateRequest.getOrganisationId())) {
@@ -135,7 +138,7 @@ public class ReportTemplateController {
                     schema = @Schema(implementation = ReportTemplateDto.class)))
     @org.springframework.web.bind.annotation.PutMapping(produces = MediaType.APPLICATION_JSON_VALUE,
             consumes = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('report_templates', 'edit')")
+    @PreAuthorize("@permissions.can(#template?.organisationId, 'report_templates', 'edit')")
     public ResponseEntity<?> update(
             @RequestBody(required = true) ReportTemplateDto template) {
         log.debug("PUT /api/report-templates - Updating template: {}", template.getName());
@@ -160,19 +163,16 @@ public class ReportTemplateController {
                     @ApiResponse(responseCode = "403", description = Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION),
                     @ApiResponse(responseCode = "404", description = "Report template not found")})
     @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('report_templates', 'view')")
+    @PreAuthorize("@permissions.can(#organisationId, 'report_templates', 'view')")
     public ResponseEntity<?> findById(
-            @PathVariable @Parameter(description = "Report template ID (hash-based)", example = "a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2") String id) {
+            @PathVariable @Parameter(description = "Report template ID (hash-based)", example = "a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2") String id,
+            @RequestParam(value = "organisationId") @Parameter(
+                    description = "Organisation the report template belongs to",
+                    example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String organisationId) {
         log.debug("GET /api/report-templates/{}", id);
-        return reportTemplateService.findById(id)
-            .map(template -> {
-                // Check organisation access
-                if (!keycloakSecurityHelper.canUserAccessOrg(template.getOrganisationId())) {
-                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
-                }
-                return ResponseEntity.ok(template);
-            })
+        // Only found within the organisation the permission was checked in
+        return reportTemplateService.findByOrganisationIdAndId(organisationId, id)
+            .<ResponseEntity<?>>map(ResponseEntity::ok)
             .orElse(ResponseEntity.notFound().build());
     }
 
@@ -185,7 +185,7 @@ public class ReportTemplateController {
                                             implementation = ReportTemplateResponseDto.class)))),
                     @ApiResponse(responseCode = "403", description = Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION)})
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('report_templates', 'view')")
+    @PreAuthorize("@permissions.can(#organisationId, 'report_templates', 'view')")
     public ResponseEntity<?> findAll(
             @RequestParam(value = "organisationId", required = true) @Parameter(
                     description = "Filter by organisation ID",
@@ -224,31 +224,21 @@ public class ReportTemplateController {
                     @ApiResponse(responseCode = "403", description = Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION),
                     @ApiResponse(responseCode = "404", description = "Report template not found")})
     @DeleteMapping("/{id}")
-    @PreAuthorize("@permissions.can('report_templates', 'delete')")
+    @PreAuthorize("@permissions.can(#organisationId, 'report_templates', 'delete')")
     public ResponseEntity<?> delete(
-            @PathVariable @Parameter(description = "Report template ID (hash-based)", example = "a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2") String id) {
+            @PathVariable @Parameter(description = "Report template ID (hash-based)", example = "a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2") String id,
+            @RequestParam(value = "organisationId") @Parameter(
+                    description = "Organisation the report template belongs to",
+                    example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String organisationId) {
         log.debug("DELETE /api/report-templates/{}", id);
 
-        // First, get the template to check organisation access
-        return reportTemplateService.findById(id)
-            .map(template -> {
-                // Check organisation access
-                if (!keycloakSecurityHelper.canUserAccessOrg(template.getOrganisationId())) {
-                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Constants.USER_DOES_NOT_HAVE_ACCESS_TO_THIS_ORGANISATION);
-                }
-
-                // Proceed with deletion
-                Either<ProblemDetail, Void> result = reportTemplateService.delete(id);
-
-                if (result.isLeft()) {
-                    ProblemDetail problem = result.getLeft();
-                    return ResponseEntity.status(problem.getStatus()).body(problem);
-                }
-
-                return ResponseEntity.noContent().build();
-            })
-            .orElse(ResponseEntity.notFound().build());
+        // Only found within the organisation the permission was checked in
+        Either<ProblemDetail, Void> result = reportTemplateService.delete(organisationId, id);
+        if (result.isLeft()) {
+            ProblemDetail problem = result.getLeft();
+            return ResponseEntity.status(problem.getStatus()).body(problem);
+        }
+        return ResponseEntity.noContent().build();
     }
 
 }

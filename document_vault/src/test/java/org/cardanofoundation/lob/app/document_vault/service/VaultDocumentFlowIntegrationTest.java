@@ -124,14 +124,14 @@ class VaultDocumentFlowIntegrationTest {
         assertEquals(0, documentService.list(ORG_ID, null, VaultDocumentStatus.PUBLISHED, null, Pageable.unpaged()).get().total());
 
         // 5. envelope fetch round-trips the ciphertext for client-side decryption
-        var envelope = documentService.fetch(uploaded.documentId()).get();
+        var envelope = documentService.fetch(ORG_ID, uploaded.documentId()).get();
         assertEquals(Base64.getEncoder().encodeToString("ciphertext-bytes".getBytes(StandardCharsets.UTF_8)),
                 envelope.payload().ciphertext());
         assertEquals(1, envelope.slots().size());
         assertEquals(keyId, envelope.slots().get(0).keyId());
 
         // 6. creator can delete a DRAFT document
-        assertTrue(documentService.delete(uploaded.documentId()).isEmpty());
+        assertTrue(documentService.delete(ORG_ID, uploaded.documentId()).isEmpty());
         assertEquals(0, documentService.list(ORG_ID, null, null, null, Pageable.unpaged()).get().total());
     }
 }

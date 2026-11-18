@@ -61,7 +61,9 @@ public class ReportTypeService {
                 return Either.left(problem);
             }
             ReportTypeFieldEntity reportTypeFieldEntity = optionalReportField.get();
-            Optional<ChartOfAccountSubType> optionalSubType = chartOfAccountSubTypeRepository.findById(String.valueOf(reportTypeFieldUpdate.getOrganisationChartOfAccountSubTypeId()));
+            // Only a sub type of this organisation: another organisation's can't be mapped into its report types
+            Optional<ChartOfAccountSubType> optionalSubType = chartOfAccountSubTypeRepository.findById(String.valueOf(reportTypeFieldUpdate.getOrganisationChartOfAccountSubTypeId()))
+                    .filter(subType -> orgId.equals(subType.getOrganisationId()));
             if (optionalSubType.isEmpty()) {
                 ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Organisation Chart of Account Sub type not found");
                 problem.setTitle("SUB_TYPE_NOT_FOUND");

@@ -121,7 +121,7 @@ class CostCenterControllerTest {
 
         ResponseEntity<?> response = costCenterController.getAllCostCenters("org123", null, null, null, true, Pageable.unpaged());
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(costCenterService);
     }
 
@@ -131,7 +131,7 @@ class CostCenterControllerTest {
 
         ResponseEntity<?> response = costCenterController.downloadCostCentersCsv("org123", null, null, null, true);
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(costCenterService);
     }
 
@@ -142,7 +142,7 @@ class CostCenterControllerTest {
 
         ResponseEntity<CostCenterView> response = costCenterController.insertCostCenters("org123", costCenterUpdate);
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(costCenterService);
     }
 
@@ -153,7 +153,7 @@ class CostCenterControllerTest {
 
         ResponseEntity<CostCenterView> response = costCenterController.updateCostCenters("org123", costCenterUpdate);
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(costCenterService);
     }
 
@@ -164,7 +164,7 @@ class CostCenterControllerTest {
 
         ResponseEntity<?> response = costCenterController.insertCostCentersCsv("org123", file);
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(costCenterService);
     }
 

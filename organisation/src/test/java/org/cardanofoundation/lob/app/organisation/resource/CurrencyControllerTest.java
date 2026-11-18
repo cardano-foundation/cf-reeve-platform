@@ -137,7 +137,7 @@ class CurrencyControllerTest {
 
         ResponseEntity<?> response = currencyController.getAllCurrencies("org123", null, null, Pageable.unpaged());
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(currencyService);
     }
 
@@ -147,7 +147,7 @@ class CurrencyControllerTest {
 
         ResponseEntity<?> response = currencyController.getCurrency("org123", "USD");
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(currencyService);
     }
 
@@ -158,7 +158,7 @@ class CurrencyControllerTest {
 
         ResponseEntity<?> response = currencyController.insertCurrency("org123", update);
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(currencyService);
     }
 
@@ -169,7 +169,7 @@ class CurrencyControllerTest {
 
         ResponseEntity<?> response = currencyController.updateCurrency("org123", update);
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(currencyService);
     }
 
@@ -180,7 +180,7 @@ class CurrencyControllerTest {
 
         ResponseEntity<?> response = currencyController.insertCurrenciesCsv("org123", file);
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(currencyService);
     }
 
@@ -190,7 +190,7 @@ class CurrencyControllerTest {
 
         ResponseEntity<?> response = currencyController.downloadCurrenciesCsv("org123", null, null);
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(currencyService);
     }
 }

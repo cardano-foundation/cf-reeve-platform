@@ -130,7 +130,7 @@ class ProjectCodeControllerTest {
 
         ResponseEntity<?> response = projectCodeController.getAllProjects("org123", null, null, null, null, Pageable.unpaged());
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(projectCodeService);
     }
 
@@ -140,7 +140,7 @@ class ProjectCodeControllerTest {
 
         ResponseEntity<?> response = projectCodeController.downloadProjectsCsv("org123", null, null, null, null);
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(projectCodeService);
     }
 
@@ -151,7 +151,7 @@ class ProjectCodeControllerTest {
 
         ResponseEntity<ProjectView> response = projectCodeController.insertProject("org123", projectUpdate);
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(projectCodeService);
     }
 
@@ -162,7 +162,7 @@ class ProjectCodeControllerTest {
 
         ResponseEntity<ProjectView> response = projectCodeController.updateProject("org123", projectUpdate);
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(projectCodeService);
     }
 
@@ -173,7 +173,7 @@ class ProjectCodeControllerTest {
 
         ResponseEntity<?> response = projectCodeController.insertProjectsCsv("org123", file);
 
-        assertEquals(401, response.getStatusCode().value());
+        assertEquals(403, response.getStatusCode().value());
         verifyNoInteractions(projectCodeService);
     }
 }

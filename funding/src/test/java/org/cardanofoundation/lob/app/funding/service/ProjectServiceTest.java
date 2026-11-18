@@ -108,7 +108,7 @@ class ProjectServiceTest {
 
         PagedResponse<ProjectView> result = projectService.listProjects("org1", new ProjectFilterRequest(), PAGEABLE);
 
-        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
     }
 
     @Test
@@ -220,7 +220,7 @@ class ProjectServiceTest {
 
         ProjectView result = projectService.getProject("p1", "org1");
 
-        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
         verify(projectRepository, never()).findByIdAndOrganisationId(any(), any());
     }
 
@@ -278,7 +278,7 @@ class ProjectServiceTest {
 
         ProjectDraftStatusView result = projectService.hasDraftEvent("org1", "p1");
 
-        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
     }
 
     @Test
@@ -308,12 +308,12 @@ class ProjectServiceTest {
     // --- createWithMilestones ---
 
     @Test
-    void createWithMilestones_returns401_whenUserCannotAccessOrg() {
+    void createWithMilestones_returns403_whenUserCannotAccessOrg() {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
         ProjectView result = projectService.createWithMilestones(createRequest());
 
-        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
         verify(projectRepository, never()).saveAndFlush(any());
     }
 
@@ -711,12 +711,12 @@ class ProjectServiceTest {
     }
 
     @Test
-    void delete_returns401_whenUserCannotAccessOrg() {
+    void delete_returns403_whenUserCannotAccessOrg() {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
         CascadeDeletionView result = projectService.deleteProject("p1", "org1");
 
-        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
         verify(cascadeDeleteService, never()).deleteProjectSubtree(any());
         verify(projectRepository, never()).findByIdAndOrganisationId(any(), any());
     }
@@ -759,12 +759,12 @@ class ProjectServiceTest {
     }
 
     @Test
-    void listSubProjects_returns401_whenUserCannotAccessOrg() {
+    void listSubProjects_returns403_whenUserCannotAccessOrg() {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
         PagedResponse<ProjectView> result = projectService.listSubProjects("p1", "org1", PAGEABLE);
 
-        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
         verify(projectRepository, never()).findByParentProjectId("p1", PAGEABLE);
         verify(projectRepository, never()).findByIdAndOrganisationId(any(), any());
     }

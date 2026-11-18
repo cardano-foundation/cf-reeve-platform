@@ -94,9 +94,9 @@ public class AddressbookService {
         return Either.right(toView(entryRepository.save(entry)));
     }
 
-    public Either<ProblemDetail, AddressbookEntryView> update(String entryId,
+    public Either<ProblemDetail, AddressbookEntryView> update(String organisationId, String entryId,
                                                               UpdateAddressbookEntryRequest request) {
-        Either<ProblemDetail, AddressbookEntryEntity> found = loadAndAuthorise(entryId);
+        Either<ProblemDetail, AddressbookEntryEntity> found = load(organisationId, entryId);
         if (found.isLeft()) {
             return Either.left(found.getLeft());
         }
@@ -122,8 +122,8 @@ public class AddressbookService {
         return Either.right(toView(entryRepository.save(entry)));
     }
 
-    public Optional<ProblemDetail> delete(String entryId) {
-        Either<ProblemDetail, AddressbookEntryEntity> found = loadAndAuthorise(entryId);
+    public Optional<ProblemDetail> delete(String organisationId, String entryId) {
+        Either<ProblemDetail, AddressbookEntryEntity> found = load(organisationId, entryId);
         if (found.isLeft()) {
             return Optional.of(found.getLeft());
         }
@@ -136,21 +136,17 @@ public class AddressbookService {
     }
 
     /**
-     * The entry decides its own organisation — the id already determines which addressbook the row is
-     * in, so taking an org from the caller as well would only let the two disagree.
+     * The entry, only within the organisation the permission was checked in: another organisation's entry, even one
+     * the user also belongs to, is not found.
      */
-    private Either<ProblemDetail, AddressbookEntryEntity> loadAndAuthorise(String entryId) {
-        Optional<AddressbookEntryEntity> entryM = entryRepository.findById(entryId);
+    private Either<ProblemDetail, AddressbookEntryEntity> load(String organisationId, String entryId) {
+        Optional<AddressbookEntryEntity> entryM = entryRepository.findById(entryId)
+                .filter(found -> found.getOrganisationId().equals(organisationId));
         if (entryM.isEmpty()) {
             return Either.left(VaultProblems.notFound(VaultProblems.ADDRESSBOOK_ENTRY_NOT_FOUND,
                     "No addressbook entry %s.".formatted(entryId)));
         }
-        AddressbookEntryEntity entry = entryM.get();
-        if (!securityHelper.canUserAccessOrg(entry.getOrganisationId())) {
-            return Either.left(VaultProblems.forbidden(
-                    "Current user is not a member of organisation %s.".formatted(entry.getOrganisationId())));
-        }
-        return Either.right(entry);
+        return Either.right(entryM.get());
     }
 
     private Optional<ProblemDetail> checkOrganisation(String organisationId) {

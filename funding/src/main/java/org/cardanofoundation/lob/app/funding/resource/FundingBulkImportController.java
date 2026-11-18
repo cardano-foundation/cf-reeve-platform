@@ -69,15 +69,16 @@ public class FundingBulkImportController {
             }
     )
     @PostMapping(value = "/bulk-import", produces = APPLICATION_JSON_VALUE, consumes = MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("@permissions.can('project_management', 'create_project')")
+    @PreAuthorize("@permissions.can(#request?.organisationId, 'project_management', 'create_project')")
     public ResponseEntity<FundingBulkImportResult> bulkImport(@ModelAttribute BulkImportRequest request) {
         return Responses.respond(fundingBulkImportService.importFiles(request), HttpStatus.OK);
     }
 
     @Operation(summary = "Download a blank CSV template (with one example row) for a bulk-import file type")
     @GetMapping(value = "/bulk-import/templates/{fileType}", produces = "text/csv")
-    @PreAuthorize("@permissions.can('project_management', 'create_project')")
-    public ResponseEntity<StreamingResponseBody> downloadTemplate(@PathVariable FundingCsvFileType fileType) {
+    @PreAuthorize("@permissions.can(#organisationId, 'project_management', 'create_project')")
+    public ResponseEntity<StreamingResponseBody> downloadTemplate(@PathVariable FundingCsvFileType fileType,
+            @RequestParam @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String organisationId) {
         StreamingResponseBody responseBody = outputStream -> fundingCsvTemplateService.writeTemplate(fileType, outputStream);
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=\"funding_%s_template.csv\"".formatted(fileType.name().toLowerCase()))
@@ -103,7 +104,7 @@ public class FundingBulkImportController {
             }
     )
     @GetMapping(value = "/bulk-import/export/projects-milestones")
-    @PreAuthorize("@permissions.can('project_management', 'view')")
+    @PreAuthorize("@permissions.can(#organisationId, 'project_management', 'view')")
     public ResponseEntity<Object> exportProjectsMilestones(
             @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94")
             @RequestParam String organisationId,

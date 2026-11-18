@@ -80,7 +80,7 @@ class ReferenceCodeResourceTest {
 
         ResponseEntity<?> response = controller.getReferenceCodes("orgId", null, null, null, null, Pageable.unpaged());
 
-        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
         verifyNoInteractions(referenceCodeService);
     }
 
@@ -90,7 +90,7 @@ class ReferenceCodeResourceTest {
 
         ResponseEntity<?> response = controller.downloadRefCodesCsv("orgId", null, null, null, null);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
         verifyNoInteractions(referenceCodeService);
     }
 
@@ -101,7 +101,7 @@ class ReferenceCodeResourceTest {
 
         ResponseEntity<?> response = controller.insertReferenceCode("orgId", update);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
         verifyNoInteractions(referenceCodeService);
     }
 
@@ -111,7 +111,7 @@ class ReferenceCodeResourceTest {
 
         ResponseEntity<?> response = controller.insertRefCodeByCsv("orgId", null);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
         verifyNoInteractions(referenceCodeService);
     }
 
@@ -122,7 +122,7 @@ class ReferenceCodeResourceTest {
 
         ResponseEntity<?> response = controller.updateReferenceCode("orgId", update);
 
-        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
         verifyNoInteractions(referenceCodeService);
     }
 

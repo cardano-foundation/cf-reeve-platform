@@ -51,7 +51,7 @@ public class AccountingRegimeController {
             ),
     })
     @GetMapping(value = "/{orgId}/accounting-regimes", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('accounting_regimes', 'view')")
+    @PreAuthorize("@permissions.can(#orgId, 'accounting_regimes', 'view')")
     public ResponseEntity<List<AccountingRegimeView>> getAllAccountingRegimes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();
@@ -65,7 +65,7 @@ public class AccountingRegimeController {
             ),
     })
     @PostMapping(value = "/{orgId}/accounting-regimes", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('accounting_regimes', 'create')")
+    @PreAuthorize("@permissions.can(#orgId, 'accounting_regimes', 'create')")
     public ResponseEntity<AccountingRegimeView> insertAccountingRegime(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody AccountingRegimeUpdate accountingRegimeUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();
@@ -81,7 +81,7 @@ public class AccountingRegimeController {
             ),
     })
     @PutMapping(value = "/{orgId}/accounting-regimes", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('accounting_regimes', 'edit')")
+    @PreAuthorize("@permissions.can(#orgId, 'accounting_regimes', 'edit')")
     public ResponseEntity<AccountingRegimeView> updateAccountingRegime(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody AccountingRegimeUpdate accountingRegimeUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();
@@ -97,7 +97,7 @@ public class AccountingRegimeController {
             ),
     })
     @PostMapping(value = "/{orgId}/accounting-regimes", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("@permissions.can('accounting_regimes', 'create')")
+    @PreAuthorize("@permissions.can(#orgId, 'accounting_regimes', 'create')")
     public ResponseEntity<Object> insertAccountingRegimesCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam(value = "file") MultipartFile file) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();

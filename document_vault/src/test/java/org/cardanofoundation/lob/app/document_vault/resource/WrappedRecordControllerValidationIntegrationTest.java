@@ -34,7 +34,7 @@ class WrappedRecordControllerValidationIntegrationTest {
     void overlongCredentialIdIsRejectedWithBadRequest() throws Exception {
         String overlong = "c".repeat(513);
 
-        mockMvc.perform(get("/api/v1/document-vault/records/{credentialId}", overlong))
+        mockMvc.perform(get("/api/v1/document-vault/records/{credentialId}", overlong).param("organisationId", "org1"))
                 .andExpect(status().isBadRequest());
     }
 
@@ -42,7 +42,7 @@ class WrappedRecordControllerValidationIntegrationTest {
     void validLengthUnknownCredentialIdIsNotFound() throws Exception {
         String validLength = "c".repeat(512);
 
-        mockMvc.perform(get("/api/v1/document-vault/records/{credentialId}", validLength))
+        mockMvc.perform(get("/api/v1/document-vault/records/{credentialId}", validLength).param("organisationId", "org1"))
                 .andExpect(status().isNotFound());
     }
 }

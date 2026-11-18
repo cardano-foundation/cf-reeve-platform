@@ -1,7 +1,7 @@
 package org.cardanofoundation.lob.app.organisation.resource;
 
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
-import static org.springframework.http.HttpStatus.UNAUTHORIZED;
+import static org.springframework.http.HttpStatus.FORBIDDEN;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE;
 
@@ -58,7 +58,7 @@ public class CostCenterController {
             ),
     })
     @GetMapping(value = "/organisations/{orgId}/cost-centers", produces = "application/json")
-    @PreAuthorize("@permissions.can('cost_centers', 'view')")
+    @PreAuthorize("@permissions.can(#orgId, 'cost_centers', 'view')")
     public ResponseEntity<?> getAllCostCenters(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                @RequestParam(value = "customerCode", required = false) String customerCode,
                                                @RequestParam(value = "name", required = false) String name,
@@ -76,7 +76,7 @@ public class CostCenterController {
 
     @Operation(summary = "Download cost centers CSV file", description = "Download cost centers as a CSV file")
     @GetMapping(value = "/organisations/{orgId}/cost-centers/download", produces = "test/csv")
-    @PreAuthorize("@permissions.can('export_setup_data', 'download')")
+    @PreAuthorize("@permissions.can(#orgId, 'export_setup_data', 'download')")
     public ResponseEntity<StreamingResponseBody> downloadCostCentersCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId,
                                                     @RequestParam(value = "customerCode", required = false) String customerCode,
                                                     @RequestParam(value = "name", required = false) String name,
@@ -99,10 +99,10 @@ public class CostCenterController {
             ),
     })
     @PostMapping(value = "/organisations/{orgId}/cost-centers", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('cost_centers', 'create')")
+    @PreAuthorize("@permissions.can(#orgId, 'cost_centers', 'create')")
     public ResponseEntity<CostCenterView> insertCostCenters(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CostCenterUpdate costCenterUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            return ResponseEntity.status(UNAUTHORIZED.value()).body(CostCenterView.createFail(costCenterUpdate, OrgAccessDenied.problem()));
+            return ResponseEntity.status(FORBIDDEN.value()).body(CostCenterView.createFail(costCenterUpdate, OrgAccessDenied.problem()));
         }
         CostCenterView costCenterView = costCenterService.insertCostCenter(orgId, costCenterUpdate, false);
         return costCenterView.getError().map(error -> ResponseEntity.status(error.getStatus())
@@ -116,10 +116,10 @@ public class CostCenterController {
             ),
     })
     @PutMapping(value = "/organisations/{orgId}/cost-centers", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('cost_centers', 'edit')")
+    @PreAuthorize("@permissions.can(#orgId, 'cost_centers', 'edit')")
     public ResponseEntity<CostCenterView> updateCostCenters(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody CostCenterUpdate costCenterUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
-            return ResponseEntity.status(UNAUTHORIZED.value()).body(CostCenterView.createFail(costCenterUpdate, OrgAccessDenied.problem()));
+            return ResponseEntity.status(FORBIDDEN.value()).body(CostCenterView.createFail(costCenterUpdate, OrgAccessDenied.problem()));
         }
         CostCenterView costCenterView = costCenterService.updateCostCenter(orgId, costCenterUpdate);
 
@@ -134,7 +134,7 @@ public class CostCenterController {
             ),
     })
     @PostMapping(value = "/organisations/{orgId}/cost-centers", produces = APPLICATION_JSON_VALUE, consumes = MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("@permissions.can('cost_centers', 'create')")
+    @PreAuthorize("@permissions.can(#orgId, 'cost_centers', 'create')")
     public ResponseEntity<?> insertCostCentersCsv(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam("file") MultipartFile file) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();
