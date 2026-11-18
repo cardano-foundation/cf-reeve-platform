@@ -69,8 +69,10 @@ public class DocumentVaultContextIntegrationTest {
         // document_vault_attestation_freeze (V1.7_100_14_5) is the sixth: the DOCUMENT attestation
         // freeze store, which moved here from blockchain_publisher because the pod that runs ceremonies
         // does not load that module at all.
-        assertEquals(6, tables,
+        // V1.9_100_14_1 adds the Envers history for key, addressbook_entry, document and document_slot.
+        assertEquals(10, tables,
                 "Expected the 6 document_vault_* tables (key, addressbook_entry, wrapped_record, "
-                        + "document, document_slot, attestation_freeze)");
+                        + "document, document_slot, attestation_freeze) plus the 4 _aud tables for "
+                        + "key, addressbook_entry, document and document_slot");
     }
 }

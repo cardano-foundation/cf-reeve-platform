@@ -21,6 +21,7 @@ import lombok.Setter;
 import org.springframework.data.domain.Persistable;
 
 import org.hibernate.annotations.DynamicUpdate;
+import org.hibernate.envers.Audited;
 
 /**
  * One row per platform user, keyed by Keycloak subject. {@code bindingVersion} is incremented on
@@ -33,6 +34,7 @@ import org.hibernate.annotations.DynamicUpdate;
 @Setter
 @NoArgsConstructor
 @DynamicUpdate
+@Audited
 @Entity(name = "keri_attestation.KeriIdentityLinkEntity")
 @Table(name = "keri_identity_link")
 public class KeriIdentityLinkEntity implements Persistable<String> {

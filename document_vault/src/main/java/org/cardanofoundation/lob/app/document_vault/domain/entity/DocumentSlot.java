@@ -8,6 +8,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import org.hibernate.envers.NotAudited;
+
 /**
  * One recipient slot of an envelope. {@code keyId}/{@code recipientRef} are labels and indexing
  * aids only, never trust anchors. {@code wrappedDek} is AES-256-GCM-encrypted under an
@@ -35,6 +37,8 @@ public class DocumentSlot {
     @Column(name = "ephemeral_pub", nullable = false, length = 64)
     private String ephemeralPub;
 
+    /** Not audited: the slot's history records who it was wrapped to, never the wrapped key itself. */
+    @NotAudited
     @Column(name = "wrapped_dek", nullable = false, length = 96)
     private String wrappedDek;
 

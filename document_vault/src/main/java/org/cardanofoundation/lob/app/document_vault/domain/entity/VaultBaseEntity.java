@@ -21,14 +21,24 @@ import org.springframework.data.annotation.LastModifiedBy;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import org.hibernate.envers.Audited;
+
 /**
- * Vault tables deliberately do not extend {@code CommonEntity}: that superclass is Envers-@Audited,
- * which would demand {@code _aud} copies of immutable rows including ciphertext blobs.
+ * Common who/when columns for the vault tables.
+ *
+ * <p>{@code @Audited} here only makes these columns part of the history of a subclass that is itself
+ * {@code @Audited}; it does not audit every subclass. The document, key and addressbook entities opt
+ * in and exclude their encrypted payloads with {@code @NotAudited}, so a revision records who changed
+ * what and when without a second copy of any ciphertext. {@link WrappedRecordEntity} stays unaudited:
+ * it is nothing but an opaque client-encrypted blob.
+ *
+ * <p>Vault tables still do not extend {@code CommonEntity}, whose Javers annotations do not apply here.
  */
 @Setter
 @Getter
 @MappedSuperclass
 @NoArgsConstructor
+@Audited
 @EntityListeners(AuditingEntityListener.class)
 public abstract class VaultBaseEntity {
 

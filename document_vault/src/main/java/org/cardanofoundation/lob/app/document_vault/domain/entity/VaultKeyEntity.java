@@ -16,6 +16,8 @@ import lombok.Setter;
 
 import org.springframework.data.domain.Persistable;
 
+import org.hibernate.envers.Audited;
+
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyAssurance;
 import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyOrigin;
 
@@ -30,6 +32,7 @@ import org.cardanofoundation.lob.app.document_vault.domain.enums.KeyOrigin;
 @Getter
 @Setter
 @NoArgsConstructor
+@Audited
 @Entity(name = "document_vault.VaultKeyEntity")
 @Table(name = "document_vault_key")
 public class VaultKeyEntity extends VaultBaseEntity implements Persistable<String> {
