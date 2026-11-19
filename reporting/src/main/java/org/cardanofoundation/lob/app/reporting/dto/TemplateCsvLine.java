@@ -9,8 +9,6 @@ import lombok.Setter;
 
 import com.opencsv.bean.CsvBindByName;
 
-import org.cardanofoundation.lob.app.organisation.service.csv.CsvLegacyHeader;
-
 @Getter
 @Setter
 @AllArgsConstructor
@@ -26,8 +24,9 @@ public class TemplateCsvLine {
     @CsvBindByName(column = "Generation Method")
     @NotNull(message = "Generation Method is required. Options are: Automatic or Manual")
     private String dataMode;
-    // Displayed as "Standard"; stored in the template's accountingRegime field. Read it with getStandard()
+    // Displayed as "Standard"; stored in the template's accountingRegime field
     @CsvBindByName(column = "Standard")
+    @NotNull(message = "Standard is required")
     private String standard;
     @CsvBindByName(column = "Active")
     @NotNull(message = "Active is required. Options are: true or false")
@@ -46,16 +45,5 @@ public class TemplateCsvLine {
     private String dateRange = "";
     @CsvBindByName(column = "Sign")
     private String sign = "";
-    // Old name of the Standard column, still accepted so CSVs prepared before the rename import unchanged.
-    // CsvParser rejects a file that has both columns.
-    @CsvBindByName(column = "Accounting Regime", profiles = "optional")
-    @CsvLegacyHeader(replacedBy = "Standard")
-    private String legacyAccountingRegime;
-
-    /** The Standard value, from whichever of the Standard or legacy Accounting Regime columns the file has. */
-    @NotNull(message = "Standard is required")
-    public String getStandard() {
-        return standard != null ? standard : legacyAccountingRegime;
-    }
 
 }

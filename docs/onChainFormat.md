@@ -202,7 +202,7 @@ Optional fields:
 
 | Field      | Type   | Description |
 | ---------- | ------ | ----------- |
-| `standard` | string | Accounting standard the report was prepared under, e.g. "IFRS", taken from the report template. Omitted for reports from legacy templates that have no standard. Introduced as `standard` in metadata version `1.3`; reports published with version `1.2` carry the same value under `accounting_regime`. |
+| `standard` | string | Accounting standard the report was prepared under, e.g. "IFRS" or "Not applicable", taken from the report template. Mandatory when a template is created or edited (UI, API and CSV import), so it is always present for those templates; omitted only for reports generated from legacy templates that predate the field. Introduced as `standard` in metadata version `1.3`; reports published with version `1.2` carry the same value under `accounting_regime`. |
 
 ### Report Data Structure
 

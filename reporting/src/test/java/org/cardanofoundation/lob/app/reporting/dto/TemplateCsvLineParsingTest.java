@@ -21,8 +21,8 @@ import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 import org.cardanofoundation.lob.app.support.security.AntiVirusScanner;
 
 /**
- * Parses real report template CSVs, to check the Standard column and its legacy Accounting Regime name
- * end to end: header check, binding and the row-level required validation.
+ * Parses real report template CSVs, to check the Standard column end to end: header check, binding and
+ * the row-level required validation. The column's old name, Accounting Regime, is no longer accepted.
  */
 class TemplateCsvLineParsingTest {
 
@@ -61,22 +61,12 @@ class TemplateCsvLineParsingTest {
     }
 
     @Test
-    void legacyAccountingRegimeHeader_isStillRead() {
+    void legacyAccountingRegimeHeader_isRejectedAsStandardMissing() {
         Either<ProblemDetail, List<TemplateCsvLine>> result = parse("Accounting Regime", "IFRS");
-
-        assertThat(result.isRight()).as(() -> "expected success but got: " + result.getLeft()).isTrue();
-        assertThat(result.get().getFirst().getStandard()).isEqualTo("IFRS");
-        assertThat(validationMessages(result.get().getFirst())).isEmpty();
-    }
-
-    @Test
-    void bothHeaders_rejectFile() {
-        Either<ProblemDetail, List<TemplateCsvLine>> result = parse("Standard;Accounting Regime", "IFRS;GAAP");
 
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo("CSV_HEADER_ERROR");
-        assertThat(result.getLeft().getDetail())
-                .isEqualTo("Header row has both the Standard and the Accounting Regime column. Accounting Regime is the old name of Standard, keep only Standard.");
+        assertThat(result.getLeft().getDetail()).isEqualTo("Missing required headers: Standard");
     }
 
     @Test
@@ -93,14 +83,6 @@ class TemplateCsvLineParsingTest {
     @Test
     void emptyStandardCell_isRequired() {
         Either<ProblemDetail, List<TemplateCsvLine>> result = parse("Standard", "");
-
-        assertThat(result.isRight()).isTrue();
-        assertThat(validationMessages(result.get().getFirst())).containsExactly("Standard is required");
-    }
-
-    @Test
-    void emptyLegacyCell_isRequiredUnderNewName() {
-        Either<ProblemDetail, List<TemplateCsvLine>> result = parse("Accounting Regime", "");
 
         assertThat(result.isRight()).isTrue();
         assertThat(validationMessages(result.get().getFirst())).containsExactly("Standard is required");

@@ -225,9 +225,9 @@ class CsvReportTemplateServiceTest {
 
         CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
         MultipartFile file = mock(MultipartFile.class);
-        TemplateCsvLine revenue = new TemplateCsvLine("Test Template", "Balance sheet", "Automatic", "IFRS", "true", "", "Revenue", "", "", "End-of-Period balance", "Positive", null);
-        TemplateCsvLine costs = new TemplateCsvLine("Test Template", "Balance sheet", "Automatic", "IFRS", "true", "", "Costs", "", "", "End-of-Period balance", "Negative", null);
-        TemplateCsvLine profit = new TemplateCsvLine("Test Template", "Balance sheet", "Automatic", "IFRS", "true", "", "Profit", "", "", "End-of-Period balance", null, null);
+        TemplateCsvLine revenue = new TemplateCsvLine("Test Template", "Balance sheet", "Automatic", "IFRS", "true", "", "Revenue", "", "", "End-of-Period balance", "Positive");
+        TemplateCsvLine costs = new TemplateCsvLine("Test Template", "Balance sheet", "Automatic", "IFRS", "true", "", "Costs", "", "", "End-of-Period balance", "Negative");
+        TemplateCsvLine profit = new TemplateCsvLine("Test Template", "Balance sheet", "Automatic", "IFRS", "true", "", "Profit", "", "", "End-of-Period balance", null);
 
         when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(new Organisation()));
         when(request.getOrganisationId()).thenReturn("org123");
@@ -248,7 +248,7 @@ class CsvReportTemplateServiceTest {
         CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
         MultipartFile file = mock(MultipartFile.class);
         Errors errors = mock(Errors.class);
-        TemplateCsvLine line = new TemplateCsvLine("Test Template", "Balance sheet", "Automatic", "IFRS", "true", "", "Revenue", "", "", "", "Positive", null);
+        TemplateCsvLine line = new TemplateCsvLine("Test Template", "Balance sheet", "Automatic", "IFRS", "true", "", "Revenue", "", "", "", "Positive");
 
         when(errors.getAllErrors()).thenReturn(List.of());
         when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(new Organisation()));
@@ -282,8 +282,8 @@ class CsvReportTemplateServiceTest {
         CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
         MultipartFile file = mock(MultipartFile.class);
         // Sign column left blank on one row and omitted entirely (null) on the other; Date Range blank on both
-        TemplateCsvLine revenue = new TemplateCsvLine("Test Template", "Balance sheet", "Manual", "IFRS", "true", "", "Revenue", "", "", "", "", null);
-        TemplateCsvLine costs = new TemplateCsvLine("Test Template", "Balance sheet", "Manual", "IFRS", "true", "", "Costs", "", "", null, null, null);
+        TemplateCsvLine revenue = new TemplateCsvLine("Test Template", "Balance sheet", "Manual", "IFRS", "true", "", "Revenue", "", "", "", "");
+        TemplateCsvLine costs = new TemplateCsvLine("Test Template", "Balance sheet", "Manual", "IFRS", "true", "", "Costs", "", "", null, null);
 
         when(organisationPublicApi.findByOrganisationId("org123")).thenReturn(Optional.of(new Organisation()));
         when(request.getOrganisationId()).thenReturn("org123");
@@ -972,7 +972,7 @@ class CsvReportTemplateServiceTest {
     private Either<ProblemDetail, List<ReportTemplateResponseDto>> importSingleManualRow(String accountingRegime) {
         CreateCsvTemplateRequest request = mock(CreateCsvTemplateRequest.class);
         MultipartFile file = mock(MultipartFile.class);
-        TemplateCsvLine line = new TemplateCsvLine("Template CSV", "Income statement", "Manual", accountingRegime, "true", "", "Revenue", "", "", "End-of-Period balance", "Positive", null);
+        TemplateCsvLine line = new TemplateCsvLine("Template CSV", "Income statement", "Manual", accountingRegime, "true", "", "Revenue", "", "", "End-of-Period balance", "Positive");
         Errors errors = mock(Errors.class);
 
         when(errors.getAllErrors()).thenReturn(List.of());

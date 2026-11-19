@@ -8,15 +8,9 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.List;
 
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-
 import org.springframework.http.ProblemDetail;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.opencsv.bean.CsvBindByName;
 import io.vavr.control.Either;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -145,71 +139,5 @@ class CsvParserTest {
 
         Assertions.assertTrue(parse.isLeft());
         Assertions.assertEquals("MALICIOUS_FILE_DETECTED", parse.getLeft().getTitle());
-    }
-
-    @Getter
-    @Setter
-    @NoArgsConstructor
-    public static class RenamedColumnLine {
-        @CsvBindByName(column = "Name")
-        private String name;
-        @CsvBindByName(column = "Standard")
-        private String standard;
-        @CsvBindByName(column = "Accounting Regime", profiles = "optional")
-        @CsvLegacyHeader(replacedBy = "Standard")
-        private String legacyAccountingRegime;
-    }
-
-    private Either<ProblemDetail, List<RenamedColumnLine>> parseRenamedColumnCsv(String csv) {
-        CsvParser<RenamedColumnLine> parser = new CsvParser<>(antiVirusScanner);
-        ReflectionTestUtils.setField(parser, "delimiter", ",");
-        byte[] bytes = csv.getBytes();
-        when(antiVirusScanner.isFileSafe(bytes)).thenReturn(true);
-        return parser.parseCsv(bytes, RenamedColumnLine.class);
-    }
-
-    @Test
-    void parseCsv_legacyHeader_currentHeaderAccepted() {
-        Either<ProblemDetail, List<RenamedColumnLine>> parse = parseRenamedColumnCsv("Name,Standard\nTemplate,IFRS\n");
-
-        Assertions.assertTrue(parse.isRight(), () -> "expected success but got: " + parse.getLeft());
-        Assertions.assertEquals("IFRS", parse.get().getFirst().getStandard());
-        Assertions.assertNull(parse.get().getFirst().getLegacyAccountingRegime());
-    }
-
-    @Test
-    void parseCsv_legacyHeader_oldHeaderSatisfiesRequiredHeader() {
-        Either<ProblemDetail, List<RenamedColumnLine>> parse = parseRenamedColumnCsv("Name,Accounting Regime\nTemplate,IFRS\n");
-
-        Assertions.assertTrue(parse.isRight(), () -> "expected success but got: " + parse.getLeft());
-        Assertions.assertNull(parse.get().getFirst().getStandard());
-        Assertions.assertEquals("IFRS", parse.get().getFirst().getLegacyAccountingRegime());
-    }
-
-    @Test
-    void parseCsv_legacyHeader_matchesHeadersIgnoringCase() {
-        Either<ProblemDetail, List<RenamedColumnLine>> parse = parseRenamedColumnCsv("Name,accounting regime\nTemplate,IFRS\n");
-
-        Assertions.assertTrue(parse.isRight(), () -> "expected success but got: " + parse.getLeft());
-        Assertions.assertEquals("IFRS", parse.get().getFirst().getLegacyAccountingRegime());
-    }
-
-    @Test
-    void parseCsv_legacyHeader_bothHeadersRejected() {
-        Either<ProblemDetail, List<RenamedColumnLine>> parse = parseRenamedColumnCsv("Name,Standard,Accounting Regime\nTemplate,IFRS,GAAP\n");
-
-        Assertions.assertTrue(parse.isLeft());
-        Assertions.assertEquals("CSV_HEADER_ERROR", parse.getLeft().getTitle());
-        Assertions.assertEquals("Header row has both the Standard and the Accounting Regime column. Accounting Regime is the old name of Standard, keep only Standard.",
-                parse.getLeft().getDetail());
-    }
-
-    @Test
-    void parseCsv_legacyHeader_neitherHeaderReportsCurrentName() {
-        Either<ProblemDetail, List<RenamedColumnLine>> parse = parseRenamedColumnCsv("Name\nTemplate\n");
-
-        Assertions.assertTrue(parse.isLeft());
-        Assertions.assertEquals("CSV_HEADER_ERROR", parse.getLeft().getTitle());
-        Assertions.assertEquals("Missing required headers: Standard", parse.getLeft().getDetail());
     }
 }

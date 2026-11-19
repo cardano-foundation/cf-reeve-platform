@@ -131,7 +131,7 @@
       "minimum": 0
     },
     "standard": {
-      "description": "Accounting standard the report was prepared under (e.g. IFRS), taken from the report template. Optional: omitted for reports from legacy templates that have no standard. Published as 'accounting_regime' up to metadata version 1.2.",
+      "description": "Accounting standard the report was prepared under (e.g. IFRS), taken from the report template. Mandatory on templates created or edited via UI, API or CSV import; omitted only for reports generated from legacy templates that predate the field. Published as 'accounting_regime' up to metadata version 1.2.",
       "type": "string",
       "minLength": 1
     },

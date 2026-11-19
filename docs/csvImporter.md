@@ -121,7 +121,7 @@ The following columns are needed:
 - `Name`: Name of the report template (e.g. `Balance Sheet Template`)
 - `Report Type`: Type of the report template. Possible values are: `Balance sheet`, `Income statement`, `Custom`
 - `Generation Method`: How the report is generated. Possible values are: `Automatic`, `Manual`
-- `Standard`: The label of one of the organisation's active standards, or `Not applicable` (e.g. `IFRS`). Matching ignores case. Any other value fails the template, except when updating an existing template whose standard is unchanged. The column's old name, `Accounting Regime`, is still accepted, so files prepared before the rename import unchanged; a file with both `Standard` and `Accounting Regime` columns is rejected
+- `Standard`: The label of one of the organisation's active standards, or `Not applicable` (e.g. `IFRS`). Matching ignores case. Any other value fails the template, except when updating an existing template whose standard is unchanged. Files still using the column's old name, `Accounting Regime`, are rejected: rename the column to `Standard`
 - `Active`: Whether the template is available for use in reports. Possible values are: `true`, `false`
 - `Description`: Free text description of the template (optional)
 - `Field Name`: Name of the field (e.g. `TOTAL_ASSETS`)
