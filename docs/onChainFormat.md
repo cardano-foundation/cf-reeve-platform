@@ -198,6 +198,12 @@ Required fields:
 | `subtype`  | string                      | Definition of what of the report type - Organisations can have custom reports, e.g., "BALANCE_SHEET", "INCOME_STATEMENT"                                               |
 | `data`     | leaf \| node                | The actual report data, recursively structured according to the organisation's needs (see [Report Data Structure](#report-data-structure) below).                     |
 
+Optional fields:
+
+| Field      | Type   | Description |
+| ---------- | ------ | ----------- |
+| `standard` | string | Accounting standard the report was prepared under, e.g. "IFRS", taken from the report template. Omitted for reports from legacy templates that have no standard. Introduced as `standard` in metadata version `1.3`; reports published with version `1.2` carry the same value under `accounting_regime`. |
+
 ### Report Data Structure
 
 Every field in the `data` tree — including the root — is exactly one of a **leaf** or a **node**:

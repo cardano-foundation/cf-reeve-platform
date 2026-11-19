@@ -130,6 +130,11 @@
       "type": "integer",
       "minimum": 0
     },
+    "standard": {
+      "description": "Accounting standard the report was prepared under (e.g. IFRS), taken from the report template. Optional: omitted for reports from legacy templates that have no standard. Published as 'accounting_regime' up to metadata version 1.2.",
+      "type": "string",
+      "minLength": 1
+    },
     "data": {
       "description": "Flexible, recursively-structured report data driven by the report template rather than a fixed per-subType layout. Field names are arbitrary and the same shape applies to INCOME_STATEMENT, BALANCE_SHEET and CUSTOM reports. Like every field in the tree, the root is exactly one of a leaf or a node — nothing in between: '_o' carries display order, leaves carry their value under 'v' (old reports use a plain decimal string), and nodes nest further child fields.",
       "allOf": [
