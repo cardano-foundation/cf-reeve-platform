@@ -31,6 +31,7 @@ import com.opencsv.enums.CSVReaderNullFieldIndicator;
 import com.opencsv.exceptions.CsvValidationException;
 import io.vavr.control.Either;
 
+import org.cardanofoundation.lob.app.organisation.util.ErrorTitleConstants;
 import org.cardanofoundation.lob.app.support.security.AntiVirusScanner;
 
 @Service
@@ -78,7 +79,7 @@ public class CsvParser<T> {
                 ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
                         "Header row has both the %1$s and the %2$s column. %2$s is the old name of %1$s, keep only %1$s."
                                 .formatted(legacy.getValue(), legacy.getKey()));
-                problem.setTitle("CSV_HEADER_ERROR");
+                problem.setTitle(ErrorTitleConstants.CSV_HEADER_ERROR);
                 return Either.left(problem);
             }
         }
@@ -93,7 +94,7 @@ public class CsvParser<T> {
 
         if (!missingHeaders.isEmpty()) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Missing required headers: " + String.join(", ", missingHeaders));
-            problem.setTitle("CSV_HEADER_ERROR");
+            problem.setTitle(ErrorTitleConstants.CSV_HEADER_ERROR);
             return Either.left(problem);
         }
         return Either.right(null); // No missing headers, return success
@@ -147,7 +148,7 @@ public class CsvParser<T> {
                 }
             } catch (CsvValidationException | IOException e) {
                 ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Error while validating CSV headers: " + e.getMessage());
-                problem.setTitle("CSV_HEADER_ERROR");
+                problem.setTitle(ErrorTitleConstants.CSV_HEADER_ERROR);
                 return Either.left(problem);
             }
 
