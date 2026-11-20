@@ -111,12 +111,16 @@ jobs:
       - name: Build payload
         if: steps.cf-gha-baseline.outputs.TRIGGERING_REF == 'pr'
         id: payload
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          SRC_BRANCH: ${{ github.event.pull_request.head.ref }}
+          TGT_BRANCH: ${{ github.event.pull_request.base.ref }}
         run: |
           PAYLOAD=$(jq -n \
             --arg version "${VERSION_PUBLISH}" \
-            --arg prName "${{ github.event.pull_request.title }}" \
-            --arg sourceBranch "${{ github.event.pull_request.head.ref }}" \
-            --arg targetBranch "${{ github.event.pull_request.base.ref }}" \
+            --arg prName "$PR_TITLE" \
+            --arg sourceBranch "$SRC_BRANCH" \
+            --arg targetBranch "$TGT_BRANCH" \
             '
               {
                 "version": $version,
