@@ -1182,13 +1182,13 @@ class ReportTemplateMapperTest {
     }
 
     @Test
-    void toEntity_mapsAccountingRegime() {
+    void toEntity_mapsStandard() {
         ReportTemplateDto dto = mock(ReportTemplateDto.class);
 
         when(dto.getOrganisationId()).thenReturn("org-id");
         when(dto.getName()).thenReturn("name");
         when(dto.getDataMode()).thenReturn("SYSTEM");
-        when(dto.getAccountingRegime()).thenReturn("IFRS");
+        when(dto.getStandard()).thenReturn("IFRS");
         when(dto.getReportTemplateType()).thenReturn("BALANCE_SHEET");
         when(dto.isActive()).thenReturn(true);
         when(dto.getValidationRules()).thenReturn(List.of());
@@ -1196,22 +1196,22 @@ class ReportTemplateMapperTest {
 
         ReportTemplateEntity entity = mapper.toEntity(dto, null);
 
-        assertThat(entity.getAccountingRegime()).isEqualTo("IFRS");
+        assertThat(entity.getStandard()).isEqualTo("IFRS");
     }
 
     @Test
-    void toResponseDto_mapsAccountingRegime() {
+    void toResponseDto_mapsStandard() {
         ReportTemplateEntity entity = ReportTemplateEntity.builder()
                 .id("template-id")
                 .organisationId("org-id")
                 .name("Test Template")
                 .reportTemplateType(ReportTemplateType.BALANCE_SHEET)
                 .dataMode(DataMode.SYSTEM)
-                .accountingRegime("IFRS")
+                .standard("IFRS")
                 .build();
 
         ReportTemplateResponseDto dto = mapper.toResponseDto(entity);
 
-        assertThat(dto.getAccountingRegime()).isEqualTo("IFRS");
+        assertThat(dto.getStandard()).isEqualTo("IFRS");
     }
 }

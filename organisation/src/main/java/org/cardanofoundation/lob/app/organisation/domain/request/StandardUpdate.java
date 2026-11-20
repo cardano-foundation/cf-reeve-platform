@@ -14,7 +14,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class AccountingRegimeUpdate {
+public class StandardUpdate {
 
     @Schema(example = "IFRS")
     @CsvBindByName(column = "Code")

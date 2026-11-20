@@ -828,9 +828,9 @@ class ReportingServiceTest {
     }
 
     @Test
-    void publish_success_copiesAccountingRegimeFromTemplateAndPublishesEvent() {
+    void publish_success_copiesStandardFromTemplateAndPublishesEvent() {
         ReportIdRequest request = ReportIdRequest.builder().organisationId("org123").reportId("abc").build();
-        templateEntity.setAccountingRegime("IFRS");
+        templateEntity.setStandard("IFRS");
         reportEntity.setReadyToPublish(true);
 
         when(reportRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(reportEntity));
@@ -841,7 +841,7 @@ class ReportingServiceTest {
         Either<ProblemDetail, ReportResponseDto> result = reportingService.publish(request);
 
         assertTrue(result.isRight());
-        assertEquals("IFRS", reportEntity.getAccountingRegime());
+        assertEquals("IFRS", reportEntity.getStandard());
         assertTrue(reportEntity.isLedgerDispatchApproved());
         assertEquals("user@example.com", reportEntity.getPublishedBy());
         verify(applicationEventPublisher).publishEvent(any(PublishReportEvent.class));

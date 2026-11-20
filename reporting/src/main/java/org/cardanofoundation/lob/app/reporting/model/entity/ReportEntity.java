@@ -103,7 +103,7 @@ public class ReportEntity extends CommonEntity {
 
     // Copied from the report template on creation, and re-synced at publish time so a
     // published report's regime disclosure stays fixed even if the template is edited afterwards.
-    private String accountingRegime;
+    private String standard;
 
     @NotAudited
     @ManyToMany

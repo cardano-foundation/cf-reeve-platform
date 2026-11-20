@@ -24,7 +24,7 @@ public class TemplateCsvLine {
     @CsvBindByName(column = "Generation Method")
     @NotNull(message = "Generation Method is required. Options are: Automatic or Manual")
     private String dataMode;
-    // Displayed as "Standard"; stored in the template's accountingRegime field
+    // Displayed as "Standard"; stored in the template's standard field
     @CsvBindByName(column = "Standard")
     @NotNull(message = "Standard is required")
     private String standard;

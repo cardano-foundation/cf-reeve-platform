@@ -29,6 +29,6 @@ public class ErrorTitleConstants {
     public static final String CSV_HEADER_ERROR = "CSV_HEADER_ERROR";
     public static final String OPENING_BALANCE_VALIDATION_ERROR = "OPENING_BALANCE_VALIDATION_ERROR";
     public static final String VAT_RATE_CANNOT_BE_NEGATIVE = "VAT_RATE_CANNOT_BE_NEGATIVE";
-    public static final String ACCOUNTING_REGIME_NOT_FOUND = "ACCOUNTING_REGIME_NOT_FOUND";
-    public static final String ACCOUNTING_REGIME_ALREADY_EXISTS = "ACCOUNTING_REGIME_ALREADY_EXISTS";
+    public static final String STANDARD_NOT_FOUND = "STANDARD_NOT_FOUND";
+    public static final String STANDARD_ALREADY_EXISTS = "STANDARD_ALREADY_EXISTS";
 }

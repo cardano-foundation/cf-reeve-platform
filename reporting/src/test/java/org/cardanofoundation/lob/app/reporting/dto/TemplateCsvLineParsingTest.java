@@ -22,7 +22,7 @@ import org.cardanofoundation.lob.app.support.security.AntiVirusScanner;
 
 /**
  * Parses real report template CSVs, to check the Standard column end to end: header check, binding and
- * the row-level required validation. The column's old name, Accounting Regime, is no longer accepted.
+ * the row-level required validation. The column's old name, Standard, is no longer accepted.
  */
 class TemplateCsvLineParsingTest {
 
@@ -61,8 +61,8 @@ class TemplateCsvLineParsingTest {
     }
 
     @Test
-    void legacyAccountingRegimeHeader_isRejectedAsStandardMissing() {
-        Either<ProblemDetail, List<TemplateCsvLine>> result = parse("Accounting Regime", "IFRS");
+    void legacyStandardHeader_isRejectedAsStandardMissing() {
+        Either<ProblemDetail, List<TemplateCsvLine>> result = parse("Standard", "IFRS");
 
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo("CSV_HEADER_ERROR");

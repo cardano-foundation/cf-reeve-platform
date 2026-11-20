@@ -25,22 +25,22 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import org.cardanofoundation.lob.app.organisation.domain.request.AccountingRegimeUpdate;
-import org.cardanofoundation.lob.app.organisation.domain.view.AccountingRegimeView;
-import org.cardanofoundation.lob.app.organisation.service.AccountingRegimeService;
+import org.cardanofoundation.lob.app.organisation.domain.request.StandardUpdate;
+import org.cardanofoundation.lob.app.organisation.domain.view.StandardView;
+import org.cardanofoundation.lob.app.organisation.service.StandardService;
 import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 
 @ExtendWith(MockitoExtension.class)
-class AccountingRegimeControllerTest {
+class StandardControllerTest {
 
     @Mock
-    private AccountingRegimeService accountingRegimeService;
+    private StandardService standardService;
 
     @Mock
     private KeycloakSecurityHelper keycloakSecurityHelper;
 
     @InjectMocks
-    private AccountingRegimeController accountingRegimeController;
+    private StandardController standardController;
 
     @BeforeEach
     void setUp() {
@@ -48,51 +48,51 @@ class AccountingRegimeControllerTest {
     }
 
     @Test
-    void getAllAccountingRegimes_noOrgAccess() {
+    void getAllStandards_noOrgAccess() {
         when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
 
-        ResponseEntity<List<AccountingRegimeView>> response = accountingRegimeController.getAllAccountingRegimes("org123");
+        ResponseEntity<List<StandardView>> response = standardController.getAllStandards("org123");
 
         assertEquals(401, response.getStatusCode().value());
-        verifyNoInteractions(accountingRegimeService);
+        verifyNoInteractions(standardService);
     }
 
     @Test
-    void insertAccountingRegime_noOrgAccess() {
+    void insertStandard_noOrgAccess() {
         when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
 
-        ResponseEntity<AccountingRegimeView> response = accountingRegimeController.insertAccountingRegime("org123", mock(AccountingRegimeUpdate.class));
+        ResponseEntity<StandardView> response = standardController.insertStandard("org123", mock(StandardUpdate.class));
 
         assertEquals(401, response.getStatusCode().value());
-        verifyNoInteractions(accountingRegimeService);
+        verifyNoInteractions(standardService);
     }
 
     @Test
-    void updateAccountingRegime_noOrgAccess() {
+    void updateStandard_noOrgAccess() {
         when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
 
-        ResponseEntity<AccountingRegimeView> response = accountingRegimeController.updateAccountingRegime("org123", mock(AccountingRegimeUpdate.class));
+        ResponseEntity<StandardView> response = standardController.updateStandard("org123", mock(StandardUpdate.class));
 
         assertEquals(401, response.getStatusCode().value());
-        verifyNoInteractions(accountingRegimeService);
+        verifyNoInteractions(standardService);
     }
 
     @Test
-    void insertAccountingRegimesCsv_noOrgAccess() {
+    void insertStandardsCsv_noOrgAccess() {
         when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
 
-        ResponseEntity<Object> response = accountingRegimeController.insertAccountingRegimesCsv("org123", mock(MultipartFile.class));
+        ResponseEntity<Object> response = standardController.insertStandardsCsv("org123", mock(MultipartFile.class));
 
         assertEquals(401, response.getStatusCode().value());
-        verifyNoInteractions(accountingRegimeService);
+        verifyNoInteractions(standardService);
     }
 
     @Test
-    void getAllAccountingRegimes_success() {
-        AccountingRegimeView view = AccountingRegimeView.createSuccess("IFRS", "IFRS Label", true);
-        when(accountingRegimeService.getAllAccountingRegimes("org123")).thenReturn(List.of(view));
+    void getAllStandards_success() {
+        StandardView view = StandardView.createSuccess("IFRS", "IFRS Label", true);
+        when(standardService.getAllStandards("org123")).thenReturn(List.of(view));
 
-        ResponseEntity<List<AccountingRegimeView>> response = accountingRegimeController.getAllAccountingRegimes("org123");
+        ResponseEntity<List<StandardView>> response = standardController.getAllStandards("org123");
 
         assertTrue(response.getStatusCode().is2xxSuccessful());
         assertNotNull(response.getBody());
@@ -101,12 +101,12 @@ class AccountingRegimeControllerTest {
     }
 
     @Test
-    void insertAccountingRegime_success() {
-        AccountingRegimeUpdate update = mock(AccountingRegimeUpdate.class);
-        AccountingRegimeView view = AccountingRegimeView.createSuccess("IFRS", "IFRS Label", true);
-        when(accountingRegimeService.insertAccountingRegime("org123", update, false)).thenReturn(view);
+    void insertStandard_success() {
+        StandardUpdate update = mock(StandardUpdate.class);
+        StandardView view = StandardView.createSuccess("IFRS", "IFRS Label", true);
+        when(standardService.insertStandard("org123", update, false)).thenReturn(view);
 
-        ResponseEntity<AccountingRegimeView> response = accountingRegimeController.insertAccountingRegime("org123", update);
+        ResponseEntity<StandardView> response = standardController.insertStandard("org123", update);
 
         assertTrue(response.getStatusCode().is2xxSuccessful());
         assertNotNull(response.getBody());
@@ -114,13 +114,13 @@ class AccountingRegimeControllerTest {
     }
 
     @Test
-    void insertAccountingRegime_error() {
-        AccountingRegimeUpdate update = mock(AccountingRegimeUpdate.class);
+    void insertStandard_error() {
+        StandardUpdate update = mock(StandardUpdate.class);
         ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Standard with code IFRS already exists");
-        AccountingRegimeView view = AccountingRegimeView.createFail(error, new AccountingRegimeUpdate("IFRS", "IFRS Label", true));
-        when(accountingRegimeService.insertAccountingRegime("org123", update, false)).thenReturn(view);
+        StandardView view = StandardView.createFail(error, new StandardUpdate("IFRS", "IFRS Label", true));
+        when(standardService.insertStandard("org123", update, false)).thenReturn(view);
 
-        ResponseEntity<AccountingRegimeView> response = accountingRegimeController.insertAccountingRegime("org123", update);
+        ResponseEntity<StandardView> response = standardController.insertStandard("org123", update);
 
         assertEquals(HttpStatus.CONFLICT.value(), response.getStatusCode().value());
         assertNotNull(response.getBody());
@@ -128,12 +128,12 @@ class AccountingRegimeControllerTest {
     }
 
     @Test
-    void updateAccountingRegime_success() {
-        AccountingRegimeUpdate update = mock(AccountingRegimeUpdate.class);
-        AccountingRegimeView view = AccountingRegimeView.createSuccess("IFRS", "Updated Label", false);
-        when(accountingRegimeService.updateAccountingRegime("org123", update)).thenReturn(view);
+    void updateStandard_success() {
+        StandardUpdate update = mock(StandardUpdate.class);
+        StandardView view = StandardView.createSuccess("IFRS", "Updated Label", false);
+        when(standardService.updateStandard("org123", update)).thenReturn(view);
 
-        ResponseEntity<AccountingRegimeView> response = accountingRegimeController.updateAccountingRegime("org123", update);
+        ResponseEntity<StandardView> response = standardController.updateStandard("org123", update);
 
         assertTrue(response.getStatusCode().is2xxSuccessful());
         assertNotNull(response.getBody());
@@ -141,13 +141,13 @@ class AccountingRegimeControllerTest {
     }
 
     @Test
-    void updateAccountingRegime_error() {
-        AccountingRegimeUpdate update = mock(AccountingRegimeUpdate.class);
+    void updateStandard_error() {
+        StandardUpdate update = mock(StandardUpdate.class);
         ProblemDetail error = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Standard with code IFRS not found");
-        AccountingRegimeView view = AccountingRegimeView.createFail(error, new AccountingRegimeUpdate("IFRS", "IFRS Label", true));
-        when(accountingRegimeService.updateAccountingRegime("org123", update)).thenReturn(view);
+        StandardView view = StandardView.createFail(error, new StandardUpdate("IFRS", "IFRS Label", true));
+        when(standardService.updateStandard("org123", update)).thenReturn(view);
 
-        ResponseEntity<AccountingRegimeView> response = accountingRegimeController.updateAccountingRegime("org123", update);
+        ResponseEntity<StandardView> response = standardController.updateStandard("org123", update);
 
         assertEquals(HttpStatus.NOT_FOUND.value(), response.getStatusCode().value());
         assertNotNull(response.getBody());
@@ -155,24 +155,24 @@ class AccountingRegimeControllerTest {
     }
 
     @Test
-    void insertAccountingRegimesCsv_success() {
+    void insertStandardsCsv_success() {
         MultipartFile file = mock(MultipartFile.class);
-        List<AccountingRegimeView> views = List.of(AccountingRegimeView.createSuccess("IFRS", "IFRS Label", true));
-        when(accountingRegimeService.insertViaCsv("org123", file)).thenReturn(Either.right(views));
+        List<StandardView> views = List.of(StandardView.createSuccess("IFRS", "IFRS Label", true));
+        when(standardService.insertViaCsv("org123", file)).thenReturn(Either.right(views));
 
-        ResponseEntity<Object> response = accountingRegimeController.insertAccountingRegimesCsv("org123", file);
+        ResponseEntity<Object> response = standardController.insertStandardsCsv("org123", file);
 
         assertTrue(response.getStatusCode().is2xxSuccessful());
         assertEquals(views, response.getBody());
     }
 
     @Test
-    void insertAccountingRegimesCsv_problem() {
+    void insertStandardsCsv_problem() {
         MultipartFile file = mock(MultipartFile.class);
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "CSV parse error");
-        when(accountingRegimeService.insertViaCsv("org123", file)).thenReturn(Either.left(problem));
+        when(standardService.insertViaCsv("org123", file)).thenReturn(Either.left(problem));
 
-        ResponseEntity<Object> response = accountingRegimeController.insertAccountingRegimesCsv("org123", file);
+        ResponseEntity<Object> response = standardController.insertStandardsCsv("org123", file);
 
         assertEquals(HttpStatus.BAD_REQUEST.value(), response.getStatusCode().value());
         assertEquals(problem, response.getBody());

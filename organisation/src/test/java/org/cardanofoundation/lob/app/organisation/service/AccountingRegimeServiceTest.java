@@ -29,33 +29,33 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import org.cardanofoundation.lob.app.organisation.domain.entity.AccountingRegime;
-import org.cardanofoundation.lob.app.organisation.domain.request.AccountingRegimeUpdate;
-import org.cardanofoundation.lob.app.organisation.domain.view.AccountingRegimeView;
-import org.cardanofoundation.lob.app.organisation.repository.AccountingRegimeRepository;
+import org.cardanofoundation.lob.app.organisation.domain.entity.Standard;
+import org.cardanofoundation.lob.app.organisation.domain.request.StandardUpdate;
+import org.cardanofoundation.lob.app.organisation.domain.view.StandardView;
+import org.cardanofoundation.lob.app.organisation.repository.StandardRepository;
 import org.cardanofoundation.lob.app.organisation.service.csv.CsvParser;
 
 @ExtendWith(MockitoExtension.class)
-class AccountingRegimeServiceTest {
+class StandardServiceTest {
 
     @Mock
-    private AccountingRegimeRepository accountingRegimeRepository;
+    private StandardRepository standardRepository;
     @Mock
-    private CsvParser<AccountingRegimeUpdate> csvParser;
+    private CsvParser<StandardUpdate> csvParser;
     @Mock
     private Validator validator;
 
     @InjectMocks
-    private AccountingRegimeService accountingRegimeService;
+    private StandardService standardService;
 
     private final String organisationId = "org123";
 
     @Test
-    void getAllAccountingRegimes_success() {
-        AccountingRegime regime = new AccountingRegime(new AccountingRegime.Id(organisationId, "IFRS"), "IFRS Label", true);
-        when(accountingRegimeRepository.findAllByOrganisationId(organisationId)).thenReturn(Set.of(regime));
+    void getAllStandards_success() {
+        Standard regime = new Standard(new Standard.Id(organisationId, "IFRS"), "IFRS Label", true);
+        when(standardRepository.findAllByOrganisationId(organisationId)).thenReturn(Set.of(regime));
 
-        List<AccountingRegimeView> result = accountingRegimeService.getAllAccountingRegimes(organisationId);
+        List<StandardView> result = standardService.getAllStandards(organisationId);
 
         assertEquals(1, result.size());
         assertEquals("IFRS", result.get(0).getCode());
@@ -64,68 +64,68 @@ class AccountingRegimeServiceTest {
     }
 
     @Test
-    void getAllAccountingRegimes_empty() {
-        when(accountingRegimeRepository.findAllByOrganisationId(organisationId)).thenReturn(Set.of());
+    void getAllStandards_empty() {
+        when(standardRepository.findAllByOrganisationId(organisationId)).thenReturn(Set.of());
 
-        List<AccountingRegimeView> result = accountingRegimeService.getAllAccountingRegimes(organisationId);
+        List<StandardView> result = standardService.getAllStandards(organisationId);
 
         assertTrue(result.isEmpty());
     }
 
     @Test
     void findAllByOrganisationId_delegatesToRepository() {
-        AccountingRegime regime = new AccountingRegime(new AccountingRegime.Id(organisationId, "IFRS"), "IFRS Label", true);
-        when(accountingRegimeRepository.findAllByOrganisationId(organisationId)).thenReturn(Set.of(regime));
+        Standard regime = new Standard(new Standard.Id(organisationId, "IFRS"), "IFRS Label", true);
+        when(standardRepository.findAllByOrganisationId(organisationId)).thenReturn(Set.of(regime));
 
-        Set<AccountingRegime> result = accountingRegimeService.findAllByOrganisationId(organisationId);
+        Set<Standard> result = standardService.findAllByOrganisationId(organisationId);
 
         assertEquals(Set.of(regime), result);
     }
 
     @Test
-    void getAccountingRegime_found() {
-        AccountingRegime.Id id = new AccountingRegime.Id(organisationId, "IFRS");
-        AccountingRegime regime = new AccountingRegime(id, "IFRS Label", true);
-        when(accountingRegimeRepository.findById(id)).thenReturn(Optional.of(regime));
+    void getStandard_found() {
+        Standard.Id id = new Standard.Id(organisationId, "IFRS");
+        Standard regime = new Standard(id, "IFRS Label", true);
+        when(standardRepository.findById(id)).thenReturn(Optional.of(regime));
 
-        Optional<AccountingRegimeView> result = accountingRegimeService.getAccountingRegime(organisationId, "IFRS");
+        Optional<StandardView> result = standardService.getStandard(organisationId, "IFRS");
 
         assertTrue(result.isPresent());
         assertEquals("IFRS", result.get().getCode());
     }
 
     @Test
-    void getAccountingRegime_notFound() {
-        AccountingRegime.Id id = new AccountingRegime.Id(organisationId, "IFRS");
-        when(accountingRegimeRepository.findById(id)).thenReturn(Optional.empty());
+    void getStandard_notFound() {
+        Standard.Id id = new Standard.Id(organisationId, "IFRS");
+        when(standardRepository.findById(id)).thenReturn(Optional.empty());
 
-        Optional<AccountingRegimeView> result = accountingRegimeService.getAccountingRegime(organisationId, "IFRS");
+        Optional<StandardView> result = standardService.getStandard(organisationId, "IFRS");
 
         assertFalse(result.isPresent());
     }
 
     @Test
-    void updateAccountingRegime_notFound() {
-        AccountingRegimeUpdate update = new AccountingRegimeUpdate("IFRS", "New Label", false);
-        when(accountingRegimeRepository.findById(new AccountingRegime.Id(organisationId, "IFRS"))).thenReturn(Optional.empty());
+    void updateStandard_notFound() {
+        StandardUpdate update = new StandardUpdate("IFRS", "New Label", false);
+        when(standardRepository.findById(new Standard.Id(organisationId, "IFRS"))).thenReturn(Optional.empty());
 
-        AccountingRegimeView result = accountingRegimeService.updateAccountingRegime(organisationId, update);
+        StandardView result = standardService.updateStandard(organisationId, update);
 
         assertEquals("IFRS", result.getCode());
         assertTrue(result.getError().isPresent());
-        assertEquals("ACCOUNTING_REGIME_NOT_FOUND", result.getError().get().getTitle());
+        assertEquals("STANDARD_NOT_FOUND", result.getError().get().getTitle());
         assertEquals("Standard with code IFRS not found", result.getError().get().getDetail());
-        verify(accountingRegimeRepository, never()).save(any());
+        verify(standardRepository, never()).save(any());
     }
 
     @Test
-    void updateAccountingRegime_success() {
-        AccountingRegimeUpdate update = new AccountingRegimeUpdate("IFRS", "New Label", false);
-        AccountingRegime existing = new AccountingRegime(new AccountingRegime.Id(organisationId, "IFRS"), "Old Label", true);
-        when(accountingRegimeRepository.findById(new AccountingRegime.Id(organisationId, "IFRS"))).thenReturn(Optional.of(existing));
-        when(accountingRegimeRepository.save(existing)).thenReturn(existing);
+    void updateStandard_success() {
+        StandardUpdate update = new StandardUpdate("IFRS", "New Label", false);
+        Standard existing = new Standard(new Standard.Id(organisationId, "IFRS"), "Old Label", true);
+        when(standardRepository.findById(new Standard.Id(organisationId, "IFRS"))).thenReturn(Optional.of(existing));
+        when(standardRepository.save(existing)).thenReturn(existing);
 
-        AccountingRegimeView result = accountingRegimeService.updateAccountingRegime(organisationId, update);
+        StandardView result = standardService.updateStandard(organisationId, update);
 
         assertTrue(result.getError().isEmpty());
         assertEquals("New Label", result.getLabel());
@@ -135,27 +135,27 @@ class AccountingRegimeServiceTest {
     }
 
     @Test
-    void insertAccountingRegime_alreadyExists_noUpsert() {
-        AccountingRegimeUpdate update = new AccountingRegimeUpdate("IFRS", "IFRS Label", true);
-        AccountingRegime existing = new AccountingRegime(new AccountingRegime.Id(organisationId, "IFRS"), "IFRS Label", true);
-        when(accountingRegimeRepository.findById(new AccountingRegime.Id(organisationId, "IFRS"))).thenReturn(Optional.of(existing));
+    void insertStandard_alreadyExists_noUpsert() {
+        StandardUpdate update = new StandardUpdate("IFRS", "IFRS Label", true);
+        Standard existing = new Standard(new Standard.Id(organisationId, "IFRS"), "IFRS Label", true);
+        when(standardRepository.findById(new Standard.Id(organisationId, "IFRS"))).thenReturn(Optional.of(existing));
 
-        AccountingRegimeView result = accountingRegimeService.insertAccountingRegime(organisationId, update, false);
+        StandardView result = standardService.insertStandard(organisationId, update, false);
 
         assertTrue(result.getError().isPresent());
-        assertEquals("ACCOUNTING_REGIME_ALREADY_EXISTS", result.getError().get().getTitle());
+        assertEquals("STANDARD_ALREADY_EXISTS", result.getError().get().getTitle());
         assertEquals("Standard with code IFRS already exists", result.getError().get().getDetail());
-        verify(accountingRegimeRepository, never()).save(any());
+        verify(standardRepository, never()).save(any());
     }
 
     @Test
-    void insertAccountingRegime_upsert_existing() {
-        AccountingRegimeUpdate update = new AccountingRegimeUpdate("IFRS", "Updated Label", false);
-        AccountingRegime existing = new AccountingRegime(new AccountingRegime.Id(organisationId, "IFRS"), "Old Label", true);
-        when(accountingRegimeRepository.findById(new AccountingRegime.Id(organisationId, "IFRS"))).thenReturn(Optional.of(existing));
-        when(accountingRegimeRepository.save(existing)).thenReturn(existing);
+    void insertStandard_upsert_existing() {
+        StandardUpdate update = new StandardUpdate("IFRS", "Updated Label", false);
+        Standard existing = new Standard(new Standard.Id(organisationId, "IFRS"), "Old Label", true);
+        when(standardRepository.findById(new Standard.Id(organisationId, "IFRS"))).thenReturn(Optional.of(existing));
+        when(standardRepository.save(existing)).thenReturn(existing);
 
-        AccountingRegimeView result = accountingRegimeService.insertAccountingRegime(organisationId, update, true);
+        StandardView result = standardService.insertStandard(organisationId, update, true);
 
         assertTrue(result.getError().isEmpty());
         assertEquals("Updated Label", result.getLabel());
@@ -163,14 +163,14 @@ class AccountingRegimeServiceTest {
     }
 
     @Test
-    void insertAccountingRegime_success_new() {
-        AccountingRegimeUpdate update = new AccountingRegimeUpdate("IFRS", "IFRS Label", true);
-        when(accountingRegimeRepository.findById(new AccountingRegime.Id(organisationId, "IFRS"))).thenReturn(Optional.empty());
+    void insertStandard_success_new() {
+        StandardUpdate update = new StandardUpdate("IFRS", "IFRS Label", true);
+        when(standardRepository.findById(new Standard.Id(organisationId, "IFRS"))).thenReturn(Optional.empty());
 
-        ArgumentCaptor<AccountingRegime> captor = ArgumentCaptor.forClass(AccountingRegime.class);
-        when(accountingRegimeRepository.save(captor.capture())).thenAnswer(invocation -> invocation.getArgument(0));
+        ArgumentCaptor<Standard> captor = ArgumentCaptor.forClass(Standard.class);
+        when(standardRepository.save(captor.capture())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        AccountingRegimeView result = accountingRegimeService.insertAccountingRegime(organisationId, update, false);
+        StandardView result = standardService.insertStandard(organisationId, update, false);
 
         assertTrue(result.getError().isEmpty());
         assertEquals("IFRS", result.getCode());
@@ -183,9 +183,9 @@ class AccountingRegimeServiceTest {
     void insertViaCsv_parseError() {
         MultipartFile file = mock(MultipartFile.class);
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Parse Error");
-        when(csvParser.parseCsv(file, AccountingRegimeUpdate.class)).thenReturn(Either.left(problem));
+        when(csvParser.parseCsv(file, StandardUpdate.class)).thenReturn(Either.left(problem));
 
-        Either<ProblemDetail, List<AccountingRegimeView>> result = accountingRegimeService.insertViaCsv(organisationId, file);
+        Either<ProblemDetail, List<StandardView>> result = standardService.insertViaCsv(organisationId, file);
 
         assertTrue(result.isLeft());
         assertEquals("Parse Error", result.getLeft().getDetail());
@@ -194,36 +194,36 @@ class AccountingRegimeServiceTest {
     @Test
     void insertViaCsv_validationError() {
         MultipartFile file = mock(MultipartFile.class);
-        AccountingRegimeUpdate update = new AccountingRegimeUpdate(null, "IFRS Label", true);
+        StandardUpdate update = new StandardUpdate(null, "IFRS Label", true);
         Errors errors = mock(Errors.class);
         ObjectError objectError = mock(ObjectError.class);
         when(objectError.getDefaultMessage()).thenReturn("Code is required");
         when(errors.getAllErrors()).thenReturn(List.of(objectError));
         when(validator.validateObject(update)).thenReturn(errors);
-        when(csvParser.parseCsv(file, AccountingRegimeUpdate.class)).thenReturn(Either.right(List.of(update)));
+        when(csvParser.parseCsv(file, StandardUpdate.class)).thenReturn(Either.right(List.of(update)));
 
-        Either<ProblemDetail, List<AccountingRegimeView>> result = accountingRegimeService.insertViaCsv(organisationId, file);
+        Either<ProblemDetail, List<StandardView>> result = standardService.insertViaCsv(organisationId, file);
 
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());
         assertTrue(result.get().get(0).getError().isPresent());
         assertEquals("VALIDATION_ERROR", result.get().get(0).getError().get().getTitle());
         assertEquals("Code is required", result.get().get(0).getError().get().getDetail());
-        verify(accountingRegimeRepository, never()).save(any());
+        verify(standardRepository, never()).save(any());
     }
 
     @Test
     void insertViaCsv_success() {
         MultipartFile file = mock(MultipartFile.class);
-        AccountingRegimeUpdate update = new AccountingRegimeUpdate("IFRS", "IFRS Label", true);
+        StandardUpdate update = new StandardUpdate("IFRS", "IFRS Label", true);
         Errors errors = mock(Errors.class);
         when(errors.getAllErrors()).thenReturn(List.of());
         when(validator.validateObject(update)).thenReturn(errors);
-        when(csvParser.parseCsv(file, AccountingRegimeUpdate.class)).thenReturn(Either.right(List.of(update)));
-        when(accountingRegimeRepository.findById(new AccountingRegime.Id(organisationId, "IFRS"))).thenReturn(Optional.empty());
-        when(accountingRegimeRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(csvParser.parseCsv(file, StandardUpdate.class)).thenReturn(Either.right(List.of(update)));
+        when(standardRepository.findById(new Standard.Id(organisationId, "IFRS"))).thenReturn(Optional.empty());
+        when(standardRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        Either<ProblemDetail, List<AccountingRegimeView>> result = accountingRegimeService.insertViaCsv(organisationId, file);
+        Either<ProblemDetail, List<StandardView>> result = standardService.insertViaCsv(organisationId, file);
 
         assertTrue(result.isRight());
         assertEquals(1, result.get().size());

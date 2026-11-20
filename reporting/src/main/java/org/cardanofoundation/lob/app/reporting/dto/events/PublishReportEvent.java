@@ -40,7 +40,7 @@ public class PublishReportEvent {
     private DataMode dataMode;
     private LedgerDispatchStatus dispatchStatus;
     private Map<String, Object> reportData;
-    private String accountingRegime;
+    private String standard;
 
     public static PublishReportEvent fromEntity(ReportEntity reportEntity) {
         PublishReportEvent event = new PublishReportEvent();
@@ -55,7 +55,7 @@ public class PublishReportEvent {
         event.setDataMode(reportEntity.getDataMode());
         event.setReportData(extractReportData(reportEntity.getFields(), new LinkedHashMap<>()));
         event.setDispatchStatus(reportEntity.getLedgerDispatchStatus());
-        event.setAccountingRegime(reportEntity.getAccountingRegime());
+        event.setStandard(reportEntity.getStandard());
 
         return event;
     }

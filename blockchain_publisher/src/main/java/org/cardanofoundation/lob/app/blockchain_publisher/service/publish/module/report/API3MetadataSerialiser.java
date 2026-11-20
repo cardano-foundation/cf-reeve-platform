@@ -49,10 +49,10 @@ public class API3MetadataSerialiser {
         globalMetadataMap.put("mode", reportEntity.getDataMode().name());
         globalMetadataMap.put("ver", BigInteger.valueOf(reportEntity.getReportVer()));
         globalMetadataMap.put("period", BigInteger.valueOf(reportEntity.getPeriod()));
-        if (reportEntity.getAccountingRegime() != null) {
+        if (reportEntity.getStandard() != null) {
             // Omitted for legacy templates that predate this field, rather than publishing an empty/null value on-chain.
-            // Published as "accounting_regime" up to metadata version 1.2; renamed to "standard" in 1.3.
-            globalMetadataMap.put("standard", reportEntity.getAccountingRegime());
+            // Published as "standard" up to metadata version 1.2; renamed to "standard" in 1.3.
+            globalMetadataMap.put("standard", reportEntity.getStandard());
         }
         MetadataMap dataMap = MetadataBuilder.createMap();
         globalMetadataMap.put("data", createRecursiveMetadataSection(dataMap, reportEntity.getReportData()));

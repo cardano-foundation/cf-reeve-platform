@@ -58,9 +58,9 @@ public class ReportTemplateResponseDto {
     @Schema(description = "Data mode for the report. Options are: SYSTEM, USER", example = "SYSTEM")
     private String dataMode;
 
-    @Schema(description = "Standard (property name kept as accountingRegime): the label of one of the organisation's active standards, or \"Not applicable\". "
+    @Schema(description = "Standard (property name kept as standard): the label of one of the organisation's active standards, or \"Not applicable\". "
             + "Null on templates created before the field existed.", example = "IFRS", nullable = true)
-    private String accountingRegime;
+    private String standard;
 
     @Schema(description = "List of validation rules for report fields")
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
