@@ -1,0 +1,178 @@
+name: e2e Tests
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+env:
+  REEVE_DB_MIGRATIONS_REPO: cardano-foundation/cf-reeve-db-migrations
+  REEVE_DB_MIGRATIONS_REF: main
+  REEVE_DB_MIGRATIONS_PATH: cf-application/src/main/resources/db/migration/postgresql/cf-reeve-db-migrations
+
+jobs:
+  postman:
+    runs-on: ubuntu-latest
+    env:
+      # Every docker compose command in this job resolves the required config-encryption keys.
+      COMPOSE_ENV_FILES: postman/envTests
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Checkout cf-reeve-db-migrations
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.REEVE_DB_MIGRATIONS_REPO }}
+          ref: ${{ env.REEVE_DB_MIGRATIONS_REF }}
+          ssh-key: ${{ secrets.CF_REEVE_DB_MIGRATIONS_SSH_DEPLOY_KEY }}
+          path: ${{ env.REEVE_DB_MIGRATIONS_PATH }}
+
+      - name: Set up Docker Compose
+        run: |
+          docker compose build
+          docker compose up -d --wait --quiet-pull
+
+          # debugging
+          docker compose logs api --tail 500
+          docker ps
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install Newman (Postman CLI)
+        run: npm install -g newman
+      - name: Run Postman Collection with Environment
+        run: |
+          newman run postman/Reeve_Integration.postman_collection.json \
+            --environment postman/Reeve_env.postman_environment.json
+
+      - name: Clean up Docker
+        if: always()
+        run: docker compose down -v
+
+  playwright:
+    runs-on: ubuntu-latest
+    env:
+      # Every docker compose command in this job resolves the required config-encryption keys.
+      COMPOSE_ENV_FILES: postman/envTests
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Checkout cf-reeve-db-migrations
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.REEVE_DB_MIGRATIONS_REPO }}
+          ref: ${{ env.REEVE_DB_MIGRATIONS_REF }}
+          ssh-key: ${{ secrets.CF_REEVE_DB_MIGRATIONS_SSH_DEPLOY_KEY }}
+          path: ${{ env.REEVE_DB_MIGRATIONS_PATH }}
+
+      - name: Set up Docker Compose
+        run: |
+          docker compose build
+          docker compose up -d --wait --quiet-pull
+
+          # debugging
+          docker compose logs api --tail 500
+          docker ps
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 24
+
+      - name: Install Playwright and Allure report dependencies
+        working-directory: playwright
+        run: |
+          npm ci
+          npm install -g allure-commandline
+
+      - name: Create .env file
+        working-directory: playwright
+        run: |
+          echo "API_URL=http://localhost:9000/api/v1" >> .env
+          echo "LOGIN_URL=http://localhost:8080" >> .env
+          echo "MANAGER_USER=${{ secrets.PLAYWRIGHT_USER }}" >> .env
+          echo "MANAGER_PASSWORD=${{ secrets.PLAYWRIGHT_PASSWORD }}" >> .env
+          echo "API_LOG_REQUEST=false" >> .env
+          echo "ORGANIZATION_ID=${{ secrets.PLAYWRIGHT_ORGANIZATION_ID }}" >> .env
+          echo "CI=true" >> .env
+
+      - name: Run Playwright e2e tests
+        working-directory: playwright
+        run: npm run test
+        continue-on-error: true
+
+      - name: Save initial test results
+        if: always()
+        working-directory: playwright
+        run: cp test-results/results.json results-initial.json 2>/dev/null || true
+
+      - name: Retry failed Playwright e2e tests
+        working-directory: playwright
+        run: npx bddgen && npx playwright test --project='api-tests' --last-failed
+        continue-on-error: true
+
+      - name: Save retry test results
+        if: always()
+        working-directory: playwright
+        run: cp test-results/results.json results-retry.json 2>/dev/null || true
+
+      - name: Check quality threshold
+        id: threshold
+        working-directory: playwright
+        run: node scripts/check-threshold.js --threshold=90
+
+      - name: Warn on PR about failing tests
+        if: always() && steps.threshold.outputs.threshold_met == 'true' && steps.threshold.outputs.all_passed != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --body "⚠️ **Test Quality Warning**
+
+          This PR can be merged — the quality threshold has been met (**${{ steps.threshold.outputs.pass_rate }}%**). However, some tests failed and required retries. Please review the failing tests before merging.
+
+          [View full test report](https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/allure-report) - give some seconds for the report to be updated with the latest results."
+
+      - name: Load Test Report history
+        uses: actions/checkout@v3
+        if: always()
+        continue-on-error: true
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      - name: Copy Test Report history
+        if: always()
+        continue-on-error: true
+        run: |
+          mkdir -p playwright/allure-results/history
+          cp -r gh-pages/allure-report/history/* playwright/allure-results/history/ 2>/dev/null || true
+
+      - name: Generate New Test Report
+        if: always()
+        run: |
+          npm install -g allure-commandline
+          allure generate playwright/allure-results --clean -o allure-report
+
+      - name: Deploy Test Report to GitHub Pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./allure-report
+          destination_dir: allure-report
+          keep_files: true
+
+      - name: Clean up Docker
+        if: always()
+        run: |
+          docker compose down -v

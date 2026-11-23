@@ -4,7 +4,7 @@
 #
 # Endpoints check resource:action permissions; Keycloak decides who has them: permissions are client roles of
 # reeve-api, roles are realm roles composed of them, and users get roles through groups. Which role holds which
-# permission is defined only in Keycloak (cf-lob keycloak-migrations and keycloak-config/realm-export.json): a new
+# permission is defined only in Keycloak (keycloak-migrations/ and keycloak-config/realm-export.json at the repository root): a new
 # permission here needs a Keycloak migration there.
 #
 # groups is the subgroup layout created under /organisations/<organisation name> for every new organisation. A member

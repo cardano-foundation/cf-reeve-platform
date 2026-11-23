@@ -1,0 +1,33 @@
+
+services:
+  publisher:
+    environment:
+      LOB_BLOCKCHAIN_PUBLISHER_IPFS_ENABLED: true
+      LOB_BLOCKCHAIN_PUBLISHER_IPFS_LOCAL_ENABLED: true
+      LOB_BLOCKCHAIN_PUBLISHER_IPFS_LOCAL_NODE: ipfs-node:5001
+      # Blockfrost is the default in docker-compose.yml; point both tiers at the local node instead.
+      LOB_BLOCKCHAIN_PUBLISHER_IPFS_BLOCKFROST_ENABLED: false
+  api:
+    environment:
+      # The attestation ceremony names the CID here (only-hash, nothing stored), so this tier needs a
+      # node too — and it must be the SAME node the publisher pins to, or the two disagree on the CID.
+      LOB_BLOCKCHAIN_PUBLISHER_IPFS_ENABLED: true
+      LOB_BLOCKCHAIN_PUBLISHER_IPFS_LOCAL_ENABLED: true
+      LOB_BLOCKCHAIN_PUBLISHER_IPFS_LOCAL_NODE: ipfs-node:5001
+      LOB_BLOCKCHAIN_PUBLISHER_IPFS_BLOCKFROST_ENABLED: false
+  ipfs:
+    restart: unless-stopped
+    image: ipfs/kubo:v0.40.1
+    hostname: ipfs-node
+    environment:
+      - IPFS_PROFILE=server
+    volumes:
+      - ipfs-data:/data/ipfs
+    networks:
+      - lob
+    ports:
+      - "4001:4001"       # swarm / p2p
+      - "5001:5001"       # API
+      - "8083:8080"       # gateway (mapped to 8082 to avoid conflict with yaci-cli)
+volumes:
+  ipfs-data:

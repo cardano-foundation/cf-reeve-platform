@@ -42,3 +42,16 @@ out/
 .minio_bucket*
 .jqwik-database
 .run
+
+### Application run stack ###
+.env*
+!.envTemplate
+!.envMultiReplica
+!**/.env.template
+*.pem
+/certs/private.pem
+.worktrees/
+
+# Private DB migrations: a separate git checkout of cf-reeve-db-migrations, not tracked here.
+/cf-application/src/main/resources/db/migration/postgresql/cf-reeve-db-migrations/
+/migrations

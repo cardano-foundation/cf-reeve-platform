@@ -22,6 +22,9 @@ env:
   MAVEN_CENTRAL_OSSRH_TOKEN: ${{ secrets.MAVEN_CENTRAL_OSSRH_TOKEN }}
   DOCKER_PUSH: true
   BUILDKIT_PROGRESS: plain
+  REEVE_DB_MIGRATIONS_REPO: cardano-foundation/cf-reeve-db-migrations
+  REEVE_DB_MIGRATIONS_REF: main
+  REEVE_DB_MIGRATIONS_PATH: cf-application/src/main/resources/db/migration/postgresql/cf-reeve-db-migrations
 
 jobs:
   publish:
@@ -32,6 +35,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # The private DB migrations are bundled into the backend image, as in the former application repository.
+      - name: Checkout cf-reeve-db-migrations
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.REEVE_DB_MIGRATIONS_REPO }}
+          ref: ${{ env.REEVE_DB_MIGRATIONS_REF }}
+          ssh-key: ${{ secrets.CF_REEVE_DB_MIGRATIONS_SSH_DEPLOY_KEY }}
+          path: ${{ env.REEVE_DB_MIGRATIONS_PATH }}
 
       - name: Setup JDK 21
         uses: actions/setup-java@v4
@@ -59,12 +71,15 @@ jobs:
           HUB_DOCKER_COM_PASS: ${{ secrets.HUB_DOCKER_COM_PASS }}
           DOCKER_REGISTRIES: "${{ secrets.DOCKER_REGISTRIES }}"
 
+      # Platform libraries are published to Maven Central on release tags only.
       - name: GPG checks
+        if: steps.cf-gha-baseline.outputs.TRIGGERING_REF == 'tag'
         run: |
           which gpg
           gpg --version
 
       - name: Decode GPG Key
+        if: steps.cf-gha-baseline.outputs.TRIGGERING_REF == 'tag'
         run: |
           mkdir -p ~/.gradle/
           echo "${{ secrets.MAVEN_CENTRAL_GPG_KEY_BASE64 }}" > ~/.gradle/secring.gpg.b64
@@ -73,24 +88,14 @@ jobs:
           gpg --keyserver hkps://keys.openpgp.org --send-key BEFB6B63A980310BB92A65365E362818AF79A015
 
       - name: Gradle publish
+        if: steps.cf-gha-baseline.outputs.TRIGGERING_REF == 'tag'
         env:
           JRELEASER_GPG_KEYNAME: "BEFB6B63A980310BB92A65365E362818AF79A015"
           JRELEASER_GPG_PASSPHRASE: "${{ secrets.MAVEN_CENTRAL_GPG_PASSPHRASE }}"
           JRELEASER_MAVENCENTRAL_USERNAME: "${{ secrets.MAVEN_CENTRAL_OSSRH_USERNAME }}"
           JRELEASER_MAVENCENTRAL_PASSWORD: "${{ secrets.MAVEN_CENTRAL_OSSRH_TOKEN }}"
         run: |
-          GRADLE_TARGETS="clean publish"
-          case "${TRIGGERING_REF}" in 
-            pr|branch)
-              VERSION_PUBLISH=${DOCKER_VERSIONED_COMMIT_GHRUNID_TAG}
-              ;;
-            tag)
-              VERSION_PUBLISH=${TAG_NAME}
-              GRADLE_TARGETS="$GRADLE_TARGETS jreleaserDeploy"
-              ;;
-          esac
-          ./gradlew $GRADLE_TARGETS -Pversion=${VERSION_PUBLISH} -x test --console=plain --no-daemon --build-cache
-          echo "VERSION_PUBLISH=$VERSION_PUBLISH" | tee -a $GITHUB_ENV
+          ./gradlew clean publish jreleaserDeploy -Pversion=${TAG_NAME} -x test --console=plain --no-daemon --build-cache
 
       - name: EarthBuild (docker build and push)
         run: |
@@ -108,37 +113,33 @@ jobs:
           name: sbom
           path: build/reports/bom.xml
 
-      - name: Build payload
-        if: steps.cf-gha-baseline.outputs.TRIGGERING_REF == 'pr'
-        id: payload
+      - name: Set event dispatch type
+        id: set-event-dispatch-type
+        if: steps.cf-gha-baseline.outputs.TRIGGERING_REF == 'tag'
+        env:
+          TAG_NAME: ${{ steps.cf-gha-baseline.outputs.TAG_NAME }}
+          TRIGGERING_REF: ${{ steps.cf-gha-baseline.outputs.TRIGGERING_REF }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          PAYLOAD=$(jq -n \
-            --arg version "${VERSION_PUBLISH}" \
-            --arg prName "${{ github.event.pull_request.title }}" \
-            --arg sourceBranch "${{ github.event.pull_request.head.ref }}" \
-            --arg targetBranch "${{ github.event.pull_request.base.ref }}" \
-            '
-              {
-                "version": $version,
-                "prName": $prName,
-                "sourceBranch": $sourceBranch,
-                "targetBranch": $targetBranch 
-              }')
-          echo 'PAYLOAD<<EOF' | tee -a ${GITHUB_ENV} | tee -a ${GITHUB_OUTPUT}
-          echo "$PAYLOAD" | tee -a ${GITHUB_ENV} | tee -a ${GITHUB_OUTPUT}
-          echo EOF | tee -a ${GITHUB_ENV} | tee -a ${GITHUB_OUTPUT}
+          # Event names are kept from the former application repository so deployments are unchanged.
+          if [[ "$TAG_NAME" =~ .*rc[0-9]+$ ]]; then
+            echo "EVENT_TYPE=cf-lob-${EVENT_NAME}-${TRIGGERING_REF}-rc" | tee -a $GITHUB_ENV | tee -a $GITHUB_OUTPUT
+          elif [[ "$TAG_NAME" =~ .*rc[0-9]+-qa-signoff$ ]]; then
+            echo "EVENT_TYPE=cf-lob-${EVENT_NAME}-${TRIGGERING_REF}-rc-qa-signoff" | tee -a $GITHUB_ENV | tee -a $GITHUB_OUTPUT
+          else
+            echo "EVENT_TYPE=cf-lob-${EVENT_NAME}-${TRIGGERING_REF}" | tee -a $GITHUB_ENV | tee -a $GITHUB_OUTPUT
+          fi
 
       - name: Dispatch successful build event to private repo
         uses: cardano-foundation/cf-gha-workflows/./actions/cf-gha-dispatch-event@main
-        if: steps.cf-gha-baseline.outputs.TRIGGERING_REF == 'pr'
+        if: steps.cf-gha-baseline.outputs.TRIGGERING_REF == 'tag'
         with:
-          EVENT_TYPE: cf-reeve-platform-pr
-          GITHUB_TOKEN: ${{ secrets.CF_REEVE_APPLICATION_REPO_PAT }}
-          GITHUB_REPO: cardano-foundation/cf-reeve-application
-          TRIGGERING_REF: ${{ steps.cf-gha-baseline.outputs.TRIGGERING_REF }}
+          EVENT_TYPE: ${{ steps.set-event-dispatch-type.outputs.EVENT_TYPE }}
+          GITHUB_TOKEN: ${{ secrets.PRIVATE_REPO_PAT }}
+          GITHUB_REPO: ${{ secrets.PRIVATE_REPO }}
           TRIGGERING_EVENT: ${{ github.event_name }}
+          TRIGGERING_REF: ${{ steps.cf-gha-baseline.outputs.TRIGGERING_REF }}
           TRIGGERING_BRANCH: ${{ steps.cf-gha-baseline.outputs.BRANCH_NAME }}
           TRIGGERING_TAG: ${{ steps.cf-gha-baseline.outputs.TAG_NAME }}
           TRIGGERING_GHRUNID: ${{ github.run_id }}
           GIT_SHORT_COMMIT: ${{ steps.cf-gha-baseline.outputs.GIT_SHORT_COMMIT }}
-          TRIGGERING_PAYLOAD: "${{ steps.payload.outputs.PAYLOAD }}"

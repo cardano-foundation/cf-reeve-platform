@@ -1,0 +1,24 @@
+{
+  "realm": "reeve-master",
+  "roles": {
+    "realm": [
+      {
+        "name": "reports_viewer",
+        "description": "Reporting module: reports, templates, chart of accounts and accounting regimes, read-only.",
+        "composite": true,
+        "composites": {
+          "client": {
+            "reeve-api": [
+              "reports:view",
+              "report_templates:view",
+              "report_types:view",
+              "chart_of_accounts:view",
+              "event_codes:view",
+              "accounting_regimes:view"
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

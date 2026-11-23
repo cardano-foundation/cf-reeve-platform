@@ -1,0 +1,27 @@
+spring:
+  env:
+    active: prod
+  flyway:
+    locations:
+      - classpath:db/migration/{vendor}/common
+      - classpath:db/migration/{vendor}/prod
+      - classpath:db/migration/{vendor}/cf-reeve-db-migrations/common
+      - classpath:db/migration/{vendor}/cf-reeve-db-migrations/prod
+management:
+  endpoint:
+    health:
+      show-details: when-authorized
+    threaddump:
+      access: none
+
+lob:
+  netsuite:
+    financial:
+      period:
+        source: IMPLICIT
+
+logging:
+ level:
+   org.apache.kafka.clients.consumer.ConsumerConfig: WARN
+   org.apache.kafka.clients.producer.ProducerConfig: WARN
+

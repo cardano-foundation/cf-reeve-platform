@@ -1,0 +1,511 @@
+x-healthcheck: &healthcheck
+  interval: 5s
+  timeout: 3s
+  retries: 10
+  start_period: 2s
+
+x-python-env: &python-env
+  PYTHONUNBUFFERED: 1
+  PYTHONIOENCODING: UTF-8
+
+services:
+
+  postgres:
+    restart: unless-stopped
+    image: postgres:17
+    hostname: postgres-reeve
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-h", "127.0.0.1", "-d", "postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-scripts/create_databases.sql:/docker-entrypoint-initdb.d/create_databases.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - lob
+
+  frontend:
+    profiles: [frontend]
+    restart: unless-stopped
+    image: pro.registry.gitlab.metadata.dev.cf-deployments.org/base-infrastructure/docker-registry/cf-lob-frontend:${FRONTEND_DOCKER_TAG:-main}
+    read_only: true
+    tmpfs:
+      - /tmp
+    networks:
+      - lob
+    ports:
+      - "3000:8080"
+    environment:
+      PORT: "3000"
+      VITE_API_URL: ${API_FRONTEND_HOSTNAME:-http://localhost:9000}
+      VITE_ADMIN_EMAIL: access_reeve-support@cardanofoundation.org
+      VITE_KEYCLOAK_URL: ${KC_FRONTEND_HOSTNAME:-http://localhost:8080}
+      VITE_KEYCLOAK_REALM: reeve-master
+      VITE_KEYCLOAK_CLIENT_ID: webclient
+      VITE_KEYCLOAK_REDIRECT_URL: ${FRONTEND_URL:-http://localhost:3000}/auth/login
+      VITE_PUBLIC_INTERFACE_OFF: ${VITE_PUBLIC_INTERFACE_OFF:-true}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend-http.entrypoints=web"
+      - "traefik.http.routers.frontend-http.rule=Host(`${FRONTEND_HOSTNAME:-example.com}`)"
+      - "traefik.http.routers.frontend-https.rule=Host(`${FRONTEND_HOSTNAME:-example.com}`)"
+      - "traefik.http.routers.frontend-https.entrypoints=websecure"
+      - "traefik.http.routers.frontend-https.tls=true"
+      - "traefik.http.middlewares.https-redirect.headers.customrequestheaders.X-Forwarded-Proto=https"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "100"
+
+  publisher:
+    restart: unless-stopped
+    build:
+      context: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    scale: ${PUBLISHER_REPLICAS:-1}
+    read_only: true
+    tmpfs:
+      - /tmp:rw,exec,nosuid,nodev,mode=1777,size=64m
+    environment:
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${OAUTH2_ISSUER_URI:-http://localhost:8080/realms/reeve-master}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${OAUTH2_JWK_SET_URI:-http://keycloak:8080/realms/reeve-master/protocol/openid-connect/certs}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWS_ALGORITHMS: ${OAUTH2_JWS_ALGORITHMS:-RS256}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${OAUTH2_AUDIENCE:-reeve-api}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUTHORITIES_CLAIM_NAME: ${OAUTH2_AUTHORITIES_CLAIM_NAME:-roles}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUTHORITY_PREFIX: ${OAUTH2_AUTHORITY_PREFIX:-ROLE_}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_PRINCIPAL_CLAIM_NAME: ${OAUTH2_PRINCIPAL_CLAIM_NAME:-preferred_username}
+      # Only used for dev and mocking netsuit
+      LOB_MOCK_RESULT_PATH: cf-application/src/main/resources/db/migration/postgresql/cf-reeve-db-migrations/NetSuiteIngestionMock.json
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev--yaci-dev-kit}
+      LOB_CARDANO_NETWORK: ${LOB_CARDANO_NETWORK:-DEV}
+      DB_URL: ${DB_URL:-jdbc:postgresql://postgres-reeve:5432/postgres}
+      lob_owner_account_mnemonic: ${LOB_OWNER_ACCOUNT_MNEMONIC:-test test test test test test test test test test test test test test test test test test test test test test test sauce}
+      LOB_ACCOUNTING_REPORTING_CORE_ENABLED: false
+      LOB_REPORTING_ENABLED: false
+      LOB_INDEXER_ENABLED: ${LOB_INDEXER_ENABLE:-true}
+      LOB_INDEXER_URL: ${LOB_INDEXER_URL:-http://reeve-indexer-api:9000}
+      LOB_ORGANISATION_ENABLED: false
+      # Decrypt-only half of the RSA key pair: this service runs the netsuite module.
+      # The api never gets this key - it can only encrypt. See certs/netsuiteConfiguration.md.
+      LOB_CONFIG_ENCRYPTION_PRIVATE_KEY: ${LOB_CONFIG_ENCRYPTION_PRIVATE_KEY:?Generate the encryption key pair - see certs/netsuiteConfiguration.md}
+      LOB_BLOCKCHAIN_READER_ENABLED: true
+      LOB_BLOCKCHAIN_PUBLISHER_ENABLED: true
+      LOB_NETSUITE_ENABLED: true
+      LOB_FUNDING_ENABLED: false
+      LOB_CSV_ENABLED: true
+      SERVER_PORT: 9001
+      LOB_BLOCKCHAIN_PUBLISHER_ROLLBACK_ENABLED: ${LOB_BLOCKCHAIN_PUBLISHER_ROLLBACK_ENABLED:-false}
+      LOB_DISPATCHING_STRATEGY_TYPE: IMMEDIATE
+      LOB_BLOCKFROST_URL: http://yaci-cli:8080/api/v1/
+      LOB_BLOCKCHAIN_READER_LOB_FOLLOWER_BASE_URL: http://follower-app:9090/api
+      SPRING_KAFKA_ENABLED: true
+      LOB_NETSUITE_CLIENT_RECORDSPERCALL: 1000
+      LOB_BLOCKCHAIN_PUBLISHER_KERI_ENABLED: ${LOB_BLOCKCHAIN_PUBLISHER_KERI_ENABLED:-true}
+      LOB_BLOCKCHAIN_PUBLISHER_KERI_URL: ${LOB_BLOCKCHAIN_PUBLISHER_KERI_URL:-http://keria:3901}
+      LOB_BLOCKCHAIN_PUBLISHER_KERI_BOOTURL: ${LOB_BLOCKCHAIN_PUBLISHER_KERI_BOOTURL:-http://keria:3903}
+      LOB_BLOCKCHAIN_PUBLISHER_KERI_IDENTIFIER_BRAN: ${LOB_BLOCKCHAIN_PUBLISHER_KERI_IDENTIFIER_BRAN:-0ADF2TpptgqcDE5IQUF1H}
+      LOB_BLOCKCHAIN_PUBLISHER_KERI_IDENTIFIER_NAME: ${LOB_BLOCKCHAIN_PUBLISHER_KERI_IDENTIFIER_NAME:-identity}
+      LOB_BLOCKCHAIN_PUBLISHER_KERI_IDENTIFIER_ROLE: agent
+      LOB_BLOCKCHAIN_PUBLISHER_KERI_METADATA_LABEL: 170
+      LOB_BLOCKCHAIN_PUBLISHER_IPFS_ENABLED: ${LOB_BLOCKCHAIN_PUBLISHER_IPFS_ENABLED:-true}
+      LOB_BLOCKCHAIN_PUBLISHER_IPFS_BLOCKFROST_ENABLED: ${LOB_BLOCKCHAIN_PUBLISHER_IPFS_BLOCKFROST_ENABLED:-true}
+      LOB_BLOCKCHAIN_PUBLISHER_IPFS_BLOCKFROST_PROJECT_ID: ${LOB_BLOCKCHAIN_PUBLISHER_IPFS_BLOCKFROST_PROJECT_ID:-ipfsJrP4wskyTOLTnqZ9Bd8lslYv0tuy17bX}
+      # Both modules default to off on this service — the api service owns them.
+      LOB_DOCUMENT_VAULT_ENABLED: ${LOB_DOCUMENT_VAULT_ENABLED:-false}
+      LOB_KERI_ATTESTATION_ENABLED: ${LOB_KERI_ATTESTATION_ENABLED:-false}
+    working_dir: /app
+    healthcheck:
+      test: ["CMD", "java", "-jar", "/healthcheck.jar", "9001"]
+      interval: 30s
+      timeout: 10s
+      retries: 8
+      start_period: 20s
+    networks:
+      - lob
+    ports:
+      - "${PUBLISHER_EXPOSE_PORT-9001}:9001"
+    volumes:
+      - ./:/app/
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "100"
+  api:
+    restart: unless-stopped
+    build:
+      context: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    scale: ${API_REPLICAS:-1}
+    read_only: true
+    tmpfs:
+      - /tmp:rw,exec,nosuid,nodev,mode=1777,size=64m
+    environment:
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${OAUTH2_ISSUER_URI:-http://localhost:8080/realms/reeve-master}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${OAUTH2_JWK_SET_URI:-http://keycloak:8080/realms/reeve-master/protocol/openid-connect/certs}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWS_ALGORITHMS: ${OAUTH2_JWS_ALGORITHMS:-RS256}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${OAUTH2_AUDIENCE:-reeve-api}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUTHORITIES_CLAIM_NAME: ${OAUTH2_AUTHORITIES_CLAIM_NAME:-roles}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUTHORITY_PREFIX: ${OAUTH2_AUTHORITY_PREFIX:-ROLE_}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_PRINCIPAL_CLAIM_NAME: ${OAUTH2_PRINCIPAL_CLAIM_NAME:-preferred_username}
+      SPRINGDOC_API_DOCS_ENABLED: true
+      SPRINGDOC_SWAGGER_UI_ENABLED: true
+      SPRINGDOC_SWAGGER_UI_PATH: /swagger-ui.html
+      # Only used for dev and mocking netsuit
+      LOB_CORS_ALLOWED_ORIGINS: ${LOB_CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      LOB_MOCK_RESULT_PATH: cf-application/src/main/resources/db/migration/postgresql/cf-reeve-db-migrations/NetSuiteIngestionMock.json
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev--yaci-dev-kit}
+      DB_URL: ${DB_URL:-jdbc:postgresql://postgres-reeve:5432/postgres}
+      LOB_KEYCLOAK_ADMIN_URL: ${LOB_KEYCLOAK_ADMIN_URL:-http://keycloak:8080}
+      LOB_KEYCLOAK_ADMIN_CLIENT_SECRET: ${LOB_KEYCLOAK_ADMIN_CLIENT_SECRET:-reeve-backend-dev-secret}
+      lob_owner_account_mnemonic: ${LOB_OWNER_ACCOUNT_MNEMONIC:-test test test test test test test test test test test test test test test test test test test test test test test sauce}
+      LOB_ACCOUNTING_REPORTING_CORE_ENABLED: true
+      LOB_ORGANISATION_ENABLED: true
+      # Encrypt-only half of the RSA key pair: this service runs the organisation module
+      # and can never decrypt stored credentials. See certs/netsuiteConfiguration.md.
+      LOB_CONFIG_ENCRYPTION_PUBLIC_KEY: ${LOB_CONFIG_ENCRYPTION_PUBLIC_KEY:?Generate the encryption key pair - see certs/netsuiteConfiguration.md}
+      LOB_REPORTING_ENABLED: true
+      LOB_INDEXER_ENABLED: ${LOB_INDEXER_ENABLE:-true}
+      LOB_INDEXER_URL: ${LOB_INDEXER_URL:-http://reeve-indexer-api:9000}
+      LOB_BLOCKCHAIN_PUBLISHER_ROLLBACK_ENABLED: ${LOB_BLOCKCHAIN_PUBLISHER_ROLLBACK_ENABLED:-false}
+      LOB_BLOCKCHAIN_READER_ENABLED: false
+      LOB_BLOCKCHAIN_PUBLISHER_ENABLED: false
+      LOB_NETSUITE_ENABLED: false
+      LOB_KERI_ATTESTATION_ENABLED: true
+      LOB_KERI_ATTESTATION_KERIA_URL: ${LOB_KERI_ATTESTATION_KERIA_URL:-https://keria.dev.ecosyseng.cf-deployments.org}
+      LOB_KERI_ATTESTATION_KERIA_BOOTURL: ${LOB_KERI_ATTESTATION_KERIA_BOOTURL:-https://keria-boot.dev.ecosyseng.cf-deployments.org}
+      LOB_KERI_ATTESTATION_KERIA_BRAN: ${LOB_KERI_ATTESTATION_KERIA_BRAN:-0A98gEaYge5XlagRM9okY}
+      LOB_KERI_ATTESTATION_IDENTIFIER_NAME: ${LOB_KERI_ATTESTATION_IDENTIFIER_NAME:-reeve-attestation}
+      LOB_KERI_ATTESTATION_SCHEMA_BASE_URL: ${LOB_KERI_ATTESTATION_SCHEMA_BASE_URL:-https://cred-issuance.dev.ecosyseng.cf-deployments.org/oobi}
+      # Accepted credential schemas and their trust anchors. Foundation Employee is configured live —
+      # its issuer AID and the OOBI that lets the agent reach that issuer's registry. Without the OOBI
+      # the agent cannot ask whether a credential is still issued, and verification fails closed.
+      # Only read when LOB_KERI_ATTESTATION_ENABLED=true.
+      LOB_KERI_ATTESTATION_EMPLOYEE_SCHEMA_SAID: ${LOB_KERI_ATTESTATION_EMPLOYEE_SCHEMA_SAID:-EL9oOWU_7zQn_rD--Xsgi3giCWnFDaNvFMUGTOZx1ARO}
+      LOB_KERI_ATTESTATION_EMPLOYEE_ISSUER_AID: ${LOB_KERI_ATTESTATION_EMPLOYEE_ISSUER_AID:-EOcGYMIaKnF4_cpkcWhZVzoHcS0EauVQeWdSipHAfTrd}
+      LOB_KERI_ATTESTATION_EMPLOYEE_OOBIS: ${LOB_KERI_ATTESTATION_EMPLOYEE_OOBIS:-https://keria-ext.dev.ecosyseng.cf-deployments.org/oobi/EOcGYMIaKnF4_cpkcWhZVzoHcS0EauVQeWdSipHAfTrd/agent/EFrACXBZnest_9ldYyGcnKdele6tW50Xot6JEzvslUAU}
+      LOB_BLOCKCHAIN_PUBLISHER_IPFS_BLOCKFROST_ENABLED: ${LOB_BLOCKCHAIN_PUBLISHER_IPFS_BLOCKFROST_ENABLED:-true}
+      LOB_BLOCKCHAIN_PUBLISHER_IPFS_BLOCKFROST_PROJECT_ID: ${LOB_BLOCKCHAIN_PUBLISHER_IPFS_BLOCKFROST_PROJECT_ID:-ipfsJrP4wskyTOLTnqZ9Bd8lslYv0tuy17bX}
+      LOB_DOCUMENT_VAULT_ENABLED: true
+      LOB_FUNDING_ENABLED: true
+      LOB_CSV_ENABLED: false
+      SPRING_KAFKA_ENABLED: true
+      SERVER_PORT: 9000
+      LOB_SECURITY_CLAMAV_ENABLED: true
+      LOB_SECURITY_CLAMAV_HOST: clamav
+      LOB_SECURITY_CLAMAV_PORT: 3310
+      SERVER_USEFORWARDHEADERS: true
+      SERVER_FORWARDHEADERSSTRATEGY: framework
+      OAUTH2_REDIRECT_URL: ${API_URL:-http://localhost:9000}/swagger-ui/oauth2-redirect.html
+    working_dir: /app
+    healthcheck:
+      test: ["CMD", "java", "-jar", "/healthcheck.jar", "9000"]
+      interval: 30s
+      timeout: 10s
+      retries: 8
+      start_period: 20s
+    networks:
+      - lob
+    ports:
+      - "${API_EXPOSE_PORT-9000}:9000"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend-http.entrypoints=web"
+      - "traefik.http.routers.backend-http.rule=Host(`${API_HOSTNAME:-api.example.com}`) && (PathPrefix(`/api/v1`) || PathPrefix(`/swagger-ui`) || PathPrefix(`/v3/api-docs`))"
+      - "traefik.http.routers.backend-https.rule=Host(`${API_HOSTNAME:-api.example.com}`) && (PathPrefix(`/api/v1`) || PathPrefix(`/swagger-ui`) || PathPrefix(`/v3/api-docs`))"
+      - "traefik.http.routers.backend-https.entrypoints=websecure"
+      - "traefik.http.routers.backend-https.tls=true"
+      - "traefik.http.services.backend.loadbalancer.server.port=9000"
+      - "traefik.http.middlewares.https-redirect.headers.customrequestheaders.X-Forwarded-Proto=https"
+    volumes:
+      - ./:/app/
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "100"
+
+  clamav:
+    image: clamav/clamav:1.5.1
+    restart: unless-stopped
+    platform: linux/amd64
+    ports:
+      - "3310:3310"
+    healthcheck:
+      test: [ "CMD", "clamdscan", "--version" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - lob
+
+  keycloak:
+    restart: unless-stopped
+    image: quay.io/keycloak/keycloak:26.8
+    command: start-dev --import-realm
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak-theme-setup:
+        condition: service_completed_successfully
+    networks:
+      - lob
+    environment:
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      KC_METRICS_ENABLED: ${KC_METRICS_ENABLED:-true}
+      KC_HEALTH_ENABLED: ${KC_HEALTH_ENABLED:-true}
+      KC_HOSTNAME: ${KC_HOSTNAME-localhost}
+      KC_IMPORT: ${KC_IMPORT:-/opt/keycloak/data/import/realm-export.json}
+      KC_HTTP_ENABLED: true
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_PORT: ${KC_HTTP_PORT:-8080}
+      KC_HTTPS_PORT: ${KC_HTTP_PORT:-8443}
+      KC_DB: ${KC_DB:-postgres}
+      KC_DB_URL_HOST: ${KC_DB_URL_HOST:-postgres-reeve}
+      KC_DB_URL_PORT: ${KC_DB_URL_PORT:-5432}
+      KC_DB_USERNAME: ${KC_DB_USERNAME:-postgres}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD:-postgres}
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8080'"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+    ports:
+      - ${EXPOSED_KC_HTTP_PORT:-8080}:${KC_HTTP_PORT:-8080}
+      - ${EXPOSED_KC_HTTPS_PORT:-8443}:${KC_HTTPS_PORT:-8443}
+      - ${EXPOSED_KC_HEALTH_PORT:-8082}:9000
+    volumes:
+      - ./keycloak-config:/opt/keycloak/data/import
+      - keycloak-providers:/opt/keycloak/providers
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.keycloak-http.entrypoints=web"
+      - "traefik.http.routers.keycloak-http.rule=Host(`${KC_HOSTNAME:-keycloak.example.com}`)"
+      - "traefik.http.routers.keycloak-https.rule=Host(`${KC_HOSTNAME:-keycloak.example.com}`)"
+      - "traefik.http.routers.keycloak-https.entrypoints=websecure"
+      - "traefik.http.routers.keycloak-https.tls=true"
+      - "traefik.http.middlewares.https-redirect.headers.customrequestheaders.X-Forwarded-Proto=https"
+      - "traefik.http.services.keycloak.loadbalancer.server.port=${KC_HTTP_PORT:-8080}"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "100"
+
+  keycloak-theme-setup:
+    image: pro.registry.gitlab.metadata.dev.cf-deployments.org/base-infrastructure/docker-registry/cf-lob-keycloak-theme:0.0.0-main-66196f8-GHRUN14472195207
+    entrypoint: /bin/sh -c "cp -a /reeve-theme.jar /opt/keycloak/providers/"
+    volumes:
+      - keycloak-providers:/opt/keycloak/providers
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "100"
+
+  kafka:
+    restart: unless-stopped
+    image: apache/kafka:4.3.2
+    healthcheck:
+      test: /opt/kafka/bin/kafka-cluster.sh cluster-id --bootstrap-server kafka:9092 || exit 1
+      interval: 1s
+      timeout: 60s
+      retries: 60
+    networks:
+      - lob
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://localhost:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
+      KAFKA_MESSAGE_MAX_BYTES: 15728640 # 15MB
+      KAFKA_REPLICA_FETCH_MAX_BYTES: 15728640 # 15MB
+
+  kafdrop:
+    image: obsidiandynamics/kafdrop:4.2.0
+    profiles:
+      - kafdrop
+    restart: "no"
+    ports:
+      - "19000:9000"
+    networks:
+      - lob
+    environment:
+      KAFKA_BROKERCONNECT: "1@kafka:9092"
+
+  follower-app:
+    restart: unless-stopped
+    image: pro.registry.gitlab.metadata.dev.cf-deployments.org/base-infrastructure/docker-registry/cf-reeve-follower-app:1.7.0-rc1
+    networks:
+      - lob
+    ports:
+      - "9090:9090"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev--yaci-dev-kit
+      DB_URL: ${DB_URL:-jdbc:postgresql://postgres-reeve:5432/postgres?currentSchema=lob_follower_service}
+      LOB_BLOCKFROST_URL: http://yaci-cli:8080/api/v1/
+      STORE_CARDANO_HOST: ${STORE_CARDANO_HOST:-yaci-cli}
+      STORE_CARDANO_PORT: ${STORE_CARDANO_PORT:-3001}
+      STORE_CARDANO_PROTOCOL_MAGIC: ${STORE_CARDANO_PROTOCOL_MAGIC:-42}
+      # Default address generated by yaci devnet
+      LOB_UTXO_FILTER_ADDRESSES: ${LOB_UTXO_FILTER_ADDRESSES:-addr_test1qppcuzs25ghufz2mzg37hcm77px4matwz2hz072z4ms7umqasylaf2uure0h5dw6zmm4ctnxfm0m9gf8lst6fflthlhq5hrg7w}
+    healthcheck:
+      test: ["CMD", "java", "-jar", "/healthcheck.jar", "9090"]
+      interval: 30s
+      timeout: 10s
+      retries: 8
+      start_period: 20s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "100"
+
+  yaci-cli:
+    restart: unless-stopped
+    image: bloxbean/yaci-cli:0.12.0
+    networks:
+      - lob
+    env_file:
+      - ./yaci-config/env
+      - ./yaci-config/node.properties
+    volumes:
+      - ./yaci-config/node.properties:/app/config/node.properties
+      - yaci-data:/clusters
+    ports:
+      - "${YACI_DEVNET_EXPOSED_PORT:-3001}:3001"
+      - "8081:8080"
+    entrypoint: [ "/app/yaci-cli", "create-node", "--start" ]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.yaci-bf-http.entrypoints=web"
+      - "traefik.http.routers.yaci-bf-http.rule=host(`${YACI_BLOCKFROST_HOSTNAME:-yaci-blockfrost.example.com}`)"
+      - "traefik.http.routers.yaci-bf-https.rule=host(`${YACI_BLOCKFROST_HOSTNAME:-yaci-blockfrost.example.com}`)"
+      - "traefik.http.routers.yaci-bf-https.entrypoints=websecure"
+      - "traefik.http.routers.yaci-bf-https.tls=true"
+      - "traefik.http.services.yaci-bf-https.loadbalancer.server.port=8080"
+      - "traefik.http.middlewares.https-redirect.headers.customrequestheaders.x-forwarded-proto=https"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "100"
+
+  yaci-viewer:
+    restart: unless-stopped
+    image: bloxbean/yaci-viewer:0.12.0
+    ports:
+      - "5173:5173"
+    env_file:
+      - ./yaci-config/env
+    environment:
+      PUBLIC_INDEXER_BASE_URL: ${PUBLIC_INDEXER_BASE_URL:-http://yaci-cli:8080/api/v1}
+      PUBLIC_INDEXER_WS_URL: ${PUBLIC_INDEXER_WS_URL:-ws://localhost:8081/ws/liveblocks}
+    networks:
+      - lob
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.yaci-viewer-http.entrypoints=web"
+      - "traefik.http.routers.yaci-viewer-http.rule=Host(`${YACI_VIEWER_HOSTNAME:-yaci-viewer.example.com}`)"
+      - "traefik.http.routers.yaci-viewer-https.rule=Host(`${YACI_VIEWER_HOSTNAME:-yaci-viewer.example.com}`)"
+      - "traefik.http.routers.yaci-viewer-https.entrypoints=websecure"
+      - "traefik.http.routers.yaci-viewer-https.tls=true"
+      - "traefik.http.middlewares.https-redirect.headers.customrequestheaders.X-Forwarded-Proto=https"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "100"
+
+  traefik:
+    profiles: [traefik]
+    restart: unless-stopped
+    image: "traefik:v3.7"
+    container_name: "traefik"
+    command:
+      - "--log.level=DEBUG"
+      - "--accesslog.filepath=/dev/stdout"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+    ports:
+      - "443:443"
+      - "80:80"
+        #- "8080:8080"
+    volumes:
+      - "/var/lib/letsencrypt:/letsencrypt"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    networks:
+      - lob
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "100"
+  keria:
+    image: ${KERIA_IMAGE:-weboftrust/keria}:${KERIA_IMAGE_TAG:-0.2.0-dev6}
+    restart: unless-stopped
+    environment:
+      KERI_AGENT_CORS: 1
+      <<: *python-env
+    volumes:
+      - ./keri-config/keria.json:/keria/config/keri/cf/keria.json
+    command: start --config-dir /keria/config --config-file keria.json --name agent  # Adjusted command line
+    healthcheck:
+      test: wget --spider http://keria:3902/spec.yaml
+      <<: *healthcheck
+    ports:
+      - 3901:3901
+      - 3902:3902
+      - 3903:3903
+    networks:
+      - lob
+
+  witness-demo:
+    image: weboftrust/keri:1.1.26
+    environment:
+      <<: *python-env
+    healthcheck:
+      test: curl -f http://localhost:5642/oobi
+      <<: *healthcheck
+    entrypoint:
+      - kli
+    command:
+      - witness
+      - demo
+    volumes:
+      - ./keri-config/witness-demo:/keripy/scripts/keri/cf/main
+    networks:
+      - lob
+
+volumes:
+  postgres-data:
+  keycloak-providers:
+  yaci-data:
+
+networks:
+  lob:
+    name: lob

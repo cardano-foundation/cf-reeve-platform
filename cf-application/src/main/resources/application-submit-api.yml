@@ -1,0 +1,9 @@
+lob:
+  blockchain_publisher:
+    tx:
+      submit:
+        url: ${LOB_BLOCKCHAIN_PUBLISHER_TX_SUBMIT_URL:""}
+        timeout:
+          in:
+            seconds: 30
+        api_key: ${LOB_BLOCKCHAIN_PUBLISHER_TX_SUBMIT_API_KEY:""}

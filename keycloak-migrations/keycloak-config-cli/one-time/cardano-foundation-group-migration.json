@@ -1,0 +1,322 @@
+{
+  "realm": "reeve-master",
+  "groups": [
+    {
+      "name": "platform",
+      "attributes": {},
+      "realmRoles": [],
+      "subGroups": [
+        {
+          "name": "administrators",
+          "attributes": {},
+          "realmRoles": [
+            "platform_admin"
+          ],
+          "subGroups": []
+        }
+      ]
+    },
+    {
+      "name": "organisations",
+      "attributes": {},
+      "realmRoles": [],
+      "subGroups": [
+        {
+          "name": "Cardano Foundation",
+          "attributes": {
+            "organisationId": [
+              "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94"
+            ],
+            "modules": [
+              "transactions",
+              "reporting",
+              "funding",
+              "document_vault"
+            ]
+          },
+          "realmRoles": [
+            "org_member"
+          ],
+          "subGroups": [
+            {
+              "name": "org_admin",
+              "attributes": {},
+              "realmRoles": [
+                "org_admin"
+              ],
+              "subGroups": []
+            },
+            {
+              "name": "transactions",
+              "attributes": {},
+              "realmRoles": [
+                "transactions_viewer"
+              ],
+              "subGroups": [
+                {
+                  "name": "reconciler",
+                  "attributes": {},
+                  "realmRoles": [
+                    "transactions_reconciler"
+                  ],
+                  "subGroups": []
+                },
+                {
+                  "name": "importer",
+                  "attributes": {},
+                  "realmRoles": [
+                    "transactions_importer"
+                  ],
+                  "subGroups": []
+                },
+                {
+                  "name": "reviewer",
+                  "attributes": {},
+                  "realmRoles": [
+                    "transactions_reviewer"
+                  ],
+                  "subGroups": []
+                },
+                {
+                  "name": "publisher",
+                  "attributes": {},
+                  "realmRoles": [
+                    "transactions_publisher"
+                  ],
+                  "subGroups": []
+                },
+                {
+                  "name": "publish_viewer",
+                  "attributes": {},
+                  "realmRoles": [
+                    "transactions_publish_viewer"
+                  ],
+                  "subGroups": []
+                },
+                {
+                  "name": "dashboard_editor",
+                  "attributes": {},
+                  "realmRoles": [
+                    "transactions_dashboard_editor"
+                  ],
+                  "subGroups": []
+                },
+                {
+                  "name": "setup",
+                  "attributes": {},
+                  "realmRoles": [
+                    "transactions_setup"
+                  ],
+                  "subGroups": [
+                    {
+                      "name": "erp",
+                      "attributes": {},
+                      "realmRoles": [
+                        "transactions_erp"
+                      ],
+                      "subGroups": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "reporting",
+              "attributes": {},
+              "realmRoles": [
+                "reports_viewer"
+              ],
+              "subGroups": [
+                {
+                  "name": "editor",
+                  "attributes": {},
+                  "realmRoles": [
+                    "reports_editor"
+                  ],
+                  "subGroups": []
+                },
+                {
+                  "name": "publisher",
+                  "attributes": {},
+                  "realmRoles": [
+                    "reports_publisher"
+                  ],
+                  "subGroups": []
+                },
+                {
+                  "name": "publish_viewer",
+                  "attributes": {},
+                  "realmRoles": [
+                    "reports_publish_viewer"
+                  ],
+                  "subGroups": []
+                },
+                {
+                  "name": "setup",
+                  "attributes": {},
+                  "realmRoles": [
+                    "reports_setup"
+                  ],
+                  "subGroups": []
+                }
+              ]
+            },
+            {
+              "name": "document_vault",
+              "attributes": {},
+              "realmRoles": [
+                "document_vault_viewer"
+              ],
+              "subGroups": [
+                {
+                  "name": "editor",
+                  "attributes": {},
+                  "realmRoles": [
+                    "document_vault_editor"
+                  ],
+                  "subGroups": []
+                },
+                {
+                  "name": "publisher",
+                  "attributes": {},
+                  "realmRoles": [
+                    "document_vault_publisher"
+                  ],
+                  "subGroups": []
+                },
+                {
+                  "name": "admin",
+                  "attributes": {},
+                  "realmRoles": [
+                    "document_vault_admin"
+                  ],
+                  "subGroups": []
+                }
+              ]
+            },
+            {
+              "name": "funding",
+              "attributes": {},
+              "realmRoles": [
+                "funding_viewer"
+              ],
+              "subGroups": [
+                {
+                  "name": "event_editor",
+                  "attributes": {},
+                  "realmRoles": [
+                    "funding_event_editor"
+                  ],
+                  "subGroups": []
+                },
+                {
+                  "name": "project_manager",
+                  "attributes": {},
+                  "realmRoles": [
+                    "funding_project_manager"
+                  ],
+                  "subGroups": []
+                },
+                {
+                  "name": "publisher",
+                  "attributes": {},
+                  "realmRoles": [
+                    "funding_publisher"
+                  ],
+                  "subGroups": []
+                },
+                {
+                  "name": "setup",
+                  "attributes": {},
+                  "realmRoles": [
+                    "funding_setup"
+                  ],
+                  "subGroups": []
+                }
+              ]
+            },
+            {
+              "name": "presets",
+              "attributes": {},
+              "realmRoles": [],
+              "subGroups": [
+                {
+                  "name": "auditor",
+                  "attributes": {},
+                  "realmRoles": [
+                    "preset_auditor"
+                  ],
+                  "subGroups": []
+                },
+                {
+                  "name": "accountant",
+                  "attributes": {},
+                  "realmRoles": [
+                    "preset_accountant"
+                  ],
+                  "subGroups": []
+                },
+                {
+                  "name": "admin",
+                  "attributes": {},
+                  "realmRoles": [
+                    "preset_admin"
+                  ],
+                  "subGroups": []
+                },
+                {
+                  "name": "account_manager",
+                  "attributes": {},
+                  "realmRoles": [
+                    "preset_account_manager"
+                  ],
+                  "subGroups": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "auditor",
+      "realmRoles": [
+        "default-roles-reeve-master"
+      ],
+      "groups": [
+        "/organisations/Cardano Foundation/presets/auditor"
+      ]
+    },
+    {
+      "username": "accountant",
+      "realmRoles": [
+        "default-roles-reeve-master"
+      ],
+      "groups": [
+        "/organisations/Cardano Foundation/presets/accountant"
+      ]
+    },
+    {
+      "username": "manager",
+      "realmRoles": [
+        "default-roles-reeve-master"
+      ],
+      "groups": [
+        "/organisations/Cardano Foundation/presets/account_manager",
+        "/platform/administrators"
+      ]
+    },
+    {
+      "username": "admin",
+      "realmRoles": [
+        "default-roles-reeve-master"
+      ],
+      "groups": [
+        "/organisations/Cardano Foundation/presets/admin",
+        "/platform/administrators"
+      ]
+    }
+  ]
+}

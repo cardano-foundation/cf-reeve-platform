@@ -1,0 +1,50 @@
+# here we specify only properties to override from the default values specified in the application.properties file
+
+# local YaciDevKit network, see: https://github.com/bloxbean/yaci-devkit
+
+spring:
+  env:
+    active: dev--yaci-dev-kit
+  flyway:
+    cleanDisabled: ${FLYWAY_CLEAN_DISABLED:false}
+    locations:
+      - classpath:db/migration/{vendor}/common
+      - classpath:db/migration/{vendor}/prod
+      - classpath:db/migration/{vendor}/dev
+      - classpath:db/migration/{vendor}/cf-reeve-db-migrations/common
+      - classpath:db/migration/{vendor}/cf-reeve-db-migrations/prod
+      - classpath:db/migration/{vendor}/cf-reeve-db-migrations/dev
+logging:
+  level:
+    org.flywaydb: DEBUG
+lob:
+  cardano:
+    network: ${LOB_CARDANO_NETWORK:DEV}
+
+  dispatching_strategy:
+    type: ${LOB_DISPATCHING_STRATEGY_TYPE:IMMEDIATE}
+
+  blockfrost:
+    url: "http://localhost:8080/api/v1/"
+  # locally YaciDevKit runs on port 8080
+    api_key: ""
+
+  # it is implicit here because on sandbox we have problems accessing explicit accounting period
+  netsuite:
+    financial:
+      period:
+        source: IMPLICIT
+
+# yaci-store properties
+store:
+  cardano:
+    # 42 is protocol magic for Yaci-Dev-Kit
+    protocol-magic: 42
+    # for devnet we must specify the genesis files for Yaci-Store
+    byron-genesis-file: classpath:/devel/config/devkit/byron-genesis.json
+    shelley-genesis-file: classpath:/devel/config/devkit/shelley-genesis.json
+    alonzo-genesis-file: classpath:/devel/config/devkit/alonzo-genesis.json
+    conway-genesis-file: classpath:/devel/config/devkit/conway-genesis.json
+
+  sync-start-blockhash:
+  sync-start-slot: 0
