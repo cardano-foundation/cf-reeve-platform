@@ -63,7 +63,7 @@ public class ReportEntity extends CommonDateOnlyEntity implements Persistable<St
     @Column(name = "report_data", columnDefinition = "json")
     private Map<String, Object> reportData;
 
-    private String standard;
+    private String reportStandard;
 
     @Nullable
     @Embedded

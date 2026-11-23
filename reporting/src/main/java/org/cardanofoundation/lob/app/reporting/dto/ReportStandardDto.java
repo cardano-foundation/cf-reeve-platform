@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.organisation.domain.request;
+package org.cardanofoundation.lob.app.reporting.dto;
 
 import jakarta.validation.constraints.NotNull;
 
@@ -14,7 +14,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class StandardUpdate {
+public class ReportStandardDto {
 
     @Schema(example = "IFRS")
     @CsvBindByName(column = "Code")

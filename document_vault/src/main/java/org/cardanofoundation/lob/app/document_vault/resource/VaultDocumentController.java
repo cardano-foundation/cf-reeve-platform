@@ -42,14 +42,14 @@ public class VaultDocumentController {
 
     @Operation(description = "Upload an encrypted envelope: ciphertext plus per-recipient wrapped-DEK slots")
     @PostMapping(value = "/documents", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('document_vault', 'create')")
+    @PreAuthorize("@permissions.can(#request?.organisationId, 'document_vault', 'create')")
     public ResponseEntity<Object> upload(@Valid @RequestBody UploadDocumentRequest request) {
         return Responses.respond(documentService.upload(request), HttpStatus.CREATED);
     }
 
     @Operation(description = "Org-wide document metadata listing: paged, sortable (createdAt, fileName, sizeBytes, status), filterable by direction/status/free text")
     @GetMapping(value = "/organisations/{organisationId}/documents", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('document_vault', 'view')")
+    @PreAuthorize("@permissions.can(#organisationId, 'document_vault', 'view')")
     public ResponseEntity<Object> list(@PathVariable String organisationId,
                                        @RequestParam(required = false) DocumentDirection direction,
                                        @RequestParam(required = false) VaultDocumentStatus status,
@@ -61,16 +61,16 @@ public class VaultDocumentController {
 
     @Operation(description = "Fetch the full encrypted envelope for client-side decryption (creator or recipient only; 404 otherwise)")
     @GetMapping(value = "/documents/{documentId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('document_vault', 'view')")
-    public ResponseEntity<Object> fetch(@PathVariable String documentId) {
-        return Responses.respond(documentService.fetch(documentId), HttpStatus.OK);
+    @PreAuthorize("@permissions.can(#organisationId, 'document_vault', 'view')")
+    public ResponseEntity<Object> fetch(@PathVariable String documentId, @RequestParam String organisationId) {
+        return Responses.respond(documentService.fetch(organisationId, documentId), HttpStatus.OK);
     }
 
     @Operation(description = "Delete a document (creator or admin only; DRAFT only)")
     @DeleteMapping(value = "/documents/{documentId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('document_vault', 'delete')")
-    public ResponseEntity<Object> delete(@PathVariable String documentId) {
-        return Responses.respondDelete(documentService.delete(documentId));
+    @PreAuthorize("@permissions.can(#organisationId, 'document_vault', 'delete')")
+    public ResponseEntity<Object> delete(@PathVariable String documentId, @RequestParam String organisationId) {
+        return Responses.respondDelete(documentService.delete(organisationId, documentId));
     }
 
     @Operation(description = "Publish a draft document: encrypted envelope to IPFS, manifest to Cardano L1 (label 1447, type DOCUMENT). "
@@ -79,10 +79,11 @@ public class VaultDocumentController {
     @PostMapping(value = "/documents/{documentId}/publish", produces = APPLICATION_JSON_VALUE)
     // Anchoring on-chain is irreversible, so publishing is a separate permission: someone can upload a draft
     // and still need another person to publish it.
-    @PreAuthorize("@permissions.can('document_vault', 'publish')")
-    public ResponseEntity<Object> publish(@PathVariable String documentId,
+    @PreAuthorize("@permissions.can(#organisationId, 'document_vault', 'publish')")
+    public ResponseEntity<Object> publish(@PathVariable String documentId, @RequestParam String organisationId,
                                           @Valid @RequestBody(required = false) PublishDocumentRequest request) {
-        return Responses.respond(documentService.publish(documentId, resolveAttestationCeremonyId(request)), HttpStatus.OK);
+        return Responses.respond(documentService.publish(organisationId, documentId,
+                resolveAttestationCeremonyId(request)), HttpStatus.OK);
     }
 
     /**

@@ -52,7 +52,7 @@ public class ReportTypeController {
             ),
     })
     @GetMapping(value = "/{orgId}", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('report_types', 'view')")
+    @PreAuthorize("@permissions.can(#orgId, 'report_types', 'view')")
     public ResponseEntity<List<ReportTypeView>> getReferenceCodes(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();
@@ -62,7 +62,7 @@ public class ReportTypeController {
 
     @Operation(description = "Add mapping to Report Type field")
     @PostMapping(value = "/{orgId}/field-mappings", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('report_types', 'edit')")
+    @PreAuthorize("@permissions.can(#orgId, 'report_types', 'edit')")
     public ResponseEntity<?> addMappingToReportTypeField(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @Valid @RequestBody ReportTypeFieldUpdate reportTypeFieldUpdate) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();
@@ -76,7 +76,7 @@ public class ReportTypeController {
 
     @Operation(description = "Add mapping to Report Type field via CSV")
     @PostMapping(value = "/{orgId}/field-mappings", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("@permissions.can('report_types', 'edit')")
+    @PreAuthorize("@permissions.can(#orgId, 'report_types', 'edit')")
     public ResponseEntity<?> addMappingToReportTypeField(@PathVariable("orgId") @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String orgId, @RequestParam(value = "file") MultipartFile file) {
         if (!keycloakSecurityHelper.canUserAccessOrg(orgId)) {
             return OrgAccessDenied.response();

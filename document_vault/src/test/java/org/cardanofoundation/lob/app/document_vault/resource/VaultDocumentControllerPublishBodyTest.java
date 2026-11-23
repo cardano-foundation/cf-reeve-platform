@@ -67,36 +67,36 @@ class VaultDocumentControllerPublishBodyTest {
 
     @Test
     void publishWithNoBodyAtAllPassesNullCeremonyId() throws Exception {
-        when(documentService.publish(eq("doc1"), isNull())).thenReturn(Either.right(view()));
+        when(documentService.publish(eq("org1"), eq("doc1"), isNull())).thenReturn(Either.right(view()));
 
-        mockMvc.perform(post("/api/v1/document-vault/documents/{documentId}/publish", "doc1"))
+        mockMvc.perform(post("/api/v1/document-vault/documents/{documentId}/publish", "doc1").param("organisationId", "org1"))
                 .andExpect(status().isOk());
 
-        verify(documentService).publish("doc1", null);
+        verify(documentService).publish("org1", "doc1", null);
     }
 
     @Test
     void publishWithEmptyJsonBodyPassesNullCeremonyId() throws Exception {
-        when(documentService.publish(eq("doc1"), isNull())).thenReturn(Either.right(view()));
+        when(documentService.publish(eq("org1"), eq("doc1"), isNull())).thenReturn(Either.right(view()));
 
-        mockMvc.perform(post("/api/v1/document-vault/documents/{documentId}/publish", "doc1")
+        mockMvc.perform(post("/api/v1/document-vault/documents/{documentId}/publish", "doc1").param("organisationId", "org1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isOk());
 
-        verify(documentService).publish("doc1", null);
+        verify(documentService).publish("org1", "doc1", null);
     }
 
     @Test
     void publishWithCeremonyIdInBodyPassesItThrough() throws Exception {
-        when(documentService.publish("doc1", "cer-1")).thenReturn(Either.right(view()));
+        when(documentService.publish("org1", "doc1", "cer-1")).thenReturn(Either.right(view()));
 
-        mockMvc.perform(post("/api/v1/document-vault/documents/{documentId}/publish", "doc1")
+        mockMvc.perform(post("/api/v1/document-vault/documents/{documentId}/publish", "doc1").param("organisationId", "org1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"attestationCeremonyId\":\"cer-1\"}"))
                 .andExpect(status().isOk());
 
-        verify(documentService).publish("doc1", "cer-1");
+        verify(documentService).publish("org1", "doc1", "cer-1");
     }
 
     /** {@code @JsonIgnoreProperties(ignoreUnknown = false)} means an unknown
@@ -104,7 +104,7 @@ class VaultDocumentControllerPublishBodyTest {
      *  {@code attestationCeremonyId} can never silently fall through to a plain, unattested publish. */
     @Test
     void publishWithUnknownFieldInBodyIsRejectedWith400() throws Exception {
-        mockMvc.perform(post("/api/v1/document-vault/documents/{documentId}/publish", "doc1")
+        mockMvc.perform(post("/api/v1/document-vault/documents/{documentId}/publish", "doc1").param("organisationId", "org1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"somethingElse\":\"ignored\"}"))
                 .andExpect(status().isBadRequest());
@@ -124,14 +124,14 @@ class VaultDocumentControllerPublishBodyTest {
                 org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY,
                 "attestationCeremonyId must not be blank; omit the field entirely for a plain publish.");
         problem.setTitle("ATTESTATION_CEREMONY_ID_BLANK");
-        when(documentService.publish("doc1", "")).thenReturn(Either.left(problem));
+        when(documentService.publish("org1", "doc1", "")).thenReturn(Either.left(problem));
 
-        mockMvc.perform(post("/api/v1/document-vault/documents/{documentId}/publish", "doc1")
+        mockMvc.perform(post("/api/v1/document-vault/documents/{documentId}/publish", "doc1").param("organisationId", "org1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"attestationCeremonyId\":null}"))
                 .andExpect(status().isUnprocessableEntity());
 
-        verify(documentService).publish("doc1", "");
+        verify(documentService).publish("org1", "doc1", "");
     }
 
     /** A present-but-blank ceremony id is rejected by the service (not
@@ -142,21 +142,21 @@ class VaultDocumentControllerPublishBodyTest {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                 org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "attestationCeremonyId must not be blank.");
         problem.setTitle("ATTESTATION_CEREMONY_ID_BLANK");
-        when(documentService.publish("doc1", "   ")).thenReturn(Either.left(problem));
+        when(documentService.publish("org1", "doc1", "   ")).thenReturn(Either.left(problem));
 
-        mockMvc.perform(post("/api/v1/document-vault/documents/{documentId}/publish", "doc1")
+        mockMvc.perform(post("/api/v1/document-vault/documents/{documentId}/publish", "doc1").param("organisationId", "org1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"attestationCeremonyId\":\"   \"}"))
                 .andExpect(status().isUnprocessableEntity());
 
-        verify(documentService).publish("doc1", "   ");
+        verify(documentService).publish("org1", "doc1", "   ");
     }
 
     @Test
     void publishRejectsOverlongCeremonyIdBeforeReachingTheService() throws Exception {
         String overlong = "c".repeat(65);
 
-        mockMvc.perform(post("/api/v1/document-vault/documents/{documentId}/publish", "doc1")
+        mockMvc.perform(post("/api/v1/document-vault/documents/{documentId}/publish", "doc1").param("organisationId", "org1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"attestationCeremonyId\":\"" + overlong + "\"}"))
                 .andExpect(status().isBadRequest());
@@ -167,9 +167,9 @@ class VaultDocumentControllerPublishBodyTest {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                 org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "Attestation unavailable.");
         problem.setTitle("ATTESTATION_UNAVAILABLE");
-        when(documentService.publish("doc1", "cer-1")).thenReturn(Either.left(problem));
+        when(documentService.publish("org1", "doc1", "cer-1")).thenReturn(Either.left(problem));
 
-        mockMvc.perform(post("/api/v1/document-vault/documents/{documentId}/publish", "doc1")
+        mockMvc.perform(post("/api/v1/document-vault/documents/{documentId}/publish", "doc1").param("organisationId", "org1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"attestationCeremonyId\":\"cer-1\"}"))
                 .andExpect(status().isUnprocessableEntity());

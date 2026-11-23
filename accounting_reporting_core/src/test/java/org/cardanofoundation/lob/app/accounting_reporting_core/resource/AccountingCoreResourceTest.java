@@ -121,7 +121,7 @@ class AccountingCoreResourceTest {
     @Test
     void transactionType_test() throws JsonProcessingException {
 
-        ResponseEntity<String> responseEntity = accountingCoreResource.transactionType();
+        ResponseEntity<String> responseEntity = accountingCoreResource.transactionType("org1");
 
         assertTrue(responseEntity.getStatusCode().is2xxSuccessful());
         assertNotNull(responseEntity.getBody());
@@ -129,7 +129,7 @@ class AccountingCoreResourceTest {
 
     @Test
     void rejectionReasons_test() {
-        ResponseEntity<RejectionReason[]> responseEntity = accountingCoreResource.rejectionReasons();
+        ResponseEntity<RejectionReason[]> responseEntity = accountingCoreResource.rejectionReasons("org1");
 
         assertTrue(responseEntity.getStatusCode().is2xxSuccessful());
         assertNotNull(responseEntity.getBody());

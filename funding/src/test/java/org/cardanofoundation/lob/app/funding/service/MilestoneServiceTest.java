@@ -644,12 +644,12 @@ class MilestoneServiceTest {
     }
 
     @Test
-    void listMilestones_returns401_whenUserCannotAccessOrg() {
+    void listMilestones_returns403_whenUserCannotAccessOrg() {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
         PagedResponse<MilestoneView> result = milestoneService.listMilestones("p1", "org1", PAGEABLE);
 
-        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
         verify(projectRepository, never()).findByIdAndOrganisationId(any(), any());
         verify(milestoneRepository, never()).findByProjectId(any(), any());
     }
@@ -668,12 +668,12 @@ class MilestoneServiceTest {
     }
 
     @Test
-    void getMilestone_returns401_whenUserCannotAccessOrg() {
+    void getMilestone_returns403_whenUserCannotAccessOrg() {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
         MilestoneView result = milestoneService.getMilestone("p1", "m1", "org1");
 
-        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
         verify(milestoneRepository, never()).findByIdAndProjectIdAndProject_OrganisationId(any(), any(), any());
     }
 
@@ -701,12 +701,12 @@ class MilestoneServiceTest {
     }
 
     @Test
-    void createMilestone_returns401_whenUserCannotAccessOrg() {
+    void createMilestone_returns403_whenUserCannotAccessOrg() {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
         MilestoneView result = milestoneService.createMilestone("p1", "org1", createRequest());
 
-        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
         verify(milestoneRepository, never()).saveAndFlush(any());
     }
 
@@ -724,13 +724,13 @@ class MilestoneServiceTest {
     }
 
     @Test
-    void updateMilestone_returns401_whenUserCannotAccessOrg() {
+    void updateMilestone_returns403_whenUserCannotAccessOrg() {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
         MilestoneView result = milestoneService.updateMilestone("p1", "m1", "org1",
                 MilestoneUpdateRequest.builder().milestoneTitle("New").build());
 
-        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
         verify(milestoneRepository, never()).saveAndFlush(any());
     }
 
@@ -748,12 +748,12 @@ class MilestoneServiceTest {
     }
 
     @Test
-    void deleteMilestone_returns401_whenUserCannotAccessOrg() {
+    void deleteMilestone_returns403_whenUserCannotAccessOrg() {
         when(keycloakSecurityHelper.canUserAccessOrg("org1")).thenReturn(false);
 
         CascadeDeletionView result = milestoneService.deleteMilestone("p1", "m1", "org1");
 
-        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(result.getError().orElseThrow().getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
         verify(cascadeDeleteService, never()).deleteMilestone(any());
     }
 

@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -116,58 +115,22 @@ class ReportingControllerTest {
 
     @Test
     void findById_Success() {
-        // Given
-        reportResponseDto.setOrganisationId("org123");
-        when(reportService.findById("abc")).thenReturn(Optional.of(reportResponseDto));
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
+        when(reportService.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(reportResponseDto));
 
-        // When
-        ResponseEntity<?> response = reportingController.findById("abc", null);
-
-        // Then
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals(reportResponseDto, response.getBody());
-    }
-
-    @Test
-    void findById_NotFound() {
-        // Given
-        when(reportService.findById("abc")).thenReturn(Optional.empty());
-
-        // When
-        ResponseEntity<?> response = reportingController.findById("abc", null);
-
-        // Then
-        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
-    }
-
-    @Test
-    void findById_NoOrganisationAccess() {
-        // Given
-        reportResponseDto.setOrganisationId("org123");
-        when(reportService.findById("abc")).thenReturn(Optional.of(reportResponseDto));
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
-
-        // When
-        ResponseEntity<?> response = reportingController.findById("abc", null);
-
-        // Then
-        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
-    }
-
-    @Test
-    void findById_WithOrganisationIdParameter_Success() {
-        // Given
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
-        when(reportService.findByOrganisationIdAndId("org123", "abc"))
-                .thenReturn(Optional.of(reportResponseDto));
-
-        // When
         ResponseEntity<?> response = reportingController.findById("abc", "org123");
 
-        // Then
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(reportResponseDto, response.getBody());
+    }
+
+    @Test
+    void findById_reportOfAnotherOrganisation_isNotFound() {
+        // the lookup is limited to the requested organisation, so another organisation's report is not found
+        when(reportService.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.empty());
+
+        ResponseEntity<?> response = reportingController.findById("abc", "org123");
+
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
     }
 
     @Test
@@ -202,46 +165,22 @@ class ReportingControllerTest {
 
     @Test
     void delete_Success() {
-        // Given
-        reportResponseDto.setOrganisationId("org123");
-        when(reportService.findById("abc")).thenReturn(Optional.of(reportResponseDto));
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
-        when(reportService.delete("abc")).thenReturn(Either.right(null));
+        when(reportService.delete("org123", "abc")).thenReturn(Either.right(null));
 
-        // When
-        ResponseEntity<?> response = reportingController.delete("abc");
+        ResponseEntity<?> response = reportingController.delete("abc", "org123");
 
-        // Then
         assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
-        verify(reportService).delete("abc");
+        verify(reportService).delete("org123", "abc");
     }
 
     @Test
-    void delete_ReportNotFound() {
-        // Given
-        when(reportService.findById("abc")).thenReturn(Optional.empty());
+    void delete_reportNotFoundInTheOrganisation() {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
+        when(reportService.delete("org123", "abc")).thenReturn(Either.left(problem));
 
-        // When
-        ResponseEntity<?> response = reportingController.delete("abc");
+        ResponseEntity<?> response = reportingController.delete("abc", "org123");
 
-        // Then
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
-        verify(reportService, never()).delete(anyString());
-    }
-
-    @Test
-    void delete_NoOrganisationAccess() {
-        // Given
-        reportResponseDto.setOrganisationId("org123");
-        when(reportService.findById("abc")).thenReturn(Optional.of(reportResponseDto));
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(false);
-
-        // When
-        ResponseEntity<?> response = reportingController.delete("abc");
-
-        // Then
-        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
-        verify(reportService, never()).delete(anyString());
     }
 
     @Test
@@ -249,13 +188,10 @@ class ReportingControllerTest {
         // Given
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
 
-        reportResponseDto.setOrganisationId("org123");
-        when(reportService.findById("abc")).thenReturn(Optional.of(reportResponseDto));
-        when(keycloakSecurityHelper.canUserAccessOrg("org123")).thenReturn(true);
-        when(reportService.delete("abc")).thenReturn(Either.left(problem));
+        when(reportService.delete("org123", "abc")).thenReturn(Either.left(problem));
 
         // When
-        ResponseEntity<?> response = reportingController.delete("abc");
+        ResponseEntity<?> response = reportingController.delete("abc", "org123");
 
         // Then
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());

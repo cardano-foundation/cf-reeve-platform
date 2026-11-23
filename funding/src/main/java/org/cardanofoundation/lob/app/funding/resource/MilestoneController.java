@@ -43,7 +43,7 @@ public class MilestoneController {
                     schema = @Schema(implementation = PagedResponse.class))})
     })
     @GetMapping(value = "/projects/{projectId}/milestones", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('project_management', 'view')")
+    @PreAuthorize("@permissions.can(#organisationId, 'project_management', 'view')")
     public ResponseEntity<PagedResponse<MilestoneView>> listMilestones(
             @PathVariable String projectId,
             @RequestParam String organisationId,
@@ -56,7 +56,7 @@ public class MilestoneController {
                     schema = @Schema(implementation = MilestoneView.class))})
     })
     @GetMapping(value = "/projects/{projectId}/milestones/{milestoneId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('project_management', 'view')")
+    @PreAuthorize("@permissions.can(#organisationId, 'project_management', 'view')")
     public ResponseEntity<MilestoneView> getMilestone(
             @PathVariable String projectId,
             @PathVariable String milestoneId,
@@ -69,7 +69,7 @@ public class MilestoneController {
                     schema = @Schema(implementation = MilestoneView.class))})
     })
     @PostMapping(value = "/projects/{projectId}/milestones", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('project_management', 'create_project')")
+    @PreAuthorize("@permissions.can(#organisationId, 'project_management', 'create_project')")
     public ResponseEntity<MilestoneView> createMilestone(
             @PathVariable String projectId,
             @RequestParam String organisationId,
@@ -82,7 +82,7 @@ public class MilestoneController {
                     schema = @Schema(implementation = MilestoneView.class))})
     })
     @PutMapping(value = "/projects/{projectId}/milestones/{milestoneId}", produces = APPLICATION_JSON_VALUE, consumes = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('project_management', 'create_project')")
+    @PreAuthorize("@permissions.can(#organisationId, 'project_management', 'create_project')")
     public ResponseEntity<MilestoneView> updateMilestone(
             @PathVariable String projectId,
             @PathVariable String milestoneId,
@@ -100,7 +100,7 @@ public class MilestoneController {
                     schema = @Schema(implementation = ProblemDetail.class))})
     })
     @DeleteMapping(value = "/projects/{projectId}/milestones/{milestoneId}", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("@permissions.can('project_management', 'delete')")
+    @PreAuthorize("@permissions.can(#organisationId, 'project_management', 'delete')")
     public ResponseEntity<CascadeDeletionView> deleteMilestone(
             @PathVariable String projectId,
             @PathVariable String milestoneId,

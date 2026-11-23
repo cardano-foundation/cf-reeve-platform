@@ -36,7 +36,7 @@ public class ReportMapper {
         report.setReportTemplate(template);
         report.setOrganisationId(dto.getOrganisationId());
         report.setName(dto.getName());
-        report.setStandard(template.getStandard());
+        report.setReportStandard(template.getReportStandard());
 
         if (dto.getDataMode() != null) {
             report.setDataMode(DataMode.valueOf(dto.getDataMode()));
@@ -105,7 +105,7 @@ public class ReportMapper {
                 .year(entity.getYear())
                 .ver(entity.getVer())
                 .dataMode(entity.getDataMode() != null ? entity.getDataMode().name() : null)
-                .standard(entity.getStandard())
+                .reportStandard(entity.getReportStandard())
                 .isReadyToPublish(entity.isReadyToPublish())
                 .isPublished(entity.isLedgerDispatchApproved())
                 .blockchainTxId(entity.getBlockchainHash())

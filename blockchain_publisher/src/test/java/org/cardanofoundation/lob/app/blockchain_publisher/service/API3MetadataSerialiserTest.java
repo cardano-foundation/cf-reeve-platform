@@ -72,7 +72,7 @@ class API3MetadataSerialiserTest {
         assertThat(data.get("test123")).isEqualTo("5");
         // No standard set on the entity -> field must be omitted from the on-chain schema
         assertThat(metadataMap.get("standard")).isNull();
-        assertThat(metadataMap.get("standard")).isNull();
+        assertThat(metadataMap.get("accounting_regime")).isNull();
     }
 
     @Test
@@ -91,13 +91,13 @@ class API3MetadataSerialiserTest {
         reportEntity.setReportTemplateType(ReportTemplateType.BALANCE_SHEET);
         reportEntity.setDataMode(DataMode.SYSTEM);
         reportEntity.setReportVer(1L);
-        reportEntity.setStandard("IFRS");
+        reportEntity.setReportStandard("IFRS");
 
         MetadataMap metadataMap = serialiser.serialiseToMetadataMap(reportEntity, CREATION_SLOT);
 
         assertThat(metadataMap.get("standard")).isEqualTo("IFRS");
         // Legacy key (metadata version <= 1.2) must no longer be published
-        assertThat(metadataMap.get("standard")).isNull();
+        assertThat(metadataMap.get("accounting_regime")).isNull();
         assertThat(((MetadataMap) metadataMap.get("metadata")).get("version")).isEqualTo("1.3");
     }
 
@@ -117,12 +117,12 @@ class API3MetadataSerialiserTest {
         reportEntity.setReportTemplateType(ReportTemplateType.BALANCE_SHEET);
         reportEntity.setDataMode(DataMode.SYSTEM);
         reportEntity.setReportVer(1L);
-        reportEntity.setStandard(null); // legacy template predating this field
+        reportEntity.setReportStandard(null); // legacy template predating this field
 
         MetadataMap metadataMap = serialiser.serialiseToMetadataMap(reportEntity, CREATION_SLOT);
 
         assertThat(metadataMap.get("standard")).isNull();
-        assertThat(metadataMap.get("standard")).isNull();
+        assertThat(metadataMap.get("accounting_regime")).isNull();
     }
 
     @Test

@@ -46,7 +46,7 @@ public class ReportTemplateMapper {
         template.setReportTemplateType(ReportTemplateType.valueOf(dto.getReportTemplateType()));
         template.setActive(dto.isActive());
         template.setDataMode(DataMode.valueOf(dto.getDataMode()));
-        template.setStandard(dto.getStandard());
+        template.setReportStandard(dto.getReportStandard());
 
         if (dto.getFields() != null) {
             // If updating existing template, intelligently merge fields instead of replacing
@@ -195,7 +195,7 @@ public class ReportTemplateMapper {
             .validationRules(validationRules)
             .reportCount(entity.getReportCount())
             .dataMode(entity.getDataMode() != null ? entity.getDataMode().name() : null)
-            .standard(entity.getStandard())
+            .reportStandard(entity.getReportStandard())
             .createdAt(entity.getCreatedAt())
             .updatedAt(entity.getUpdatedAt())
             .createdBy(entity.getCreatedBy())

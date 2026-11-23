@@ -72,11 +72,11 @@ class SpendingEventControllerTest {
     @Test
     void listEvents_propagatesErrorStatus() {
         when(spendingEventService.listEvents(eq("org1"), any(), eq(PAGEABLE)))
-                .thenReturn(PagedResponse.error(problem(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED")));
+                .thenReturn(PagedResponse.error(problem(HttpStatus.FORBIDDEN, "UNAUTHORIZED")));
 
         ResponseEntity<?> response = spendingEventController.listEvents("org1", null, null, null, null, null, null, null, null, PAGEABLE);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     }
 
     @Test
@@ -124,7 +124,7 @@ class SpendingEventControllerTest {
 
     @Test
     void eventTypes_returnsEnumNames() {
-        ResponseEntity<List<String>> response = spendingEventController.eventTypes();
+        ResponseEntity<List<String>> response = spendingEventController.eventTypes("org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).contains("FUNDING", "SPENDING", "REFUND");
@@ -132,7 +132,7 @@ class SpendingEventControllerTest {
 
     @Test
     void eventStatuses_returnsEnumNames() {
-        ResponseEntity<List<String>> response = spendingEventController.eventStatuses();
+        ResponseEntity<List<String>> response = spendingEventController.eventStatuses("org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).contains("DRAFT", "PUBLISHED");
@@ -218,9 +218,9 @@ class SpendingEventControllerTest {
         SpendingEventBulkPublishRequest request = SpendingEventBulkPublishRequest.builder()
                 .organisationId("org1").eventIds(List.of("e1")).build();
         when(spendingEventService.publishEvents("org1", List.of("e1")))
-                .thenReturn(SpendingEventBulkPublishView.error(problem(HttpStatus.UNAUTHORIZED, ErrorTitleConstants.UNAUTHORIZED)));
+                .thenReturn(SpendingEventBulkPublishView.error(problem(HttpStatus.FORBIDDEN, ErrorTitleConstants.UNAUTHORIZED)));
 
-        assertThat(spendingEventController.publishEvents(request).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(spendingEventController.publishEvents(request).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     }
 
     @Test

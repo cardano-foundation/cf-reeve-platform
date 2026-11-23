@@ -8,6 +8,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.Set;
 
@@ -52,46 +53,47 @@ class CurrentUserAccessTest {
     }
 
     @Test
-    void permissionIsCheckedInTheRequestedOrganisation() {
-        request.addHeader(CurrentUserAccess.ORGANISATION_HEADER, "org-b");
-
-        assertThat(permissions.can("reports", "view")).isTrue();
-        assertThat(permissions.can("reports", "publish")).isFalse();
+    void permissionIsCheckedInTheGivenOrganisation() {
+        // manager in org-a, viewer in org-b: the manager rights stay in org-a
+        assertThat(permissions.can("org-a", "reports", "publish")).isTrue();
+        assertThat(permissions.can("org-b", "reports", "view")).isTrue();
+        assertThat(permissions.can("org-b", "reports", "publish")).isFalse();
     }
 
     @Test
-    void organisationOfTheRequestMustMatchTheHeader() {
-        request.addHeader(CurrentUserAccess.ORGANISATION_HEADER, "org-b");
-
-        assertThat(keycloakSecurityHelper.canUserAccessOrg("org-b")).isTrue();
-        // member of org-a, but the request acts on org-b: a manager permission checked for org-b must not touch org-a data
-        assertThat(keycloakSecurityHelper.canUserAccessOrg("org-a")).isFalse();
-        assertThat(keycloakSecurityHelper.isMemberOfOrg("org-a")).isTrue();
-        assertThat(keycloakSecurityHelper.canUserAccessOrg("org-c")).isFalse();
-        assertThat(keycloakSecurityHelper.canUserAccessOrg(null)).isFalse();
+    void organisationTheUserIsNotIn_hasNoPermission() {
+        assertThat(permissions.can("org-c", "reports", "view")).isFalse();
     }
 
     @Test
-    void withoutHeader_permissionNeedsASingleOrganisation() {
-        assertThat(keycloakSecurityHelper.canUserAccessOrg("org-a")).isTrue();
-        // two organisations and no header: ambiguous, deny
-        assertThat(permissions.can("reports", "view")).isFalse();
+    void missingOrBlankOrganisation_isRefused() {
+        assertThat(permissions.can(null, "reports", "view")).isFalse();
+        assertThat(permissions.can("", "reports", "view")).isFalse();
+        assertThat(permissions.can("  ", "reports", "view")).isFalse();
     }
 
     @Test
-    void withoutHeader_singleOrganisationIsUsed() {
+    void missingOrganisation_isRefusedEvenForAUserWithASingleOrganisation() {
         when(resolver.resolve(any())).thenReturn(new UserAccess("single", Map.of(
                 "org-a", new OrganisationAccess("org-a", Set.of("reports_viewer"), Set.of(), Set.of("reports:view")))));
 
-        assertThat(permissions.can("reports", "view")).isTrue();
+        assertThat(permissions.can(null, "reports", "view")).isFalse();
     }
 
     @Test
-    void headerForAnOrganisationTheUserIsNotIn_deniesEverything() {
-        request.addHeader(CurrentUserAccess.ORGANISATION_HEADER, "org-c");
+    void headerIsIgnored() {
+        request.addHeader("X-Organisation-Id", "org-a");
 
-        assertThat(permissions.can("reports", "view")).isFalse();
-        assertThat(keycloakSecurityHelper.canUserAccessOrg("org-a")).isFalse();
+        assertThat(permissions.can("org-b", "reports", "publish")).isFalse();
+        assertThat(keycloakSecurityHelper.canUserAccessOrg("org-b")).isTrue();
+    }
+
+    @Test
+    void accessToAnOrganisationIsMembership() {
+        assertThat(keycloakSecurityHelper.canUserAccessOrg("org-a")).isTrue();
+        assertThat(keycloakSecurityHelper.canUserAccessOrg("org-b")).isTrue();
+        assertThat(keycloakSecurityHelper.canUserAccessOrg("org-c")).isFalse();
+        assertThat(keycloakSecurityHelper.canUserAccessOrg(null)).isFalse();
     }
 
     @Test
@@ -99,21 +101,28 @@ class CurrentUserAccessTest {
         when(resolver.resolve(any())).thenReturn(new UserAccess("platform.admin", Map.of(), Set.of("organisations:create")));
 
         assertThat(permissions.canPlatform("organisations", "create")).isTrue();
-        assertThat(permissions.can("organisations", "create")).isFalse();
+        assertThat(permissions.can("org-a", "organisations", "create")).isFalse();
     }
 
     @Test
     void organisationPermissionsDoNotGivePlatformPermissions() {
-        request.addHeader(CurrentUserAccess.ORGANISATION_HEADER, "org-a");
-
         assertThat(permissions.canPlatform("organisations", "create")).isFalse();
+    }
+
+    @Test
+    void thereIsNoPermissionCheckWithoutAnOrganisation() {
+        // an endpoint left on the old expression must fail, never grant access
+        assertThat(java.util.Arrays.stream(PermissionChecker.class.getMethods())
+                .filter(method -> method.getName().equals("can"))
+                .map(Method::getParameterCount))
+                .containsExactly(3);
     }
 
     @Test
     void accessIsResolvedOncePerRequest() {
         currentUserAccess.get();
         currentUserAccess.get();
-        permissions.can("reports", "view");
+        permissions.can("org-a", "reports", "view");
 
         verify(resolver, times(1)).resolve(any());
     }
@@ -138,14 +147,13 @@ class CurrentUserAccessTest {
     }
 
     @Test
-    void outsideARequestTheResolverIsAskedEachTimeAndThereIsNoHeader() {
+    void outsideARequestTheResolverIsAskedEachTime() {
         RequestContextHolder.resetRequestAttributes();
 
         currentUserAccess.get();
         currentUserAccess.get();
 
         verify(resolver, times(2)).resolve(any());
-        assertThat(currentUserAccess.requestedOrganisationId()).isEmpty();
     }
 
     @Test

@@ -20,7 +20,10 @@ public class Constants {
     public static final String INVALID_VALIDATION_RULE = "INVALID_VALIDATION_RULE";
     public static final String VALIDATION_RULE_S_MUST_HAVE_AT_LEAST_ONE_TERM_ON_THE_S_SIDE = "Validation rule '%s' must have at least one term on the %s side";
     public static final String INVALID_FIELD_NAME = "INVALID_FIELD_NAME";
-    public static final String INVALID_STANDARD = "INVALID_STANDARD";
+    public static final String INVALID_REPORT_STANDARD = "INVALID_REPORT_STANDARD";
+    public static final String REPORT_STANDARD_NOT_FOUND = "REPORT_STANDARD_NOT_FOUND";
+    public static final String REPORT_STANDARD_ALREADY_EXISTS = "REPORT_STANDARD_ALREADY_EXISTS";
+    public static final String REPORT_STANDARD_IMMUTABLE_AFTER_PUBLISH = "REPORT_STANDARD_IMMUTABLE_AFTER_PUBLISH";
     public static final String REPORT_WITH_ID_S_DOES_NOT_EXIST = "Report with ID %s does not exist";
 
     private Constants() {
