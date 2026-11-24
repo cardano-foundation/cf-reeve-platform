@@ -356,7 +356,8 @@ services:
 
   follower-app:
     restart: unless-stopped
-    image: pro.registry.gitlab.metadata.dev.cf-deployments.org/base-infrastructure/docker-registry/cf-reeve-follower-app:1.7.0-rc1
+    build:
+      context: _backend-services/cf-reeve-ledger-follower-app
     networks:
       - lob
     ports:
