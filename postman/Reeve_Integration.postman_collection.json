@@ -1865,7 +1865,7 @@
               "raw": "{\n    \"customerCode\": \"6311170100\",\n    \"refCode\": \"7157\",\n    \"eventRefCode\": \"7100\",\n    \"name\": \"New Postman Name\",\n    \"subType\": 18,\n    \"type\": 5,\n    \"active\": true\n}"
             },
             "url": {
-              "raw": "{{base_url}}/api/v1/transactions-rejection-codes",
+              "raw": "{{base_url}}/api/v1/transactions-rejection-codes?organisationId={{orgId}}",
               "host": [
                 "{{base_url}}"
               ],
@@ -1873,6 +1873,12 @@
                 "api",
                 "v1",
                 "transactions-rejection-codes"
+              ],
+              "query": [
+                {
+                  "key": "organisationId",
+                  "value": "{{orgId}}"
+                }
               ]
             }
           },
