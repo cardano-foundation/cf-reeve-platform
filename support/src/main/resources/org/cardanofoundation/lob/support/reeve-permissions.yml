@@ -74,7 +74,7 @@ lob:
       - name: currencies
         modules: [transactions, funding]
         actions: [view, create, edit]
-      - name: accounting_regimes
+      - name: report_standards
         modules: [reporting]
         actions: [view, create, edit]
     groups:

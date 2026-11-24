@@ -91,7 +91,7 @@ class API3MetadataSerialiserTest {
         reportEntity.setReportTemplateType(ReportTemplateType.BALANCE_SHEET);
         reportEntity.setDataMode(DataMode.SYSTEM);
         reportEntity.setReportVer(1L);
-        reportEntity.setAccountingRegime("IFRS");
+        reportEntity.setReportStandard("IFRS");
 
         MetadataMap metadataMap = serialiser.serialiseToMetadataMap(reportEntity, CREATION_SLOT);
 
@@ -117,7 +117,7 @@ class API3MetadataSerialiserTest {
         reportEntity.setReportTemplateType(ReportTemplateType.BALANCE_SHEET);
         reportEntity.setDataMode(DataMode.SYSTEM);
         reportEntity.setReportVer(1L);
-        reportEntity.setAccountingRegime(null); // legacy template predating this field
+        reportEntity.setReportStandard(null); // legacy template predating this field
 
         MetadataMap metadataMap = serialiser.serialiseToMetadataMap(reportEntity, CREATION_SLOT);
 

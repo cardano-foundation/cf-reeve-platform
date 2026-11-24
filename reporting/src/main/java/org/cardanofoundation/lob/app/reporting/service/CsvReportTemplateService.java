@@ -135,7 +135,7 @@ public class CsvReportTemplateService {
             reportTemplateDto.setName(firstLine.getName());
             reportTemplateDto.setReportTemplateType(reportTemplateType.name());
             reportTemplateDto.setDataMode(dataMode.name());
-            reportTemplateDto.setAccountingRegime(firstLine.getStandard());
+            reportTemplateDto.setReportStandard(firstLine.getReportStandard());
             reportTemplateDto.setActive(active);
             reportTemplateDto.setDescription(firstLine.getDescription());
             reportTemplateDto.setVer(1L);
@@ -198,9 +198,9 @@ public class CsvReportTemplateService {
                 .findByOrgnisationIdAndNameAndReportTemplateTypeLatestVersion(dto.getOrganisationId(), dto.getName(), ReportTemplateType.valueOf(dto.getReportTemplateType()));
 
         // Same rules as the template API, checked here because they depend on the template being created or updated
-        Either<ProblemDetail, Void> accountingRegime = reportTemplateService.validateAccountingRegime(dto, existingTemplateO);
-        if (accountingRegime.isLeft()) {
-            return ReportTemplateResponseDto.builder().error(Optional.of(atRow(accountingRegime.getLeft(), parsedTemplate.rowNumber()))).build();
+        Either<ProblemDetail, Void> reportStandard = reportTemplateService.validateReportStandard(dto, existingTemplateO);
+        if (reportStandard.isLeft()) {
+            return ReportTemplateResponseDto.builder().error(Optional.of(atRow(reportStandard.getLeft(), parsedTemplate.rowNumber()))).build();
         }
 
         boolean updateInPlace = existingTemplateO
