@@ -177,7 +177,7 @@
       },
       {
         "name": "reports_viewer",
-        "description": "Reporting module: reports, templates, chart of accounts and accounting regimes, read-only.",
+        "description": "Reporting module: reports, templates, chart of accounts and report standards, read-only.",
         "composite": true,
         "composites": {
           "client": {
@@ -187,20 +187,20 @@
               "report_types:view",
               "chart_of_accounts:view",
               "event_codes:view",
-              "accounting_regimes:view"
+              "report_standards:view"
             ]
           }
         }
       },
       {
         "name": "reports_setup",
-        "description": "Reporting module: configure accounting regimes and report type field mappings.",
+        "description": "Reporting module: configure report standards and report type field mappings.",
         "composite": true,
         "composites": {
           "client": {
             "reeve-api": [
-              "accounting_regimes:create",
-              "accounting_regimes:edit",
+              "report_standards:create",
+              "report_standards:edit",
               "report_types:edit"
             ]
           }
@@ -929,20 +929,20 @@
           "clientRole": true
         },
         {
-          "name": "accounting_regimes:view",
-          "description": "view on accounting_regimes (reporting)",
+          "name": "report_standards:view",
+          "description": "view on report_standards (reporting)",
           "composite": false,
           "clientRole": true
         },
         {
-          "name": "accounting_regimes:create",
-          "description": "create on accounting_regimes (reporting)",
+          "name": "report_standards:create",
+          "description": "create on report_standards (reporting)",
           "composite": false,
           "clientRole": true
         },
         {
-          "name": "accounting_regimes:edit",
-          "description": "edit on accounting_regimes (reporting)",
+          "name": "report_standards:edit",
+          "description": "edit on report_standards (reporting)",
           "composite": false,
           "clientRole": true
         }

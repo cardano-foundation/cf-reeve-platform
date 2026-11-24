@@ -4,7 +4,7 @@
     "realm": [
       {
         "name": "reports_viewer",
-        "description": "Reporting module: reports, templates, chart of accounts and accounting regimes, read-only.",
+        "description": "Reporting module: reports, templates, chart of accounts and report standards, read-only.",
         "composite": true,
         "composites": {
           "client": {
@@ -14,7 +14,7 @@
               "report_types:view",
               "chart_of_accounts:view",
               "event_codes:view",
-              "accounting_regimes:view"
+              "report_standards:view"
             ]
           }
         }

@@ -150,6 +150,15 @@ publishing for someone, move them to the specific groups instead.
 | `reeve_admin` | `presets/admin` | `org_admin`, `transactions/setup/erp`, `transactions/importer`, `transactions/reviewer`, `transactions/reconciler`, `transactions/publish_viewer`, `reporting/setup`, `reporting/publish_viewer`, `funding/project_manager`, `funding/event_editor`, `funding/publisher`, `funding/setup`, `document_vault/editor`, `document_vault/publisher`, `document_vault/admin` | `/platform/administrators` |
 | `reeve_account_manager` | `presets/account_manager` | `org_admin`, `transactions/reconciler`, `transactions/importer`, `transactions/reviewer`, `transactions/publisher`, `transactions/dashboard_editor`, `transactions/setup/erp`, `reporting/editor`, `reporting/publisher`, `reporting/setup`, `funding/event_editor`, `funding/project_manager`, `funding/publisher`, `funding/setup`, `document_vault/editor`, `document_vault/publisher` | `/platform/administrators` |
 
+## Renamed permissions
+
+`accounting_regimes:view`, `:create` and `:edit` became `report_standards:view`,
+`:create` and `:edit` (LOB-2492). On a realm that has the old ones, the normal
+command creates the new permissions and moves `reports_viewer` and `reports_setup`
+to them. The old permissions stay, because roles run with `NO_DELETE`, and nothing
+checks them any more: delete them by hand from the `reeve-api` client
+(Clients → `reeve-api` → Roles) after the run.
+
 ## Safety settings
 
 The manual command intentionally uses:
