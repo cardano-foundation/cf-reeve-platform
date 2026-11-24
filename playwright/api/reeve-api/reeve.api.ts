@@ -31,11 +31,13 @@ export function reeveApi(request: APIRequestContext) {
         );
     };
 
-    const transactionTypes = async (authToken: string) => {
+    const transactionTypes = async (organizationId: string, authToken: string) => {
         return BaseApi.getData(
             request,
             Endpoints.Reeve.Transactions.Types,
-            {},
+            {
+                organisationId: organizationId
+            },
             {
                 Accept: "*/*",
                 "Accept-Encoding": "gzip, deflate, br",

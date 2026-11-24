@@ -21,7 +21,7 @@ export async function reeveService(request: APIRequestContext) {
     }
 
     const getTransactionTypes = async (authToken: string) => {
-        return await reeveApi(request).transactionTypes(authToken);
+        return await reeveApi(request).transactionTypes(organizationId, authToken);
     }
 
     const getEventCodes = async (authToken: string) => {
