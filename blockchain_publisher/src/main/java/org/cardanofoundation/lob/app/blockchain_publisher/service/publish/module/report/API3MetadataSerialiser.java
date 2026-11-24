@@ -27,7 +27,7 @@ import org.cardanofoundation.lob.app.support.calc.BigDecimals;
 @Slf4j
 public class API3MetadataSerialiser {
     private final OrganisationPublicApi organisationPublicApi;
-    public static final String VERSION = "1.2";
+    public static final String VERSION = "1.3";
     private final Clock clock;
 
     public MetadataMap serialiseToMetadataMap(ReportEntity reportEntity,
@@ -51,7 +51,8 @@ public class API3MetadataSerialiser {
         globalMetadataMap.put("period", BigInteger.valueOf(reportEntity.getPeriod()));
         if (reportEntity.getAccountingRegime() != null) {
             // Omitted for legacy templates that predate this field, rather than publishing an empty/null value on-chain.
-            globalMetadataMap.put("accounting_regime", reportEntity.getAccountingRegime());
+            // Published as "accounting_regime" up to metadata version 1.2; renamed to "standard" in 1.3.
+            globalMetadataMap.put("standard", reportEntity.getAccountingRegime());
         }
         MetadataMap dataMap = MetadataBuilder.createMap();
         globalMetadataMap.put("data", createRecursiveMetadataSection(dataMap, reportEntity.getReportData()));

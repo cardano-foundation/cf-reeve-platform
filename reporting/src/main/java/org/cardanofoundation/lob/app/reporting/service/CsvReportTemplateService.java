@@ -135,7 +135,7 @@ public class CsvReportTemplateService {
             reportTemplateDto.setName(firstLine.getName());
             reportTemplateDto.setReportTemplateType(reportTemplateType.name());
             reportTemplateDto.setDataMode(dataMode.name());
-            reportTemplateDto.setAccountingRegime(firstLine.getAccountingRegime());
+            reportTemplateDto.setAccountingRegime(firstLine.getStandard());
             reportTemplateDto.setActive(active);
             reportTemplateDto.setDescription(firstLine.getDescription());
             reportTemplateDto.setVer(1L);
