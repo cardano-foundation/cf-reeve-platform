@@ -49,7 +49,7 @@ class ReportMapperTest {
         ReportTemplateEntity template = ReportTemplateEntity.builder()
                 .id("template123")
                 .name("Financial Report Template")
-                .accountingRegime("IFRS")
+                .reportStandard("IFRS")
                 .build();
 
         ReportDto dto = ReportDto.builder()
@@ -75,7 +75,7 @@ class ReportMapperTest {
         assertEquals((short) 1, result.getPeriod());
         assertEquals((short) 2024, result.getYear());
         assertEquals(DataMode.SYSTEM, result.getDataMode());
-        assertEquals("IFRS", result.getAccountingRegime());
+        assertEquals("IFRS", result.getReportStandard());
     }
 
     @Test
@@ -278,7 +278,7 @@ class ReportMapperTest {
                 .ledgerDispatchApproved(false)
                 .blockchainHash("hash123")
                 .publishError(PublishError.INVALID_REPORT_DATA)
-                .accountingRegime("US_GAAP")
+                .reportStandard("US_GAAP")
                 .fields(new ArrayList<>())
                 .build();
         when(reportResponseConverter.convertResponse(any(), any())).thenAnswer(invocationOnMock -> invocationOnMock.getArguments()[0]);
@@ -300,7 +300,7 @@ class ReportMapperTest {
         assertFalse(result.getIsPublished());
         assertEquals("hash123", result.getBlockchainTxId());
         assertEquals("INVALID_REPORT_DATA", result.getPublishError());
-        assertEquals("US_GAAP", result.getAccountingRegime());
+        assertEquals("US_GAAP", result.getReportStandard());
         assertNotNull(result.getFields());
         assertTrue(result.getFields().isEmpty());
     }

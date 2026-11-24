@@ -40,7 +40,7 @@ class ReportConverterTest {
         when(event.getDataMode()).thenReturn(null);
         when(event.getReportData()).thenReturn(null);
         when(event.getDispatchStatus()).thenReturn(LedgerDispatchStatus.DISPATCHED);
-        when(event.getAccountingRegime()).thenReturn("IFRS");
+        when(event.getReportStandard()).thenReturn("IFRS");
 
         ReportEntity reportEntity = reportConverter.convertToDbDetached(event);
 
@@ -51,7 +51,7 @@ class ReportConverterTest {
         assertEquals(1L, reportEntity.getReportVer());
         assertEquals((short)1, reportEntity.getPeriod());
         assertEquals((short)2023, reportEntity.getYear());
-        assertEquals("IFRS", reportEntity.getAccountingRegime());
+        assertEquals("IFRS", reportEntity.getReportStandard());
 
     }
 

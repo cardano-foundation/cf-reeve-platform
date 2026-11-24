@@ -24,10 +24,10 @@ public class TemplateCsvLine {
     @CsvBindByName(column = "Generation Method")
     @NotNull(message = "Generation Method is required. Options are: Automatic or Manual")
     private String dataMode;
-    // Displayed as "Standard"; stored in the template's accountingRegime field
+    // CSV column header stays "Standard" (the label users see)
     @CsvBindByName(column = "Standard")
     @NotNull(message = "Standard is required")
-    private String standard;
+    private String reportStandard;
     @CsvBindByName(column = "Active")
     @NotNull(message = "Active is required. Options are: true or false")
     private String active;

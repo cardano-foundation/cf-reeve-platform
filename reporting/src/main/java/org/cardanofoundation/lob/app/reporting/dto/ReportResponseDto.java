@@ -58,9 +58,9 @@ public class ReportResponseDto {
     @Schema(description = "Data mode", example = "SYSTEM", allowableValues = {"SYSTEM", "USER"})
     private String dataMode;
 
-    @Schema(description = "Standard declared on the report template, copied when the report is created (property name kept as accountingRegime): "
+    @Schema(description = "Report standard declared on the report template, copied when the report is created: "
             + "one of the organisation's active standards, or \"Not applicable\"", example = "IFRS", nullable = true)
-    private String accountingRegime;
+    private String reportStandard;
 
     @Schema(description = "Indicates if the report is ready to be published to blockchain", example = "true")
     private Boolean isReadyToPublish;

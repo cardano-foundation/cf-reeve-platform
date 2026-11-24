@@ -848,7 +848,7 @@ public class ReportingService {
             problem.setTitle(Constants.REPORT_ALREADY_PUBLISHED);
             return Either.left(problem);
         }
-        report.setAccountingRegime(report.getReportTemplate().getAccountingRegime());
+        report.setReportStandard(report.getReportTemplate().getReportStandard());
         report.setLedgerDispatchApproved(true);
         report.setLedgerDispatchDate(LocalDateTime.now());
         report.setPublishedBy(authenticationUserService.getCurrentUser());

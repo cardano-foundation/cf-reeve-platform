@@ -1,4 +1,4 @@
-package org.cardanofoundation.lob.app.organisation.domain.entity;
+package org.cardanofoundation.lob.app.reporting.model.entity;
 
 import jakarta.persistence.*;
 
@@ -21,10 +21,10 @@ import org.cardanofoundation.lob.app.support.spring_audit.CommonEntity;
 @Getter
 @Setter
 @Entity
-@Table(name = "organisation_accounting_regime")
+@Table(name = "report_standard")
 @Audited
 @EntityListeners({ AuditingEntityListener.class })
-public class AccountingRegime extends CommonEntity implements Persistable<AccountingRegime.Id> {
+public class ReportStandardEntity extends CommonEntity implements Persistable<ReportStandardEntity.Id> {
 
     @EmbeddedId
     @AttributeOverrides({
