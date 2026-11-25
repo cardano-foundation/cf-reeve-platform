@@ -54,7 +54,10 @@ public class CeremonyRepositoryTest {
     @SpringBootConfiguration
     @EnableAutoConfiguration
     @EnableJpaRepositories("org.cardanofoundation.lob.app.keri_attestation")
-    @EntityScan("org.cardanofoundation.lob.app.keri_attestation")
+    // support's spring_audit.internal holds the Envers RevInfoEntity (the revinfo table). Without it
+    // Envers falls back to its default revision entity, which does not match revinfo's columns.
+    @EntityScan({"org.cardanofoundation.lob.app.keri_attestation",
+            "org.cardanofoundation.lob.app.support.spring_audit.internal"})
     // This package holds @Service/@Component classes (CeremonyService, CeremonyCleanupJob) to this package;
     // they now get picked up by this scan too, so the properties they depend on must be bindable here
     // just like in the real KeriAttestationModuleConfig pairing of ComponentScan + EnableConfigurationProperties.
