@@ -12,6 +12,7 @@ import org.springframework.web.client.RestClient;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.javers.core.Javers;
+
 import org.junit.jupiter.api.Test;
 
 class LobServiceAppTest {

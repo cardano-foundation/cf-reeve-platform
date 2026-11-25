@@ -14,9 +14,10 @@ import java.util.stream.Stream;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.kafka.annotation.KafkaListener;
 
+import org.mockito.invocation.Invocation;
+
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.mockito.invocation.Invocation;
 
 /**
  * The Kafka consumers bridge Kafka topics back onto the local Spring event bus. Each listener must republish
