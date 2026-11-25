@@ -76,9 +76,7 @@ public class LobServiceApp {
 
     @Bean
     public CommandLineRunner onStart() {
-        return (args) -> {
-            log.info("Lob Service started.");
-        };
+        return args -> log.info("Lob Service started.");
     }
 
     @Configuration
