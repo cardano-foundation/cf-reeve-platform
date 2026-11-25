@@ -68,8 +68,8 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         TransactionsRequest transactionsRequest = new TransactionsRequest();
         transactionsRequest.setOrganisationId(ORGANISATION_ID);
         transactionsRequest.setTransactionIds(Set.of(transactionId));
-        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(
-                transactionsRequest.getTransactionIds().stream().map(TransactionId::getId).collect(Collectors.toSet())))
+        when(accountingCoreTransactionRepository.findAllByIdAndOrganisationIdWithPessimisticLock(
+                transactionsRequest.getTransactionIds().stream().map(TransactionId::getId).collect(Collectors.toSet()), ORGANISATION_ID))
                 .thenReturn(new ArrayList<>());
 
         // Act
@@ -96,7 +96,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         otherOrganisationsTransaction.setOrganisation(Organisation.builder().id("org-b").build());
         otherOrganisationsTransaction.setOverallStatus(OK);
         otherOrganisationsTransaction.setTransactionApproved(true);
-        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
+        when(accountingCoreTransactionRepository.findAllByIdAndOrganisationIdWithPessimisticLock(Set.of(transactionId.getId()), ORGANISATION_ID))
                 .thenReturn(List.of(otherOrganisationsTransaction));
 
         List<Either<IdentifiableProblem, TransactionEntity>> approved = transactionRepositoryGateway.approveTransactions(transactionsRequest);
@@ -122,7 +122,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         failedTransaction.setOrganisation(Organisation.builder().id(ORGANISATION_ID).build());
         failedTransaction.setId(transactionId.getId());
         failedTransaction.setAutomatedValidationStatus(TxValidationStatus.FAILED);
-        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
+        when(accountingCoreTransactionRepository.findAllByIdAndOrganisationIdWithPessimisticLock(Set.of(transactionId.getId()), ORGANISATION_ID))
                 .thenReturn(List.of(failedTransaction));
 
         // Act
@@ -148,7 +148,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         validTransaction.setOrganisation(Organisation.builder().id(ORGANISATION_ID).build());
         validTransaction.setId(transactionId.getId());
         validTransaction.setOverallStatus(OK);
-        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
+        when(accountingCoreTransactionRepository.findAllByIdAndOrganisationIdWithPessimisticLock(Set.of(transactionId.getId()), ORGANISATION_ID))
                 .thenReturn(List.of(validTransaction));
         when(accountingCoreTransactionRepository.saveAll(List.of(validTransaction))).thenReturn(List.of(validTransaction));
 
@@ -181,9 +181,9 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         validTransaction.setId(validTransactionId.getId());
         validTransaction.setOverallStatus(OK);
 
-        // Mock findAllByIdWithPessimisticLock to return only the valid transaction
+        // Mock findAllByIdAndOrganisationIdWithPessimisticLock to return only the valid transaction
         // The failed transaction ID won't be found
-        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(validTransactionId.getId(), failedTransactionId.getId())))
+        when(accountingCoreTransactionRepository.findAllByIdAndOrganisationIdWithPessimisticLock(Set.of(validTransactionId.getId(), failedTransactionId.getId()), ORGANISATION_ID))
                 .thenReturn(List.of(validTransaction));
 
         // Act
@@ -223,7 +223,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         validTransaction.setOverallStatus(OK);
         validTransaction.setTransactionApproved(true);
 
-        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
+        when(accountingCoreTransactionRepository.findAllByIdAndOrganisationIdWithPessimisticLock(Set.of(transactionId.getId()), ORGANISATION_ID))
                 .thenReturn(List.of(validTransaction));
 
         // Act
@@ -327,7 +327,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
 
         rejectedTransaction.setItems(Set.of(transactionItemEntity));
 
-        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
+        when(accountingCoreTransactionRepository.findAllByIdAndOrganisationIdWithPessimisticLock(Set.of(transactionId.getId()), ORGANISATION_ID))
                 .thenReturn(List.of(rejectedTransaction));
 
         // Act
@@ -356,7 +356,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         unapprovedTransaction.setOverallStatus(OK);
         unapprovedTransaction.setTransactionApproved(false); // Not approved
 
-        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
+        when(accountingCoreTransactionRepository.findAllByIdAndOrganisationIdWithPessimisticLock(Set.of(transactionId.getId()), ORGANISATION_ID))
                 .thenReturn(List.of(unapprovedTransaction));
 
         // Act
@@ -442,7 +442,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         TransactionEntity transaction = new TransactionEntity();
         transaction.setId("tx_without_org");
         transaction.setOverallStatus(OK);
-        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of("tx_without_org")))
+        when(accountingCoreTransactionRepository.findAllByIdAndOrganisationIdWithPessimisticLock(Set.of("tx_without_org"), ORGANISATION_ID))
                 .thenReturn(List.of(transaction));
 
         assertThat(transactionRepositoryGateway.approveTransactions(transactionsRequest)).singleElement().satisfies(result ->
@@ -455,16 +455,27 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         TransactionsRequest transactionsRequest = new TransactionsRequest();
         transactionsRequest.setTransactionIds(Set.of(new TransactionId("tx_id")));
 
-        TransactionEntity transaction = new TransactionEntity();
-        transaction.setId("tx_id");
-        transaction.setOrganisation(Organisation.builder().id(ORGANISATION_ID).build());
-        transaction.setOverallStatus(OK);
-        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of("tx_id")))
-                .thenReturn(List.of(transaction));
-
         assertThat(transactionRepositoryGateway.approveTransactions(transactionsRequest)).singleElement().satisfies(result ->
                 assertThat(result.getLeft().getProblem().getTitle()).isEqualTo("TX_NOT_FOUND"));
-        assertThat(transaction.getTransactionApproved()).isNotEqualTo(Boolean.TRUE);
+        assertThat(transactionRepositoryGateway.approveTransactionsDispatch(transactionsRequest)).singleElement().satisfies(result ->
+                assertThat(result.getLeft().getProblem().getTitle()).isEqualTo("TX_NOT_FOUND"));
+        // nothing is looked up, so nothing is locked
+        verifyNoInteractions(accountingCoreTransactionRepository);
+    }
+
+    @Test
+    void approveTransactions_lockQueryIsScopedToTheRequestedOrganisation() {
+        // another organisation's id must not even be locked: the query itself carries the organisation
+        TransactionsRequest transactionsRequest = new TransactionsRequest();
+        transactionsRequest.setOrganisationId(ORGANISATION_ID);
+        transactionsRequest.setTransactionIds(Set.of(new TransactionId("tx_of_org_b")));
+        when(accountingCoreTransactionRepository.findAllByIdAndOrganisationIdWithPessimisticLock(Set.of("tx_of_org_b"), ORGANISATION_ID))
+                .thenReturn(List.of());
+
+        assertThat(transactionRepositoryGateway.approveTransactionsDispatch(transactionsRequest)).singleElement().satisfies(result ->
+                assertThat(result.getLeft().getProblem().getTitle()).isEqualTo("TX_NOT_FOUND"));
+        verify(accountingCoreTransactionRepository).findAllByIdAndOrganisationIdWithPessimisticLock(Set.of("tx_of_org_b"), ORGANISATION_ID);
+        verify(accountingCoreTransactionRepository, never()).findAllById(any());
     }
 
     @Test
@@ -472,7 +483,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         TransactionsRequest transactionsRequest = new TransactionsRequest();
         transactionsRequest.setOrganisationId(ORGANISATION_ID);
         transactionsRequest.setTransactionIds(Set.of(new TransactionId("tx_1"), new TransactionId("tx_2")));
-        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of("tx_1", "tx_2")))
+        when(accountingCoreTransactionRepository.findAllByIdAndOrganisationIdWithPessimisticLock(Set.of("tx_1", "tx_2"), ORGANISATION_ID))
                 .thenThrow(new DataAccessException("Lock timeout") {
                 });
 
@@ -498,7 +509,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         transaction.setId(transactionId.getId());
         transaction.setOverallStatus(OK);
 
-        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
+        when(accountingCoreTransactionRepository.findAllByIdAndOrganisationIdWithPessimisticLock(Set.of(transactionId.getId()), ORGANISATION_ID))
                 .thenReturn(List.of(transaction));
 
         // Simulate DataAccessException during saveAll
@@ -533,7 +544,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
         validTransaction.setOverallStatus(OK);
         validTransaction.setTransactionApproved(true);
 
-        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
+        when(accountingCoreTransactionRepository.findAllByIdAndOrganisationIdWithPessimisticLock(Set.of(transactionId.getId()), ORGANISATION_ID))
                 .thenReturn(List.of(validTransaction));
 
         // Simulate DataAccessException during saveAll
@@ -581,7 +592,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
 
         transaction.setItems(Set.of(itemWithRejection, validItem));
 
-        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
+        when(accountingCoreTransactionRepository.findAllByIdAndOrganisationIdWithPessimisticLock(Set.of(transactionId.getId()), ORGANISATION_ID))
                 .thenReturn(List.of(transaction));
 
         // Act
@@ -620,7 +631,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
 
         transaction.setItems(Set.of(validItem1, validItem2));
 
-        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
+        when(accountingCoreTransactionRepository.findAllByIdAndOrganisationIdWithPessimisticLock(Set.of(transactionId.getId()), ORGANISATION_ID))
                 .thenReturn(List.of(transaction));
         when(accountingCoreTransactionRepository.saveAll(List.of(transaction))).thenReturn(List.of(transaction));
 
@@ -656,7 +667,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
 
         transaction.setItems(Set.of(itemWithRejection));
 
-        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
+        when(accountingCoreTransactionRepository.findAllByIdAndOrganisationIdWithPessimisticLock(Set.of(transactionId.getId()), ORGANISATION_ID))
                 .thenReturn(List.of(transaction));
 
         // Act
@@ -691,7 +702,7 @@ class BlockchainReaderAccountingCoreTransactionRepositoryGatewayTest {
 
         transaction.setItems(Set.of(validItem));
 
-        when(accountingCoreTransactionRepository.findAllByIdWithPessimisticLock(Set.of(transactionId.getId())))
+        when(accountingCoreTransactionRepository.findAllByIdAndOrganisationIdWithPessimisticLock(Set.of(transactionId.getId()), ORGANISATION_ID))
                 .thenReturn(List.of(transaction));
 
         // Act

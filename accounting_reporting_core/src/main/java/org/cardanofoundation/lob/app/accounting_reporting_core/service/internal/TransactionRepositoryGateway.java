@@ -84,21 +84,27 @@ public class TransactionRepositoryGateway {
                 .sorted()
                 .toList();
 
+        // Only transactions of the requested organisation, the one the permission was checked in: an id of any other
+        // organisation is reported as not found, and is neither locked nor touched.
+        String organisationId = transactionsRequest.getOrganisationId();
+        if (organisationId == null || organisationId.isBlank()) {
+            return sortedTransactionIds.stream().map(FailureResponses::transactionNotFoundResponse).toList();
+        }
+
         List<TransactionEntity> lockedTransactions;
         try {
             // Lock all transactions upfront in a single query with pessimistic lock
             log.info("Attempting to acquire pessimistic locks for transactions: {}", sortedTransactionIds);
             lockedTransactions = accountingCoreTransactionRepository
-                    .findAllByIdWithPessimisticLock(new HashSet<>(sortedTransactionIds));
+                    .findAllByIdAndOrganisationIdWithPessimisticLock(new HashSet<>(sortedTransactionIds), organisationId);
             log.info("Acquired pessimistic locks for {} transactions", lockedTransactions.size());
         } catch (DataAccessException dae) {
             log.error("Error acquiring locks for transactions: {}", sortedTransactionIds, dae);
             return transactionDBErrors(sortedTransactionIds, dae);
         }
 
-        // Create lookup map for O(1) access. Only transactions of the requested organisation, the one the permission was
-        // checked in: an id of any other organisation is reported as not found and left untouched.
-        String organisationId = transactionsRequest.getOrganisationId();
+        // Create lookup map for O(1) access. The query is already scoped; the organisation is checked again so that
+        // nothing of another organisation can be approved should the query ever change.
         Map<String, TransactionEntity> transactionMap = lockedTransactions.stream()
                 .filter(tx -> tx.getOrganisation() != null && organisationId != null
                         && organisationId.equals(tx.getOrganisation().getId()))
