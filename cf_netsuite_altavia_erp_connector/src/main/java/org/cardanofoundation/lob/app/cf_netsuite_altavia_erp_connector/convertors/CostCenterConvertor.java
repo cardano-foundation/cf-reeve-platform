@@ -18,10 +18,8 @@ public class CostCenterConvertor implements Function<String, Either<ProblemDetai
     public Either<ProblemDetail, String> apply(String s) {
         val matcher = pattern.matcher(s);
 
-        if (matcher.groupCount() == 2) {
-            if (matcher.find()) {
-                return Either.right(matcher.group(1));
-            }
+        if (matcher.find()) {
+            return Either.right(matcher.group(1));
         }
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid cost center");
         problemDetail.setTitle("INVALID_COST_CENTER");

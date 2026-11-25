@@ -32,9 +32,12 @@ import org.springframework.web.filter.ShallowEtagHeaderFilter;
 
 import io.micrometer.core.aop.TimedAspect;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.apache.hc.client5.http.config.ConnectionConfig;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
 import org.apache.hc.core5.util.Timeout;
 import org.javers.core.Javers;
 import org.javers.core.JaversBuilder;
@@ -164,15 +167,22 @@ public class LobServiceApp {
 
         @Bean("netsuiteRestClient")
         public RestClient restClient() {
+            Timeout timeout = Timeout.of(Duration.ofSeconds(netsuiteClientTimeoutSeconds));
+            // The connect timeout belongs on the connection manager: the factory setter is marked for removal.
+            PoolingHttpClientConnectionManager connectionManager = PoolingHttpClientConnectionManagerBuilder.create()
+                    .setDefaultConnectionConfig(ConnectionConfig.custom()
+                            .setConnectTimeout(timeout)
+                            .build())
+                    .build();
             CloseableHttpClient httpClient = HttpClients.custom()
+                    .setConnectionManager(connectionManager)
                     .setDefaultRequestConfig(RequestConfig.custom()
-                            .setConnectionRequestTimeout(Timeout.of(Duration.ofSeconds(netsuiteClientTimeoutSeconds)))
-                            .setResponseTimeout(Timeout.of(Duration.ofSeconds(netsuiteClientTimeoutSeconds)))
+                            .setConnectionRequestTimeout(timeout)
+                            .setResponseTimeout(timeout)
                             .build())
                     .build();
 
             HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
-            factory.setConnectTimeout(Duration.ofSeconds(netsuiteClientTimeoutSeconds));
             factory.setConnectionRequestTimeout(Duration.ofSeconds(netsuiteClientTimeoutSeconds));
             return RestClient.builder()
                     .requestFactory(factory)

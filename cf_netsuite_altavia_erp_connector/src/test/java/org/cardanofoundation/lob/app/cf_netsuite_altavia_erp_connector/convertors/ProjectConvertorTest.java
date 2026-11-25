@@ -1,6 +1,6 @@
 package org.cardanofoundation.lob.app.cf_netsuite_altavia_erp_connector.convertors;
 
-import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import org.springframework.http.ProblemDetail;
 
@@ -8,6 +8,8 @@ import io.vavr.control.Either;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 
 class ProjectConvertorTest {
@@ -45,64 +47,23 @@ class ProjectConvertorTest {
         assertThat(result.get()).isEqualTo("CF 000002 2023");
     }
 
-    @Test
-    void shouldReturnLeftWhenProjectCodeIsInvalid() {
-        // Given
-        String invalidProjectCode = "Invalid Code";
-
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "Invalid Code",          // not a project code at all
+            "AN1234562023Summit",    // no separators
+            "AN 000001 999 Summit",  // year has three digits
+            "AN 000001 2023"         // missing project name
+    })
+    void shouldReturnLeftWhenProjectCodeIsInvalid(String invalidProjectCode) {
         // When
         Either<ProblemDetail, String> result = projectConvertor.apply(invalidProjectCode);
 
         // Then
         assertThat(result.isLeft()).isTrue();
-        assertThat(result.getLeft().getTitle()).isEqualTo("INVALID_PROJECT");
-        assertThat(result.getLeft().getDetail()).isEqualTo("Invalid project code");
-        assertThat(result.getLeft().getProperties().get("project")).isEqualTo(invalidProjectCode);
-    }
-
-    @Test
-    void shouldReturnLeftWhenProjectCodeHasInvalidFormat() {
-        // Given
-        String invalidProjectCode = "AN1234562023Summit";
-
-        // When
-        Either<ProblemDetail, String> result = projectConvertor.apply(invalidProjectCode);
-
-        // Then
-        assertThat(result.isLeft()).isTrue();
-        assertThat(result.getLeft().getTitle()).isEqualTo("INVALID_PROJECT");
-        assertThat(result.getLeft().getDetail()).isEqualTo("Invalid project code");
-        assertThat(result.getLeft().getProperties().get("project")).isEqualTo(invalidProjectCode);
-    }
-
-    @Test
-    void shouldReturnLeftWhenProjectCodeHasIncorrectYear() {
-        // Given
-        String invalidProjectCode = "AN 000001 999 Summit";
-
-        // When
-        Either<ProblemDetail, String> result = projectConvertor.apply(invalidProjectCode);
-
-        // Then
-        assertThat(result.isLeft()).isTrue();
-        assertThat(result.getLeft().getTitle()).isEqualTo("INVALID_PROJECT");
-        assertThat(result.getLeft().getDetail()).isEqualTo("Invalid project code");
-        assertThat(result.getLeft().getProperties().get("project")).isEqualTo(invalidProjectCode);
-    }
-
-    @Test
-    void shouldReturnLeftWhenProjectCodeIsMissingLastWord() {
-        // Given
-        String invalidProjectCode = "AN 000001 2023";
-
-        // When
-        Either<ProblemDetail, String> result = projectConvertor.apply(invalidProjectCode);
-
-        // Then
-        assertThat(result.isLeft()).isTrue();
-        assertThat(result.getLeft().getTitle()).isEqualTo("INVALID_PROJECT");
-        assertThat(result.getLeft().getDetail()).isEqualTo("Invalid project code");
-        assertThat(result.getLeft().getProperties().get("project")).isEqualTo(invalidProjectCode);
+        ProblemDetail problem = result.getLeft();
+        assertThat(problem.getTitle()).isEqualTo("INVALID_PROJECT");
+        assertThat(problem.getDetail()).isEqualTo("Invalid project code");
+        assertThat(problem.getProperties()).containsEntry("project", invalidProjectCode);
     }
 
 }

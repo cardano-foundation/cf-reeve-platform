@@ -91,8 +91,9 @@ class ApplicationYamlTest {
 
         assertThat(client)
                 .as("credentials are per-organisation in the database now")
-                .doesNotContainKeys("url", "token-url", "client-id", "certificate-id", "private-key-file-path");
-        assertThat(client).as("operator tuning stays global").containsKey("recordspercall");
+                .doesNotContainKeys("url", "token-url", "client-id", "certificate-id", "private-key-file-path")
+                .as("operator tuning stays global")
+                .containsKey("recordspercall");
     }
 
     @Test

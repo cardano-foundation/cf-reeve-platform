@@ -7,17 +7,17 @@ import lombok.val;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-public class VatConvertorTest {
+class VatConvertorTest {
 
     private VatConvertor vatConvertor;
 
     @BeforeEach
-    public void setUp() {
+    void setUp() {
         vatConvertor = new VatConvertor();
     }
 
     @Test
-    public void shouldWorkForSingle() {
+    void shouldWorkForSingle() {
         val vatCode = "CH-VMN-8.1";
 
         val result = vatConvertor.apply(vatCode);
@@ -27,7 +27,7 @@ public class VatConvertorTest {
     }
 
     @Test
-    public void shouldWorkForBroken() {
+    void shouldWorkForBroken() {
         val vatCode = "CH:aaaa:bbbb";
 
         val result = vatConvertor.apply(vatCode);
@@ -41,7 +41,7 @@ public class VatConvertorTest {
     }
 
     @Test
-    public void shouldWorkForComplex() {
+    void shouldWorkForComplex() {
         val complexVatCode = "CH-VMN-7.7 : CH-VID";
 
         val result = vatConvertor.apply(complexVatCode);

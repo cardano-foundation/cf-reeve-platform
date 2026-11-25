@@ -9,17 +9,17 @@ import io.vavr.control.Either;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-public class AccountNumberConvertorTest {
+class AccountNumberConvertorTest {
 
     private AccountNumberConvertor accountNumberConvertor;
 
     @BeforeEach
-    public void setUp() {
+    void setUp() {
         accountNumberConvertor = new AccountNumberConvertor();
     }
 
     @Test
-    public void testExtractAccountNumber_validAccountNumber() {
+    void testExtractAccountNumber_validAccountNumber() {
         String input = "2101110100 Accounts Payable : Accounts Payable CHF";
         Either<ProblemDetail, String> result = accountNumberConvertor.apply(input);
 
@@ -28,7 +28,7 @@ public class AccountNumberConvertorTest {
     }
 
     @Test
-    public void testExtractAccountNumber_validAccountNumberWithNewLine() {
+    void testExtractAccountNumber_validAccountNumberWithNewLine() {
         String input = "2102110100 UBS Corporate Credit Cards\n0000000000";
         Either<ProblemDetail, String> result = accountNumberConvertor.apply(input);
 
@@ -37,7 +37,7 @@ public class AccountNumberConvertorTest {
     }
 
     @Test
-    public void testExtractAccountNumber_noAccountNumber() {
+    void testExtractAccountNumber_noAccountNumber() {
         String input = "No account number at the beginning";
         Either<ProblemDetail, String> result = accountNumberConvertor.apply(input);
 
@@ -46,7 +46,7 @@ public class AccountNumberConvertorTest {
     }
 
     @Test
-    public void testExtractAccountNumber_emptyString() {
+    void testExtractAccountNumber_emptyString() {
         String input = "";
         Either<ProblemDetail, String> result = accountNumberConvertor.apply(input);
 
