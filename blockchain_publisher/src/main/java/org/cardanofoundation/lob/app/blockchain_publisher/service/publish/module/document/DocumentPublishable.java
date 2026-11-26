@@ -39,8 +39,13 @@ public class DocumentPublishable implements CardanoPublishable<DocumentEntity> {
     }
 
     @Override
-    public Set<DocumentEntity> findReadyToDispatch(String organisationId, int batchSize) {
-        return repositoryGateway.findDocumentsReadyToBeDispatched(organisationId, batchSize);
+    public Set<String> claimReadyToDispatch(String organisationId, int batchSize) {
+        return repositoryGateway.claimDocumentsReadyToBeDispatched(organisationId, batchSize, dispatchingStrategy());
+    }
+
+    @Override
+    public Set<DocumentEntity> loadByIds(Set<String> ids) {
+        return repositoryGateway.findAllByIdsPreservingOrder(ids);
     }
 
     @Override
@@ -78,16 +83,6 @@ public class DocumentPublishable implements CardanoPublishable<DocumentEntity> {
     @Override
     public void storeAll(Set<DocumentEntity> entities) {
         repositoryGateway.storeAll(entities);
-    }
-
-    @Override
-    public boolean supportsLocking() {
-        return true;
-    }
-
-    @Override
-    public void lock(Set<DocumentEntity> entities) {
-        repositoryGateway.lock(entities);
     }
 
     @Override

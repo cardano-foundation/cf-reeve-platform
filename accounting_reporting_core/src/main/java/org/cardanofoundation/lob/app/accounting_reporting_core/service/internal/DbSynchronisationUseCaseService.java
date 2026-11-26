@@ -9,7 +9,6 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -20,9 +19,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.OrganisationTransactions;
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.Source;
@@ -47,10 +43,6 @@ public class DbSynchronisationUseCaseService {
     private final TransactionBatchAssocRepository transactionBatchAssocRepository;
     private final TransactionBatchService transactionBatchService;
     private final ApplicationEventPublisher eventPublisher;
-    private final Cache<String, Integer> batchTransactionCountCache = CacheBuilder.newBuilder()
-            .expireAfterWrite(1, TimeUnit.MINUTES)
-            .expireAfterAccess(10, TimeUnit.MINUTES)
-            .build();
 
     @Value("${lob.blockchain-publisher.rollback.enabled:false}")
     private Optional<Boolean> rollbackEnabled;
@@ -159,16 +151,8 @@ public class DbSynchronisationUseCaseService {
         raiseViolationForAlreadyProcessedTransactions(txsAlreadyStored);
 
         storeTransactions(batchId, new OrganisationTransactions(organisationId, toProcessTransactions), flags);
-        // Atomically read, compute and write the transaction count for the batch
-        Integer totalProcessTx = batchTransactionCountCache.asMap().compute(batchId, (key, oldVal) -> {
-            int current = (oldVal == null) ? 0 : oldVal;
-            return current + toProcessTransactions.size();
-        });
-        log.info("Batch transaction count for batchId: {}, totalProcessTx: {}", batchId, totalProcessTx);
-
         eventPublisher.publishEvent(TransactionBatchChunkCommittedEvent.builder()
                 .batchId(batchId)
-                .processedTransactionCount(totalProcessTx)
                 .batchesToBeUpdated(batchesToBeUpdated)
                 .build());
 

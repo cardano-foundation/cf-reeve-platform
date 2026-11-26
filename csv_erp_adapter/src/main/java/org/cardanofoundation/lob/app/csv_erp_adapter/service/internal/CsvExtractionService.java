@@ -25,7 +25,6 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Service;
 
-import com.google.common.cache.Cache;
 import io.vavr.control.Either;
 
 import org.cardanofoundation.lob.app.accounting_reporting_core.domain.core.ExtractorType;
@@ -55,7 +54,7 @@ import org.cardanofoundation.lob.app.support.modulith.EventMetadata;
 public class CsvExtractionService {
 
     private final ApplicationEventPublisher applicationEventPublisher;
-    private final Cache<String, ExtractionData> temporaryFileCache;
+    private final CsvExtractionFileStore temporaryFileStore;
     private final SystemExtractionParametersFactory systemExtractionParametersFactory;
     @Qualifier("csvTransactionConverter")
     private final TransactionConverter transactionConverter;
@@ -140,17 +139,7 @@ public class CsvExtractionService {
             return;
         }
 
-        ExtractionData extractionData = new ExtractionData(
-                batchId,
-                organisationId,
-                user,
-                userExtractionParameters,
-                systemExtractionParameters,
-                file
-        );
-
-        temporaryFileCache.put(batchId, extractionData);
-        log.info(Constants.TEMPORARY_FILE_CACHE_SIZE_LOG, temporaryFileCache.size());
+        temporaryFileStore.put(batchId, organisationId, file);
         applicationEventPublisher.publishEvent(TransactionBatchStartedEvent.builder()
                 .metadata(EventMetadata.create(TransactionBatchStartedEvent.VERSION, user))
                 .batchId(batchId)
@@ -164,7 +153,7 @@ public class CsvExtractionService {
 
     public void continueERPExtraction(@NotBlank String batchId, @NotBlank String organisationId, @NotNull UserExtractionParameters userExtractionParameters, @NotNull SystemExtractionParameters systemExtractionParameters) {
 
-        ExtractionData extractionData = temporaryFileCache.getIfPresent(batchId);
+        ExtractionData extractionData = temporaryFileStore.take(batchId).orElse(null);
         if (extractionData == null) {
             log.error("BatchId {} not found in temporary file cache", batchId);
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(org.springframework.http.HttpStatus.NOT_FOUND, Constants.BATCH_ID + batchId);
@@ -182,9 +171,6 @@ public class CsvExtractionService {
             applicationEventPublisher.publishEvent(batchFailedEvent);
             return;
         }
-        // invalidating cache to avoid memory leak
-        temporaryFileCache.invalidate(batchId);
-        log.info(Constants.TEMPORARY_FILE_CACHE_SIZE_LOG, temporaryFileCache.size());
 
         if (!extractionData.organisationId().equals(organisationId)) {
             log.error("BatchId {} not found in temporary file cache for organisationId {}", batchId, organisationId);
@@ -290,16 +276,7 @@ public class CsvExtractionService {
 
         String reconcilationRequestId = digestAsHex(UUID.randomUUID().toString());
 
-        ExtractionData extractionData = new ExtractionData(
-                reconcilationRequestId,
-                organisationId,
-                user,
-                null,
-                null,
-                file
-        );
-        temporaryFileCache.put(reconcilationRequestId, extractionData);
-        log.info(Constants.TEMPORARY_FILE_CACHE_SIZE_LOG, temporaryFileCache.size());
+        temporaryFileStore.put(reconcilationRequestId, organisationId, file);
         applicationEventPublisher.publishEvent(ReconcilationStartedEvent.builder()
                 .metadata(EventMetadata.create(ReconcilationStartedEvent.VERSION, user))
                 .reconciliationId(reconcilationRequestId)
@@ -311,8 +288,8 @@ public class CsvExtractionService {
         );
     }
 
-    public void continueERPReconciliation(@NotBlank String reconcilationId, @NotBlank String organisationId) {
-        ExtractionData extractionData = temporaryFileCache.getIfPresent(reconcilationId);
+    public void continueERPReconciliation(@NotBlank String reconcilationId, @NotBlank String organisationId, @NotNull LocalDate from, @NotNull LocalDate to) {
+        ExtractionData extractionData = temporaryFileStore.take(reconcilationId).orElse(null);
         log.info("Continue reconcilation..., reconcilationId: {}", reconcilationId);
         if (extractionData == null) {
             log.error("NetSuite ingestion not found, reconcilationId: {}", reconcilationId);
@@ -329,9 +306,6 @@ public class CsvExtractionService {
             applicationEventPublisher.publishEvent(reconcilationFailedEvent);
             return;
         }
-        // invalidating cache to avoid memory leak
-        temporaryFileCache.invalidate(reconcilationId);
-        log.info(Constants.TEMPORARY_FILE_CACHE_SIZE_LOG, temporaryFileCache.size());
 
         if (!extractionData.organisationId().equals(organisationId)) {
             log.error("Reconcilation {} not found in temporary file cache for organisationId {}", reconcilationId, organisationId);
@@ -398,6 +372,8 @@ public class CsvExtractionService {
         List<Transaction> transactionList = transactions.get();
         ReconcilationChunkEvent.ReconcilationChunkEventBuilder reconcilationChunkEvent = ReconcilationChunkEvent.builder()
                 .metadata(EventMetadata.create(ReconcilationChunkEvent.VERSION))
+                .from(from)
+                .to(to)
                 .reconciliationId(reconcilationId)
                 .organisationId(organisationId)
                 .totalTransactionsCount(transactionList.size());

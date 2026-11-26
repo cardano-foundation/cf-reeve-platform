@@ -52,7 +52,6 @@ class AccountingCoreEventHandlerTest {
     void scheduleStatusUpdateForPrimaryBatchOfTransactionAfterCommit() {
         var event = TransactionBatchChunkCommittedEvent.builder()
                 .batchId("batch-test")
-                .processedTransactionCount(5)
                 .batchesToBeUpdated(Set.of())
                 .build();
 
@@ -60,7 +59,7 @@ class AccountingCoreEventHandlerTest {
 
         verify(transactionBatchService).updateTransactionBatchStatusAndStats(
                 "batch-test",
-                5,
+                null,
                 Optional.empty()
         );
     }
@@ -69,7 +68,6 @@ class AccountingCoreEventHandlerTest {
     void scheduleStatusUpdateForRelatedBatchesAfterCommit() {
         var event = TransactionBatchChunkCommittedEvent.builder()
                 .batchId("batch-test")
-                .processedTransactionCount(3)
                 .batchesToBeUpdated(Set.of("related-batch"))
                 .build();
 

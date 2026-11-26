@@ -3,6 +3,7 @@ package org.cardanofoundation.lob.app.csv_erp_adapter.service.internal;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -11,12 +12,12 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 
-import com.google.common.cache.Cache;
 import io.vavr.control.Either;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -48,7 +49,7 @@ class CsvExtractionServiceTest {
     @Mock
     private ApplicationEventPublisher applicationEventPublisher;
     @Mock
-    private Cache<String, ExtractionData> temporaryFileCache;
+    private CsvExtractionFileStore temporaryFileStore;
     @Mock
     private SystemExtractionParametersFactory systemExtractionParametersFactory;
     @Mock
@@ -107,7 +108,7 @@ class CsvExtractionServiceTest {
 
         csvExtractionService.startNewExtraction("orgId", "userId", userExtractionParameters, new byte[2]);
 
-        verify(temporaryFileCache).put(anyString(), any(ExtractionData.class));
+        verify(temporaryFileStore).put(anyString(), eq("orgId"), any());
         verify(applicationEventPublisher).publishEvent(any(TransactionBatchStartedEvent.class));
     }
 
@@ -116,7 +117,7 @@ class CsvExtractionServiceTest {
         UserExtractionParameters userExtractionParameters = mock(UserExtractionParameters.class);
         SystemExtractionParameters systemExtractionParameters = mock(SystemExtractionParameters.class);
 
-        when(temporaryFileCache.getIfPresent("batchId")).thenReturn(null);
+        when(temporaryFileStore.take("batchId")).thenReturn(Optional.empty());
 
         csvExtractionService.continueERPExtraction("batchId", "orgId", userExtractionParameters, systemExtractionParameters);
 
@@ -133,13 +134,12 @@ class CsvExtractionServiceTest {
         SystemExtractionParameters systemExtractionParameters = mock(SystemExtractionParameters.class);
         ExtractionData extractionData = mock(ExtractionData.class);
 
-        when(temporaryFileCache.getIfPresent("batchId")).thenReturn(extractionData);
+        when(temporaryFileStore.take("batchId")).thenReturn(Optional.of(extractionData));
         when(extractionData.organisationId()).thenReturn("differentOrgId");
 
         csvExtractionService.continueERPExtraction("batchId", "orgId", userExtractionParameters, systemExtractionParameters);
 
-        verify(temporaryFileCache).getIfPresent("batchId");
-        verify(temporaryFileCache).invalidate("batchId");
+        verify(temporaryFileStore).take("batchId");
         ArgumentCaptor<TransactionBatchFailedEvent> captor = ArgumentCaptor.forClass(TransactionBatchFailedEvent.class);
         verify(applicationEventPublisher).publishEvent(captor.capture());
         TransactionBatchFailedEvent value = captor.getValue();
@@ -153,15 +153,14 @@ class CsvExtractionServiceTest {
         SystemExtractionParameters systemExtractionParameters = mock(SystemExtractionParameters.class);
         ExtractionData extractionData = mock(ExtractionData.class);
 
-        when(temporaryFileCache.getIfPresent("batchId")).thenReturn(extractionData);
+        when(temporaryFileStore.take("batchId")).thenReturn(Optional.of(extractionData));
         when(extractionData.organisationId()).thenReturn("orgId");
         when(extractionData.file()).thenReturn(null);
         when(parser.parseCsv((byte[]) null, TransactionLine.class)).thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
 
         csvExtractionService.continueERPExtraction("batchId", "orgId", userExtractionParameters, systemExtractionParameters);
 
-        verify(temporaryFileCache).getIfPresent("batchId");
-        verify(temporaryFileCache).invalidate("batchId");
+        verify(temporaryFileStore).take("batchId");
         ArgumentCaptor<TransactionBatchFailedEvent> captor = ArgumentCaptor.forClass(TransactionBatchFailedEvent.class);
         verify(applicationEventPublisher).publishEvent(captor.capture());
         TransactionBatchFailedEvent value = captor.getValue();
@@ -175,15 +174,14 @@ class CsvExtractionServiceTest {
         SystemExtractionParameters systemExtractionParameters = mock(SystemExtractionParameters.class);
         ExtractionData extractionData = mock(ExtractionData.class);
 
-        when(temporaryFileCache.getIfPresent("batchId")).thenReturn(extractionData);
+        when(temporaryFileStore.take("batchId")).thenReturn(Optional.of(extractionData));
         when(extractionData.organisationId()).thenReturn("orgId");
         when(extractionData.file()).thenReturn(new byte[]{1,2,3});
         when(parser.parseCsv(new byte[]{1,2,3}, TransactionLine.class)).thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
 
         csvExtractionService.continueERPExtraction("batchId", "orgId", userExtractionParameters, systemExtractionParameters);
 
-        verify(temporaryFileCache).getIfPresent("batchId");
-        verify(temporaryFileCache).invalidate("batchId");
+        verify(temporaryFileStore).take("batchId");
         ArgumentCaptor<TransactionBatchFailedEvent> captor = ArgumentCaptor.forClass(TransactionBatchFailedEvent.class);
         verify(applicationEventPublisher).publishEvent(captor.capture());
         TransactionBatchFailedEvent value = captor.getValue();
@@ -198,7 +196,7 @@ class CsvExtractionServiceTest {
         ExtractionData extractionData = mock(ExtractionData.class);
         TransactionLine transactionLine = mock(TransactionLine.class);
 
-        when(temporaryFileCache.getIfPresent("batchId")).thenReturn(extractionData);
+        when(temporaryFileStore.take("batchId")).thenReturn(Optional.of(extractionData));
         when(extractionData.organisationId()).thenReturn("orgId");
         byte[] bytes = getClass()
                 .getClassLoader()
@@ -211,8 +209,7 @@ class CsvExtractionServiceTest {
 
         csvExtractionService.continueERPExtraction("batchId", "orgId", userExtractionParameters, systemExtractionParameters);
 
-        verify(temporaryFileCache).getIfPresent("batchId");
-        verify(temporaryFileCache).invalidate("batchId");
+        verify(temporaryFileStore).take("batchId");
         ArgumentCaptor<TransactionBatchFailedEvent> captor = ArgumentCaptor.forClass(TransactionBatchFailedEvent.class);
         verify(applicationEventPublisher).publishEvent(captor.capture());
         TransactionBatchFailedEvent value = captor.getValue();
@@ -228,7 +225,7 @@ class CsvExtractionServiceTest {
         Transaction transaction = mock(Transaction.class);
         TransactionLine line = mock(TransactionLine.class);
 
-        when(temporaryFileCache.getIfPresent("batchId")).thenReturn(extractionData);
+        when(temporaryFileStore.take("batchId")).thenReturn(Optional.of(extractionData));
         when(extractionData.organisationId()).thenReturn("orgId");
         byte[] bytes = new byte[2];
 
@@ -238,8 +235,7 @@ class CsvExtractionServiceTest {
 
         csvExtractionService.continueERPExtraction("batchId", "orgId", userExtractionParameters, systemExtractionParameters);
 
-        verify(temporaryFileCache).getIfPresent("batchId");
-        verify(temporaryFileCache).invalidate("batchId");
+        verify(temporaryFileStore).take("batchId");
         ArgumentCaptor<TransactionBatchChunkEvent> captor = ArgumentCaptor.forClass(TransactionBatchChunkEvent.class);
         verify(applicationEventPublisher).publishEvent(captor.capture());
         TransactionBatchChunkEvent value = captor.getValue();
@@ -257,7 +253,7 @@ class CsvExtractionServiceTest {
         ExtractionData extractionData = mock(ExtractionData.class);
         TransactionLine line = mock(TransactionLine.class);
 
-        when(temporaryFileCache.getIfPresent("batchId")).thenReturn(extractionData);
+        when(temporaryFileStore.take("batchId")).thenReturn(Optional.of(extractionData));
         when(extractionData.organisationId()).thenReturn("orgId");
         byte[] bytes = new byte[2];
 
@@ -267,8 +263,7 @@ class CsvExtractionServiceTest {
 
         csvExtractionService.continueERPExtraction("batchId", "orgId", userExtractionParameters, systemExtractionParameters);
 
-        verify(temporaryFileCache).getIfPresent("batchId");
-        verify(temporaryFileCache).invalidate("batchId");
+        verify(temporaryFileStore).take("batchId");
         ArgumentCaptor<TransactionBatchChunkEvent> captor = ArgumentCaptor.forClass(TransactionBatchChunkEvent.class);
         verify(applicationEventPublisher).publishEvent(captor.capture());
         TransactionBatchChunkEvent value = captor.getValue();
@@ -284,15 +279,15 @@ class CsvExtractionServiceTest {
 
         csvExtractionService.startNewReconciliation("orgId", "userId", null, LocalDate.EPOCH, LocalDate.EPOCH);
 
-        verify(temporaryFileCache).put(anyString(), any(ExtractionData.class));
+        verify(temporaryFileStore).put(anyString(), eq("orgId"), any());
         verify(applicationEventPublisher).publishEvent(any(ReconcilationStartedEvent.class));
     }
 
     @Test
     void continueERPReconcilation_ingestionNotFound() {
-        when(temporaryFileCache.getIfPresent("reconcilationId")).thenReturn(null);
+        when(temporaryFileStore.take("reconcilationId")).thenReturn(Optional.empty());
 
-        csvExtractionService.continueERPReconciliation("reconcilationId", "orgId");
+        csvExtractionService.continueERPReconciliation("reconcilationId", "orgId", LocalDate.EPOCH, LocalDate.EPOCH);
 
         ArgumentCaptor<ReconcilationFailedEvent> captor = ArgumentCaptor.forClass(ReconcilationFailedEvent.class);
         verify(applicationEventPublisher).publishEvent(captor.capture());
@@ -305,13 +300,12 @@ class CsvExtractionServiceTest {
     void continueERPReconcilation_organisationMismatch() {
         ExtractionData extractionData = mock(ExtractionData.class);
 
-        when(temporaryFileCache.getIfPresent("reconcilationId")).thenReturn(extractionData);
+        when(temporaryFileStore.take("reconcilationId")).thenReturn(Optional.of(extractionData));
         when(extractionData.organisationId()).thenReturn("differentOrgId");
 
-        csvExtractionService.continueERPReconciliation("reconcilationId", "orgId");
+        csvExtractionService.continueERPReconciliation("reconcilationId", "orgId", LocalDate.EPOCH, LocalDate.EPOCH);
 
-        verify(temporaryFileCache).getIfPresent("reconcilationId");
-        verify(temporaryFileCache).invalidate("reconcilationId");
+        verify(temporaryFileStore).take("reconcilationId");
         ArgumentCaptor<ReconcilationFailedEvent> captor = ArgumentCaptor.forClass(ReconcilationFailedEvent.class);
         verify(applicationEventPublisher).publishEvent(captor.capture());
         ReconcilationFailedEvent value = captor.getValue();
@@ -323,15 +317,14 @@ class CsvExtractionServiceTest {
     void continueERPReconcilation_csvParseError() {
         ExtractionData extractionData = mock(ExtractionData.class);
 
-        when(temporaryFileCache.getIfPresent("reconcilationId")).thenReturn(extractionData);
+        when(temporaryFileStore.take("reconcilationId")).thenReturn(Optional.of(extractionData));
         when(extractionData.organisationId()).thenReturn("orgId");
         when(extractionData.file()).thenReturn(null);
         when(parser.parseCsv((byte[]) null, TransactionLine.class)).thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
 
-        csvExtractionService.continueERPReconciliation("reconcilationId", "orgId");
+        csvExtractionService.continueERPReconciliation("reconcilationId", "orgId", LocalDate.EPOCH, LocalDate.EPOCH);
 
-        verify(temporaryFileCache).getIfPresent("reconcilationId");
-        verify(temporaryFileCache).invalidate("reconcilationId");
+        verify(temporaryFileStore).take("reconcilationId");
         ArgumentCaptor<ReconcilationFailedEvent> captor = ArgumentCaptor.forClass(ReconcilationFailedEvent.class);
         verify(applicationEventPublisher).publishEvent(captor.capture());
         ReconcilationFailedEvent value = captor.getValue();
@@ -343,15 +336,14 @@ class CsvExtractionServiceTest {
     void continueERPReconcilation_emptyTransactionLines() {
         ExtractionData extractionData = mock(ExtractionData.class);
 
-        when(temporaryFileCache.getIfPresent("reconcilationId")).thenReturn(extractionData);
+        when(temporaryFileStore.take("reconcilationId")).thenReturn(Optional.of(extractionData));
         when(extractionData.organisationId()).thenReturn("orgId");
         when(extractionData.file()).thenReturn(new byte[]{1,2,3});
         when(parser.parseCsv(new byte[]{1,2,3}, TransactionLine.class)).thenReturn(Either.right(List.of()));
 
-        csvExtractionService.continueERPReconciliation("reconcilationId", "orgId");
+        csvExtractionService.continueERPReconciliation("reconcilationId", "orgId", LocalDate.EPOCH, LocalDate.EPOCH);
 
-        verify(temporaryFileCache).getIfPresent("reconcilationId");
-        verify(temporaryFileCache).invalidate("reconcilationId");
+        verify(temporaryFileStore).take("reconcilationId");
         ArgumentCaptor<ReconcilationFailedEvent> captor = ArgumentCaptor.forClass(ReconcilationFailedEvent.class);
         verify(applicationEventPublisher).publishEvent(captor.capture());
         ReconcilationFailedEvent value = captor.getValue();
@@ -364,7 +356,7 @@ class CsvExtractionServiceTest {
         ExtractionData extractionData = mock(ExtractionData.class);
         TransactionLine line = mock(TransactionLine.class);
 
-        when(temporaryFileCache.getIfPresent("reconcilationId")).thenReturn(extractionData);
+        when(temporaryFileStore.take("reconcilationId")).thenReturn(Optional.of(extractionData));
         when(extractionData.organisationId()).thenReturn("orgId");
         byte[] bytes = getClass()
                 .getClassLoader()
@@ -375,10 +367,9 @@ class CsvExtractionServiceTest {
         when(parser.parseCsv(bytes, TransactionLine.class)).thenReturn(Either.right(List.of(line)));
         when(transactionConverter.convertToTransaction(any(), any(), any())).thenReturn(Either.left(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST)));
 
-        csvExtractionService.continueERPReconciliation("reconcilationId", "orgId");
+        csvExtractionService.continueERPReconciliation("reconcilationId", "orgId", LocalDate.EPOCH, LocalDate.EPOCH);
 
-        verify(temporaryFileCache).getIfPresent("reconcilationId");
-        verify(temporaryFileCache).invalidate("reconcilationId");
+        verify(temporaryFileStore).take("reconcilationId");
         ArgumentCaptor<ReconcilationFailedEvent> captor = ArgumentCaptor.forClass(ReconcilationFailedEvent.class);
         verify(applicationEventPublisher).publishEvent(captor.capture());
         ReconcilationFailedEvent value = captor.getValue();
@@ -392,7 +383,7 @@ class CsvExtractionServiceTest {
         Transaction transaction = mock(Transaction.class);
         TransactionLine line = mock(TransactionLine.class);
 
-        when(temporaryFileCache.getIfPresent("reconcilationId")).thenReturn(extractionData);
+        when(temporaryFileStore.take("reconcilationId")).thenReturn(Optional.of(extractionData));
         when(extractionData.organisationId()).thenReturn("orgId");
         byte[] bytes = getClass()
                 .getClassLoader()
@@ -403,13 +394,14 @@ class CsvExtractionServiceTest {
         when(parser.parseCsv(bytes, TransactionLine.class)).thenReturn(Either.right(List.of(line)));
         when(transactionConverter.convertToTransaction(any(), any(), any())).thenReturn(Either.right(List.of(transaction)));
 
-        csvExtractionService.continueERPReconciliation("reconcilationId", "orgId");
+        csvExtractionService.continueERPReconciliation("reconcilationId", "orgId", LocalDate.of(2025, 1, 1), LocalDate.of(2025, 12, 31));
 
-        verify(temporaryFileCache).getIfPresent("reconcilationId");
-        verify(temporaryFileCache).invalidate("reconcilationId");
+        verify(temporaryFileStore).take("reconcilationId");
         ArgumentCaptor<ReconcilationChunkEvent> captor = ArgumentCaptor.forClass(ReconcilationChunkEvent.class);
         verify(applicationEventPublisher).publishEvent(captor.capture());
         ReconcilationChunkEvent value = captor.getValue();
+        assertEquals(LocalDate.of(2025, 1, 1), value.getFrom());
+        assertEquals(LocalDate.of(2025, 12, 31), value.getTo());
         assertEquals("orgId", value.getOrganisationId());
         assertEquals("reconcilationId", value.getReconciliationId());
         assertEquals(1, value.getTransactions().size());
@@ -420,7 +412,7 @@ class CsvExtractionServiceTest {
     void continueERPReconcilation_emptyLines() throws Exception {
         ExtractionData extractionData = mock(ExtractionData.class);
         TransactionLine line = mock(TransactionLine.class);
-        when(temporaryFileCache.getIfPresent("reconcilationId")).thenReturn(extractionData);
+        when(temporaryFileStore.take("reconcilationId")).thenReturn(Optional.of(extractionData));
         when(extractionData.organisationId()).thenReturn("orgId");
         byte[] bytes = getClass()
                 .getClassLoader()
@@ -431,10 +423,9 @@ class CsvExtractionServiceTest {
         when(parser.parseCsv(bytes, TransactionLine.class)).thenReturn(Either.right(List.of(line)));
         when(transactionConverter.convertToTransaction(any(), any(), any())).thenReturn(Either.right(List.of()));
 
-        csvExtractionService.continueERPReconciliation("reconcilationId", "orgId");
+        csvExtractionService.continueERPReconciliation("reconcilationId", "orgId", LocalDate.EPOCH, LocalDate.EPOCH);
 
-        verify(temporaryFileCache).getIfPresent("reconcilationId");
-        verify(temporaryFileCache).invalidate("reconcilationId");
+        verify(temporaryFileStore).take("reconcilationId");
         ArgumentCaptor<ReconcilationChunkEvent> captor = ArgumentCaptor.forClass(ReconcilationChunkEvent.class);
         verify(applicationEventPublisher).publishEvent(captor.capture());
         ReconcilationChunkEvent value = captor.getValue();
