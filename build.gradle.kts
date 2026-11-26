@@ -63,14 +63,21 @@ allprojects {
 
 }
 
+// Deployable application modules: built and tested with the platform, but never published as libraries.
+val applicationModules = setOf("cf-application", "cf_netsuite_altavia_erp_connector")
+
 subprojects {
+    val isPublishedLibrary = project.name !in applicationModules
+
     apply(plugin = "java")
     apply(plugin = "java-library")
     apply(plugin = "io.spring.dependency-management")
     apply(plugin = "com.github.ben-manes.versions")
     apply(plugin = "info.solidsoft.pitest")
     apply(plugin = "com.diffplug.spotless")
-    apply(plugin = "maven-publish")
+    if (isPublishedLibrary) {
+        apply(plugin = "maven-publish")
+    }
     apply(plugin = "jacoco")
     apply(plugin = "org.sonarqube")
 
@@ -87,8 +94,10 @@ subprojects {
 
     java {
         sourceCompatibility = VERSION_21
-        withJavadocJar()
-        withSourcesJar()
+        if (isPublishedLibrary) {
+            withJavadocJar()
+            withSourcesJar()
+        }
     }
 
     tasks.withType<JavaCompile> {
@@ -269,66 +278,64 @@ subprojects {
         //mutationThreshold.set(20)
     }
 
-    publishing {
-        publications {
-            create<MavenPublication>("mavenJava") {
-                from(components["java"])
-                artifactId = "cf-lob-platform-" + project.name
-                pom {
-                    name = project.name
-                    description = "Reeve, also known as Ledger on the Blockchain (LOB), empowers organizations to securely record and share critical financial data on the Cardano blockchain, ensuring its integrity and verifiability for all stakeholders."
-                    url = "https://github.com/cardano-foundation/cf-reeve-platform/"
-                    licenses {
-                        license {
-                            name = "Apache License 2.0"
-                            url = "https://www.apache.org/licenses/LICENSE-2.0"
-                        }
-                    }
-                    developers {
-                        developer {
-                            id = "CF"
-                            name = "Cardano Foundation"
-                        }
-                    }
-                    scm {
-                        connection = "scm:git:git://github.com/cardano-foundation/cf-reeve-platform/"
-                        developerConnection = "scm:git:ssh://git@github.com:cardano-foundation/cf-reeve-platform.git"
+    if (isPublishedLibrary) {
+        publishing {
+            publications {
+                create<MavenPublication>("mavenJava") {
+                    from(components["java"])
+                    artifactId = "cf-lob-platform-" + project.name
+                    pom {
+                        name = project.name
+                        description = "Reeve, also known as Ledger on the Blockchain (LOB), empowers organizations to securely record and share critical financial data on the Cardano blockchain, ensuring its integrity and verifiability for all stakeholders."
                         url = "https://github.com/cardano-foundation/cf-reeve-platform/"
+                        licenses {
+                            license {
+                                name = "Apache License 2.0"
+                                url = "https://www.apache.org/licenses/LICENSE-2.0"
+                            }
+                        }
+                        developers {
+                            developer {
+                                id = "CF"
+                                name = "Cardano Foundation"
+                            }
+                        }
+                        scm {
+                            connection = "scm:git:git://github.com/cardano-foundation/cf-reeve-platform/"
+                            developerConnection = "scm:git:ssh://git@github.com:cardano-foundation/cf-reeve-platform.git"
+                            url = "https://github.com/cardano-foundation/cf-reeve-platform/"
+                        }
                     }
                 }
             }
-        }
 
-        repositories {
-            // Aggregate release in local build directory which jrelease uses to deploy to Maven Central.
-            maven {
-                name = "build"
-                url = uri(File(rootProject.projectDir.path, "build/staging-deploy"))
-            }
-            maven {
-                name = "localM2"
-                url = uri("${System.getProperty("user.home")}/.m2/repository")
-            }
-            maven {
-                name = "localApplicationM2"
-                url = uri("${System.getenv("APPLICATION_PATH")}/.m2/repository")
-            }
-            if (!System.getenv("GITLAB_MAVEN_REGISTRY_URL").isNullOrBlank()) {
+            repositories {
+                // Aggregate release in local build directory which jrelease uses to deploy to Maven Central.
                 maven {
-                    name = "gitlabPrivate"
-                    url = uri(System.getenv("GITLAB_MAVEN_REGISTRY_URL") ?: "")
-                    credentials(HttpHeaderCredentials::class) {
-                        name = "PRIVATE-TOKEN"
-                        value = System.getenv("GITLAB_MAVEN_REGISTRY_PASS") ?: ""
-                    }
-                    authentication {
-                        val header by registering(HttpHeaderAuthentication::class)
+                    name = "build"
+                    url = uri(File(rootProject.projectDir.path, "build/staging-deploy"))
+                }
+                maven {
+                    name = "localM2"
+                    url = uri("${System.getProperty("user.home")}/.m2/repository")
+                }
+                if (!System.getenv("GITLAB_MAVEN_REGISTRY_URL").isNullOrBlank()) {
+                    maven {
+                        name = "gitlabPrivate"
+                        url = uri(System.getenv("GITLAB_MAVEN_REGISTRY_URL") ?: "")
+                        credentials(HttpHeaderCredentials::class) {
+                            name = "PRIVATE-TOKEN"
+                            value = System.getenv("GITLAB_MAVEN_REGISTRY_PASS") ?: ""
+                        }
+                        authentication {
+                            val header by registering(HttpHeaderAuthentication::class)
+                        }
                     }
                 }
             }
         }
-    }
 
+    }
 }
 
 project.logger.lifecycle("*** Build version: " + version)

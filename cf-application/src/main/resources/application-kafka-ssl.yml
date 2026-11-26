@@ -1,0 +1,11 @@
+spring:
+  kafka:
+    bootstrap-servers: kafka:9093
+    properties:
+      security.protocol: SSL
+#      ssl.endpoint.identification.algorithm: "" # Disable hostname verification
+#      ssl.truststore.location: /etc/kafka/secrets/kafka.truststore.jks
+#      ssl.truststore.password: ${KAFKA_SSL_TRUSTSTORE_PASSWORD:-password}
+#      ssl.keystore.location: /etc/kafka/secrets/kafka.keystore.jks
+#      ssl.keystore.password: ${KAFKA_SSL_KEYSTORE_PASSWORD:-password}
+#      ssl.key.password: ${KAFKA_SSL_KEY_PASSWORD:-password}

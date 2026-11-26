@@ -20,5 +20,8 @@ include (
  ":notification_gateway",
  ":organisation",
  ":reporting",
- ":funding"
+ ":funding",
+ // Deployable application (not published to Maven Central)
+ ":cf_netsuite_altavia_erp_connector",
+ ":cf-application"
 )

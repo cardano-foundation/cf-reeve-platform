@@ -1,0 +1,34 @@
+lob:
+  blockchain_reader:
+    enabled: true
+  accounting_reporting_core:
+    enabled: true
+  organisation:
+    enabled: true
+  blockchain_publisher:
+    enabled: true
+  reporting:
+    enabled: true
+  netsuite:
+    enabled: true
+    client:
+      url: http://localhost:9000/api/v1/mockresult
+      # certificate_id: ${LOB_NETSUITE_CLIENT_CERTIFICATE_ID:-<enter value>}
+      # client_id: ${LOB_NETSUITE_CLIENT_CLIENT_ID:-<enter value>}
+      # private_key_file_path: ${LOB_NETSUITE_CLIENT_PRIVATE_KEY_FILE_PATH:-/tmp/dummy.pem}
+      # token_url: ${LOB_NETSUITE_CLIENT_TOKEN_URL:-<enter value>}
+      # recordspercall: 1000
+  csv:
+    enabled: true
+  mock-result-path: src/main/resources/db/migration/postgresql/cf-reeve-db-migrations/NetSuiteIngestionMock.json
+spring:
+  kafka:
+    enabled: false
+  flyway:
+    locations:
+      - classpath:db/migration/{vendor}/common
+      - classpath:db/migration/{vendor}/prod
+      - classpath:db/migration/{vendor}/dev
+      - classpath:db/migration/{vendor}/cf-reeve-db-migrations/common
+      - classpath:db/migration/{vendor}/cf-reeve-db-migrations/prod
+      - classpath:db/migration/{vendor}/cf-reeve-db-migrations/dev

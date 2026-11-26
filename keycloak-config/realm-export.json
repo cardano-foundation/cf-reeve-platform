@@ -1,0 +1,2373 @@
+[
+  {
+    "id": "master",
+    "sslRequired": "none",
+    "enabled": true,
+    "realm": "master",
+    "loginTheme": "reeve_v7"
+  },
+  {
+    "realm": "reeve-master",
+    "sslRequired": "none",
+    "enabled": true,
+    "displayName": "Reeve",
+    "browserSecurityHeaders": {
+      "contentSecurityPolicy": "frame-src 'self'; frame-ancestors 'self' *; object-src 'none';"
+    },
+    "passwordPolicy": "length(8) and upperCase(1) and lowerCase(1) and specialChars(1) and notUsername() and digits(1)",
+    "accessTokenLifespan": 1800,
+    "accessTokenLifespanForImplicitFlow": 900,
+    "ssoSessionIdleTimeout": 1800,
+    "ssoSessionMaxLifespan": 36000,
+    "accessCodeLifespanUserAction": 1800,
+    "accessCodeLifespanLogin": 1800,
+    "actionTokenGeneratedByAdminLifespan": 43200,
+    "actionTokenGeneratedByUserLifespan": 1800,
+    "oauth2DeviceCodeLifespan": 1800,
+    "loginWithEmailAllowed": true,
+    "resetPasswordAllowed": true,
+    "components": {
+      "org.keycloak.userprofile.UserProfileProvider": [
+        {
+          "providerId": "declarative-user-profile",
+          "config": {
+            "kc.user.profile.config": [
+              "{\"attributes\": [{\"name\": \"username\", \"displayName\": \"${username}\", \"validations\": {\"length\": {\"min\": 3, \"max\": 255}, \"username-prohibited-characters\": {}, \"up-username-not-idn-homograph\": {}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"email\", \"displayName\": \"${email}\", \"validations\": {\"email\": {}, \"length\": {\"max\": 255}}, \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"firstName\", \"displayName\": \"${firstName}\", \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}, \"annotations\": {}, \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"lastName\", \"displayName\": \"${lastName}\", \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}, \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"phone\", \"displayName\": \"${phone}\", \"validations\": {}, \"annotations\": {}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"job\", \"displayName\": \"${job}\", \"validations\": {}, \"annotations\": {}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}], \"groups\": [{\"name\": \"user-metadata\", \"displayHeader\": \"User metadata\", \"displayDescription\": \"Attributes, which refer to user metadata\"}]}"
+            ]
+          }
+        }
+      ]
+    },
+    "users": [
+      {
+        "username": "auditor",
+        "email": "auditor@reeve.technology",
+        "firstName": "Reeve",
+        "lastName": "Auditor",
+        "enabled": true,
+        "emailVerified": true,
+        "credentials": [
+          {
+            "type": "password",
+            "value": "CF-aud123",
+            "temporary": true
+          }
+        ],
+        "attributes": {
+          "JobTitle": "Auditor",
+          "PhoneNumber": "+123456789"
+        },
+        "groups": [
+          "/organisations/Cardano Foundation/transactions",
+          "/organisations/Cardano Foundation/reporting",
+          "/organisations/Cardano Foundation/funding",
+          "/organisations/Cardano Foundation/document_vault/editor"
+        ]
+      },
+      {
+        "username": "accountant",
+        "email": "accountant@reeve.technology",
+        "firstName": "Reeve",
+        "lastName": "Accountant",
+        "enabled": true,
+        "emailVerified": true,
+        "credentials": [
+          {
+            "type": "password",
+            "value": "CF-acc123",
+            "temporary": true
+          }
+        ],
+        "attributes": {
+          "JobTitle": "Accountant",
+          "PhoneNumber": "+123456789"
+        },
+        "groups": [
+          "/organisations/Cardano Foundation/transactions/setup",
+          "/organisations/Cardano Foundation/transactions/importer",
+          "/organisations/Cardano Foundation/transactions/reviewer",
+          "/organisations/Cardano Foundation/transactions/reconciler",
+          "/organisations/Cardano Foundation/reporting/editor",
+          "/organisations/Cardano Foundation/funding/event_editor",
+          "/organisations/Cardano Foundation/funding/setup",
+          "/organisations/Cardano Foundation/document_vault/editor"
+        ]
+      },
+      {
+        "username": "manager",
+        "email": "manager@reeve.technology",
+        "firstName": "Reeve",
+        "lastName": "Manager",
+        "enabled": true,
+        "emailVerified": true,
+        "credentials": [
+          {
+            "type": "password",
+            "value": "CF-man123",
+            "temporary": true
+          }
+        ],
+        "attributes": {
+          "JobTitle": "Account Manager",
+          "PhoneNumber": "+987654321"
+        },
+        "groups": [
+          "/organisations/Cardano Foundation/org_admin",
+          "/organisations/Cardano Foundation/transactions/reconciler",
+          "/organisations/Cardano Foundation/transactions/importer",
+          "/organisations/Cardano Foundation/transactions/reviewer",
+          "/organisations/Cardano Foundation/transactions/publisher",
+          "/organisations/Cardano Foundation/transactions/dashboard_editor",
+          "/organisations/Cardano Foundation/transactions/setup/erp",
+          "/organisations/Cardano Foundation/reporting/editor",
+          "/organisations/Cardano Foundation/reporting/publisher",
+          "/organisations/Cardano Foundation/reporting/setup",
+          "/organisations/Cardano Foundation/funding/event_editor",
+          "/organisations/Cardano Foundation/funding/project_manager",
+          "/organisations/Cardano Foundation/funding/publisher",
+          "/organisations/Cardano Foundation/funding/setup",
+          "/organisations/Cardano Foundation/document_vault/editor",
+          "/organisations/Cardano Foundation/document_vault/publisher",
+          "/platform/administrators"
+        ]
+      },
+      {
+        "username": "admin",
+        "email": "admin@reeve.technology",
+        "firstName": "Reeve",
+        "lastName": "Admin",
+        "enabled": true,
+        "emailVerified": true,
+        "credentials": [
+          {
+            "type": "password",
+            "value": "CF-adm123",
+            "temporary": true
+          }
+        ],
+        "attributes": {
+          "JobTitle": "Administrator",
+          "PhoneNumber": "+987654321"
+        },
+        "groups": [
+          "/organisations/Cardano Foundation/org_admin",
+          "/organisations/Cardano Foundation/transactions/setup/erp",
+          "/organisations/Cardano Foundation/transactions/importer",
+          "/organisations/Cardano Foundation/transactions/reviewer",
+          "/organisations/Cardano Foundation/transactions/reconciler",
+          "/organisations/Cardano Foundation/transactions/publish_viewer",
+          "/organisations/Cardano Foundation/reporting/setup",
+          "/organisations/Cardano Foundation/reporting/publish_viewer",
+          "/organisations/Cardano Foundation/funding/project_manager",
+          "/organisations/Cardano Foundation/funding/event_editor",
+          "/organisations/Cardano Foundation/funding/publisher",
+          "/organisations/Cardano Foundation/funding/setup",
+          "/organisations/Cardano Foundation/document_vault/editor",
+          "/organisations/Cardano Foundation/document_vault/publisher",
+          "/organisations/Cardano Foundation/document_vault/admin",
+          "/platform/administrators"
+        ]
+      },
+      {
+        "username": "service-account-reeve-backend",
+        "enabled": true,
+        "serviceAccountClientId": "reeve-backend",
+        "clientRoles": {
+          "realm-management": [
+            "view-users",
+            "query-groups",
+            "view-clients",
+            "view-realm",
+            "manage-users"
+          ]
+        }
+      }
+    ],
+    "clients": [
+      {
+        "clientId": "reeve-api",
+        "name": "Reeve API",
+        "enabled": true,
+        "protocol": "openid-connect",
+        "bearerOnly": true,
+        "standardFlowEnabled": false,
+        "implicitFlowEnabled": false,
+        "directAccessGrantsEnabled": false,
+        "serviceAccountsEnabled": false,
+        "publicClient": false
+      },
+      {
+        "clientId": "webclient",
+        "enabled": true,
+        "protocol": "openid-connect",
+        "redirectUris": [
+          "http://localhost:9000/*",
+          "http://api.reeve.localhost/*",
+          "http://localhost:3000/*",
+          "http://reeve.localhost/*"
+        ],
+        "webOrigins": [
+          "http://localhost:9000",
+          "http://api.reeve.localhost",
+          "http://localhost:3000",
+          "http://reeve.localhost"
+        ],
+        "adminUrl": "http://localhost:8080",
+        "rootUrl": "http://localhost:3000",
+        "baseUrl": "http://localhost:3000",
+        "attributes": {
+          "realm_client": "false",
+          "oidc.ciba.grant.enabled": "false",
+          "backchannel.logout.session.required": "true",
+          "post.logout.redirect.uris": "http://localhost:3000/*##http://localhost:3000/auth/login/",
+          "display.on.consent.screen": "false",
+          "oauth2.device.authorization.grant.enabled": "true",
+          "backchannel.logout.revoke.offline.tokens": "false"
+        },
+        "bearerOnly": false,
+        "consentRequired": false,
+        "standardFlowEnabled": true,
+        "implicitFlowEnabled": true,
+        "directAccessGrantsEnabled": true,
+        "serviceAccountsEnabled": false,
+        "publicClient": true,
+        "surrogateAuthRequired": false,
+        "defaultClientScopes": [
+          "web-origins",
+          "acr",
+          "phone",
+          "profile",
+          "organization",
+          "roles",
+          "basic",
+          "email"
+        ],
+        "fullScopeAllowed": false
+      },
+      {
+        "clientId": "reeve-backend",
+        "name": "Reeve backend",
+        "description": "Service account the backend uses to read organisations, roles and modules",
+        "enabled": true,
+        "protocol": "openid-connect",
+        "publicClient": false,
+        "clientAuthenticatorType": "client-secret",
+        "secret": "reeve-backend-dev-secret",
+        "serviceAccountsEnabled": true,
+        "standardFlowEnabled": false,
+        "implicitFlowEnabled": false,
+        "directAccessGrantsEnabled": false,
+        "defaultClientScopes": [
+          "basic",
+          "roles",
+          "kc-admin-api"
+        ]
+      }
+    ],
+    "clientScopes": [
+      {
+        "name": "kc-admin-api",
+        "description": "Grants access to the Keycloak Admin REST API by adding its required audience to the token",
+        "protocol": "openid-connect",
+        "attributes": {
+          "include.in.token.scope": "true",
+          "display.on.consent.screen": "false"
+        },
+        "protocolMappers": [
+          {
+            "name": "admin-api-audience",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-admin-api-audience-mapper",
+            "consentRequired": false,
+            "config": {
+              "lightweight.claim": "true",
+              "introspection.token.claim": "true",
+              "access.token.claim": "true"
+            }
+          }
+        ]
+      },
+      {
+        "name": "basic",
+        "description": "OpenID Connect scope for add all basic claims to the token",
+        "protocol": "openid-connect",
+        "attributes": {
+          "include.in.token.scope": "false",
+          "display.on.consent.screen": "false"
+        },
+        "protocolMappers": [
+          {
+            "name": "sub",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-sub-mapper",
+            "consentRequired": false,
+            "config": {
+              "introspection.token.claim": "true",
+              "access.token.claim": "true"
+            }
+          },
+          {
+            "name": "auth_time",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-usersessionmodel-note-mapper",
+            "consentRequired": false,
+            "config": {
+              "user.session.note": "AUTH_TIME",
+              "introspection.token.claim": "true",
+              "id.token.claim": "true",
+              "access.token.claim": "true",
+              "claim.name": "auth_time",
+              "jsonType.label": "long"
+            }
+          }
+        ]
+      },
+      {
+        "name": "roles",
+        "description": "OpenID Connect scope for add user roles to the access token",
+        "protocol": "openid-connect",
+        "attributes": {
+          "include.in.token.scope": "false",
+          "consent.screen.text": "${rolesScopeConsentText}",
+          "display.on.consent.screen": "true"
+        },
+        "protocolMappers": [
+          {
+            "id": "f10300c3-1e78-40ea-9b28-4cd55726e5a0",
+            "name": "audience resolve",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-audience-resolve-mapper",
+            "consentRequired": false,
+            "config": {
+              "introspection.token.claim": "true",
+              "access.token.claim": "true"
+            }
+          },
+          {
+            "id": "4c3a88be-dff5-4d56-a40c-94ea9013f6ab",
+            "name": "reeve api audience",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-audience-mapper",
+            "consentRequired": false,
+            "config": {
+              "included.client.audience": "reeve-api",
+              "introspection.token.claim": "true",
+              "access.token.claim": "true"
+            }
+          },
+          {
+            "id": "278b4e47-bf90-478a-8064-fc445a7e9e6d",
+            "name": "spring security roles",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-usermodel-realm-role-mapper",
+            "consentRequired": false,
+            "config": {
+              "user.attribute": "foo",
+              "introspection.token.claim": "true",
+              "access.token.claim": "true",
+              "claim.name": "roles",
+              "jsonType.label": "String",
+              "multivalued": "true"
+            }
+          },
+          {
+            "id": "d875e258-5037-45e9-bfe1-19f44fc4e329",
+            "name": "realm roles",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-usermodel-realm-role-mapper",
+            "consentRequired": false,
+            "config": {
+              "user.attribute": "foo",
+              "introspection.token.claim": "true",
+              "access.token.claim": "true",
+              "claim.name": "realm_access.roles",
+              "jsonType.label": "String",
+              "multivalued": "true"
+            }
+          },
+          {
+            "id": "79ab3e45-01e8-4784-af0a-e491a5b6a423",
+            "name": "client roles",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-usermodel-client-role-mapper",
+            "consentRequired": false,
+            "config": {
+              "user.attribute": "foo",
+              "introspection.token.claim": "true",
+              "access.token.claim": "true",
+              "claim.name": "resource_access.${client_id}.roles",
+              "jsonType.label": "String",
+              "multivalued": "true"
+            }
+          }
+        ]
+      },
+      {
+        "id": "dba3fe10-0b33-4203-b05a-91619cf4d63b",
+        "name": "profile",
+        "description": "OpenID Connect built-in scope: profile",
+        "protocol": "openid-connect",
+        "attributes": {
+          "include.in.token.scope": "true",
+          "consent.screen.text": "${profileScopeConsentText}",
+          "display.on.consent.screen": "true"
+        },
+        "protocolMappers": [
+          {
+            "id": "9b91eccc-20e9-457c-8eed-dd0bfde65e8f",
+            "name": "website",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-usermodel-attribute-mapper",
+            "consentRequired": false,
+            "config": {
+              "introspection.token.claim": "true",
+              "userinfo.token.claim": "true",
+              "user.attribute": "website",
+              "id.token.claim": "true",
+              "access.token.claim": "true",
+              "claim.name": "website",
+              "jsonType.label": "String"
+            }
+          },
+          {
+            "id": "32606c43-2fe7-4c73-a932-9e9cd1fb7e8b",
+            "name": "locale",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-usermodel-attribute-mapper",
+            "consentRequired": false,
+            "config": {
+              "introspection.token.claim": "true",
+              "userinfo.token.claim": "true",
+              "user.attribute": "locale",
+              "id.token.claim": "true",
+              "access.token.claim": "true",
+              "claim.name": "locale",
+              "jsonType.label": "String"
+            }
+          },
+          {
+            "id": "d219b498-d678-4478-a001-eed7c136e929",
+            "name": "full name",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-full-name-mapper",
+            "consentRequired": false,
+            "config": {
+              "id.token.claim": "true",
+              "introspection.token.claim": "true",
+              "access.token.claim": "true",
+              "userinfo.token.claim": "true"
+            }
+          },
+          {
+            "id": "b2f63448-554c-4fc3-8c4d-3a696a6b7e8f",
+            "name": "profile",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-usermodel-attribute-mapper",
+            "consentRequired": false,
+            "config": {
+              "introspection.token.claim": "true",
+              "userinfo.token.claim": "true",
+              "user.attribute": "profile",
+              "id.token.claim": "true",
+              "access.token.claim": "true",
+              "claim.name": "profile",
+              "jsonType.label": "String"
+            }
+          },
+          {
+            "id": "24067350-0335-400b-bc39-85e44869ea23",
+            "name": "given name",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-usermodel-attribute-mapper",
+            "consentRequired": false,
+            "config": {
+              "introspection.token.claim": "true",
+              "userinfo.token.claim": "true",
+              "user.attribute": "firstName",
+              "id.token.claim": "true",
+              "access.token.claim": "true",
+              "claim.name": "given_name",
+              "jsonType.label": "String"
+            }
+          },
+          {
+            "id": "30d3947b-4383-42a3-9b7e-1c32d6fd5b73",
+            "name": "middle name",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-usermodel-attribute-mapper",
+            "consentRequired": false,
+            "config": {
+              "introspection.token.claim": "true",
+              "userinfo.token.claim": "true",
+              "user.attribute": "middleName",
+              "id.token.claim": "true",
+              "access.token.claim": "true",
+              "claim.name": "middle_name",
+              "jsonType.label": "String"
+            }
+          },
+          {
+            "id": "5a0b66d1-60e2-43a7-b7d4-a92a6b20d42e",
+            "name": "updated at",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-usermodel-attribute-mapper",
+            "consentRequired": false,
+            "config": {
+              "introspection.token.claim": "true",
+              "userinfo.token.claim": "true",
+              "user.attribute": "updatedAt",
+              "id.token.claim": "true",
+              "access.token.claim": "true",
+              "claim.name": "updated_at",
+              "jsonType.label": "long"
+            }
+          },
+          {
+            "id": "1e8edf32-f938-45a2-b6b9-48b763f29118",
+            "name": "picture",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-usermodel-attribute-mapper",
+            "consentRequired": false,
+            "config": {
+              "introspection.token.claim": "true",
+              "userinfo.token.claim": "true",
+              "user.attribute": "picture",
+              "id.token.claim": "true",
+              "access.token.claim": "true",
+              "claim.name": "picture",
+              "jsonType.label": "String"
+            }
+          },
+          {
+            "id": "13423ef7-fa3b-428a-89b3-4432d2e8cdc3",
+            "name": "birthdate",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-usermodel-attribute-mapper",
+            "consentRequired": false,
+            "config": {
+              "introspection.token.claim": "true",
+              "userinfo.token.claim": "true",
+              "user.attribute": "birthdate",
+              "id.token.claim": "true",
+              "access.token.claim": "true",
+              "claim.name": "birthdate",
+              "jsonType.label": "String"
+            }
+          },
+          {
+            "id": "9edd9021-aa15-488f-a929-e09cc9b050b1",
+            "name": "nickname",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-usermodel-attribute-mapper",
+            "consentRequired": false,
+            "config": {
+              "introspection.token.claim": "true",
+              "userinfo.token.claim": "true",
+              "user.attribute": "nickname",
+              "id.token.claim": "true",
+              "access.token.claim": "true",
+              "claim.name": "nickname",
+              "jsonType.label": "String"
+            }
+          },
+          {
+            "id": "b586c3b1-1ec0-4d46-b35d-784d18a8f157",
+            "name": "zoneinfo",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-usermodel-attribute-mapper",
+            "consentRequired": false,
+            "config": {
+              "introspection.token.claim": "true",
+              "userinfo.token.claim": "true",
+              "user.attribute": "zoneinfo",
+              "id.token.claim": "true",
+              "access.token.claim": "true",
+              "claim.name": "zoneinfo",
+              "jsonType.label": "String"
+            }
+          },
+          {
+            "id": "9f40c3b7-119a-4b6c-9f93-549e661eb71e",
+            "name": "family name",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-usermodel-attribute-mapper",
+            "consentRequired": false,
+            "config": {
+              "introspection.token.claim": "true",
+              "userinfo.token.claim": "true",
+              "user.attribute": "lastName",
+              "id.token.claim": "true",
+              "access.token.claim": "true",
+              "claim.name": "family_name",
+              "jsonType.label": "String"
+            }
+          },
+          {
+            "id": "e5874a8c-17e1-421b-ba21-039e9971a97b",
+            "name": "username",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-usermodel-attribute-mapper",
+            "consentRequired": false,
+            "config": {
+              "introspection.token.claim": "true",
+              "userinfo.token.claim": "true",
+              "user.attribute": "username",
+              "id.token.claim": "true",
+              "access.token.claim": "true",
+              "claim.name": "preferred_username",
+              "jsonType.label": "String"
+            }
+          },
+          {
+            "id": "e786cae2-a5ee-4836-b4c6-3911bdba3c1a",
+            "name": "gender",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-usermodel-attribute-mapper",
+            "consentRequired": false,
+            "config": {
+              "introspection.token.claim": "true",
+              "userinfo.token.claim": "true",
+              "user.attribute": "gender",
+              "id.token.claim": "true",
+              "access.token.claim": "true",
+              "claim.name": "gender",
+              "jsonType.label": "String"
+            }
+          }
+        ]
+      }
+    ],
+    "roles": {
+      "realm": [
+        {
+          "name": "org_member",
+          "description": "Member of the organisation: organisation details and settings, read-only. Assigned on the organisation group, so every member has it.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "settings:view",
+                "organization:view",
+                "organization_details:view",
+                "currencies:view"
+              ]
+            }
+          }
+        },
+        {
+          "name": "org_admin",
+          "description": "Edit the organisation details and currencies.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "organization_details:edit",
+                "currencies:create",
+                "currencies:edit"
+              ]
+            }
+          }
+        },
+        {
+          "name": "transactions_viewer",
+          "description": "Transactions module: transactions, batches, reconciliation status, data explorer, setup data, read-only.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "transactions:view",
+                "transactions:export",
+                "transactions:batches_view",
+                "transactions:reconcilate_view",
+                "data_explorer:view",
+                "data_explorer:dashboard_view",
+                "data_explorer:search_view",
+                "chart_of_accounts:view",
+                "event_codes:view",
+                "cost_centers:view",
+                "projects:view",
+                "vat_codes:view",
+                "export_setup_data:view"
+              ]
+            }
+          }
+        },
+        {
+          "name": "transactions_setup",
+          "description": "Transactions module: configure chart of accounts, event/reference codes, cost centers, project codes, VAT codes, currencies; import/export setup data.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "chart_of_accounts:create",
+                "chart_of_accounts:edit",
+                "event_codes:create",
+                "event_codes:edit",
+                "cost_centers:create",
+                "cost_centers:edit",
+                "projects:create",
+                "projects:edit",
+                "vat_codes:create",
+                "vat_codes:edit",
+                "currencies:create",
+                "currencies:edit",
+                "organization_setup:view",
+                "organization_setup:import",
+                "export_setup_data:download"
+              ]
+            }
+          }
+        },
+        {
+          "name": "transactions_erp",
+          "description": "Transactions module: configure the ERP (NetSuite) connection.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "netsuite_configuration:view",
+                "netsuite_configuration:create",
+                "netsuite_configuration:edit"
+              ]
+            }
+          }
+        },
+        {
+          "name": "transactions_importer",
+          "description": "Transactions module: import/extract from the ERP and reprocess batches.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "transactions:import_view",
+                "transactions:import",
+                "transactions:batches_reprocess"
+              ]
+            }
+          }
+        },
+        {
+          "name": "transactions_reviewer",
+          "description": "Transactions module: review (approve/reject) transactions.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "transactions:review_view",
+                "transactions:review_approve",
+                "transactions:review_reject"
+              ]
+            }
+          }
+        },
+        {
+          "name": "transactions_reconciler",
+          "description": "Transactions module: run the reconciliation.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "transactions:reconcilate"
+              ]
+            }
+          }
+        },
+        {
+          "name": "transactions_publisher",
+          "description": "Transactions module: publish (approve/reject) transactions.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "transactions:publish_view",
+                "transactions:publish_approve",
+                "transactions:publish_reject",
+                "transactions:review_reject"
+              ]
+            }
+          }
+        },
+        {
+          "name": "transactions_publish_viewer",
+          "description": "Transactions: see the publish queue, without approving anything",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "transactions:publish_view"
+              ]
+            }
+          }
+        },
+        {
+          "name": "transactions_dashboard_editor",
+          "description": "Transactions: create and edit data explorer dashboards",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "data_explorer:dashboard_create",
+                "data_explorer:dashboard_edit"
+              ]
+            }
+          }
+        },
+        {
+          "name": "reports_viewer",
+          "description": "Reporting module: reports, templates, chart of accounts and report standards, read-only.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "reports:view",
+                "report_templates:view",
+                "report_types:view",
+                "chart_of_accounts:view",
+                "event_codes:view",
+                "report_standards:view"
+              ]
+            }
+          }
+        },
+        {
+          "name": "reports_setup",
+          "description": "Reporting module: configure report standards and report type field mappings.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "report_standards:create",
+                "report_standards:edit",
+                "report_types:edit"
+              ]
+            }
+          }
+        },
+        {
+          "name": "reports_editor",
+          "description": "Reporting module: create, edit, generate and delete reports and report templates.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "reports:create",
+                "reports:edit",
+                "reports:delete",
+                "reports:preview",
+                "report_templates:create",
+                "report_templates:edit",
+                "report_templates:delete",
+                "report_types:edit"
+              ]
+            }
+          }
+        },
+        {
+          "name": "reports_publisher",
+          "description": "Reporting module: publish/reject reports.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "reports:publish_view",
+                "reports:publish",
+                "reports:reject"
+              ]
+            }
+          }
+        },
+        {
+          "name": "reports_publish_viewer",
+          "description": "Reporting: see the publish queue, without approving anything",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "reports:publish_view"
+              ]
+            }
+          }
+        },
+        {
+          "name": "document_vault_viewer",
+          "description": "Document vault module: documents, keys, recipients and contacts, read-only.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "document_vault:view"
+              ]
+            }
+          }
+        },
+        {
+          "name": "document_vault_editor",
+          "description": "Document vault module: upload documents, manage keys and contacts, delete own drafts.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "document_vault:create",
+                "document_vault:edit",
+                "document_vault:delete"
+              ]
+            }
+          }
+        },
+        {
+          "name": "document_vault_publisher",
+          "description": "Document vault module: publish documents on-chain and attest them with KERI.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "document_vault:publish"
+              ]
+            }
+          }
+        },
+        {
+          "name": "document_vault_admin",
+          "description": "Document vault module: delete keys and draft documents of other users.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "document_vault:delete_any"
+              ]
+            }
+          }
+        },
+        {
+          "name": "funding_viewer",
+          "description": "Funding module: projects and spending events, read-only (plus the VAT codes and currencies they use).",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "project_management:view",
+                "vat_codes:view",
+                "currencies:view"
+              ]
+            }
+          }
+        },
+        {
+          "name": "funding_setup",
+          "description": "Funding module: create and edit the VAT codes and currencies the funding module uses.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "vat_codes:create",
+                "vat_codes:edit",
+                "currencies:create",
+                "currencies:edit",
+                "export_setup_data:download"
+              ]
+            }
+          }
+        },
+        {
+          "name": "funding_project_manager",
+          "description": "Funding module: create, edit and delete projects and milestones, bulk import; delete events.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "project_management:create_project",
+                "project_management:delete"
+              ]
+            }
+          }
+        },
+        {
+          "name": "funding_event_editor",
+          "description": "Funding module: create and edit spending events.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "project_management:create",
+                "project_management:edit"
+              ]
+            }
+          }
+        },
+        {
+          "name": "funding_publisher",
+          "description": "Funding module: publish spending events.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "project_management:publish"
+              ]
+            }
+          }
+        },
+        {
+          "name": "platform_admin",
+          "description": "Platform administrator: creates organisations.",
+          "composite": true,
+          "composites": {
+            "client": {
+              "reeve-api": [
+                "organisations:create"
+              ]
+            }
+          }
+        }
+      ],
+      "client": {
+        "reeve-api": [
+          {
+            "name": "organisations:create",
+            "description": "create on organisations (core)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "transactions:view",
+            "description": "view on transactions (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "transactions:export",
+            "description": "export on transactions (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "transactions:import_view",
+            "description": "import_view on transactions (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "transactions:import",
+            "description": "import on transactions (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "transactions:review_view",
+            "description": "review_view on transactions (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "transactions:review_approve",
+            "description": "review_approve on transactions (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "transactions:review_reject",
+            "description": "review_reject on transactions (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "transactions:publish_view",
+            "description": "publish_view on transactions (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "transactions:publish_approve",
+            "description": "publish_approve on transactions (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "transactions:publish_reject",
+            "description": "publish_reject on transactions (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "transactions:batches_view",
+            "description": "batches_view on transactions (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "transactions:batches_reprocess",
+            "description": "batches_reprocess on transactions (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "transactions:reconcilate_view",
+            "description": "reconcilate_view on transactions (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "transactions:reconcilate",
+            "description": "reconcilate on transactions (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "data_explorer:view",
+            "description": "view on data_explorer (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "data_explorer:dashboard_view",
+            "description": "dashboard_view on data_explorer (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "data_explorer:dashboard_create",
+            "description": "dashboard_create on data_explorer (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "data_explorer:dashboard_edit",
+            "description": "dashboard_edit on data_explorer (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "data_explorer:search_view",
+            "description": "search_view on data_explorer (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "reports:view",
+            "description": "view on reports (reporting)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "reports:create",
+            "description": "create on reports (reporting)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "reports:edit",
+            "description": "edit on reports (reporting)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "reports:delete",
+            "description": "delete on reports (reporting)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "reports:preview",
+            "description": "preview on reports (reporting)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "reports:publish",
+            "description": "publish on reports (reporting)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "reports:publish_view",
+            "description": "publish_view on reports (reporting)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "reports:reject",
+            "description": "reject on reports (reporting)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "report_templates:view",
+            "description": "view on report_templates (reporting)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "report_templates:create",
+            "description": "create on report_templates (reporting)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "report_templates:edit",
+            "description": "edit on report_templates (reporting)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "report_templates:delete",
+            "description": "delete on report_templates (reporting)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "report_types:view",
+            "description": "view on report_types (reporting)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "report_types:edit",
+            "description": "edit on report_types (reporting)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "project_management:view",
+            "description": "view on project_management (funding)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "project_management:create",
+            "description": "create on project_management (funding)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "project_management:edit",
+            "description": "edit on project_management (funding)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "project_management:delete",
+            "description": "delete on project_management (funding)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "project_management:publish",
+            "description": "publish on project_management (funding)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "project_management:create_project",
+            "description": "create_project on project_management (funding)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "document_vault:view",
+            "description": "view on document_vault (document_vault)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "document_vault:create",
+            "description": "create on document_vault (document_vault)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "document_vault:edit",
+            "description": "edit on document_vault (document_vault)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "document_vault:delete",
+            "description": "delete on document_vault (document_vault)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "document_vault:delete_any",
+            "description": "delete_any on document_vault (document_vault)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "document_vault:publish",
+            "description": "publish on document_vault (document_vault)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "settings:view",
+            "description": "view on settings (core)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "organization:view",
+            "description": "view on organization (core)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "organization_details:view",
+            "description": "view on organization_details (core)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "organization_details:edit",
+            "description": "edit on organization_details (core)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "netsuite_configuration:view",
+            "description": "view on netsuite_configuration (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "netsuite_configuration:create",
+            "description": "create on netsuite_configuration (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "netsuite_configuration:edit",
+            "description": "edit on netsuite_configuration (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "organization_setup:view",
+            "description": "view on organization_setup (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "organization_setup:import",
+            "description": "import on organization_setup (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "export_setup_data:view",
+            "description": "view on export_setup_data (transactions, funding)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "export_setup_data:download",
+            "description": "download on export_setup_data (transactions, funding)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "chart_of_accounts:view",
+            "description": "view on chart_of_accounts (transactions, reporting)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "chart_of_accounts:create",
+            "description": "create on chart_of_accounts (transactions, reporting)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "chart_of_accounts:edit",
+            "description": "edit on chart_of_accounts (transactions, reporting)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "event_codes:view",
+            "description": "view on event_codes (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "event_codes:create",
+            "description": "create on event_codes (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "event_codes:edit",
+            "description": "edit on event_codes (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "cost_centers:view",
+            "description": "view on cost_centers (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "cost_centers:create",
+            "description": "create on cost_centers (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "cost_centers:edit",
+            "description": "edit on cost_centers (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "projects:view",
+            "description": "view on projects (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "projects:create",
+            "description": "create on projects (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "projects:edit",
+            "description": "edit on projects (transactions)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "vat_codes:view",
+            "description": "view on vat_codes (transactions, funding)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "vat_codes:create",
+            "description": "create on vat_codes (transactions, funding)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "vat_codes:edit",
+            "description": "edit on vat_codes (transactions, funding)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "currencies:view",
+            "description": "view on currencies (transactions, funding)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "currencies:create",
+            "description": "create on currencies (transactions, funding)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "currencies:edit",
+            "description": "edit on currencies (transactions, funding)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "report_standards:view",
+            "description": "view on report_standards (reporting)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "report_standards:create",
+            "description": "create on report_standards (reporting)",
+            "composite": false,
+            "clientRole": true
+          },
+          {
+            "name": "report_standards:edit",
+            "description": "edit on report_standards (reporting)",
+            "composite": false,
+            "clientRole": true
+          }
+        ]
+      }
+    },
+    "smtpServer": {
+      "password": "**********",
+      "replyToDisplayName": "Reeve Admin",
+      "starttls": "true",
+      "auth": "true",
+      "port": "587",
+      "host": "email-smtp.eu-west-1.amazonaws.com",
+      "replyTo": "dev-reeve@metadata.dev.cf-deployments.org",
+      "from": "dev-reeve@metadata.dev.cf-deployments.org",
+      "fromDisplayName": "Reeve Admin",
+      "envelopeFrom": "dev-reeve@metadata.dev.cf-deployments.org",
+      "ssl": "false",
+      "user": "AKIA233ZQYOM3EL3COS6"
+    },
+    "loginTheme": "reeve_v4",
+    "authenticationFlows": [
+      {
+        "id": "f1c45480-32cd-4066-b32d-2ba48b684a34",
+        "alias": "Account verification options",
+        "description": "Method with which to verity the existing account",
+        "providerId": "basic-flow",
+        "topLevel": false,
+        "builtIn": true,
+        "authenticationExecutions": [
+          {
+            "authenticator": "idp-email-verification",
+            "authenticatorFlow": false,
+            "requirement": "ALTERNATIVE",
+            "priority": 10,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticatorFlow": true,
+            "requirement": "ALTERNATIVE",
+            "priority": 20,
+            "autheticatorFlow": true,
+            "flowAlias": "Verify Existing Account by Re-authentication",
+            "userSetupAllowed": false
+          }
+        ]
+      },
+      {
+        "id": "bfdf9ae3-445e-4cbe-8c60-eca48be10359",
+        "alias": "Browser - Conditional OTP",
+        "description": "Flow to determine if the OTP is required for the authentication",
+        "providerId": "basic-flow",
+        "topLevel": false,
+        "builtIn": true,
+        "authenticationExecutions": [
+          {
+            "authenticator": "conditional-user-configured",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 10,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticator": "auth-otp-form",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 20,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          }
+        ]
+      },
+      {
+        "id": "59c558c7-49f3-4cbf-acaa-8d539bd6f1c4",
+        "alias": "Browser - Conditional Organization",
+        "description": "Flow to determine if the organization identity-first login is to be used",
+        "providerId": "basic-flow",
+        "topLevel": false,
+        "builtIn": true,
+        "authenticationExecutions": [
+          {
+            "authenticator": "conditional-user-configured",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 10,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticator": "organization",
+            "authenticatorFlow": false,
+            "requirement": "ALTERNATIVE",
+            "priority": 20,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          }
+        ]
+      },
+      {
+        "id": "f9bb07ed-6568-47a0-9b55-d4b3cddf996e",
+        "alias": "Direct Grant - Conditional OTP",
+        "description": "Flow to determine if the OTP is required for the authentication",
+        "providerId": "basic-flow",
+        "topLevel": false,
+        "builtIn": true,
+        "authenticationExecutions": [
+          {
+            "authenticator": "conditional-user-configured",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 10,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticator": "direct-grant-validate-otp",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 20,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          }
+        ]
+      },
+      {
+        "id": "7aa3cb88-388e-4537-b1bd-8eb353a4f414",
+        "alias": "First Broker Login - Conditional Organization",
+        "description": "Flow to determine if the authenticator that adds organization members is to be used",
+        "providerId": "basic-flow",
+        "topLevel": false,
+        "builtIn": true,
+        "authenticationExecutions": [
+          {
+            "authenticator": "conditional-user-configured",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 10,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticator": "idp-add-organization-member",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 20,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          }
+        ]
+      },
+      {
+        "id": "dff98f51-c386-459c-b33e-e68b0663062c",
+        "alias": "First broker login - Conditional OTP",
+        "description": "Flow to determine if the OTP is required for the authentication",
+        "providerId": "basic-flow",
+        "topLevel": false,
+        "builtIn": true,
+        "authenticationExecutions": [
+          {
+            "authenticator": "conditional-user-configured",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 10,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticator": "auth-otp-form",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 20,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          }
+        ]
+      },
+      {
+        "id": "0b18ef36-4952-4653-936a-04d7906c6920",
+        "alias": "Handle Existing Account",
+        "description": "Handle what to do if there is existing account with same email/username like authenticated identity provider",
+        "providerId": "basic-flow",
+        "topLevel": false,
+        "builtIn": true,
+        "authenticationExecutions": [
+          {
+            "authenticator": "idp-confirm-link",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 10,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticatorFlow": true,
+            "requirement": "REQUIRED",
+            "priority": 20,
+            "autheticatorFlow": true,
+            "flowAlias": "Account verification options",
+            "userSetupAllowed": false
+          }
+        ]
+      },
+      {
+        "id": "c9155f46-e033-4a2c-8607-d807712bd79c",
+        "alias": "Organization",
+        "providerId": "basic-flow",
+        "topLevel": false,
+        "builtIn": true,
+        "authenticationExecutions": [
+          {
+            "authenticatorFlow": true,
+            "requirement": "CONDITIONAL",
+            "priority": 10,
+            "autheticatorFlow": true,
+            "flowAlias": "Browser - Conditional Organization",
+            "userSetupAllowed": false
+          }
+        ]
+      },
+      {
+        "id": "ab26245b-29ab-44aa-9834-47c8bfec7981",
+        "alias": "Reset - Conditional OTP",
+        "description": "Flow to determine if the OTP should be reset or not. Set to REQUIRED to force.",
+        "providerId": "basic-flow",
+        "topLevel": false,
+        "builtIn": true,
+        "authenticationExecutions": [
+          {
+            "authenticator": "conditional-user-configured",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 10,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticator": "reset-otp",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 20,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          }
+        ]
+      },
+      {
+        "id": "5fbbeb75-3eb1-4e4b-93c7-284fb50895ec",
+        "alias": "User creation or linking",
+        "description": "Flow for the existing/non-existing user alternatives",
+        "providerId": "basic-flow",
+        "topLevel": false,
+        "builtIn": true,
+        "authenticationExecutions": [
+          {
+            "authenticatorConfig": "create unique user config",
+            "authenticator": "idp-create-user-if-unique",
+            "authenticatorFlow": false,
+            "requirement": "ALTERNATIVE",
+            "priority": 10,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticatorFlow": true,
+            "requirement": "ALTERNATIVE",
+            "priority": 20,
+            "autheticatorFlow": true,
+            "flowAlias": "Handle Existing Account",
+            "userSetupAllowed": false
+          }
+        ]
+      },
+      {
+        "id": "5333262a-f08d-4ca3-ad2b-1059e5b4d963",
+        "alias": "Verify Existing Account by Re-authentication",
+        "description": "Reauthentication of existing account",
+        "providerId": "basic-flow",
+        "topLevel": false,
+        "builtIn": true,
+        "authenticationExecutions": [
+          {
+            "authenticator": "idp-username-password-form",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 10,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticatorFlow": true,
+            "requirement": "CONDITIONAL",
+            "priority": 20,
+            "autheticatorFlow": true,
+            "flowAlias": "First broker login - Conditional OTP",
+            "userSetupAllowed": false
+          }
+        ]
+      },
+      {
+        "id": "19daf618-ca73-4178-9d0b-4b9c5f5736da",
+        "alias": "browser",
+        "description": "Browser based authentication",
+        "providerId": "basic-flow",
+        "topLevel": true,
+        "builtIn": true,
+        "authenticationExecutions": [
+          {
+            "authenticator": "auth-cookie",
+            "authenticatorFlow": false,
+            "requirement": "ALTERNATIVE",
+            "priority": 10,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticator": "auth-spnego",
+            "authenticatorFlow": false,
+            "requirement": "DISABLED",
+            "priority": 20,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticator": "identity-provider-redirector",
+            "authenticatorFlow": false,
+            "requirement": "ALTERNATIVE",
+            "priority": 25,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticatorFlow": true,
+            "requirement": "ALTERNATIVE",
+            "priority": 26,
+            "autheticatorFlow": true,
+            "flowAlias": "Organization",
+            "userSetupAllowed": false
+          },
+          {
+            "authenticatorFlow": true,
+            "requirement": "ALTERNATIVE",
+            "priority": 30,
+            "autheticatorFlow": true,
+            "flowAlias": "forms",
+            "userSetupAllowed": false
+          }
+        ]
+      },
+      {
+        "id": "d0aee346-3d12-4e39-8d26-25c0a8b204c8",
+        "alias": "clients",
+        "description": "Base authentication for clients",
+        "providerId": "client-flow",
+        "topLevel": true,
+        "builtIn": true,
+        "authenticationExecutions": [
+          {
+            "authenticator": "client-secret",
+            "authenticatorFlow": false,
+            "requirement": "ALTERNATIVE",
+            "priority": 10,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticator": "client-jwt",
+            "authenticatorFlow": false,
+            "requirement": "ALTERNATIVE",
+            "priority": 20,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticator": "client-secret-jwt",
+            "authenticatorFlow": false,
+            "requirement": "ALTERNATIVE",
+            "priority": 30,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticator": "client-x509",
+            "authenticatorFlow": false,
+            "requirement": "ALTERNATIVE",
+            "priority": 40,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          }
+        ]
+      },
+      {
+        "id": "60fa20af-b88a-4267-9ce8-486d628ac7fd",
+        "alias": "direct grant",
+        "description": "OpenID Connect Resource Owner Grant",
+        "providerId": "basic-flow",
+        "topLevel": true,
+        "builtIn": true,
+        "authenticationExecutions": [
+          {
+            "authenticator": "direct-grant-validate-username",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 10,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticator": "direct-grant-validate-password",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 20,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticatorFlow": true,
+            "requirement": "CONDITIONAL",
+            "priority": 30,
+            "autheticatorFlow": true,
+            "flowAlias": "Direct Grant - Conditional OTP",
+            "userSetupAllowed": false
+          }
+        ]
+      },
+      {
+        "id": "98fa219d-d0db-4dc6-9150-39600c0b30ed",
+        "alias": "docker auth",
+        "description": "Used by Docker clients to authenticate against the IDP",
+        "providerId": "basic-flow",
+        "topLevel": true,
+        "builtIn": true,
+        "authenticationExecutions": [
+          {
+            "authenticator": "docker-http-basic-authenticator",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 10,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          }
+        ]
+      },
+      {
+        "id": "a9c58e5d-3351-43d0-a571-9c09057a2a66",
+        "alias": "first broker login",
+        "description": "Actions taken after first broker login with identity provider account, which is not yet linked to any Keycloak account",
+        "providerId": "basic-flow",
+        "topLevel": true,
+        "builtIn": true,
+        "authenticationExecutions": [
+          {
+            "authenticatorConfig": "review profile config",
+            "authenticator": "idp-review-profile",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 10,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticatorFlow": true,
+            "requirement": "REQUIRED",
+            "priority": 20,
+            "autheticatorFlow": true,
+            "flowAlias": "User creation or linking",
+            "userSetupAllowed": false
+          },
+          {
+            "authenticatorFlow": true,
+            "requirement": "CONDITIONAL",
+            "priority": 50,
+            "autheticatorFlow": true,
+            "flowAlias": "First Broker Login - Conditional Organization",
+            "userSetupAllowed": false
+          }
+        ]
+      },
+      {
+        "id": "f7e3dcfc-1e7b-47d4-8947-f430bd3cbd1d",
+        "alias": "forms",
+        "description": "Username, password, otp and other auth forms.",
+        "providerId": "basic-flow",
+        "topLevel": false,
+        "builtIn": true,
+        "authenticationExecutions": [
+          {
+            "authenticator": "auth-username-password-form",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 10,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticatorFlow": true,
+            "requirement": "CONDITIONAL",
+            "priority": 20,
+            "autheticatorFlow": true,
+            "flowAlias": "Browser - Conditional OTP",
+            "userSetupAllowed": false
+          }
+        ]
+      },
+      {
+        "id": "5d25ed47-e117-4d70-8e1a-d0fc9b166dcf",
+        "alias": "registration",
+        "description": "Registration flow",
+        "providerId": "basic-flow",
+        "topLevel": true,
+        "builtIn": true,
+        "authenticationExecutions": [
+          {
+            "authenticator": "registration-page-form",
+            "authenticatorFlow": true,
+            "requirement": "REQUIRED",
+            "priority": 10,
+            "autheticatorFlow": true,
+            "flowAlias": "registration form",
+            "userSetupAllowed": false
+          }
+        ]
+      },
+      {
+        "id": "75d25631-2f8f-47eb-9f37-b86ced7025b2",
+        "alias": "registration form",
+        "description": "Registration form",
+        "providerId": "form-flow",
+        "topLevel": false,
+        "builtIn": true,
+        "authenticationExecutions": [
+          {
+            "authenticator": "registration-user-creation",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 20,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticator": "registration-password-action",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 50,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticator": "registration-recaptcha-action",
+            "authenticatorFlow": false,
+            "requirement": "DISABLED",
+            "priority": 60,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticator": "registration-terms-and-conditions",
+            "authenticatorFlow": false,
+            "requirement": "DISABLED",
+            "priority": 70,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          }
+        ]
+      },
+      {
+        "id": "281c7e81-0202-4c5f-a4fe-f3ccbe08c9b4",
+        "alias": "reset credentials",
+        "description": "Reset credentials for a user if they forgot their password or something",
+        "providerId": "basic-flow",
+        "topLevel": true,
+        "builtIn": true,
+        "authenticationExecutions": [
+          {
+            "authenticator": "reset-credentials-choose-user",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 10,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticator": "reset-credential-email",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 20,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticator": "reset-password",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 30,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          },
+          {
+            "authenticatorFlow": true,
+            "requirement": "DISABLED",
+            "priority": 40,
+            "autheticatorFlow": true,
+            "flowAlias": "Reset - Conditional OTP",
+            "userSetupAllowed": false
+          }
+        ]
+      },
+      {
+        "id": "bc9a5886-bfd2-49e2-91f4-25a993ba6b4e",
+        "alias": "saml ecp",
+        "description": "SAML ECP Profile Authentication Flow",
+        "providerId": "basic-flow",
+        "topLevel": true,
+        "builtIn": true,
+        "authenticationExecutions": [
+          {
+            "authenticator": "http-basic-authenticator",
+            "authenticatorFlow": false,
+            "requirement": "REQUIRED",
+            "priority": 10,
+            "autheticatorFlow": false,
+            "userSetupAllowed": false
+          }
+        ]
+      }
+    ],
+    "authenticatorConfig": [
+      {
+        "id": "a76f804f-1224-434b-8171-00d8448e0640",
+        "alias": "create unique user config",
+        "config": {
+          "require.password.update.after.registration": "false"
+        }
+      },
+      {
+        "id": "83a4f6bf-f9e2-4eb1-b775-2019de3d3f6d",
+        "alias": "review profile config",
+        "config": {
+          "update.profile.on.first.login": "missing"
+        }
+      }
+    ],
+    "groups": [
+      {
+        "name": "platform",
+        "attributes": {},
+        "realmRoles": [],
+        "subGroups": [
+          {
+            "name": "administrators",
+            "attributes": {},
+            "realmRoles": [
+              "platform_admin"
+            ],
+            "subGroups": []
+          }
+        ]
+      },
+      {
+        "name": "organisations",
+        "attributes": {},
+        "realmRoles": [],
+        "subGroups": [
+          {
+            "name": "Cardano Foundation",
+            "attributes": {
+              "organisationId": [
+                "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94"
+              ],
+              "modules": [
+                "transactions",
+                "reporting",
+                "funding",
+                "document_vault"
+              ]
+            },
+            "realmRoles": [
+              "org_member"
+            ],
+            "subGroups": [
+              {
+                "name": "org_admin",
+                "attributes": {},
+                "realmRoles": [
+                  "org_admin"
+                ],
+                "subGroups": []
+              },
+              {
+                "name": "transactions",
+                "attributes": {},
+                "realmRoles": [
+                  "transactions_viewer"
+                ],
+                "subGroups": [
+                  {
+                    "name": "reconciler",
+                    "attributes": {},
+                    "realmRoles": [
+                      "transactions_reconciler"
+                    ],
+                    "subGroups": []
+                  },
+                  {
+                    "name": "importer",
+                    "attributes": {},
+                    "realmRoles": [
+                      "transactions_importer"
+                    ],
+                    "subGroups": []
+                  },
+                  {
+                    "name": "reviewer",
+                    "attributes": {},
+                    "realmRoles": [
+                      "transactions_reviewer"
+                    ],
+                    "subGroups": []
+                  },
+                  {
+                    "name": "publisher",
+                    "attributes": {},
+                    "realmRoles": [
+                      "transactions_publisher"
+                    ],
+                    "subGroups": []
+                  },
+                  {
+                    "name": "publish_viewer",
+                    "attributes": {},
+                    "realmRoles": [
+                      "transactions_publish_viewer"
+                    ],
+                    "subGroups": []
+                  },
+                  {
+                    "name": "dashboard_editor",
+                    "attributes": {},
+                    "realmRoles": [
+                      "transactions_dashboard_editor"
+                    ],
+                    "subGroups": []
+                  },
+                  {
+                    "name": "setup",
+                    "attributes": {},
+                    "realmRoles": [
+                      "transactions_setup"
+                    ],
+                    "subGroups": [
+                      {
+                        "name": "erp",
+                        "attributes": {},
+                        "realmRoles": [
+                          "transactions_erp"
+                        ],
+                        "subGroups": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "reporting",
+                "attributes": {},
+                "realmRoles": [
+                  "reports_viewer"
+                ],
+                "subGroups": [
+                  {
+                    "name": "editor",
+                    "attributes": {},
+                    "realmRoles": [
+                      "reports_editor"
+                    ],
+                    "subGroups": []
+                  },
+                  {
+                    "name": "publisher",
+                    "attributes": {},
+                    "realmRoles": [
+                      "reports_publisher"
+                    ],
+                    "subGroups": []
+                  },
+                  {
+                    "name": "publish_viewer",
+                    "attributes": {},
+                    "realmRoles": [
+                      "reports_publish_viewer"
+                    ],
+                    "subGroups": []
+                  },
+                  {
+                    "name": "setup",
+                    "attributes": {},
+                    "realmRoles": [
+                      "reports_setup"
+                    ],
+                    "subGroups": []
+                  }
+                ]
+              },
+              {
+                "name": "document_vault",
+                "attributes": {},
+                "realmRoles": [
+                  "document_vault_viewer"
+                ],
+                "subGroups": [
+                  {
+                    "name": "editor",
+                    "attributes": {},
+                    "realmRoles": [
+                      "document_vault_editor"
+                    ],
+                    "subGroups": []
+                  },
+                  {
+                    "name": "publisher",
+                    "attributes": {},
+                    "realmRoles": [
+                      "document_vault_publisher"
+                    ],
+                    "subGroups": []
+                  },
+                  {
+                    "name": "admin",
+                    "attributes": {},
+                    "realmRoles": [
+                      "document_vault_admin"
+                    ],
+                    "subGroups": []
+                  }
+                ]
+              },
+              {
+                "name": "funding",
+                "attributes": {},
+                "realmRoles": [
+                  "funding_viewer"
+                ],
+                "subGroups": [
+                  {
+                    "name": "event_editor",
+                    "attributes": {},
+                    "realmRoles": [
+                      "funding_event_editor"
+                    ],
+                    "subGroups": []
+                  },
+                  {
+                    "name": "project_manager",
+                    "attributes": {},
+                    "realmRoles": [
+                      "funding_project_manager"
+                    ],
+                    "subGroups": []
+                  },
+                  {
+                    "name": "publisher",
+                    "attributes": {},
+                    "realmRoles": [
+                      "funding_publisher"
+                    ],
+                    "subGroups": []
+                  },
+                  {
+                    "name": "setup",
+                    "attributes": {},
+                    "realmRoles": [
+                      "funding_setup"
+                    ],
+                    "subGroups": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

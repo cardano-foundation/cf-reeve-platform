@@ -1,0 +1,3854 @@
+{
+  "info": {
+    "_postman_id": "5c003ce4-1502-418b-bace-5bccbd9b247b",
+    "name": "Reeve Integration",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "9953617"
+  },
+  "item": [
+    {
+      "name": "Authorization",
+      "item": [
+        {
+          "name": "Get Access Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "pm.environment.set(\"access_token\", response.access_token);"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "type": "string"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "webclient",
+                  "type": "text"
+                },
+                {
+                  "key": "username",
+                  "value": "{{admin_username}}",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "{{admin_password}}",
+                  "type": "text"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{keycloak_url}}/realms/{{realm_name}}/protocol/openid-connect/token",
+              "host": [
+                "{{keycloak_url}}"
+              ],
+              "path": [
+                "realms",
+                "{{realm_name}}",
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Organisation",
+      "item": [
+        {
+          "name": "GET Organisation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if  name is Cardano Foundation\", function () {",
+                  "    pm.expect(jsonData.name).to.eql(\"Cardano Foundation\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Organisation Validate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "pm.test(\"Check if org is valid\", function () {",
+                  "",
+                  "    pm.expect(jsonData.valid).to.eql(false);",
+                  "    pm.expect(jsonData.violations.length).to.eql(2);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/validate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "validate"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Organisation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if  name has changed\", function () {",
+                  "    pm.expect(jsonData.address).to.eql(\"Ballyhealy Cottage\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Cardano Foundation\",\n  \"city\": \"City Name\",\n  \"postCode\": \"Y35 C6KC\",\n  \"province\": \"Co. Wexford\",\n  \"address\": \"Ballyhealy Cottage\",\n  \"phoneNumber\": \"0035863286566\",\n  \"adminEmail\": \"lob@cardanofoundation.org\",\n  \"websiteUrl\": \"http://cardanofoundation.org\",\n  \"currencyId\": \"ISO_4217:CHF\",\n  \"reportCurrencyId\": \"ISO_4217:CHF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET VAT Codes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if array contains elements\", function () {",
+                  "    pm.expect(jsonData).to.be.an('array').that.is.not.empty;",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/vat-codes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "vat-codes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT VAT Codes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if  rate has changed\", function () {",
+                  "    pm.expect(jsonData.rate).to.eql(\"0\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"customerCode\": \"CH-N\",\n    \"description\": \"description\",\n    \"rate\": \"0\",\n    \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/vat-codes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "vat-codes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT VAT Codes - Unkown Code",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if error\", function () {",
+                  "    pm.expect(jsonData.error.title).to.eql(\"ORGANISATION_VAT_DO_NOT_EXISTS\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"customerCode\": \"CH-N123\",\n    \"description\": \"description\",\n    \"rate\": \"0\",\n    \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/vat-codes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "vat-codes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST VAT Codes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if inserted\", function () {",
+                  "    const randomNumber = pm.environment.get(\"randomNumber\");",
+                  "    pm.expect(jsonData.customerCode).to.eql(\"CH-N\" + randomNumber);",
+                  "    pm.expect(jsonData.rate).to.eql(\"0\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Generate a random integer between 1 and 1000",
+                  "const randomNumber = Math.floor(Math.random() * 1000) + 1;",
+                  "",
+                  "// Save it to an environment variable",
+                  "pm.environment.set(\"randomNumber\", randomNumber);"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"customerCode\": \"CH-N{{randomNumber}}\",\n    \"description\": \"description\",\n    \"rate\": \"0\",\n    \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/vat-codes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "vat-codes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST VAT Codes - Duplicate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if inserted\", function () {",
+                  "    pm.expect(jsonData.error.title).to.eql(\"ORGANISATION_VAT_ALREADY_EXISTS\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Generate a random integer between 1 and 1000",
+                  "const randomNumber = Math.floor(Math.random() * 1000) + 1;",
+                  "",
+                  "// Save it to an environment variable",
+                  "pm.environment.set(\"randomNumber\", randomNumber);"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"customerCode\": \"CH-N\",\n    \"description\": \"description\",\n    \"rate\": \"0\",\n    \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/vat-codes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "vat-codes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET reference Codes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if array contains elements\", function () {",
+                  "    pm.expect(jsonData).to.be.an('array').that.is.not.empty;",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/reference-codes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "reference-codes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Reference Codes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if  name has changed\", function () {",
+                  "    pm.expect(jsonData.description).to.eql(\"New Postman Name\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"referenceCode\": \"1100\",\n    \"name\": \"New Postman Name\",\n    \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/reference-codes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "reference-codes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT reference Codes - Unkown Code Copy",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if error\", function () {",
+                  "    pm.expect(jsonData.error.title).to.eql(\"REFERENCE_CODE_NOT_FOUND\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"referenceCode\": \"11010101\",\n    \"name\": \"New Postman Name\",\n    \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/reference-codes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "reference-codes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Reference Codes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if inserted\", function () {",
+                  "    const randomNumber = pm.environment.get(\"randomNumber\");",
+                  "    pm.expect(jsonData.referenceCode).to.eql(\"\"+randomNumber);",
+                  "    pm.expect(jsonData.description).to.eql(\"Random referenceCode\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Generate a random integer between 1 and 1000",
+                  "const randomNumber = Math.floor(Math.random() * 1000) + 1;",
+                  "",
+                  "// Save it to an environment variable",
+                  "pm.environment.set(\"randomNumber\", randomNumber);"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceCode\": \"{{randomNumber}}\",\n  \"name\": \"Random referenceCode\",\n  \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/reference-codes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "reference-codes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST reference Codes - Duplicate Copy",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 409\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if inserted\", function () {",
+                  "    pm.expect(jsonData.error.title).to.eql(\"REFERENCE_CODE_ALREADY_EXIST\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Generate a random integer between 1 and 1000",
+                  "const randomNumber = Math.floor(Math.random() * 1000) + 1;",
+                  "",
+                  "// Save it to an environment variable",
+                  "pm.environment.set(\"randomNumber\", randomNumber);"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceCode\": \"1100\",\n  \"name\": \"Random referenceCode\",\n  \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/reference-codes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "reference-codes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET projects",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if array contains elements\", function () {",
+                  "    pm.expect(jsonData).to.be.an('array').that.is.not.empty;",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/projects",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "projects"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT projects",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if  name has changed\", function () {",
+                  "    pm.expect(jsonData.name).to.eql(\"New Postman Name\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"customerCode\": \"CF 000002 2023\",\n    \"name\": \"New Postman Name\",\n    \"active\": true\n    }",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/projects",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "projects"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT projects - Unkown Code",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 404\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if error\", function () {",
+                  "    pm.expect(jsonData.error.title).to.eql(\"PROJECT_CODE_NOT_FOUND\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"customerCode\": \"CF 000002 2023 Postman Unkown\",\n    \"name\": \"New Postman Name\",\n    \"active\": true\n    }",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/projects",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "projects"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Projects Copy",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if inserted\", function () {",
+                  "    const randomNumber = pm.environment.get(\"randomNumber\");",
+                  "    pm.expect(jsonData.customerCode).to.eql(\"\"+randomNumber);",
+                  "    pm.expect(jsonData.name).to.eql(\"New Postman Name\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Generate a random integer between 1 and 1000",
+                  "const randomNumber = Math.floor(Math.random() * 1000) + 1;",
+                  "",
+                  "// Save it to an environment variable",
+                  "pm.environment.set(\"randomNumber\", randomNumber);"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"customerCode\": \"{{randomNumber}}\",\n    \"name\": \"New Postman Name\",\n    \"active\": true\n    }",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/projects",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "projects"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Event Codes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if array contains elements\", function () {",
+                  "    pm.expect(jsonData).to.be.an('array').that.is.not.empty;",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/event-codes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "event-codes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT event codes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if  name has changed\", function () {",
+                  "    pm.expect(jsonData.description).to.eql(\"New Postman Name\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"debitReferenceCode\": \"1100\",\n    \"creditReferenceCode\": \"1100\",\n    \"name\": \"New Postman Name\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/event-codes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "event-codes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Event Codes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Generate a random integer between 1 and 1000",
+                  "const randomNumber = Math.floor(Math.random() * 1000) + 1;",
+                  "",
+                  "// Save it to an environment variable",
+                  "pm.environment.set(\"randomNumber\", randomNumber);"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"debitReferenceCode\": \"1103\",\n    \"creditReferenceCode\": \"1103\",\n    \"name\": \"New Postman Name\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/event-codes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "event-codes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET currencies",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if array contains elements\", function () {",
+                  "    pm.expect(jsonData).to.be.an('array').that.is.not.empty;",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Transfer-Encoding",
+                "value": "",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/currencies",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "currencies"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT currencies",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if  name has changed\", function () {",
+                  "    pm.expect(jsonData.isoCode).to.eql(\"New Postman Name\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"code\": \"ADA\",\n    \"isoCode\": \"New Postman Name\",\n    \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/currencies",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "currencies"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST currencies",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if inserted\", function () {",
+                  "    const randomNumber = pm.environment.get(\"randomNumber\");",
+                  "    pm.expect(jsonData.code).to.eql(\"\"+randomNumber);",
+                  "    pm.expect(jsonData.isoCode).to.eql(\"New Postman Name\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Generate a random 3-digit integer between 100 and 999 (currency codes must be exactly 3 characters)",
+                  "const randomNumber = Math.floor(Math.random() * 900) + 100;",
+                  "",
+                  "// Save it to an environment variable",
+                  "pm.environment.set(\"randomNumber\", randomNumber);"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"code\": \"{{randomNumber}}\",\n    \"isoCode\": \"New Postman Name\",\n    \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/currencies",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "currencies"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET cost-centers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if array contains elements\", function () {",
+                  "    pm.expect(jsonData).to.be.an('array').that.is.not.empty;",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Transfer-Encoding",
+                "value": "",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/cost-centers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "cost-centers"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT cost centers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if  name has changed\", function () {",
+                  "",
+                  "    pm.expect(jsonData.name).to.eql(\"New Postman Name\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"customerCode\": \"1000\",\n    \"name\": \"New Postman Name\",\n    \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/cost-centers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "cost-centers"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST cost centers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if inserted\", function () {",
+                  "    const randomNumber = pm.environment.get(\"randomNumber\");",
+                  "    pm.expect(jsonData.customerCode).to.eql(\"\"+randomNumber);",
+                  "    pm.expect(jsonData.name).to.eql(\"New Postman Name\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Generate a random integer between 1 and 1000",
+                  "const randomNumber = Math.floor(Math.random() * 1000) + 1;",
+                  "",
+                  "// Save it to an environment variable",
+                  "pm.environment.set(\"randomNumber\", randomNumber);"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"customerCode\": \"{{randomNumber}}\",\n    \"name\": \"New Postman Name\",\n    \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/cost-centers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "cost-centers"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET chart of account",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if array contains elements\", function () {",
+                  "    pm.expect(jsonData).to.be.an('array').that.is.not.empty;",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Transfer-Encoding",
+                "value": "",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/chart-of-accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "chart-of-accounts"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT chart of accounts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if  name has changed\", function () {",
+                  "",
+                  "    pm.expect(jsonData.name).to.eql(\"New Postman Name\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"customerCode\": \"6311170100\",\n    \"eventRefCode\": \"7100\",\n    \"name\": \"New Postman Name\",\n    \"subType\": 18,\n    \"type\": 5,\n    \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/organisations/{{orgId}}/chart-of-accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organisations",
+                "{{orgId}}",
+                "chart-of-accounts"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Reconciliation",
+      "item": [
+        {
+          "name": "GET Rejection Codes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if array contains elements\", function () {",
+                  "    pm.expect(jsonData).to.be.an('array').that.is.not.empty;",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"customerCode\": \"6311170100\",\n    \"refCode\": \"7157\",\n    \"eventRefCode\": \"7100\",\n    \"name\": \"New Postman Name\",\n    \"subType\": 18,\n    \"type\": 5,\n    \"active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/transactions-rejection-codes?organisationId={{orgId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions-rejection-codes"
+              ],
+              "query": [
+                {
+                  "key": "organisationId",
+                  "value": "{{orgId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Transactions Reconcile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if  response is valid\", function () {",
+                  "",
+                  "    pm.expect(jsonData.total).to.eql(0);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disabledSystemHeaders": {}
+          },
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organisationId\": \"75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94\",\n  \"filter\": \"UNRECONCILED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/transactions-reconcile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions-reconcile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Reconcile Trigger",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if  response is valid\", function () {",
+                  "",
+                  "    pm.expect(jsonData.message).to.eql(\"We have received your reconcile request now.\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organisationId\": \"75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94\",\n  \"extractorType\": \"NETSUITE\",\n  \"dateFrom\": \"2024-01-01\",\n  \"dateTo\": \"2024-12-31\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reconcile/trigger",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reconcile",
+                "trigger"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Transactions",
+      "item": [
+        {
+          "name": "POST Extraction",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(202);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if array contains elements\", function () {",
+                  "    pm.expect(jsonData.message).eq(\"We have received your extraction request now. Please review imported transactions from the batch list.\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "organisationId",
+                  "value": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                  "type": "text"
+                },
+                {
+                  "key": "extractorType",
+                  "value": "CSV",
+                  "type": "text"
+                },
+                {
+                  "key": "dateFrom",
+                  "value": "2013-01-02",
+                  "type": "text"
+                },
+                {
+                  "key": "dateTo",
+                  "value": "2024-05-01",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/Users/thkammer/Documents/dev/cardano/java/cf-lob-platform/docs/examples/transactions_csv_example.csv"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/extraction",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "extraction"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST transactions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Parse response JSON",
+                  "let jsonData = pm.response.json();",
+                  "",
+                  "// Retry counter",
+                  "let counter = parseInt(pm.environment.get(\"retryCounter\") || \"0\", 10);",
+                  "counter++;",
+                  "pm.environment.set(\"retryCounter\", counter);",
+                  "",
+                  "// Condition: array is empty and retry limit not reached",
+                  "if (counter < 20 && Array.isArray(jsonData) && jsonData.length === 0) {",
+                  "    setTimeout(function () {",
+                  "        console.log(`Retry ${counter}: array still empty. Waiting before retry...`);",
+                  "        pm.execution.setNextRequest('POST transactions'); // jump to wait request",
+                  "    }, 10000); // 10 seconds delay before retrying (10000 milliseconds)",
+                  "} else {",
+                  "    console.log(`Stopping after ${counter} tries.`);",
+                  "    pm.environment.set(\"retryCounter\", 0); // reset",
+                  "    pm.execution.setNextRequest(null); // stop",
+                  "}",
+                  "",
+                  "// ✅ Basic tests",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organisationId\": \"75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/transactions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST transaction approve",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if success is true\", function () {",
+                  "    pm.expect(jsonData[0].success).eq(true);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"organisationId\": \"{{orgId}}\",\n    \"transactionIds\": [\n        {\n            \"id\": \"170601e7d7217efdd3ddc6720aabf33e134798b458d16d2d69f8c354ad4ca826\"\n        }\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/transactions/approve",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions",
+                "approve"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST transaction publish",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if success is true\", function () {",
+                  "    pm.expect(jsonData[0].success).eq(true);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"organisationId\": \"{{orgId}}\",\n    \"transactionIds\": [\n        {\n            \"id\": \"170601e7d7217efdd3ddc6720aabf33e134798b458d16d2d69f8c354ad4ca826\"\n        }\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/transactions/publish",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions",
+                "publish"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST transaction reject",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if success is true\", function () {",
+                  "    pm.expect(jsonData.success).eq(true);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"organisationId\": \"{{orgId}}\",\n    \"transactionId\": \"54f3ec88393a7966a9d2e285dcda2bf3a1806e1e2d6dc6224c16c7fcf57e9130\",\n    \"transactionItemsRejections\": [\n    {\n      \"txItemId\": \"07ada41d8df8bcd8324e35f982eaaf23bbdf1fa39efa957557a417bd87ff2d7b\",\n      \"rejectionReason\": \"INCORRECT_VAT_CODE\"\n    },\n    {\n      \"txItemId\": \"d96235c121c35a9ac3b5ac3126faadf362bce926e782784a8f69ac7f7694651e\",\n      \"rejectionReason\": \"REVIEW_PARENT_PROJECT_CODE\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/transaction/reject",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transaction",
+                "reject"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Extraction Validation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// commenting this out until we have a health check for the publisher implemented",
+                  "// // Check if response status code is 200",
+                  " pm.test(\"Status code is 200\", function () {",
+                  "     pm.response.to.have.status(200);",
+                  " });",
+                  "",
+                  "// // Parse response JSON",
+                  " const jsonData = pm.response.json();",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  " pm.test(\"Check if array contains elements\", function () {",
+                  "     pm.expect(jsonData.valid).eq(true);",
+                  " });"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organisationId\": \"75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94\",\n  \"extractorType\": \"NETSUITE\",\n  \"dateFrom\": \"2013-01-02\",\n  \"dateTo\": \"2024-05-01\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/extraction/validation",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "extraction",
+                "validation"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Transaction Detail",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if array contains elements\", function () {",
+                  "    const transactionId = pm.environment.get(\"transactionId\");",
+                  "    pm.expect(jsonData.id).eq(transactionId + \"\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/transactions/{{transactionId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions",
+                "{{transactionId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Transaction types",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if array contains elements\", function () {",
+                  "    pm.expect(jsonData).to.be.an('array').that.is.not.empty;",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/transaction-types",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transaction-types"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Rejection Reasons",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if array contains elements\", function () {",
+                  "    pm.expect(jsonData).to.be.an('array').that.is.not.empty;",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/rejection-reasons",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "rejection-reasons"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Batches",
+      "item": [
+        {
+          "name": "POST Batches",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Set environment variable 'batchId' ",
+                  "pm.environment.set(\"batchId\", jsonData.batchs[0].id);",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if array contains elements\", function () {",
+                  "    pm.expect(jsonData.total).above(0)",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"organisationId\": \"{{orgId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/batches",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "batches"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Batch",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check response contains BatchID \", function () {",
+                  "    pm.expect(jsonData.id).to.eql(pm.environment.get(\"batchId\"));",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/batches/{{batchId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "batches",
+                "{{batchId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Batch reprocess",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if response status code is 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Parse response JSON",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "// Check if 'keyName' exists and equals 'expectedValue'",
+                  "pm.test(\"Check if array contains elements\", function () {",
+                  "    pm.expect(jsonData.success).eq(true);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/batches/reprocess/{{batchId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "batches",
+                "reprocess",
+                "{{batchId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Reporting",
+      "item": [
+        {
+          "name": "GET All Templates",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// expect 200 and response is an empty array",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is an array\", function () {",
+                  "    pm.response.to.be.json;",
+                  "    pm.expect(pm.response.json().templates).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reporting/templates?organisationId={{orgId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reporting",
+                "templates"
+              ],
+              "query": [
+                {
+                  "key": "organisationId",
+                  "value": "{{orgId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Create Template",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// expect 201 response",
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "// store in dummyTemplateId environment variable",
+                  "pm.test(\"Template ID is stored in environment variable\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set(\"dummyTemplateId\", jsonData.id);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"organisationId\": \"{{orgId}}\",\n    \"name\": \"TestTemplate\",\n    \"description\": \"Description of the report\",\n    \"reportTemplateType\": \"CUSTOM\",\n    \"dataMode\": \"USER\",\n    \"fields\": [\n        {\n            \"fieldName\": \"Field1\",\n            \"dateRange\": \"PERIOD\",\n            \"childFields\": [\n                {\n                    \"fieldName\": \"Field2\"\n                },\n                {\n                    \"fieldName\": \"Field3\",\n                    \"negated\": false\n                }\n            ]\n        },\n        {\n            \"fieldName\": \"Field3\",\n            \"negated\": false\n        }\n    ],\n    \"validationRules\": [\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reporting/templates",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reporting",
+                "templates"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET All Reports",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// expect 200 and response is an empty array",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is an array\", function () {",
+                  "    pm.response.to.be.json;",
+                  "    pm.expect(pm.response.json()).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reporting/reports?organisationId={{orgId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reporting",
+                "reports"
+              ],
+              "query": [
+                {
+                  "key": "organisationId",
+                  "value": "{{orgId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Update Template",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// expect 200 response",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// store in dummyTemplateId environment variable",
+                  "pm.test(\"Template ID is stored in environment variable\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set(\"dummyTemplateId\", jsonData.id);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"id\": \"{{dummyTemplateId}}\",\n    \"organisationId\": \"{{orgId}}\",\n    \"name\": \"TestTemplate\",\n    \"description\": \"Description of the report\",\n    \"reportTemplateType\": \"CUSTOM\",\n    \"dataMode\": \"USER\",\n    \"fields\": [\n        {\n            \"fieldName\": \"Field1\",\n            \"childFields\": [\n                {\n                    \"fieldName\": \"Field2\",\n                    \"accumulated\": true,\n                    \"accumulatedYearly\": false,\n                    \"accumulatedPreviousYear\": false,\n                    \"negated\": false\n                }\n            ]\n        },\n        {\n            \"fieldName\": \"Field3\",\n            \"accumulated\": true,\n            \"accumulatedYearly\": false,\n            \"accumulatedPreviousYear\": false,\n            \"negated\": false\n        }\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reporting/templates",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reporting",
+                "templates"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Create Dummy Report",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"organisationId\": \"{{orgId}}\",\n    \"reportTemplateId\": \"{{dummyTemplateId}}\",\n    \"name\": \"TestReport\",\n    \"intervalType\": \"QUARTER\",\n    \"period\": 1,\n    \"year\": 2025,\n    \"dataMode\": \"USER\",\n    \"fields\": [\n        {\n            \"templateFieldId\": 1,\n            \"childFields\": [\n                {\n                    \"templateFieldId\": 2,\n                    \"value\": 10\n                },\n                {\n                    \"templateFieldId\": 3,\n                    \"value\": 15\n                }\n            ]\n        },\n        {\n            \"templateFieldId\": 4,\n            \"value\": 5\n        }\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reporting/reports",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reporting",
+                "reports"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Create Balance Sheet",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// expect 201 response and store the id in an environment variable",
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Response body contains id\", function () {",
+                  "    pm.response.to.have.jsonBody('id');",
+                  "    pm.environment.set(\"balanceSheetTemplateId\", pm.response.json().id);",
+                  "});",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"organisationId\": \"{{orgId}}\",\n    \"name\": \"Balance Sheet Manual\",\n    \"description\": \"This is a balance sheet\",\n    \"reportTemplateType\": \"BALANCE_SHEET\",\n    \"dataMode\": \"USER\",\n    \"fields\": [\n        {\n            \"fieldName\": \"Assets\",\n            \"dateRange\": \"ACCUMULATED_START_TO_PERIOD_END\",\n            \"negated\": false,\n            \"childFields\": [\n                {\n                    \"fieldName\": \"Non Current Assets\",\n                    \"dateRange\": \"ACCUMULATED_START_TO_PERIOD_END\",\n                    \"negated\": false,\n                    \"childFields\": [\n                        {\n                            \"fieldName\": \"Tangible Assets\",\n                            \"dateRange\": \"ACCUMULATED_START_TO_PERIOD_END\",\n                            \"negated\": false\n                        },\n                        {\n                            \"fieldName\": \"Intangible Assets\",\n                            \"dateRange\": \"ACCUMULATED_START_TO_PERIOD_END\",\n                            \"negated\": false\n                        },\n                        {\n                            \"fieldName\": \"Investments\",\n                            \"dateRange\": \"ACCUMULATED_START_TO_PERIOD_END\",\n                            \"negated\": false\n                        },\n                        {\n                            \"fieldName\": \"Financial Assets\",\n                            \"dateRange\": \"ACCUMULATED_START_TO_PERIOD_END\",\n                            \"negated\": false\n                        }\n                    ]\n                },\n                {\n                    \"fieldName\": \"Current Assets\",\n                    \"dateRange\": \"ACCUMULATED_START_TO_PERIOD_END\",\n                    \"negated\": false,\n                    \"childFields\": [\n                        {\n                            \"fieldName\": \"Prepayments and other short term assets\",\n                            \"dateRange\": \"ACCUMULATED_START_TO_PERIOD_END\",\n                            \"negated\": false\n                        },\n                        {\n                            \"fieldName\": \"Other Receivables\",\n                            \"dateRange\": \"ACCUMULATED_START_TO_PERIOD_END\",\n                            \"negated\": false\n                        },\n                        {\n                            \"fieldName\": \"Crypto Assets\",\n                            \"dateRange\": \"ACCUMULATED_START_TO_PERIOD_END\",\n                            \"negated\": false\n                        },\n                        {\n                            \"fieldName\": \"Cash and Cash equivalents\",\n                            \"dateRange\": \"ACCUMULATED_START_TO_PERIOD_END\",\n                            \"negated\": false\n                        }\n                    ]\n                }\n            ]\n        },\n        {\n            \"fieldName\": \"Liabilities\",\n            \"dateRange\": \"ACCUMULATED_START_TO_PERIOD_END\",\n            \"negated\": false,\n            \"childFields\": [\n                {\n                    \"fieldName\": \"Non Current Liabilities\",\n                    \"dateRange\": \"ACCUMULATED_START_TO_PERIOD_END\",\n                    \"negated\": false,\n                    \"childFields\": [\n                        {\n                            \"fieldName\": \"Provisions\",\n                            \"dateRange\": \"ACCUMULATED_START_TO_PERIOD_END\",\n                            \"negated\": true\n                        }\n                    ]\n                },\n                {\n                    \"fieldName\": \"Current Liabilities\",\n                    \"dateRange\": \"ACCUMULATED_START_TO_PERIOD_END\",\n                    \"negated\": false,\n                    \"childFields\": [\n                        {\n                            \"fieldName\": \"Trade accounts payables\",\n                            \"dateRange\": \"ACCUMULATED_START_TO_PERIOD_END\",\n                            \"negated\": true\n                        },\n                        {\n                            \"fieldName\": \"Other short term Liabilities\",\n                            \"dateRange\": \"ACCUMULATED_START_TO_PERIOD_END\",\n                            \"negated\": true\n                        },\n                        {\n                            \"fieldName\": \"Accruals and short term provisions\",\n                            \"dateRange\": \"ACCUMULATED_START_TO_PERIOD_END\",\n                            \"negated\": true\n                        }\n                    ]\n                }\n            ]\n        },\n        {\n            \"fieldName\": \"Capital\",\n            \"dateRange\": \"ACCUMULATED_START_TO_PERIOD_END\",\n            \"negated\": false,\n            \"childFields\": [\n                {\n                    \"fieldName\": \"Capital\",\n                    \"dateRange\": \"ACCUMULATED_START_TO_PERIOD_END\",\n                    \"negated\": true\n                },\n                {\n                    \"fieldName\": \"Profit fort the year\",\n                    \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n                    \"negated\": true\n                },\n                {\n                    \"fieldName\": \"Results carried forward\",\n                    \"dateRange\": \"ACCUMULATED_PREVIOUS_YEAR_TO_PREVIOUS_YEAR_END\",\n                    \"negated\": true\n                }\n            ]\n        }\n    ],\n    \"validationRules\": [\n        {\n            \"name\": \"Balanced\",\n            \"operator\": \"EQUAL\",\n            \"leftSideTerms\": [\n                {\n                    \"fieldName\": \"Assets\",\n                    \"operation\": \"ADD\"\n                }\n            ],\n            \"rightSideTerms\": [\n                {\n                    \"fieldName\": \"Liabilities\",\n                    \"operation\": \"ADD\"\n                },\n                {\n                    \"fieldName\": \"Capital\",\n                    \"operation\": \"ADD\"\n                }\n            ]\n        }\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reporting/templates",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reporting",
+                "templates"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Create Income Statement",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// expect 201 response and store the id in an environment variable",
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Response body contains id\", function () {",
+                  "    pm.response.to.have.jsonBody('id');",
+                  "    pm.environment.set(\"incomeStatementTemplateId\", pm.response.json().id);",
+                  "});",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"organisationId\": \"{{orgId}}\",\n    \"name\": \"Income Statement New\",\n    \"description\": \"This is an income statement\",\n    \"reportTemplateType\": \"INCOME_STATEMENT\",\n    \"dataMode\": \"SYSTEM\",\n    \"fields\": [\n        {\n            \"fieldName\": \"Revenues\",\n            \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n            \"negated\": true,\n            \"childFields\": [\n                {\n                    \"fieldName\": \"Building of long term provisions\",\n                    \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n                    \"negated\": true,\n                    \"mappingAccounts\": [\n                        \"4101130100\",\n                        \"4101120100\",\n                        \"4100000100\",\n                        \"4101100100\",\n                        \"4101110100\",\n                        \"4101140100\",\n                        \"4101150100\"\n                    ]\n                }\n            ]\n        },\n        {\n            \"fieldName\": \"Cost of goods and services\",\n            \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n            \"negated\": true,\n            \"childFields\": [\n                {\n                    \"fieldName\": \"External services\",\n                    \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n                    \"negated\": true,\n                    \"mappingAccounts\": [\n                        \"5203100100\",\n                        \"5204120100\",\n                        \"5205140100\",\n                        \"5206110100\",\n                        \"4102120100\",\n                        \"5206120100\",\n                        \"5208110100\",\n                        \"5205100100\",\n                        \"4102100100\",\n                        \"4102130100\",\n                        \"5205150100\",\n                        \"5204130100\",\n                        \"5205110100\",\n                        \"5208120100\",\n                        \"5207100100\",\n                        \"5207110100\",\n                        \"4102140100\",\n                        \"5205170100\",\n                        \"5204100100\",\n                        \"5205160100\",\n                        \"5204150100\",\n                        \"5205120100\",\n                        \"5206100100\",\n                        \"5205130100\",\n                        \"5207120100\",\n                        \"5204110100\",\n                        \"5205180100\",\n                        \"4102150100\",\n                        \"4102110100\",\n                        \"5208100100\"\n                    ]\n                }\n            ]\n        },\n        {\n            \"fieldName\": \"Operating Expenses\",\n            \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n            \"negated\": true,\n            \"childFields\": [\n                {\n                    \"fieldName\": \"Personnel Expenses\",\n                    \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n                    \"negated\": true,\n                    \"mappingAccounts\": [\n                        \"6311120100\",\n                        \"6310100100\",\n                        \"6311170100\",\n                        \"6310230100\",\n                        \"6310150100\",\n                        \"6312140100\",\n                        \"6312430100\",\n                        \"6311130100\",\n                        \"6312450100\",\n                        \"6312190100\",\n                        \"6311110100\",\n                        \"6311180100\",\n                        \"6309100100\",\n                        \"6310220100\",\n                        \"6312150100\",\n                        \"6310160100\",\n                        \"6310250100\",\n                        \"6310130100\",\n                        \"6312420100\",\n                        \"6311140100\",\n                        \"6312160100\",\n                        \"6310170100\",\n                        \"6310210100\",\n                        \"6312460100\",\n                        \"6311100100\",\n                        \"6312120100\",\n                        \"6310120100\",\n                        \"6312110100\",\n                        \"6312470100\",\n                        \"6310180100\",\n                        \"6312170100\",\n                        \"6312410100\",\n                        \"6311150100\",\n                        \"6312130100\",\n                        \"6312400100\",\n                        \"6311160100\",\n                        \"6310240100\",\n                        \"6310140100\",\n                        \"6310110100\",\n                        \"6312100100\",\n                        \"6312121100\",\n                        \"6311210100\",\n                        \"6312180100\",\n                        \"6310190100\",\n                        \"6312440100\"\n                    ]\n                },\n                {\n                    \"fieldName\": \"General and administrative expenses\",\n                    \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n                    \"negated\": true,\n                    \"mappingAccounts\": [\n                        \"6313160100\",\n                        \"6314130100\",\n                        \"6317140100\",\n                        \"6317150100\",\n                        \"6316130100\",\n                        \"6314140100\",\n                        \"6313120100\",\n                        \"6317100100\",\n                        \"6316170100\",\n                        \"6318120100\",\n                        \"6313100100\",\n                        \"6317110100\",\n                        \"6317160100\",\n                        \"6315170100\",\n                        \"6314100100\",\n                        \"6315160100\",\n                        \"6313130100\",\n                        \"6314150100\",\n                        \"6316180100\",\n                        \"6313000100\",\n                        \"6316140100\",\n                        \"6316100100\",\n                        \"6317120100\",\n                        \"6314110100\",\n                        \"6316190100\",\n                        \"6318100100\",\n                        \"6313140100\",\n                        \"6314160100\",\n                        \"6316150100\",\n                        \"6314120100\",\n                        \"6315140100\",\n                        \"6313150100\",\n                        \"6316110100\",\n                        \"6317130100\",\n                        \"6318110100\",\n                        \"6316120100\",\n                        \"6313110100\",\n                        \"6316160100\"\n                    ]\n                },\n                {\n                    \"fieldName\": \"Depreciation and impairment losses on tangible assets\",\n                    \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n                    \"negated\": true,\n                    \"mappingAccounts\": [\n                        \"6319100100\",\n                        \"6319110100\",\n                        \"6319120100\",\n                        \"6319130100\"\n                    ]\n                },\n                {\n                    \"fieldName\": \"Amortization on intangible assets\",\n                    \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n                    \"negated\": true,\n                    \"mappingAccounts\": [\n                        \"6319140100\"\n                    ]\n                },\n                {\n                    \"fieldName\": \"Rent expenses\",\n                    \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n                    \"negated\": true,\n                    \"mappingAccounts\": [\n                        \"6315130100\",\n                        \"6315150100\",\n                        \"6315110100\",\n                        \"6315120100\",\n                        \"6315100100\"\n                    ]\n                }\n            ]\n        },\n        {\n            \"fieldName\": \"Financial Income\",\n            \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n            \"negated\": true,\n            \"childFields\": [\n                {\n                    \"fieldName\": \"Financial Revenues\",\n                    \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n                    \"negated\": true,\n                    \"mappingAccounts\": [\n                        \"6421260100\",\n                        \"6421200100\",\n                        \"6421270100\",\n                        \"6421250100\",\n                        \"6421100100\",\n                        \"6421240100\",\n                        \"6421220100\",\n                        \"6421230100\",\n                        \"6421120100\",\n                        \"6421180100\",\n                        \"6421160100\",\n                        \"6421170100\"\n                    ]\n                },\n                {\n                    \"fieldName\": \"Financial Expenses\",\n                    \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n                    \"negated\": true,\n                    \"mappingAccounts\": [\n                        \"6420120100\",\n                        \"6422110100\",\n                        \"6420190100\",\n                        \"6420170100\",\n                        \"Unrealized\",\n                        \"6420150100\",\n                        \"6420151100\",\n                        \"6422120100\",\n                        \"6420200100\",\n                        \"6420110100\",\n                        \"6420220100\",\n                        \"6422100100\",\n                        \"6420130100\",\n                        \"6420160100\",\n                        \"6422150100\",\n                        \"6420180100\",\n                        \"6422130100\",\n                        \"6420210100\",\n                        \"6420140100\",\n                        \"6421310100\",\n                        \"6420100100\"\n                    ]\n                },\n                {\n                    \"fieldName\": \"Realised Gains on Sale of Cryptocurrencies\",\n                    \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n                    \"negated\": true,\n                    \"mappingAccounts\": [\n                        \"6421130100\",\n                        \"6421150100\"\n                    ]\n                },\n                {\n                    \"fieldName\": \"Staking Rewards income\",\n                    \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n                    \"negated\": true,\n                    \"mappingAccounts\": [\n                        \"6421110100\"\n                    ]\n                },\n                {\n                    \"fieldName\": \"Net Income options sale\",\n                    \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n                    \"negated\": true,\n                    \"mappingAccounts\": [\n                        \"6421140100\"\n                    ]\n                }\n            ]\n        },\n        {\n            \"fieldName\": \"Extraordninary income\",\n            \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n            \"negated\": true,\n            \"childFields\": [\n                {\n                    \"fieldName\": \"Extraprdinary Expenses\",\n                    \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n                    \"negated\": true,\n                    \"mappingAccounts\": [\n                        \"6422140100\"\n                    ]\n                }\n            ]\n        },\n        {\n            \"fieldName\": \"Tax Expenses\",\n            \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n            \"negated\": true,\n            \"childFields\": [\n                {\n                    \"id\": 42,\n                    \"fieldName\": \"Direct Taxes\",\n                    \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n                    \"negated\": true,\n                    \"mappingAccounts\": [\n                        \"6423110100\",\n                        \"6423100100\"\n                    ]\n                }\n            ]\n        },\n        {\n            \"fieldName\": \"Profit for the year\",\n            \"dateRange\": \"ACCUMULATED_YEAR_TO_PERIOD_END\",\n            \"negated\": true,\n            \"mappingAccounts\": [\n                \"6421140100\"\n            ]\n        }\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reporting/templates",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reporting",
+                "templates"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Create Balance Sheet Report",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// expect 201 response and field reportTemplate id to be equal to balanceSheetTemplateId",
+                  "pm.test(\"Check if response status is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "// field reportTemplateId to be equal to env balanceSheetTemplateId",
+                  "pm.test(\"Check if reportTemplateId is equal to balanceSheetTemplateId\", function () {",
+                  "    pm.expect(pm.response.json().reportTemplateId).to.eql(pm.environment.get(\"balanceSheetTemplateId\"));",
+                  "});",
+                  "",
+                  "// export dataMode to be SYSTEM",
+                  "pm.test(\"Check if dataMode is equal to SYSTEM\", function () {",
+                  "    pm.expect(pm.response.json().dataMode).to.eql(\"SYSTEM\");",
+                  "});",
+                  "",
+                  "// store id in environment variable balanceSheetReportId",
+                  "pm.environment.set(\"balanceSheetReportId\", pm.response.json().id);"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"organisationId\": \"{{orgId}}\",\n    \"reportTemplateId\": \"{{balanceSheetTemplateId}}\",\n    \"name\": \"TestReport\",\n    \"intervalType\": \"QUARTER\",\n    \"period\": 1,\n    \"year\": 2025,\n    \"dataMode\": \"SYSTEM\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reporting/reports",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reporting",
+                "reports"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Publish Report",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"organisationId\": \"{{orgId}}\",\n    \"reportId\": \"{{balanceSheetReportId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reporting/reports/publish",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reporting",
+                "reports",
+                "publish"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE Report",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// expect 400 response",
+                  "pm.test(\"Status code is 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "// expect title to be Report Already Published",
+                  "pm.test(\"Response title is 'REPORT_ALREADY_PUBLISHED'\", function () {",
+                  "    pm.expect(pm.response.json().title).to.eql(\"REPORT_ALREADY_PUBLISHED\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reporting/reports/{{balanceSheetReportId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reporting",
+                "reports",
+                "{{balanceSheetReportId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE Report Template",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// expect 400 response",
+                  "pm.test(\"Status code is 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "// expect title to be Report Already Published",
+                  "pm.test(\"Response title is 'REPORT_ALREADY_PUBLISHED'\", function () {",
+                  "    pm.expect(pm.response.json().title).to.eql(\"REPORT_ALREADY_PUBLISHED\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reporting/templates/{{dummyTemplateId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reporting",
+                "templates",
+                "{{dummyTemplateId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Generate Report",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// expect response 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// expect reportTEmplateId to be incomeStatementTemplateId env variable",
+                  "pm.test(\"Report Template ID is correct\", function () {",
+                  "    pm.expect(pm.response.json().reportTemplateId).to.eql(pm.environment.get(\"incomeStatementTemplateId\"));",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded",
+                "type": "string",
+                "disabled": true
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organisationId\": \"{{orgId}}\",\n  \"reportTemplateId\": \"{{incomeStatementTemplateId}}\",\n  \"intervalType\": \"YEAR\",\n  \"year\": 2025,\n  \"period\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reporting/reports/generate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reporting",
+                "reports",
+                "generate"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Create Template CSV",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "organisationId",
+                  "value": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/Users/thkammer/Documents/dev/cardano/java/cf-reeve-platform/docs/examples/reporting/report_template_example.csv"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reporting/templates",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reporting",
+                "templates"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Create Report CSV",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "organisationId",
+                  "value": "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/Users/thkammer/Documents/dev/cardano/java/cf-reeve-platform/docs/examples/reporting/report_example.csv"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reporting/reports",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reporting",
+                "reports"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Funding",
+      "item": [
+        {
+          "name": "GET All Projects",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/funding/projects?organisationId={{orgId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "funding",
+                "projects"
+              ],
+              "query": [
+                {
+                  "key": "organisationId",
+                  "value": "{{orgId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Create Project",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// store in dummyTemplateId environment variable",
+                  "pm.test(\"Template ID is stored in environment variable\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set(\"dummyProject\", jsonData.projectId);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organisationId\": \"75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94\",\n  \"fundingId\": \"GRANT-2025-001\",\n  \"projectId\": \"projectId\",\n  \"projectTitle\": \"projectTitle\",\n  \"totalAmount\": 100,\n  \"currency\": \"USD\",\n  \"milestones\": [{\n    \"milestoneId\": \"milestone1\",\n    \"milestoneTitle\": \"title\",\n    \"milestoneAmount\": 200,\n    \"currency\": \"USD\",\n    \"milestoneDate\": \"2025-06-30\"\n  }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/funding/projects",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "funding",
+                "projects"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Update Project",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"activityTitle\": \"Project AB-2\",\n    \"expectedTotalAmount\": 200000,\n    \"currency\": \"USD\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/spending/projects/{{dummyProject}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "spending",
+                "projects",
+                "{{dummyProject}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Get specific project",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organisationId\": \"75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94\",\n  \"fundingId\": \"GRANT-2025-001\",\n  \"activityId\": \"PROJ-AB\",\n  \"activityTitle\": \"Project AB\",\n  \"expectedTotalAmount\": 200000,\n  \"currency\": \"USD\",\n  \"milestones\": [\n    {\n      \"label\": \"Milestone AB\",\n      \"expectedCost\": 50000,\n      \"currency\": \"USD\",\n      \"dueDate\": \"2025-06-30\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/spending/projects/{{dummyProject}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "spending",
+                "projects",
+                "{{dummyProject}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Create Spending Event",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// store in dummyTemplateId environment variable",
+                  "pm.test(\"Template ID is stored in environment variable\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set(\"dummySpendingEvent\", jsonData.eventId);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organisationId\": \"75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94\",\n  \"eventType\": \"FUNDING\",\n  \"fundingId\": \"GRANT-2025-003\",\n  \"fundingHash\": \"18939000123\",\n  \"fundingEntity\": \"Test entity\",\n  \"currency\": \"USD\",\n  \"allocations\": [\n    {\n        \"projectId\": \"GRANT-2025-001\",\n        \"fundingId\": \"FundingID\",\n        \"projectTitle\": \"projectTitle\",\n        \"milestones\": [\n            {\n                \"milestoneId\": \"milestone1\",\n                \"allocatedAmount\": 50\n            }\n        ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/funding/events",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "funding",
+                "events"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET all spending events",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/spending/projects/{{dummyProject}}/events",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "spending",
+                "projects",
+                "{{dummyProject}}",
+                "events"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET spending event",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/spending/projects/{{dummyProject}}/events/{{dummySpendingEvent}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "spending",
+                "projects",
+                "{{dummyProject}}",
+                "events",
+                "{{dummySpendingEvent}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST publish spending event",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/spending/projects/{{dummyProject}}/events/{{dummySpendingEvent}}/publish",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "spending",
+                "projects",
+                "{{dummyProject}}",
+                "events",
+                "{{dummySpendingEvent}}",
+                "publish"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "access_token",
+      "value": ""
+    }
+  ]
+}

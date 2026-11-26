@@ -1,0 +1,300 @@
+# ============================================================================
+# Reeve lightweight deployment
+# ----------------------------------------------------------------------------
+# A trimmed-down version of docker-compose.yml for local testing and
+# lightweigt small deployments:
+#   * API + Publisher run as a SINGLE container (single JVM) with all module
+#     flags enabled. Inter-module communication happens in-process via Spring
+#     ApplicationEvents, so Kafka is disabled entirely (no kafka / kafdrop).
+#   * ClamAV is omitted - it is NOT a hard dependency.
+#   * KERI is disabled (lob.blockchain_publisher.keri.enabled=false) so the
+#     heavy keria + witness-demo containers are not needed. Flip it back to
+#     true and re-add those services if you need the KERI identifier layer.
+#
+# Kept: postgres, keycloak (+ theme setup), frontend, follower-app,
+#       yaci-cli, yaci-viewer (the Yaci DevKit).
+#
+# Usage:
+#   docker compose -f docker-compose.lightweight.yml up -d --build
+#
+# Yaci Devnet (yaci-cli + yaci-viewer) runs behind the "yaci-devnet" profile
+# and is OFF by default. Enable it for local testing against a local devnet:
+#   docker compose -f docker-compose.lightweight.yml --profile yaci-devnet up -d --build
+# (or: export COMPOSE_PROFILES=yaci-devnet)
+#
+# Running WITHOUT the profile: the default LOB_BLOCKFROST_URL /
+# STORE_CARDANO_HOST values point at yaci-cli, so override them to target a
+# real network, e.g.:
+#   LOB_BLOCKFROST_URL=https://blockfrost-preprod.cardano.org/api/v1/ \
+#   STORE_CARDANO_HOST=preprod-node.world.dev.cardano.org \
+#   STORE_CARDANO_PORT=30000 \
+#   docker compose -f docker-compose.lightweight.yml up -d --build
+#
+# Notes:
+#   - The merged backend listens on port 9000 (what the frontend expects as
+#     VITE_API_URL). Publisher endpoints that used to live on 9001 are now
+#     served on 9000 too, since there is only one JVM.
+#   - The NetSuite client points at the mock-result endpoint served by the
+#     same container (http://localhost:9000/api/v1/mockresult).
+# ============================================================================
+
+services:
+
+  postgres:
+    restart: unless-stopped
+    image: postgres:17
+    hostname: postgres-reeve
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-h", "127.0.0.1", "-d", "postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-scripts/create_databases.sql:/docker-entrypoint-initdb.d/create_databases.sql
+    networks:
+      - lob
+
+  keycloak-theme-setup:
+    image: pro.registry.gitlab.metadata.dev.cf-deployments.org/base-infrastructure/docker-registry/cf-lob-keycloak-theme:0.0.0-main-66196f8-GHRUN14472195207
+    entrypoint: /bin/sh -c "cp -a /reeve-theme.jar /opt/keycloak/providers/"
+    volumes:
+      - keycloak-providers:/opt/keycloak/providers
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "100"
+
+  keycloak:
+    restart: unless-stopped
+    image: quay.io/keycloak/keycloak:26.7
+    command: start-dev --import-realm
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak-theme-setup:
+        condition: service_completed_successfully
+    networks:
+      - lob
+    environment:
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      KC_METRICS_ENABLED: ${KC_METRICS_ENABLED:-true}
+      KC_HEALTH_ENABLED: ${KC_HEALTH_ENABLED:-true}
+      KC_HOSTNAME: ${KC_HOSTNAME-localhost}
+      KC_IMPORT: ${KC_IMPORT:-/opt/keycloak/data/import/realm-export.json}
+      KC_HTTP_ENABLED: true
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_PORT: ${KC_HTTP_PORT:-8080}
+      KC_HTTPS_PORT: ${KC_HTTPS_PORT:-8443}
+      KC_DB: ${KC_DB:-postgres}
+      KC_DB_URL_HOST: ${KC_DB_URL_HOST:-postgres-reeve}
+      KC_DB_URL_PORT: ${KC_DB_URL_PORT:-5432}
+      KC_DB_USERNAME: ${KC_DB_USERNAME:-postgres}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD:-postgres}
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8080'"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+    ports:
+      - ${EXPOSED_KC_HTTP_PORT:-8080}:${KC_HTTP_PORT:-8080}
+      - ${EXPOSED_KC_HTTPS_PORT:-8443}:${KC_HTTPS_PORT:-8443}
+      - ${EXPOSED_KC_HEALTH_PORT:-8082}:9000
+    volumes:
+      - ./keycloak-config-multitenancy:/opt/keycloak/data/import
+      - keycloak-providers:/opt/keycloak/providers
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "100"
+
+  # Merged API + Publisher in a single JVM. All module flags enabled.
+  # Kafka disabled -> modules talk via Spring ApplicationEvents in-process.
+  backend:
+    restart: unless-stopped
+    build:
+      context: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    environment:
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${OAUTH2_ISSUER_URI:-http://localhost:8080/realms/reeve-master}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${OAUTH2_JWK_SET_URI:-http://keycloak:8080/realms/reeve-master/protocol/openid-connect/certs}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWS_ALGORITHMS: ${OAUTH2_JWS_ALGORITHMS:-RS256}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${OAUTH2_AUDIENCE:-reeve-api}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUTHORITIES_CLAIM_NAME: ${OAUTH2_AUTHORITIES_CLAIM_NAME:-roles}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUTHORITY_PREFIX: ${OAUTH2_AUTHORITY_PREFIX:-ROLE_}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_PRINCIPAL_CLAIM_NAME: ${OAUTH2_PRINCIPAL_CLAIM_NAME:-preferred_username}
+      SPRINGDOC_API_DOCS_ENABLED: true
+      SPRINGDOC_SWAGGER_UI_ENABLED: true
+      SPRINGDOC_SWAGGER_UI_PATH: /swagger-ui.html
+      LOB_CORS_ALLOWED_ORIGINS: ${LOB_CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      # Only used for dev and mocking netsuite
+      LOB_MOCK_RESULT_PATH: cf-application/src/main/resources/db/migration/postgresql/cf-reeve-db-migrations/NetSuiteIngestionMock.json
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev--yaci-dev-kit}
+      LOB_CARDANO_NETWORK: ${LOB_CARDANO_NETWORK:-DEV}
+      DB_URL: ${DB_URL:-jdbc:postgresql://postgres-reeve:5432/postgres}
+      lob_owner_account_mnemonic: ${LOB_OWNER_ACCOUNT_MNEMONIC:-test test test test test test test test test test test test test test test test test test test test test test test sauce}
+      # --- union of api + publisher module flags (both features enabled) ---
+      LOB_ACCOUNTING_REPORTING_CORE_ENABLED: true
+      LOB_ORGANISATION_ENABLED: true
+      # This service runs BOTH modules, so it needs both halves of the RSA key pair.
+      # See certs/netsuiteConfiguration.md.
+      LOB_CONFIG_ENCRYPTION_PUBLIC_KEY: ${LOB_CONFIG_ENCRYPTION_PUBLIC_KEY:?Generate the encryption key pair - see certs/netsuiteConfiguration.md}
+      LOB_CONFIG_ENCRYPTION_PRIVATE_KEY: ${LOB_CONFIG_ENCRYPTION_PRIVATE_KEY:?Generate the encryption key pair - see certs/netsuiteConfiguration.md}
+      LOB_REPORTING_ENABLED: true
+      LOB_FUNDING_ENABLED: true
+      LOB_BLOCKCHAIN_READER_ENABLED: true
+      LOB_BLOCKCHAIN_PUBLISHER_ENABLED: true
+      LOB_NETSUITE_ENABLED: true
+      LOB_CSV_ENABLED: true
+      LOB_INDEXER_ENABLED: ${LOB_INDEXER_ENABLE:-true}
+      LOB_INDEXER_URL: ${LOB_INDEXER_URL:-http://reeve-verifier-backend:9000}
+      LOB_BLOCKCHAIN_PUBLISHER_ROLLBACK_ENABLED: ${LOB_BLOCKCHAIN_PUBLISHER_ROLLBACK_ENABLED:-false}
+      # --- single JVM -> single port (frontend expects API at 9000) ---
+      SERVER_PORT: 9000
+      # --- Kafka disabled: in-process Spring events instead of a broker ---
+      SPRING_KAFKA_ENABLED: false
+      # --- ClamAV disabled (optional dependency, no-ops when off) ---
+      LOB_SECURITY_CLAMAV_ENABLED: false
+      # --- KERI disabled for lightweight run (no keria / witness-demo) ---
+      LOB_BLOCKCHAIN_PUBLISHER_KERI_ENABLED: false
+      # --- dispatching + reader/publisher wiring ---
+      LOB_DISPATCHING_STRATEGY_TYPE: IMMEDIATE
+      LOB_BLOCKFROST_URL: ${LOB_BLOCKFROST_URL:-http://yaci-cli:8080/api/v1/}
+      LOB_BLOCKCHAIN_READER_LOB_FOLLOWER_BASE_URL: http://follower-app:9090/api
+      # NetSuite client points at the mock endpoint served by this same container
+      LOB_NETSUITE_CLIENT_RECORDSPERCALL: 1000
+      # IPFS off (default)
+      LOB_BLOCKCHAIN_PUBLISHER_IPFS_ENABLED: ${LOB_BLOCKCHAIN_PUBLISHER_IPFS_ENABLED:-false}
+      LOB_BLOCKCHAIN_PUBLISHER_IPFS_BLOCKFROST_ENABLED: ${LOB_BLOCKCHAIN_PUBLISHER_IPFS_BLOCKFROST_ENABLED:-false}
+      LOB_BLOCKCHAIN_PUBLISHER_IPFS_BLOCKFROST_PROJECT_ID: ${LOB_BLOCKCHAIN_PUBLISHER_IPFS_BLOCKFROST_PROJECT_ID:-DUMMY_KEY}
+      # --- security / web ---
+      SERVER_USEFORWARDHEADERS: true
+      SERVER_FORWARDHEADERSSTRATEGY: framework
+      OAUTH2_REDIRECT_URL: ${API_URL:-http://localhost:9000}/swagger-ui/oauth2-redirect.html
+    working_dir: /app
+    entrypoint: ${ENTRYPOINT:-java -jar /app.jar}
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/9000'"]
+      interval: 30s
+      timeout: 10s
+      retries: 8
+      start_period: 20s
+    networks:
+      - lob
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./:/app/
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "100"
+
+  frontend:
+    restart: unless-stopped
+    image: pro.registry.gitlab.metadata.dev.cf-deployments.org/base-infrastructure/docker-registry/cf-lob-frontend:${FRONTEND_DOCKER_TAG:-main}
+    networks:
+      - lob
+    ports:
+      - "3000:80"
+    environment:
+      PORT: "3000"
+      VITE_API_URL: ${API_FRONTEND_HOSTNAME:-http://localhost:9000}
+      VITE_ADMIN_EMAIL: access_reeve-support@cardanofoundation.org
+      VITE_KEYCLOAK_URL: ${KC_FRONTEND_HOSTNAME:-http://localhost:8080}
+      VITE_KEYCLOAK_REALM: reeve-master
+      VITE_KEYCLOAK_CLIENT_ID: webclient
+      VITE_KEYCLOAK_REDIRECT_URL: ${FRONTEND_URL:-http://localhost:3000}/auth/login
+      VITE_PUBLIC_INTERFACE_OFF: ${VITE_PUBLIC_INTERFACE_OFF:-true}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "100"
+
+  follower-app:
+    restart: unless-stopped
+    image: pro.registry.gitlab.metadata.dev.cf-deployments.org/base-infrastructure/docker-registry/cf-reeve-follower-app:1.6.0-rc1
+    networks:
+      - lob
+    ports:
+      - "9090:9090"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev--yaci-dev-kit
+      DB_URL: ${DB_URL:-jdbc:postgresql://postgres-reeve:5432/postgres?currentSchema=lob_follower_service}
+      LOB_BLOCKFROST_URL: ${LOB_BLOCKFROST_URL:-http://yaci-cli:8080/api/v1/}
+      STORE_CARDANO_HOST: ${STORE_CARDANO_HOST:-yaci-cli}
+      STORE_CARDANO_PORT: ${STORE_CARDANO_PORT:-3001}
+      STORE_CARDANO_PROTOCOL_MAGIC: ${STORE_CARDANO_PROTOCOL_MAGIC:-42}
+      # Default address generated by yaci devnet
+      LOB_UTXO_FILTER_ADDRESSES: ${LOB_UTXO_FILTER_ADDRESSES:-addr_test1qppcuzs25ghufz2mzg37hcm77px4matwz2hz072z4ms7umqasylaf2uure0h5dw6zmm4ctnxfm0m9gf8lst6fflthlhq5hrg7w}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "100"
+
+  yaci-cli:
+    restart: unless-stopped
+    image: bloxbean/yaci-cli:0.10.6
+    # Optional: only started with --profile yaci-devnet (see header)
+    profiles: ["yaci-devnet"]
+    networks:
+      - lob
+    env_file:
+      - ./yaci-config/env
+      - ./yaci-config/node.properties
+    volumes:
+      - ./yaci-config/node.properties:/app/config/node.properties
+      - yaci-data:/clusters
+    ports:
+      - "${YACI_DEVNET_EXPOSED_PORT:-3001}:3001"
+      - "8081:8080"
+    entrypoint: [ "/app/yaci-cli", "create-node", "-o", "--start" ]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "100"
+
+  yaci-viewer:
+    restart: unless-stopped
+    image: bloxbean/yaci-viewer:0.10.6
+    # Optional: only started with --profile yaci-devnet (see header)
+    profiles: ["yaci-devnet"]
+    ports:
+      - "5173:5173"
+    env_file:
+      - ./yaci-config/env
+    environment:
+      PUBLIC_INDEXER_BASE_URL: ${PUBLIC_INDEXER_BASE_URL:-http://yaci-cli:8080/api/v1}
+      PUBLIC_INDEXER_WS_URL: ${PUBLIC_INDEXER_WS_URL:-ws://localhost:8081/ws/liveblocks}
+    networks:
+      - lob
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "100"
+
+volumes:
+  postgres-data:
+  keycloak-providers:
+  yaci-data:
+
+networks:
+  lob:
+    name: lob

@@ -1,6 +1,6 @@
 VERSION 0.8
 
-ARG --global ALL_BUILD_TARGETS="follower-app"
+ARG --global ALL_BUILD_TARGETS="backend follower-app"
 
 ARG --global DOCKER_IMAGE_PREFIX="cf-reeve"
 ARG --global DOCKER_IMAGES_EXTRA_TAGS=""
@@ -37,6 +37,11 @@ docker-publish:
       RUN if [ "$PUSH" = "true" ]; then docker push ${registry}/${IMAGE_NAME}:${EARTH_GIT_SHORT_HASH}; fi
     END
   END
+
+backend:
+  ARG EARTH_TARGET_NAME
+  FROM DOCKERFILE -f Dockerfile --target ${EARTH_TARGET_NAME} .
+  SAVE IMAGE ${DOCKER_IMAGE_PREFIX}-${EARTH_TARGET_NAME}:latest
 
 follower-app:
    ARG EARTH_TARGET_NAME

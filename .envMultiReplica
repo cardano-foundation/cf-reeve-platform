@@ -1,0 +1,14 @@
+API_REPLICAS=2
+PUBLISHER_REPLICAS=2
+
+API_HOSTNAME=api.reeve.localhost
+FRONTEND_HOSTNAME=reeve.localhost
+KC_HOSTNAME=keycloak.reeve.localhost
+KC_FRONTEND_HOSTNAME=http://keycloak.reeve.localhost
+API_FRONTEND_HOSTNAME=http://api.reeve.localhost
+LOB_CORS_ALLOWED_ORIGINS=http://reeve.localhost
+
+
+# Important to let docker compose choose a random port when starting multiple replicas of api and publisher 
+API_EXPOSE_PORT=
+PUBLISHER_EXPOSE_PORT=
