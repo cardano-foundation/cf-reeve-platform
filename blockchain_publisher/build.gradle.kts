@@ -15,7 +15,7 @@ dependencies {
     implementation("com.bloxbean.cardano:cardano-client-crypto")
     implementation("com.bloxbean.cardano:cardano-client-backend-blockfrost")
     implementation("com.bloxbean.cardano:cardano-client-quicktx")
-    implementation("id.veridian:signify:0.1.2-66227de-SNAPSHOT")
+    implementation("id.veridian:signify:0.1.3")
     // IPFS client library
     implementation("com.github.ipfs:java-ipfs-http-client:v1.3.3")
 
