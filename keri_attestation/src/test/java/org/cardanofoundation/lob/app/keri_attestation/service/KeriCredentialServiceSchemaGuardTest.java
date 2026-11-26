@@ -132,7 +132,7 @@ class KeriCredentialServiceSchemaGuardTest {
     private SchemaOobiResolver schemaOobiResolver;
 
     @BeforeEach
-    void setUp() throws Exception {
+    void setUp() {
         lenient().when(keriClient.client()).thenReturn(client);
         lenient().when(client.ipex()).thenReturn(ipex);
         lenient().when(client.exchanges()).thenReturn(exchanges);
@@ -230,7 +230,7 @@ class KeriCredentialServiceSchemaGuardTest {
     }
 
     @Test
-    void rejectsGrantWithForeignSchemaBeforeAdmit() throws Exception {
+    void rejectsGrantWithForeignSchemaBeforeAdmit() {
         beginFreshStep();
         when(mockCorrelator.awaitByRoute(eq(OFFER_OR_GRANT_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
@@ -252,7 +252,7 @@ class KeriCredentialServiceSchemaGuardTest {
     }
 
     @Test
-    void rejectsNegotiatedGrantWithForeignSchemaBeforeAdmit() throws Exception {
+    void rejectsNegotiatedGrantWithForeignSchemaBeforeAdmit() {
         beginFreshStep();
         when(mockCorrelator.awaitByRoute(eq(OFFER_OR_GRANT_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(OFFER_NOTIF_ID, OFFER_SAID, Map.of())));
@@ -274,7 +274,7 @@ class KeriCredentialServiceSchemaGuardTest {
     }
 
     @Test
-    void rejectsGrantWhoseAcdcNamesNoSchema() throws Exception {
+    void rejectsGrantWhoseAcdcNamesNoSchema() {
         beginFreshStep();
         when(mockCorrelator.awaitByRoute(eq(OFFER_OR_GRANT_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
@@ -291,7 +291,7 @@ class KeriCredentialServiceSchemaGuardTest {
     }
 
     @Test
-    void admitsAnyConfiguredSchemaNotOnlyTheRequestedOne() throws Exception {
+    void admitsAnyConfiguredSchemaNotOnlyTheRequestedOne() {
         // The apply asks for SCHEMA_SAID, but Veridian presents spontaneously: a credential of the
         // other configured schema is still admitted.
         beginFreshStep();
@@ -309,7 +309,7 @@ class KeriCredentialServiceSchemaGuardTest {
     }
 
     @Test
-    void rejectedGrantIsDeletedSoNextPresentationDoesNotReclaimIt() throws Exception {
+    void rejectedGrantIsDeletedSoNextPresentationDoesNotReclaimIt() {
         // The REAL correlator over a simulated agent queue: mark/delete really removes the notification,
         // exactly as KERIA does, so a second presentation sees what the first one left behind.
         List<Notification> queue = new ArrayList<>();

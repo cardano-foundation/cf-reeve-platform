@@ -130,9 +130,9 @@ class DocumentLedgerUpdateHandlerRollbackIntegrationTest {
     void ledgerUpdateIsAppliedViaFallbackExecutionWhenPublishedOutsideAnyTransaction() {
         VaultDocumentEntity doc = persistStuckDocument("doc-fallback");
 
-        // no TransactionTemplate here at all: no active transaction synchronization is present,
-        // which is exactly the case fallbackExecution=true exists for (e.g. DocumentDispatchRetryJob
-        // re-emitting after its own read-only transaction has already completed).
+        // No TransactionTemplate here at all, so no transaction synchronization is active. That is
+        // exactly the case the listener's fallback execution exists for, for example the dispatch
+        // retry job re-emitting after its own read-only transaction has already completed.
         eventPublisher.publishEvent(dispatchedEvent(doc.getId()));
 
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {

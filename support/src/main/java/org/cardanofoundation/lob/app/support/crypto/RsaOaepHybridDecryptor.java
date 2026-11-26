@@ -22,6 +22,8 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
+import org.springframework.lang.Nullable;
+
 /**
  * Hybrid RSA-OAEP + AES-256-GCM decryptor — the decrypt-only half held by the netsuite tier.
  * <p>
@@ -52,7 +54,7 @@ public class RsaOaepHybridDecryptor implements SecretDecryptor {
     }
 
     @Override
-    public String decrypt(String envelope, String organisationId) {
+    public String decrypt(@Nullable String envelope, String organisationId) {
         if (envelope == null || envelope.isBlank()) {
             throw new IllegalArgumentException("Secret envelope is empty");
         }

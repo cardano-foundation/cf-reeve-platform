@@ -20,6 +20,7 @@ import id.veridian.signify.app.clienting.SignifyClient;
 import id.veridian.signify.cesr.Diger;
 import id.veridian.signify.cesr.args.RawArgs;
 import id.veridian.signify.cesr.util.CoreUtil;
+import id.veridian.signify.generated.keria.model.KelOperation;
 
 import org.cardanofoundation.lob.app.blockchain_publisher.domain.core.IdentifierConfig;
 
@@ -39,7 +40,7 @@ public class KeriService {
                     CborSerializationUtil.serialize(data.getMap()), 32);
             Diger diger = new Diger(RawArgs.builder().raw(blake3_256).build());
 
-            EventResult interact = client.identifiers().interact(identifierConfig.getPrefix(),
+            EventResult<KelOperation> interact = client.identifiers().interact(identifierConfig.getPrefix(),
                     diger.getQb64());
             requireNotFailed(client.operations().wait(interact.op()), "publisher interact");
             Map<String, Object> ked = interact.serder().getKed();

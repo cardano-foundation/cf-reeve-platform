@@ -214,7 +214,7 @@ public class KeriCredentialService {
         ValidatedCredential vc = validated.get();
 
         // Fold the link write into completeStep's mutator (mirrors
-        // KeriAuthBeginService#persistAuthBeginIfIdentityStillCurrent exactly): the credential write and
+        // AuthBeginLedgerUpdateHandler#persistAuthBeginIfIdentityStillCurrent exactly): the credential write and
         // the ceremony's CREDENTIAL_REQUESTED -> CREDENTIAL_RECEIVED transition commit atomically, in
         // CeremonyService's one transaction.
         String finalCredentialSaid = vc.credentialSaid();
@@ -599,22 +599,7 @@ public class KeriCredentialService {
                 log.info("agent key-state: no HabState found for agent identifier {}", agentName);
             }
 
-            // Told apart from the outer catch deliberately: a thrown/empty contact lookup is itself the
-            // diagnostic signal ("our agent can't even address this AID"), not a diagnostics failure —
-            // it must still log something actionable rather than falling through to the generic
-            // "receive diagnostics unavailable" message below.
-            try {
-                var contact = client.client().contacts().get(linkedAid);
-                if (contact.isPresent()) {
-                    log.info("wallet contact {}: {}", linkedAid, contact.get());
-                } else {
-                    log.info("wallet AID {} is NOT a resolved contact (empty response) -- our agent may not "
-                            + "be able to address it at all.", linkedAid);
-                }
-            } catch (Exception e) {
-                interruptIfNeeded(e);
-                log.info("wallet AID {} is NOT a resolved contact: {}", linkedAid, e.getMessage());
-            }
+            logWalletContact(linkedAid);
 
             // notes() is a typed list now; render it for the diagnostic rather than substring a body.
             String rawNotes = String.valueOf(client.client().notifications().list().notes());
@@ -625,6 +610,27 @@ public class KeriCredentialService {
         } catch (Exception e) {
             interruptIfNeeded(e);
             log.info("receive diagnostics unavailable: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Told apart from the diagnostics' outer catch deliberately: a thrown/empty contact lookup is itself
+     * the diagnostic signal ("our agent can't even address this AID"), not a diagnostics failure — it
+     * must still log something actionable rather than falling through to the generic "receive
+     * diagnostics unavailable" message.
+     */
+    private void logWalletContact(String linkedAid) {
+        try {
+            var contact = client.client().contacts().get(linkedAid);
+            if (contact.isPresent()) {
+                log.info("wallet contact {}: {}", linkedAid, contact.get());
+            } else {
+                log.info("wallet AID {} is NOT a resolved contact (empty response) -- our agent may not "
+                        + "be able to address it at all.", linkedAid);
+            }
+        } catch (Exception e) {
+            interruptIfNeeded(e);
+            log.info("wallet AID {} is NOT a resolved contact: {}", linkedAid, e.getMessage());
         }
     }
 
@@ -660,7 +666,7 @@ public class KeriCredentialService {
     /**
      * Persists the validated credential to the identity link. <b>Only ever called from inside a
      * {@link CeremonyService#completeStep} mutator</b> — same rationale as
-     * {@link KeriAuthBeginService#persistAuthBeginIfIdentityStillCurrent}'s javadoc: {@code
+     * {@code AuthBeginLedgerUpdateHandler#persistAuthBeginIfIdentityStillCurrent}: {@code
      * completeStep} only invokes its mutator after the ceremony row's own {@code (state,
      * attemptGeneration)} CAS has already confirmed this is the current, non-superseded attempt, so a
      * stale attempt's mutator never runs, and both the link write and the ceremony transition commit

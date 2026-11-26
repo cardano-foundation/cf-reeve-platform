@@ -1,7 +1,7 @@
 package org.cardanofoundation.lob.app.keri_attestation.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -74,7 +74,7 @@ class CredentialVerificationServiceTest {
         assertEquals(TrustModel.CHAINED, row.getTrustModel());
         assertEquals("fp-123", row.getPolicyFingerprint());
         assertEquals("EKelEvent", row.getKelEventSaid());
-        assertTrue(row.getVerifiedAt() != null);
+        assertNotNull(row.getVerifiedAt());
     }
 
     /** Re-verifying updates the existing row rather than accumulating a second verdict for one card. */

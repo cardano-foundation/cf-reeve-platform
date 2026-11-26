@@ -55,7 +55,7 @@ public class DocumentPublishable implements CardanoPublishable<DocumentEntity> {
     public Either<ProblemDetail, Optional<L1Batch<DocumentEntity>>> buildL1Transaction(String organisationId, Set<DocumentEntity> unit) {
         DocumentEntity document = unit.iterator().next();
 
-        return l1TransactionCreator.pullBlockchainTransaction(organisationId, document)
+        return l1TransactionCreator.pullBlockchainTransaction(document)
                 .map(tx -> Optional.of(new L1Batch<>(
                         organisationId,
                         Set.of(document),

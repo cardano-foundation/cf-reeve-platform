@@ -98,7 +98,7 @@ class RemotesignRequestFactoryTest {
      * doc's payload shape claims are checked against.
      */
     @Test
-    void anchorRequestKedMatchesAnIndependentlyComputedSaidOverTheSamePayloadShape() throws Exception {
+    void anchorRequestKedMatchesAnIndependentlyComputedSaidOverTheSamePayloadShape() {
         Map<String, Object> expectedPayload = new LinkedHashMap<>();
         expectedPayload.put("i", WALLET_AID);
         expectedPayload.put("d", "");

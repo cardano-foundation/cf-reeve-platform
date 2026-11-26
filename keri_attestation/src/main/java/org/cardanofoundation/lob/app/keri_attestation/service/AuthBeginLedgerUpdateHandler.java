@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.keri_attestation.service;
 
 import java.time.Instant;
 import java.util.EnumSet;
+import java.util.Objects;
 import java.util.Set;
 
 import lombok.RequiredArgsConstructor;
@@ -91,7 +92,7 @@ public class AuthBeginLedgerUpdateHandler {
 
         String txHash = update.getBlockchainReceipts().stream()
                 .map(BlockchainReceipt::getHash)
-                .filter(hash -> hash != null)
+                .filter(Objects::nonNull)
                 .findFirst()
                 .orElse(null);
 

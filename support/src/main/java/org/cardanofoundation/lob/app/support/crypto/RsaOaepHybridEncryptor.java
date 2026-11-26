@@ -19,6 +19,8 @@ import javax.crypto.spec.OAEPParameterSpec;
 import javax.crypto.spec.PSource;
 import javax.crypto.spec.SecretKeySpec;
 
+import org.springframework.lang.Nullable;
+
 /**
  * Hybrid RSA-OAEP + AES-256-GCM encryptor — the encrypt-only half held by the organisation tier.
  * <p>
@@ -54,7 +56,7 @@ public class RsaOaepHybridEncryptor implements SecretEncryptor {
      * Decodes a Base64(DER) key env value. Whitespace and line breaks are stripped first because
      * {@code openssl base64} wraps lines and the strict JDK decoder rejects them.
      */
-    static byte[] decodeKeyMaterial(String base64, String keyRole) {
+    static byte[] decodeKeyMaterial(@Nullable String base64, String keyRole) {
         if (base64 == null || base64.isBlank()) {
             throw new IllegalArgumentException(
                     "Config encryption %s key is not set.".formatted(keyRole));

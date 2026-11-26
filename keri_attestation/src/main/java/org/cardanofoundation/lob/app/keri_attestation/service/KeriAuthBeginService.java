@@ -195,47 +195,10 @@ public class KeriAuthBeginService {
     }
 
     /**
-     * Persists the confirmed (or verified-external) AUTH_BEGIN tx hash to the identity link.
-     * <b>Only ever called from inside a {@link CeremonyService#completeStep} mutator</b> — that method
-     * only invokes its mutator after the ceremony row's own {@code (state, attemptGeneration)} CAS has
-     * already confirmed this is the current, non-superseded attempt, so a stale generation's mutator
-     * never runs at all, and both the link write and the ceremony transition commit together in
-     * {@code CeremonyService}'s one transaction.
-     *
-     * <p>That CAS alone does not cover a relink, though: relink doesn't touch the ceremony's own
-     * {@code (state, attemptGeneration)} directly (a separate {@code KeriOobiService} write invalidates
-     * the ceremony out-of-band), so this re-fetches the link fresh and compares {@code bindingVersion}
-     * against the version this attempt was authorized under — the same idiom
-     * {@code KeriCredentialService#persistCredentialIfIdentityStillCurrent} uses for the identical race.
-     *
-     * <p>The re-fetch is row-locked via
-     * {@link org.cardanofoundation.lob.app.keri_attestation.repository.KeriIdentityLinkRepository#findByUserIdForUpdate}
-     * rather than a plain {@code findById}: this write and {@code KeriOobiService}'s relink write race
-     * the same row, and without the lock the two could interleave into a row that is a mix of the old
-     * and new identity.
-     */
-    private void persistAuthBeginIfIdentityStillCurrent(String userId, int expectedBindingVersion, String txHash,
-            Long blockNumber) {
-        identityLinkRepository.findByUserIdForUpdate(userId).ifPresent(freshLink -> {
-            if (freshLink.getBindingVersion() != expectedBindingVersion) {
-                log.warn("Skipping AUTH_BEGIN link write for user {}: identity was relinked (expected binding "
-                        + "version {}, now {}).", userId, expectedBindingVersion, freshLink.getBindingVersion());
-                return;
-            }
-            freshLink.setAuthBeginTxHash(txHash);
-            freshLink.setAuthBeginAt(Instant.now());
-            if (blockNumber != null) {
-                freshLink.setAuthBeginBlock(blockNumber);
-            }
-            identityLinkRepository.save(freshLink);
-        });
-    }
-
-    /**
      * Records the user-asserted, UNVERIFIED AUTH_BEGIN completion on the identity link: sets the
      * {@code auth_begin_asserted} flag (no tx hash, no block). Same relink-race guard and row-lock idiom
-     * as {@link #persistAuthBeginIfIdentityStillCurrent}; only ever called from inside a {@link
-     * CeremonyService#completeStep} mutator.
+     * as {@code AuthBeginLedgerUpdateHandler#persistAuthBeginIfIdentityStillCurrent}; only ever called
+     * from inside a {@link CeremonyService#completeStep} mutator.
      */
     private void markAuthBeginAssertedIfIdentityStillCurrent(String userId, int expectedBindingVersion) {
         identityLinkRepository.findByUserIdForUpdate(userId).ifPresent(freshLink -> {

@@ -65,10 +65,10 @@ public class KelAnchorVerifier {
     }
 
     /** @return every {@code ixn} event in {@code aid}'s KEL, empty when the agent returns nothing usable. */
-    public List<Map<String, Object>> fetchIxnEvents(String aid) throws Exception {
+    public List<Map<String, Object>> fetchIxnEvents(String aid) {
         List<Map<String, Object>> events = new ArrayList<>();
-        for (KeyEventRecord record : client.client().keyEvents().get(aid)) {
-            KeyEvent ked = record.getKed();
+        for (KeyEventRecord keyEventRecord : client.client().keyEvents().get(aid)) {
+            KeyEvent ked = keyEventRecord.getKed();
             if (ked != null && "ixn".equals(ked.getT())) {
                 events.add(KEL_MAPPER.convertValue(ked, new TypeReference<Map<String, Object>>() {
                 }));
@@ -93,10 +93,9 @@ public class KelAnchorVerifier {
         if (candidate.isEmpty()) {
             return Optional.empty();
         }
-        Map<String, Object> event = locateCandidate(fetchIxnEvents(aid), candidate);
-        return event != null && matchesEveryCoordinate(event, candidate)
-                && sealContainsDigest(event.get("a"), payloadSaid)
-                ? Optional.of(event) : Optional.empty();
+        return locateCandidate(fetchIxnEvents(aid), candidate)
+                .filter(event -> matchesEveryCoordinate(event, candidate)
+                        && sealContainsDigest(event.get("a"), payloadSaid));
     }
 
     private static boolean matchesEveryCoordinate(Map<String, Object> event, AnchorCandidate candidate) {
@@ -113,32 +112,32 @@ public class KelAnchorVerifier {
      * <p>No fallback to "the latest event" if neither matches: a caller holding an explicit candidate
      * that cannot be found must fail rather than shop for a different event.
      */
-    public static Map<String, Object> locateCandidate(List<Map<String, Object>> ixnEvents,
+    public static Optional<Map<String, Object>> locateCandidate(List<Map<String, Object>> ixnEvents,
             AnchorCandidate candidate) {
         if (candidate.said() != null) {
             for (Map<String, Object> ke : ixnEvents) {
                 if (candidate.said().equals(ke.get("d"))) {
-                    return ke;
+                    return Optional.of(ke);
                 }
             }
         }
         if (candidate.sequence() != null) {
             for (Map<String, Object> ke : ixnEvents) {
                 if (candidate.sequence().equals(String.valueOf(ke.get("s")))) {
-                    return ke;
+                    return Optional.of(ke);
                 }
             }
         }
-        return null;
+        return Optional.empty();
     }
 
     /**
      * Bounded scan over {@code ixnEvents} whose sequence falls within ({@code floorSequence},
      * {@code currentSequence}] — strictly after the floor, at or before the current key-state sequence
      * (hex-compared numerically) — returning the first whose seal contains {@code payloadSaid}, or
-     * {@code null} when none in that window match.
+     * empty when none in that window match.
      */
-    public static Map<String, Object> scanForSealMatch(List<Map<String, Object>> ixnEvents, String floorSequence,
+    public static Optional<Map<String, Object>> scanForSealMatch(List<Map<String, Object>> ixnEvents, String floorSequence,
             String currentSequence, String payloadSaid) {
         long floor = parseHexSequence(floorSequence);
         long current = parseHexSequence(currentSequence);
@@ -148,10 +147,10 @@ public class KelAnchorVerifier {
                 continue;
             }
             if (sealContainsDigest(ke.get("a"), payloadSaid)) {
-                return ke;
+                return Optional.of(ke);
             }
         }
-        return null;
+        return Optional.empty();
     }
 
     /**

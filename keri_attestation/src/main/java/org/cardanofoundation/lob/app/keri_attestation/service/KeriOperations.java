@@ -23,7 +23,7 @@ public final class KeriOperations {
 
     /**
      * Returns {@code result} unchanged unless it is a {@link FailedOperation}, in which case it throws a
-     * {@link RuntimeException} naming {@code stage}, the operation and KERIA's error code and message.
+     * {@link KeriOperationFailedException} naming {@code stage}, the operation and KERIA's error code and message.
      */
     public static <T extends Operation> T requireNotFailed(T result, String stage) {
         if (result instanceof FailedOperation failed) {
@@ -31,9 +31,17 @@ public final class KeriOperations {
             String detail = error == null
                     ? "no error details"
                     : "code " + error.getCode() + ": " + error.getMessage();
-            throw new RuntimeException("KERIA " + stage + " operation " + failed.getName()
+            throw new KeriOperationFailedException("KERIA " + stage + " operation " + failed.getName()
                     + " failed (" + detail + ")");
         }
         return result;
+    }
+
+    /** KERIA completed an operation as failed. Unchecked, so existing runtime-failure handling still applies. */
+    public static final class KeriOperationFailedException extends RuntimeException {
+
+        public KeriOperationFailedException(String message) {
+            super(message);
+        }
     }
 }

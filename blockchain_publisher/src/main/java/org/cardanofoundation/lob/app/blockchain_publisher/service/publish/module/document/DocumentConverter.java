@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.blockchain_publisher.service.publish.module.document;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -49,7 +50,8 @@ public class DocumentConverter {
         }
         return slots.stream()
                 .map(slot -> new DocumentEntity.Slot(slot.ephemeralPub(), slot.wrappedDek(), slot.recipientKeyHash()))
-                .collect(Collectors.toList());
+                // mutable on purpose: this list becomes a JPA element collection Hibernate manages
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
     /**
@@ -82,7 +84,7 @@ public class DocumentConverter {
         return slots.stream()
                 .map(slot -> new DocumentPublishCommand.PublishSlot(slot.getEphemeralPub(), slot.getWrappedDek(),
                         slot.getRecipientKeyHash()))
-                .collect(Collectors.toList());
+                .toList();
     }
 
 }

@@ -29,6 +29,12 @@ public class CESRStreamUtil {
      *  printing and no key reordering. Events are parsed into LinkedHashMaps to preserve order. */
     private static final ObjectMapper JSON = new ObjectMapper();
 
+    private static final String EVENT_KEY = "event";
+    private static final String ATTACHMENT_KEY = "atc";
+
+    private CESRStreamUtil() {
+    }
+
     /**
      * Parses CESR format string into an array of events with their attachments.
      * CESR format: {json_event}{attachment}{json_event}{attachment}...
@@ -36,71 +42,69 @@ public class CESRStreamUtil {
      * @param cesrData The CESR format string
      * @return List of maps containing "event" and "atc" keys
      */
-    @SuppressWarnings("unchecked")
     public static List<Map<String, Object>> parseCESRData(String cesrData) {
         List<Map<String, Object>> result = new ArrayList<>();
 
         int index = 0;
-        while (index < cesrData.length()) {
+        while (index >= 0 && index < cesrData.length()) {
             // Find the start of JSON event (look for opening brace)
-            if (cesrData.charAt(index) == '{') {
-                // Find the end of JSON event by counting braces
-                int braceCount = 0;
-                int jsonStart = index;
-                int jsonEnd = index;
-
-                for (int i = index; i < cesrData.length(); i++) {
-                    char ch = cesrData.charAt(i);
-                    if (ch == '{') {
-                        braceCount++;
-                    } else if (ch == '}') {
-                        braceCount--;
-                        if (braceCount == 0) {
-                            jsonEnd = i + 1;
-                            break;
-                        }
-                    }
-                }
-
-                // Extract JSON event
-                String jsonEvent = cesrData.substring(jsonStart, jsonEnd);
-
-                // Find attachment data (everything until next '{' or end of string)
-                int attachmentStart = jsonEnd;
-                int attachmentEnd = cesrData.length();
-
-                for (int i = attachmentStart; i < cesrData.length(); i++) {
-                    if (cesrData.charAt(i) == '{') {
-                        attachmentEnd = i;
-                        break;
-                    }
-                }
-
-                String attachment = "";
-                if (attachmentStart < attachmentEnd) {
-                    attachment = cesrData.substring(attachmentStart, attachmentEnd);
-                }
-
-                // Parse JSON event to Object
-                try {
-                    Map<String, Object> eventObj = readEvent(jsonEvent);
-
-                    Map<String, Object> eventMap = new LinkedHashMap<>();
-                    eventMap.put("event", eventObj);
-                    eventMap.put("atc", attachment);
-                    result.add(eventMap);
-                } catch (Exception e) {
-                    // The event body is not logged: an ACDC carries credential attributes (possibly PII).
-                    log.warn("Skipping unparseable CESR JSON event ({} chars): {}", jsonEvent.length(), e.getMessage());
-                }
-
-                index = attachmentEnd;
-            } else {
-                index++;
-            }
+            index = cesrData.charAt(index) == '{' ? parseEventAt(cesrData, index, result) : index + 1;
         }
 
         return result;
+    }
+
+    /**
+     * Frames the JSON event starting at {@code start} plus its attachment into {@code result}.
+     *
+     * @return where parsing resumes, or -1 when the event never closes (a truncated stream, so nothing
+     *         after this point can be framed)
+     */
+    private static int parseEventAt(String cesrData, int start, List<Map<String, Object>> result) {
+        int jsonEnd = findJsonEnd(cesrData, start);
+        if (jsonEnd < 0) {
+            log.warn("Stopping CESR parse at index {}: JSON event is never closed", start);
+            return -1;
+        }
+        String jsonEvent = cesrData.substring(start, jsonEnd);
+
+        // Attachment data is everything until the next '{' or the end of the string
+        int attachmentEnd = indexOfOrEnd(cesrData, '{', jsonEnd);
+        String attachment = cesrData.substring(jsonEnd, attachmentEnd);
+
+        // Parse JSON event to Object
+        try {
+            Map<String, Object> eventMap = new LinkedHashMap<>();
+            eventMap.put(EVENT_KEY, readEvent(jsonEvent));
+            eventMap.put(ATTACHMENT_KEY, attachment);
+            result.add(eventMap);
+        } catch (Exception e) {
+            // The event body is not logged: an ACDC carries credential attributes (possibly PII).
+            log.warn("Skipping unparseable CESR JSON event ({} chars): {}", jsonEvent.length(), e.getMessage());
+        }
+        return attachmentEnd;
+    }
+
+    /** End (exclusive) of the brace-balanced JSON object starting at {@code start}, or -1 if it never closes. */
+    private static int findJsonEnd(String cesrData, int start) {
+        int braceCount = 0;
+        for (int i = start; i < cesrData.length(); i++) {
+            char ch = cesrData.charAt(i);
+            if (ch == '{') {
+                braceCount++;
+            } else if (ch == '}') {
+                braceCount--;
+                if (braceCount == 0) {
+                    return i + 1;
+                }
+            }
+        }
+        return -1;
+    }
+
+    private static int indexOfOrEnd(String s, char ch, int from) {
+        int found = s.indexOf(ch, from);
+        return found < 0 ? s.length() : found;
     }
 
     /**
@@ -113,8 +117,8 @@ public class CESRStreamUtil {
         StringBuilder cesrStream = new StringBuilder();
 
         for (Map<String, Object> eventData : parsedData) {
-            Map<String, Object> event = (Map<String, Object>) eventData.get("event");
-            String attachment = (String) eventData.get("atc");
+            Map<String, Object> event = (Map<String, Object>) eventData.get(EVENT_KEY);
+            String attachment = (String) eventData.get(ATTACHMENT_KEY);
 
             if (event != null) {
                 String jsonEvent = writeEvent(event);
@@ -147,8 +151,8 @@ public class CESRStreamUtil {
         List<Map<String, Object>> parsedData = new ArrayList<>();
         for (int i = 0; i < events.size(); i++) {
             Map<String, Object> eventMap = new LinkedHashMap<>();
-            eventMap.put("event", events.get(i));
-            eventMap.put("atc", attachments.get(i) != null ? attachments.get(i) : "");
+            eventMap.put(EVENT_KEY, events.get(i));
+            eventMap.put(ATTACHMENT_KEY, attachments.get(i) != null ? attachments.get(i) : "");
             parsedData.add(eventMap);
         }
 

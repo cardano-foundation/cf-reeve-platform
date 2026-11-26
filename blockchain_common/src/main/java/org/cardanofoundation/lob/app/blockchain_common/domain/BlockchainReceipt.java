@@ -6,6 +6,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 
+import org.springframework.lang.Nullable;
+
 /**
  * A receipt for a blockchain submission (e.g. {@code CARDANO_L1} + tx hash). Shared across modules via
  * {@code blockchain_common} so ledger-update events do not need module-specific receipt types.
@@ -19,6 +21,7 @@ public class BlockchainReceipt {
 
     private String type;
 
+    @Nullable
     private String hash;
 
 }

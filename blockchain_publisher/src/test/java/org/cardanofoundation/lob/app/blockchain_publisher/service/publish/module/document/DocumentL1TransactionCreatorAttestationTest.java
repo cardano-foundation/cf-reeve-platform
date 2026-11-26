@@ -189,7 +189,7 @@ class DocumentL1TransactionCreatorAttestationTest {
 
         DocumentEntity document = fixture("cer-1");
         Either<ProblemDetail, API3BlockchainTransaction> result =
-                creator().pullBlockchainTransaction("org-1", document);
+                creator().pullBlockchainTransaction(document);
 
         assertThat(result.isRight()).isTrue();
         verify(ipfsPublisher).publish(anyString());
@@ -209,7 +209,7 @@ class DocumentL1TransactionCreatorAttestationTest {
         when(cip170MetadataFactory.attestMap(anyString(), anyString(), anyString()))
                 .thenReturn(MetadataBuilder.createMap());
 
-        assertThat(creator().pullBlockchainTransaction("org-1", fixture("cer-1")).isRight()).isTrue();
+        assertThat(creator().pullBlockchainTransaction(fixture("cer-1")).isRight()).isTrue();
 
         verify(cip170MetadataFactory).attestMap("Eaid-user-1", ATTESTED_PAYLOAD_SAID, "5");
     }
@@ -219,7 +219,7 @@ class DocumentL1TransactionCreatorAttestationTest {
     void aPlainPublishAttachesNoAttestMap() throws Exception {
         stubHappyPath();
 
-        assertThat(creator().pullBlockchainTransaction("org-1", fixture(null)).isRight()).isTrue();
+        assertThat(creator().pullBlockchainTransaction(fixture(null)).isRight()).isTrue();
 
         verify(cip170MetadataFactory, never()).attestMap(anyString(), anyString(), anyString());
     }
@@ -237,7 +237,8 @@ class DocumentL1TransactionCreatorAttestationTest {
         broken.setAttestationAid(null);
         broken.setAttestationPayloadSaid(null);
 
-        assertThatThrownBy(() -> creator().pullBlockchainTransaction("org-1", broken))
+        DocumentL1TransactionCreator creator = creator();
+        assertThatThrownBy(() -> creator.pullBlockchainTransaction(broken))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("refusing to publish it as unattested");
     }
@@ -256,7 +257,7 @@ class DocumentL1TransactionCreatorAttestationTest {
         when(cip170MetadataFactory.digestOf(any())).thenReturn("EDIFFERENTMANIFESTDIGEST0000000000000000000");
 
         Either<ProblemDetail, API3BlockchainTransaction> result =
-                creator().pullBlockchainTransaction("org-1", fixture("cer-1"));
+                creator().pullBlockchainTransaction(fixture("cer-1"));
 
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo("ATTESTED_MANIFEST_MISMATCH");
@@ -270,7 +271,7 @@ class DocumentL1TransactionCreatorAttestationTest {
         stubHappyPath();
         when(cip170MetadataFactory.digestOf(any())).thenReturn("EANYTHINGATALL00000000000000000000000000000");
 
-        assertThat(creator().pullBlockchainTransaction("org-1", fixture(null)).isRight()).isTrue();
+        assertThat(creator().pullBlockchainTransaction(fixture(null)).isRight()).isTrue();
     }
 
     /** IPFS is mandatory for documents on both paths — never inlined, never skipped. */
@@ -282,7 +283,7 @@ class DocumentL1TransactionCreatorAttestationTest {
                 Optional.empty(), cip170MetadataFactory, new RemotesignRequestFactory(), 1447, false);
 
         Either<ProblemDetail, API3BlockchainTransaction> result =
-                noIpfs.pullBlockchainTransaction("org-1", fixture("cer-1"));
+                noIpfs.pullBlockchainTransaction(fixture("cer-1"));
 
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo("DOCUMENT_PUBLISHING_UNAVAILABLE");

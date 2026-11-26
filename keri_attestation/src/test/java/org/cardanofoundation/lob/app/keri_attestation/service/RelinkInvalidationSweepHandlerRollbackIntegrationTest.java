@@ -123,10 +123,10 @@ class RelinkInvalidationSweepHandlerRollbackIntegrationTest {
     void sweepFiresViaFallbackExecutionWhenPublishedOutsideAnyTransaction() {
         KeriAttestationCeremonyEntity ceremony = persistStaleBoundCeremony("cer-fallback");
 
-        // No TransactionTemplate here at all: no active transaction synchronization is present, which is
-        // exactly the case fallbackExecution = true exists for (e.g. a caller re-publishing after its own
-        // transaction has already completed). Contrast with the rollback case above, where a
-        // synchronization WAS present and fallbackExecution correctly does NOT apply.
+        // No TransactionTemplate here at all, so no transaction synchronization is active. That is
+        // exactly the case the listener's fallback execution exists for, for example a caller
+        // re-publishing after its own transaction has already completed. Contrast with the rollback
+        // case above, where a synchronization WAS present and fallback execution correctly does NOT apply.
         eventPublisher.publishEvent(new RelinkCompletedEvent(USER, 2));
 
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {

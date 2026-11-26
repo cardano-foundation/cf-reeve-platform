@@ -70,7 +70,8 @@ class RsaOaepHybridCipherTest {
         raw[raw.length - 1] ^= 0x01;
         String tampered = Base64.getEncoder().encodeToString(raw);
 
-        assertThatThrownBy(() -> decryptor().decrypt(tampered, ORG_ID))
+        RsaOaepHybridDecryptor decryptor = decryptor();
+        assertThatThrownBy(() -> decryptor.decrypt(tampered, ORG_ID))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("tampered or organisation context mismatch");
     }
@@ -79,7 +80,8 @@ class RsaOaepHybridCipherTest {
     void rejectsDecryptionUnderADifferentOrganisation() {
         String envelope = encryptor().encrypt(PLAINTEXT, ORG_ID);
 
-        assertThatThrownBy(() -> decryptor().decrypt(envelope, "another-org"))
+        RsaOaepHybridDecryptor decryptor = decryptor();
+        assertThatThrownBy(() -> decryptor.decrypt(envelope, "another-org"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("tampered or organisation context mismatch");
     }
@@ -97,8 +99,9 @@ class RsaOaepHybridCipherTest {
 
     @Test
     void rejectsEmptyEnvelopes() {
+        RsaOaepHybridDecryptor decryptor = decryptor();
         for (String envelope : new String[]{null, "", "  "}) {
-            assertThatThrownBy(() -> decryptor().decrypt(envelope, ORG_ID))
+            assertThatThrownBy(() -> decryptor.decrypt(envelope, ORG_ID))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("empty");
         }
@@ -174,14 +177,15 @@ class RsaOaepHybridCipherTest {
         generator.initialize(2048);
         KeyPair weak = generator.generateKeyPair();
 
-        assertThatThrownBy(() -> new RsaOaepHybridEncryptor(
-                Base64.getEncoder().encodeToString(weak.getPublic().getEncoded())))
+        String weakPublic = Base64.getEncoder().encodeToString(weak.getPublic().getEncoded());
+        String weakPrivate = Base64.getEncoder().encodeToString(weak.getPrivate().getEncoded());
+
+        assertThatThrownBy(() -> new RsaOaepHybridEncryptor(weakPublic))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("3072")
                 .hasMessageContaining("public key");
 
-        assertThatThrownBy(() -> new RsaOaepHybridDecryptor(
-                Base64.getEncoder().encodeToString(weak.getPrivate().getEncoded())))
+        assertThatThrownBy(() -> new RsaOaepHybridDecryptor(weakPrivate))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("3072")
                 .hasMessageContaining("private key");
@@ -200,8 +204,8 @@ class RsaOaepHybridCipherTest {
     void rejectsNonRsaKeys() throws Exception {
         KeyPair ec = KeyPairGenerator.getInstance("EC").generateKeyPair();
 
-        assertThatThrownBy(() -> new RsaOaepHybridEncryptor(
-                Base64.getEncoder().encodeToString(ec.getPublic().getEncoded())))
+        String ecPublic = Base64.getEncoder().encodeToString(ec.getPublic().getEncoded());
+        assertThatThrownBy(() -> new RsaOaepHybridEncryptor(ecPublic))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("public key is not a valid X.509 RSA key");
     }

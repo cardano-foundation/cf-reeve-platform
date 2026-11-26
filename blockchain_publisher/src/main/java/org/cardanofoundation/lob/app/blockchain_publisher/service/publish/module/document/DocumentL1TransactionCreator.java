@@ -100,8 +100,7 @@ public class DocumentL1TransactionCreator {
      * the ceremony. Nothing here calls back into {@code keri_attestation} or {@code document_vault},
      * which is what lets those modules run in a separate process.
      */
-    public Either<ProblemDetail, API3BlockchainTransaction> pullBlockchainTransaction(
-            String organisationId, DocumentEntity document) {
+    public Either<ProblemDetail, API3BlockchainTransaction> pullBlockchainTransaction(DocumentEntity document) {
         if (ipfsPublisher.isEmpty()) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
                     "Document publishing requires IPFS; no IpfsPublisher is configured in this deployment.");

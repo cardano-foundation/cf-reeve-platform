@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -20,7 +21,6 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import id.veridian.signify.app.Exchanging;
 import id.veridian.signify.app.Notifying;
 import id.veridian.signify.app.clienting.SignifyClient;
@@ -50,7 +50,6 @@ class KeriNotificationCorrelatorTest {
     private static final String NOTIFICATION_ID = "0ANOTIFICATIONID000000000000000";
     private static final String REFERENCED_EXN_SAID = "EREFERENCEDEXNSAID00000000000000000";
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Mock
     private SignifyClient client;
@@ -133,7 +132,7 @@ class KeriNotificationCorrelatorTest {
     // --- awaitByRoute: claims the first unread route-matching notification, no other checks ---
 
     @Test
-    void awaitByRouteClaimsTheFirstUnreadRouteMatchingNotificationRegardlessOfSenderOrThread() throws Exception {
+    void awaitByRouteClaimsTheFirstUnreadRouteMatchingNotificationRegardlessOfSenderOrThread() {
         // OTHER_AID (not some "expected" sender) and no thread-back at all -- awaitByRoute claims it
         // anyway, since it never looks at sender or thread-back, only route + unread.
         when(notifications.list(anyInt(), anyInt())).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
@@ -151,7 +150,7 @@ class KeriNotificationCorrelatorTest {
     }
 
     @Test
-    void awaitByRouteClaimsTheBareRouteFormWhenBothFormsAreAccepted() throws Exception {
+    void awaitByRouteClaimsTheBareRouteFormWhenBothFormsAreAccepted() {
         // KERIA can surface an IPEX offer/grant notification's route in the bare form ("/ipex/offer")
         // rather than the "/exn/"-prefixed one; both forms are accepted. When the caller passes both
         // forms (as OFFER_ROUTES/GRANT_ROUTES do), a bare-route notification must still be claimed --
@@ -169,7 +168,7 @@ class KeriNotificationCorrelatorTest {
     }
 
     @Test
-    void awaitByRoutePrefersTheFetchedExchangesOwnDOverTheNotificationsClaimedSaid() throws Exception {
+    void awaitByRoutePrefersTheFetchedExchangesOwnDOverTheNotificationsClaimedSaid() {
         // The fetched exchange's own d (offerResource/grantResource's own getExn().getD(), read after
         // the fetch) is preferred over the notification body's own a.d.
         String fetchedOwnSaid = "EFETCHEDOWNSAID0000000000000000000000";
@@ -185,7 +184,7 @@ class KeriNotificationCorrelatorTest {
     }
 
     @Test
-    void awaitByRouteFallsBackToTheNotificationsClaimedSaidWhenTheFetchedExchangeHasNoOwnD() throws Exception {
+    void awaitByRouteFallsBackToTheNotificationsClaimedSaidWhenTheFetchedExchangeHasNoOwnD() {
         when(notifications.list(anyInt(), anyInt())).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
         when(exchanges.get(REFERENCED_EXN_SAID)).thenReturn(exchangeWithRoute(SENDER_AID, ROUTE, ""));
 
@@ -197,7 +196,7 @@ class KeriNotificationCorrelatorTest {
     }
 
     @Test
-    void awaitByRouteIgnoresNonMatchingRouteAndTimesOutWithoutTouchingExchanges() throws Exception {
+    void awaitByRouteIgnoresNonMatchingRouteAndTimesOutWithoutTouchingExchanges() {
         when(notifications.list(anyInt(), anyInt()))
                 .thenReturn(responseOf(note(NOTIFICATION_ID, false, OTHER_ROUTE, REFERENCED_EXN_SAID)));
 
@@ -209,7 +208,7 @@ class KeriNotificationCorrelatorTest {
     }
 
     @Test
-    void awaitByRouteIgnoresAlreadyReadNotificationAndTimesOutWithoutTouchingExchanges() throws Exception {
+    void awaitByRouteIgnoresAlreadyReadNotificationAndTimesOutWithoutTouchingExchanges() {
         when(notifications.list(anyInt(), anyInt())).thenReturn(responseOf(note(NOTIFICATION_ID, true, ROUTE, REFERENCED_EXN_SAID)));
 
         Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
@@ -220,7 +219,7 @@ class KeriNotificationCorrelatorTest {
     }
 
     @Test
-    void awaitByRouteReturnsEmptyOnTimeoutWhenNoNotificationsArrive() throws Exception {
+    void awaitByRouteReturnsEmptyOnTimeoutWhenNoNotificationsArrive() {
         when(notifications.list(anyInt(), anyInt())).thenReturn(responseOf());
 
         Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
@@ -230,7 +229,7 @@ class KeriNotificationCorrelatorTest {
     }
 
     @Test
-    void awaitByRouteTimesOutCleanlyInsteadOfPropagatingWhenTheClientRepeatedlyThrows() throws Exception {
+    void awaitByRouteTimesOutCleanlyInsteadOfPropagatingWhenTheClientRepeatedlyThrows() {
         // A transient agent hiccup (network blip, 5xx, ...) must not blow up the caller's async
         // worker — it's logged and retried on the next poll, same as any other empty round, until the
         // deadline is reached.
@@ -243,7 +242,7 @@ class KeriNotificationCorrelatorTest {
     }
 
     @Test
-    void awaitByRouteNeverMarksOrDeletesRegardlessOfOutcome() throws Exception {
+    void awaitByRouteNeverMarksOrDeletesRegardlessOfOutcome() {
         when(notifications.list(anyInt(), anyInt())).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
         when(exchanges.get(REFERENCED_EXN_SAID))
                 .thenReturn(exchangeWithRouteAndSaid(SENDER_AID, ROUTE, REFERENCED_EXN_SAID));
@@ -257,7 +256,7 @@ class KeriNotificationCorrelatorTest {
     // --- excludeNoteIds: ignore pre-existing debris so a stale reply isn't mistaken for a new one ---
 
     @Test
-    void awaitByRouteSkipsANotificationWhoseIdIsExcludedAndTimesOut() throws Exception {
+    void awaitByRouteSkipsANotificationWhoseIdIsExcludedAndTimesOut() {
         when(notifications.list(anyInt(), anyInt())).thenReturn(responseOf(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID)));
 
         Optional<KeriNotificationCorrelator.CorrelatedNotification> result =
@@ -268,7 +267,7 @@ class KeriNotificationCorrelatorTest {
     }
 
     @Test
-    void awaitByRouteClaimsAFreshNotificationEvenWhenAnExcludedStaleOneIsAlsoPresent() throws Exception {
+    void awaitByRouteClaimsAFreshNotificationEvenWhenAnExcludedStaleOneIsAlsoPresent() {
         String freshId = "0AFRESHNOTE00000000000000000000";
         String freshExnSaid = "EFRESHEXNSAID000000000000000000000";
         // The stale note (NOTIFICATION_ID) is excluded; only the fresh one is claimed — the stale note's
@@ -286,7 +285,7 @@ class KeriNotificationCorrelatorTest {
     }
 
     @Test
-    void outstandingNoteIdsReturnsOnlyUnreadRouteMatchingIds() throws Exception {
+    void outstandingNoteIdsReturnsOnlyUnreadRouteMatchingIds() {
         String readId = "0AREADNOTE0000000000000000000000";
         String otherRouteId = "0AOTHERROUTE000000000000000000000";
         when(notifications.list(anyInt(), anyInt())).thenReturn(responseOf(
@@ -300,7 +299,7 @@ class KeriNotificationCorrelatorTest {
     }
 
     @Test
-    void outstandingNoteIdsReturnsEmptyWhenTheListingFails() throws Exception {
+    void outstandingNoteIdsReturnsEmptyWhenTheListingFails() {
         when(notifications.list(anyInt(), anyInt())).thenThrow(new RuntimeException("agent unreachable"));
 
         assertTrue(correlator.outstandingNoteIds(List.of(ROUTE)).isEmpty());
@@ -309,7 +308,7 @@ class KeriNotificationCorrelatorTest {
     // --- markAndDelete ---
 
     @Test
-    void markAndDeleteCallsMarkThenDelete() throws Exception {
+    void markAndDeleteCallsMarkThenDelete() {
         correlator.markAndDelete(NOTIFICATION_ID);
 
         InOrder inOrder = Mockito.inOrder(notifications);
@@ -340,7 +339,8 @@ class KeriNotificationCorrelatorTest {
             interruptFlagRestored.set(Thread.currentThread().isInterrupted());
         });
         worker.start();
-        Thread.sleep(100);
+        // Interrupt only once the worker is inside the poll loop (it has listed at least once).
+        verify(notifications, timeout(2000).atLeastOnce()).list(anyInt(), anyInt());
         worker.interrupt();
         worker.join(2000);
 
@@ -359,7 +359,7 @@ class KeriNotificationCorrelatorTest {
      * clear them.
      */
     @Test
-    void claimsAReplyThatSitsBeyondTheFirstPageOfAnAgentCloggedWithStaleNotifications() throws Exception {
+    void claimsAReplyThatSitsBeyondTheFirstPageOfAnAgentCloggedWithStaleNotifications() {
         List<Notification> firstPage = filler(25);
         List<Notification> secondPage = new java.util.ArrayList<>(filler(3));
         secondPage.add(note(NOTIFICATION_ID, false, ROUTE, REFERENCED_EXN_SAID));
@@ -388,7 +388,7 @@ class KeriNotificationCorrelatorTest {
      * ceremony (nothing outlives ceremony-ttl), so it is provably debris.
      */
     @Test
-    void pruneDeletesOnlyNotificationsOlderThanTheRetentionWindow() throws Exception {
+    void pruneDeletesOnlyNotificationsOlderThanTheRetentionWindow() {
         when(notifications.list(anyInt(), anyInt())).thenReturn(page(0, 3, List.of(
                 noteAt("old-1", isoMinutesAgo(180), ROUTE),
                 noteAt("recent", isoMinutesAgo(5), ROUTE),
@@ -410,7 +410,7 @@ class KeriNotificationCorrelatorTest {
      * read state, or how much older debris surrounds it.
      */
     @Test
-    void pruneNeverDeletesAFreshNotificationEvenAmongOlderDebris() throws Exception {
+    void pruneNeverDeletesAFreshNotificationEvenAmongOlderDebris() {
         when(notifications.list(anyInt(), anyInt())).thenReturn(page(0, 3, List.of(
                 noteAt("ancient", isoMinutesAgo(600), ROUTE),
                 noteAt("the-real-grant", isoMinutesAgo(1), ROUTE),
@@ -425,7 +425,7 @@ class KeriNotificationCorrelatorTest {
 
     /** Undatable means unprovable, so it is never deleted. */
     @Test
-    void pruneSkipsNotificationsWhoseTimestampCannotBeParsed() throws Exception {
+    void pruneSkipsNotificationsWhoseTimestampCannotBeParsed() {
         when(notifications.list(anyInt(), anyInt())).thenReturn(page(0, 2, List.of(
                 noteAt("no-date", "not-a-timestamp", ROUTE),
                 noteAt("old", isoMinutesAgo(300), ROUTE))));
@@ -439,7 +439,7 @@ class KeriNotificationCorrelatorTest {
 
     /** One stubborn notification must not abort the sweep. */
     @Test
-    void pruneContinuesAfterAFailedDelete() throws Exception {
+    void pruneContinuesAfterAFailedDelete() {
         when(notifications.list(anyInt(), anyInt())).thenReturn(page(0, 2, List.of(
                 noteAt("wont-go", isoMinutesAgo(300), ROUTE),
                 noteAt("will-go", isoMinutesAgo(300), ROUTE))));

@@ -3,9 +3,6 @@ package org.cardanofoundation.lob.app.blockchain_common.service_assistance;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigInteger;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -35,8 +32,6 @@ import org.cardanofoundation.lob.app.blockchain_common.domain.events.DocumentPub
  */
 class DocumentMetadataSerialiserTest {
 
-    private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2024-06-01T10:15:30Z"), ZoneId.of("UTC"));
-    private static final long CREATION_SLOT = 123456L;
     private static final String HASH_A = "300c9c9603b92a4b39ed3958bf9240114804db4fd373012c0ca47432d63425ae";
     private static final String HASH_B = "f35e5616160a30bf3c6e79fa73c576d40205e8fc3ba4e1c6dcf93e6b98e857b4";
 

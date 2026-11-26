@@ -1,3 +1,7 @@
+val signifyVersion: String by project
+val ipfsHttpClientVersion: String by project
+val archunitVersion: String by project
+
 dependencies {
     implementation(project(":accounting_reporting_core"))
     implementation(project(":reporting"))
@@ -15,12 +19,12 @@ dependencies {
     implementation("com.bloxbean.cardano:cardano-client-crypto")
     implementation("com.bloxbean.cardano:cardano-client-backend-blockfrost")
     implementation("com.bloxbean.cardano:cardano-client-quicktx")
-    implementation("id.veridian:signify:0.1.2-66227de-SNAPSHOT")
+    implementation("id.veridian:signify:$signifyVersion")
     // IPFS client library
-    implementation("com.github.ipfs:java-ipfs-http-client:v1.3.3")
+    implementation("com.github.ipfs:java-ipfs-http-client:$ipfsHttpClientVersion")
 
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa")
     testImplementation("org.springframework.boot:spring-boot-starter-validation")
     testImplementation(project(":organisation"))  // Explicitly include organisation for tests
-    testImplementation("com.tngtech.archunit:archunit-junit5:1.3.0")
+    testImplementation("com.tngtech.archunit:archunit-junit5:$archunitVersion")
 }

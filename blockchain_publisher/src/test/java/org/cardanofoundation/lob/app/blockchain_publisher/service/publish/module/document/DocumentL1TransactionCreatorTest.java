@@ -10,9 +10,6 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
@@ -61,7 +58,6 @@ class DocumentL1TransactionCreatorTest {
             .isSynced(true)
             .build();
 
-    private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2024-06-01T10:15:30Z"), ZoneId.of("UTC"));
 
     private BackendService backendService;
     private BlockchainReaderPublicApiIF blockchainReaderPublicApi;
@@ -127,7 +123,7 @@ class DocumentL1TransactionCreatorTest {
     @Test
     void emptyIpfsPublisher_returnsServiceUnavailableAndNeverTouchesTheChain() {
         Either<ProblemDetail, API3BlockchainTransaction> result =
-                creator(Optional.empty()).pullBlockchainTransaction("org-1", fixture());
+                creator(Optional.empty()).pullBlockchainTransaction(fixture());
 
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE.value());
@@ -156,7 +152,7 @@ class DocumentL1TransactionCreatorTest {
 
         DocumentEntity document = fixture();
         Either<ProblemDetail, API3BlockchainTransaction> result =
-                creator.pullBlockchainTransaction("org-1", document);
+                creator.pullBlockchainTransaction(document);
 
         assertThat(result.isRight()).isTrue();
         assertThat(result.get().creationSlot()).isEqualTo(12345L);
@@ -174,7 +170,7 @@ class DocumentL1TransactionCreatorTest {
         when(ipfsPublisher.publish(anyString())).thenReturn(Either.left(ipfsError));
 
         Either<ProblemDetail, API3BlockchainTransaction> result =
-                creator(Optional.of(ipfsPublisher)).pullBlockchainTransaction("org-1", fixture());
+                creator(Optional.of(ipfsPublisher)).pullBlockchainTransaction(fixture());
 
         assertThat(result.isLeft()).isTrue();
         assertThat(result.getLeft().getTitle()).isEqualTo("IPFS_UPLOAD_ERROR");
@@ -194,7 +190,9 @@ class DocumentL1TransactionCreatorTest {
         when(blockchainReaderPublicApi.getChainTip()).thenReturn(Either.right(CHAIN_TIP));
         when(organisationPublicApi.findByOrganisationId("org-1")).thenReturn(Optional.empty());
 
+        DocumentL1TransactionCreator creator = creator(Optional.of(ipfsPublisher));
+        DocumentEntity document = fixture();
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
-                () -> creator(Optional.of(ipfsPublisher)).pullBlockchainTransaction("org-1", fixture()));
+                () -> creator.pullBlockchainTransaction(document));
     }
 }

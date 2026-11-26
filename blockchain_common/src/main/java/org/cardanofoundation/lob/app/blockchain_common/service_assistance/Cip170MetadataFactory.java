@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import org.springframework.lang.Nullable;
+
 import co.nstant.in.cbor.CborException;
 import com.bloxbean.cardano.client.common.cbor.CborSerializationUtil;
 import com.bloxbean.cardano.client.metadata.MetadataBuilder;
@@ -60,7 +62,7 @@ public class Cip170MetadataFactory {
      * overwrite the authorization-labels list rather than add to it.
      */
     public MetadataMap authBeginMap(String aid, String leafSchemaSaid, byte[] reducedCesrChain,
-            Map<String, Object> optionalM, List<Long> authorizedLabels) {
+            @Nullable Map<String, Object> optionalM, List<Long> authorizedLabels) {
         MetadataMap map = MetadataBuilder.createMap();
         map.put("t", "AUTH_BEGIN");
         map.put("s", leafSchemaSaid);
@@ -86,8 +88,8 @@ public class Cip170MetadataFactory {
      */
     public String digestOf(MetadataMap map1447) {
         try {
-            byte[] blake3_256 = CoreUtil.blake3_256(CborSerializationUtil.serialize(map1447.getMap()), 32);
-            return new Diger(RawArgs.builder().raw(blake3_256).build()).getQb64();
+            byte[] blake3Digest = CoreUtil.blake3_256(CborSerializationUtil.serialize(map1447.getMap()), 32);
+            return new Diger(RawArgs.builder().raw(blake3Digest).build()).getQb64();
         } catch (CborException e) {
             throw new IllegalStateException("Failed to CBOR-serialize a metadata map for digesting.", e);
         }
@@ -97,7 +99,8 @@ public class Cip170MetadataFactory {
 
     // --- internals ---
 
-    private static MetadataMap authorizationMap(Map<String, Object> optionalM, List<Long> authorizedLabels) {
+    private static MetadataMap authorizationMap(@Nullable Map<String, Object> optionalM,
+            List<Long> authorizedLabels) {
         Objects.requireNonNull(authorizedLabels, "authorizedLabels must not be null");
 
         MetadataMap m = MetadataBuilder.createMap();

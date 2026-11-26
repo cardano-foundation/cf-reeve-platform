@@ -4,6 +4,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 
+import org.springframework.lang.Nullable;
+
 /**
  * Derives a recipient's public, on-chain-publishable identifier from their X25519 public key:
  *
@@ -25,7 +27,7 @@ public final class RecipientKeyHasher {
     private RecipientKeyHasher() {
     }
 
-    public static String hash(String publicKeyHex) {
+    public static String hash(@Nullable String publicKeyHex) {
         if (publicKeyHex == null || publicKeyHex.length() != PUBLIC_KEY_HEX_LENGTH) {
             throw new IllegalArgumentException(
                     "X25519 public key must be %d hex characters, got: %s"

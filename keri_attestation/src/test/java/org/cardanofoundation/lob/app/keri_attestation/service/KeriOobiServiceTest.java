@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
@@ -42,6 +43,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import org.cardanofoundation.lob.app.keri_attestation.config.KeriAttestationClient;
 import org.cardanofoundation.lob.app.keri_attestation.domain.core.CeremonyState;
@@ -79,7 +83,7 @@ class KeriOobiServiceTest {
     private KeriOobiService service;
 
     @BeforeEach
-    void setUp() throws Exception {
+    void setUp() {
         // Shared "happy path" client stubs — not every test reaches the client (invalid-URL tests
         // must never touch it at all), so these are lenient and simply unused in those cases.
         lenient().when(keriClient.client()).thenReturn(client);
@@ -116,53 +120,23 @@ class KeriOobiServiceTest {
         verifyNoInteractions(identityLinkRepository);
     }
 
-    @Test
-    void urlWithoutOobiSegmentIsOobiInvalidAndNeverTouchesTheClient() {
-        Either<ProblemDetail, String> result =
-                service.resolveUserOobi(USER, "https://witness.example.org/not-oobi/EAID12345", false);
-
-        assertTrue(result.isLeft());
-        assertEquals(KeriAttestationProblems.OOBI_INVALID, result.getLeft().getTitle());
-        verifyNoInteractions(client);
+    static Stream<Arguments> invalidOobiUrls() {
+        return Stream.of(
+                Arguments.of("without an /oobi/ segment", "https://witness.example.org/not-oobi/EAID12345"),
+                Arguments.of("with an empty AID segment", "https://witness.example.org/oobi/"),
+                Arguments.of("exceeding the max length",
+                        "https://witness.example.org/oobi/" + "E".repeat(2048) + "/agent/x"),
+                Arguments.of("blank", "   "),
+                // An unescaped space is illegal in a URI and fails java.net.URI parsing outright, distinct
+                // from the other validation failures (which are all syntactically valid URIs that fail a
+                // semantic check instead).
+                Arguments.of("syntactically invalid", "https://witness.example.org/oobi/E AID 12345"));
     }
 
-    @Test
-    void urlWithEmptyAidSegmentIsOobiInvalidAndNeverTouchesTheClient() {
-        Either<ProblemDetail, String> result =
-                service.resolveUserOobi(USER, "https://witness.example.org/oobi/", false);
-
-        assertTrue(result.isLeft());
-        assertEquals(KeriAttestationProblems.OOBI_INVALID, result.getLeft().getTitle());
-        verifyNoInteractions(client);
-    }
-
-    @Test
-    void urlExceedingMaxLengthIsOobiInvalidAndNeverTouchesTheClient() {
-        String longUrl = "https://witness.example.org/oobi/" + "E".repeat(2048) + "/agent/x";
-
-        Either<ProblemDetail, String> result = service.resolveUserOobi(USER, longUrl, false);
-
-        assertTrue(result.isLeft());
-        assertEquals(KeriAttestationProblems.OOBI_INVALID, result.getLeft().getTitle());
-        verifyNoInteractions(client);
-    }
-
-    @Test
-    void blankUrlIsOobiInvalidAndNeverTouchesTheClient() {
-        Either<ProblemDetail, String> result = service.resolveUserOobi(USER, "   ", false);
-
-        assertTrue(result.isLeft());
-        assertEquals(KeriAttestationProblems.OOBI_INVALID, result.getLeft().getTitle());
-        verifyNoInteractions(client);
-    }
-
-    @Test
-    void syntacticallyInvalidUrlIsOobiInvalidAndNeverTouchesTheClient() {
-        // An unescaped space is illegal in a URI and fails java.net.URI parsing outright, distinct
-        // from the other validation failures (which are all syntactically valid URIs that fail a
-        // semantic check instead).
-        Either<ProblemDetail, String> result =
-                service.resolveUserOobi(USER, "https://witness.example.org/oobi/E AID 12345", false);
+    @ParameterizedTest(name = "url {0} is OOBI_INVALID and never touches the client")
+    @MethodSource("invalidOobiUrls")
+    void invalidUrlIsOobiInvalidAndNeverTouchesTheClient(String description, String url) {
+        Either<ProblemDetail, String> result = service.resolveUserOobi(USER, url, false);
 
         assertTrue(result.isLeft());
         assertEquals(KeriAttestationProblems.OOBI_INVALID, result.getLeft().getTitle());
@@ -172,7 +146,7 @@ class KeriOobiServiceTest {
     // --- happy path: no existing link ---
 
     @Test
-    void happyPathWithNoExistingLinkExtractsAidAndPersistsAtBindingVersion1() throws Exception {
+    void happyPathWithNoExistingLinkExtractsAidAndPersistsAtBindingVersion1() {
         when(identityLinkRepository.findById(USER)).thenReturn(Optional.empty());
         when(identityLinkRepository.findByUserIdForUpdate(USER)).thenReturn(Optional.empty());
 
@@ -432,7 +406,7 @@ class KeriOobiServiceTest {
     // --- resolve/verify failures after validation ---
 
     @Test
-    void contactVerificationFailureAfterResolveIsOobiInvalidAndDoesNotPersist() throws Exception {
+    void contactVerificationFailureAfterResolveIsOobiInvalidAndDoesNotPersist() {
         when(contacts.get(AID)).thenReturn(Optional.empty());
 
         Either<ProblemDetail, String> result = service.resolveUserOobi(USER, VALID_OOBI, false);
@@ -446,7 +420,7 @@ class KeriOobiServiceTest {
     // --- FF1 (whole-branch review fast-follow): KERIA transient failures vs. genuinely invalid OOBIs ---
 
     @Test
-    void ioExceptionDuringResolveIsKeriAgentUnavailableWithActionableDetailAndDoesNotPersist() throws Exception {
+    void ioExceptionDuringResolveIsKeriAgentUnavailableWithActionableDetailAndDoesNotPersist() {
         // Covers connection-refused/timeout/any other network-level transport failure. The JDK
         // HttpClient underneath SignifyClient#fetch still raises an IOException subclass, but the client
         // wraps it: no signify method declares a checked IOException any more, so an unwrapped one can
@@ -465,7 +439,7 @@ class KeriOobiServiceTest {
     }
 
     @Test
-    void abortSignalTimeoutWhileWaitingOnTheResolveIsKeriAgentUnavailable() throws Exception {
+    void abortSignalTimeoutWhileWaitingOnTheResolveIsKeriAgentUnavailable() {
         // The resolve wait's own timeout (RESOLVE_TIMEOUT_MILLIS) fires as a TYPED timeout now -- the
         // agent accepted the resolve request but the long-running operation never completed in time,
         // i.e. the agent is slow/unresponsive, not the request being malformed.
@@ -481,7 +455,7 @@ class KeriOobiServiceTest {
     }
 
     @Test
-    void nonTimeoutInterruptedExceptionWhileWaitingOnTheResolveStaysOobiInvalid() throws Exception {
+    void nonTimeoutInterruptedExceptionWhileWaitingOnTheResolveStaysOobiInvalid() {
         // A plain thread interruption unrelated to the abort-signal timeout must not be misclassified as
         // agent unavailability -- only a genuine operation timeout/abort is.
         when(operations.wait(any(Operation.class), any(Operations.WaitOptions.class)))
@@ -504,7 +478,7 @@ class KeriOobiServiceTest {
     }
 
     @Test
-    void serverErrorResponseFromTheAgentIsKeriAgentUnavailable() throws Exception {
+    void serverErrorResponseFromTheAgentIsKeriAgentUnavailable() {
         // The agent responded, but with an HTTP 5xx -- a server-side failure, not a rejection of the
         // request itself.
         when(oobis.resolve(anyString(), anyString())).thenThrow(
@@ -519,7 +493,7 @@ class KeriOobiServiceTest {
     }
 
     @Test
-    void clientRejectionResponseFromTheAgentStaysOobiInvalidNotAgentUnavailable() throws Exception {
+    void clientRejectionResponseFromTheAgentStaysOobiInvalidNotAgentUnavailable() {
         // The agent was reachable and understood the request well enough to reject it (HTTP 4xx) -- this
         // is a genuine problem with the OOBI/AID, not agent unavailability, so it must stay OOBI_INVALID.
         when(oobis.resolve(anyString(), anyString())).thenThrow(

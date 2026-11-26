@@ -73,8 +73,7 @@ public class CardImportService {
     public Either<ProblemDetail, ImportCardResultView> importCard(ImportCardRequest request) {
         String organisationId = request.getOrganisationId();
         if (!securityHelper.canUserAccessOrg(organisationId)) {
-            return Either.left(VaultProblems.forbidden(
-                    "Current user is not a member of organisation %s.".formatted(organisationId)));
+            return Either.left(VaultProblems.of403NotOrgMember(organisationId));
         }
         if (organisationPublicApi.findByOrganisationId(organisationId).isEmpty()) {
             return Either.left(VaultProblems.notFound(VaultProblems.ORGANISATION_NOT_FOUND,
@@ -241,13 +240,12 @@ public class CardImportService {
                             + "(keri_attestation module disabled)."));
         }
         String cardDigest = attestationDigestFactory.digestOf(card);
-        Either<ProblemDetail, CredentialChainValidator.ValidatedCredential> verified = attestationVerifier.verify(
+        return attestationVerifier.verify(
                 securityHelper.getCurrentUserId(),
                 new AttestationImportVerifier.CardAttestationClaim(attestation.oobi(), attestation.aid(),
                         attestation.credentialSaid(), attestation.schemaSaid(), attestation.kelSequence(),
                         attestation.kelEventSaid(), attestation.metadataLabel(), attestation.cardDigest(),
                         attestation.payloadSaid(), attestation.credentialCesr(), cardDigest));
-        return verified;
     }
 
     /**

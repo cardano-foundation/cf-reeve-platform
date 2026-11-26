@@ -66,7 +66,8 @@ class NetSuiteAadRoundtripTest {
                 .isEqualTo(PEM);
 
         // The binding is real: any other organisation id fails the integrity check.
-        assertThatThrownBy(() -> decryptor.decrypt(stored.getPrivateKeyEncrypted(), "other-org"))
+        String storedEnvelope = stored.getPrivateKeyEncrypted();
+        assertThatThrownBy(() -> decryptor.decrypt(storedEnvelope, "other-org"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("context mismatch");
     }

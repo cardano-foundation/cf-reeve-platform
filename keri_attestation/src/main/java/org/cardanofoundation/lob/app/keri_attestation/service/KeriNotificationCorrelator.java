@@ -188,8 +188,8 @@ public class KeriNotificationCorrelator {
     public Set<String> outstandingNoteIds(List<String> routes) {
         Set<String> ids = listNotifications().stream()
                 .filter(note -> isUnreadRouteMatch(note, routes))
-                .map(note -> note.getI())
-                .filter(id -> id != null)
+                .map(Notification::getI)
+                .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
         if (!ids.isEmpty()) {
             log.info("Snapshotted {} pre-existing notification(s) on routes {} to exclude from the next wait",
@@ -259,56 +259,70 @@ public class KeriNotificationCorrelator {
         logNotificationState(notes, routes);
 
         for (Notification note : notes) {
-            if (!isUnreadRouteMatch(note, routes)) {
-                continue;
+            Optional<CorrelatedNotification> claimed = tryClaim(note, routes, excludeNoteIds, exnMatches);
+            if (claimed.isPresent()) {
+                return claimed;
             }
-            if (note.getI() != null && excludeNoteIds.contains(note.getI())) {
-                // Pre-existing debris snapshotted before the caller's request was sent — cannot be the
-                // reply to it. Skip it so the wait continues for a genuinely new notification.
-                continue;
-            }
-            String noteExnSaid = note.getA() != null ? note.getA().getD() : null;
-            if (noteExnSaid == null) {
-                continue;
-            }
-            Map<String, Object> exn;
-            try {
-                var exchange = client.client().exchanges().get(noteExnSaid);
-                if (exchange.isEmpty()) {
-                    // The notification is present and its route matches, but the referenced exchange is
-                    // not yet retrievable from the agent — surface it and retry on the next poll rather
-                    // than looping silently until timeout.
-                    log.info("KERI notification matched route {} (exn {}) but the exchange is not yet "
-                            + "retrievable from the agent — retrying", note.getA().getR(), noteExnSaid);
-                    continue;
-                }
-                exn = extractExn(exchange.get());
-            } catch (SignifyInterruptedException e) {
-                throw e;
-            } catch (Exception e) {
-                log.warn("Failed to fetch KERI exchange {} while route-matching: {}", noteExnSaid, e.getMessage());
-                continue;
-            }
-            if (exn == null) {
-                continue;
-            }
-            if (exnMatches != null && (!noteExnSaid.equals(exn.get("d")) || !exnMatches.test(exn))) {
-                // Route matches but the exchange does not answer the caller's request (or is not the one
-                // the notification announced). Leave it untouched and keep waiting.
-                if (!String.valueOf(note.getI()).equals(lastSkippedNotificationId.getAndSet(String.valueOf(note.getI())))) {
-                    log.info("Skipping KERI notification {} on route {} (exn {}): does not answer the awaited request "
-                            + "(exn d={} r={} p={} i={} rp={})", note.getI(), note.getA().getR(), noteExnSaid,
-                            exn.get("d"), exn.get("r"), exn.get("p"), exn.get("i"), exn.get("rp"));
-                }
-                continue;
-            }
-            log.info("Claimed KERI notification on route {} (exn {})", note.getA().getR(), noteExnSaid);
-            // Prefer the FETCHED exn's own "d" over the notification's claimed note.a.d.
-            Object fetchedSaid = exn.get("d");
-            String exnSaid = fetchedSaid instanceof String s ? s : noteExnSaid;
-            return Optional.of(new CorrelatedNotification(note.getI(), exnSaid, exn, note.getA().getR()));
         }
         return Optional.empty();
+    }
+
+    /** Claims {@code note} if it is an unread, non-excluded route match whose exchange answers the request. */
+    private Optional<CorrelatedNotification> tryClaim(Notification note, List<String> routes,
+            Set<String> excludeNoteIds, Predicate<Map<String, Object>> exnMatches) throws InterruptedException {
+        if (!isUnreadRouteMatch(note, routes)) {
+            return Optional.empty();
+        }
+        if (note.getI() != null && excludeNoteIds.contains(note.getI())) {
+            // Pre-existing debris snapshotted before the caller's request was sent — cannot be the
+            // reply to it. Skip it so the wait continues for a genuinely new notification.
+            return Optional.empty();
+        }
+        String noteExnSaid = note.getA() != null ? note.getA().getD() : null;
+        if (noteExnSaid == null) {
+            return Optional.empty();
+        }
+        Optional<Map<String, Object>> fetched = fetchExn(note, noteExnSaid);
+        if (fetched.isEmpty()) {
+            return Optional.empty();
+        }
+        Map<String, Object> exn = fetched.get();
+        if (exnMatches != null && (!noteExnSaid.equals(exn.get("d")) || !exnMatches.test(exn))) {
+            // Route matches but the exchange does not answer the caller's request (or is not the one
+            // the notification announced). Leave it untouched and keep waiting.
+            if (!String.valueOf(note.getI()).equals(lastSkippedNotificationId.getAndSet(String.valueOf(note.getI())))) {
+                log.info("Skipping KERI notification {} on route {} (exn {}): does not answer the awaited request "
+                        + "(exn d={} r={} p={} i={} rp={})", note.getI(), note.getA().getR(), noteExnSaid,
+                        exn.get("d"), exn.get("r"), exn.get("p"), exn.get("i"), exn.get("rp"));
+            }
+            return Optional.empty();
+        }
+        log.info("Claimed KERI notification on route {} (exn {})", note.getA().getR(), noteExnSaid);
+        // Prefer the FETCHED exn's own "d" over the notification's claimed note.a.d.
+        Object fetchedSaid = exn.get("d");
+        String exnSaid = fetchedSaid instanceof String said ? said : noteExnSaid;
+        return Optional.of(new CorrelatedNotification(note.getI(), exnSaid, exn, note.getA().getR()));
+    }
+
+    /** Fetches the exchange a notification announces; empty when it is not (yet) retrievable. */
+    private Optional<Map<String, Object>> fetchExn(Notification note, String noteExnSaid) throws InterruptedException {
+        try {
+            var exchange = client.client().exchanges().get(noteExnSaid);
+            if (exchange.isEmpty()) {
+                // The notification is present and its route matches, but the referenced exchange is
+                // not yet retrievable from the agent — surface it and retry on the next poll rather
+                // than looping silently until timeout.
+                log.info("KERI notification matched route {} (exn {}) but the exchange is not yet "
+                        + "retrievable from the agent — retrying", note.getA().getR(), noteExnSaid);
+                return Optional.empty();
+            }
+            return extractExn(exchange.get());
+        } catch (SignifyInterruptedException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("Failed to fetch KERI exchange {} while route-matching: {}", noteExnSaid, e.getMessage());
+            return Optional.empty();
+        }
     }
 
     /**
@@ -393,17 +407,8 @@ public class KeriNotificationCorrelator {
             Optional<Instant> sentAt = parseNotificationTimestamp(note.getDt());
             if (sentAt.isEmpty()) {
                 undatable++;
-                continue;
-            }
-            if (sentAt.get().isAfter(cutoff)) {
-                continue;
-            }
-            try {
-                markAndDelete(note.getI());
+            } else if (!sentAt.get().isAfter(cutoff) && tryPrune(note.getI())) {
                 pruned++;
-            } catch (RuntimeException e) {
-                // One stubborn notification must not abort the sweep; the next run retries it.
-                log.warn("Failed to prune KERI notification {}: {}", note.getI(), e.getMessage());
             }
         }
 
@@ -413,6 +418,17 @@ public class KeriNotificationCorrelator {
         }
 
         return pruned;
+    }
+
+    private boolean tryPrune(String notificationId) {
+        try {
+            markAndDelete(notificationId);
+            return true;
+        } catch (RuntimeException e) {
+            // One stubborn notification must not abort the sweep; the next run retries it.
+            log.warn("Failed to prune KERI notification {}: {}", notificationId, e.getMessage());
+            return false;
+        }
     }
 
     /** KERI timestamps are ISO-8601 with an explicit offset, e.g. {@code 2026-07-21T00:00:00.000000+00:00}. */
@@ -442,10 +458,10 @@ public class KeriNotificationCorrelator {
      * match, and correlation would fail SILENTLY rather than loudly.
      */
     @SuppressWarnings("unchecked")
-    private static Map<String, Object> extractExn(ExchangeResource exchangeResult) {
+    private static Optional<Map<String, Object>> extractExn(ExchangeResource exchangeResult) {
         if (exchangeResult == null || exchangeResult.getExn() == null) {
-            return null;
+            return Optional.empty();
         }
-        return EXN_MAPPER.convertValue(exchangeResult.getExn(), Map.class);
+        return Optional.of(EXN_MAPPER.convertValue(exchangeResult.getExn(), Map.class));
     }
 }

@@ -72,8 +72,9 @@ class CredentialSchemaRegistryTest {
 
     @Test
     void aChainedSchemaWithNoTrustedRootsRefusesToStart() {
+        List<CredentialSchema> schemas = List.of(chained(VLEI));
         IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> new CredentialSchemaRegistry(List.of(chained(VLEI))));
+                () -> new CredentialSchemaRegistry(schemas));
 
         assertTrue(e.getMessage().contains("trusted-roots"));
         assertTrue(e.getMessage().contains("would accept any issuer"));
@@ -81,8 +82,9 @@ class CredentialSchemaRegistryTest {
 
     @Test
     void aStandaloneSchemaWithNoTrustedIssuersRefusesToStart() {
+        List<CredentialSchema> schemas = List.of(standalone(EMPLOYEE));
         IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> new CredentialSchemaRegistry(List.of(standalone(EMPLOYEE))));
+                () -> new CredentialSchemaRegistry(schemas));
 
         assertTrue(e.getMessage().contains("trusted-issuers"));
     }
@@ -93,8 +95,9 @@ class CredentialSchemaRegistryTest {
      */
     @Test
     void aBlankTrustAnchorIsRejectedRatherThanQuietlyDropped() {
+        List<CredentialSchema> schemas = List.of(chained(VLEI, GLEIF_ROOT, "  "));
         IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> new CredentialSchemaRegistry(List.of(chained(VLEI, GLEIF_ROOT, "  "))));
+                () -> new CredentialSchemaRegistry(schemas));
 
         assertTrue(e.getMessage().contains("blank entry"));
         assertTrue(e.getMessage().contains("environment variable"));
@@ -102,24 +105,26 @@ class CredentialSchemaRegistryTest {
 
     @Test
     void aSchemaWithNoTrustModelRefusesToStart() {
+        List<CredentialSchema> schemas = List.of(
+                new CredentialSchema(VLEI, "x", null, List.of(GLEIF_ROOT), List.of(), List.of()));
         IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> new CredentialSchemaRegistry(List.of(
-                        new CredentialSchema(VLEI, "x", null, List.of(GLEIF_ROOT), List.of(), List.of()))));
+                () -> new CredentialSchemaRegistry(schemas));
 
         assertTrue(e.getMessage().contains("trust-model"));
     }
 
     @Test
     void aSchemaWithNoSaidRefusesToStart() {
+        List<CredentialSchema> schemas = List.of(chained("  ", GLEIF_ROOT));
         assertThrows(IllegalStateException.class,
-                () -> new CredentialSchemaRegistry(List.of(chained("  ", GLEIF_ROOT))));
+                () -> new CredentialSchemaRegistry(schemas));
     }
 
     @Test
     void aDuplicateSchemaSaidRefusesToStartRatherThanSilentlyPickingOne() {
+        List<CredentialSchema> schemas = List.of(chained(VLEI, GLEIF_ROOT), standalone(VLEI, ISSUER));
         IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> new CredentialSchemaRegistry(List.of(
-                        chained(VLEI, GLEIF_ROOT), standalone(VLEI, ISSUER))));
+                () -> new CredentialSchemaRegistry(schemas));
 
         assertTrue(e.getMessage().contains("duplicates"));
     }
@@ -141,8 +146,9 @@ class CredentialSchemaRegistryTest {
     /** Every problem at once, so a misconfigured deployment is fixed in one pass. */
     @Test
     void allProblemsAreReportedTogether() {
+        List<CredentialSchema> schemas = List.of(chained(VLEI), standalone(EMPLOYEE));
         IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> new CredentialSchemaRegistry(List.of(chained(VLEI), standalone(EMPLOYEE))));
+                () -> new CredentialSchemaRegistry(schemas));
 
         assertTrue(e.getMessage().contains(VLEI));
         assertTrue(e.getMessage().contains(EMPLOYEE));

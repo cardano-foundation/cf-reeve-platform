@@ -20,7 +20,7 @@ public record IdentityView(boolean linked, String aid, IdentityCredentialView cr
     /**
      * {@code txHash}/{@code at} come straight off {@code KeriIdentityLinkEntity}. {@code external} is
      * always {@code false}: the entity persists the confirmed (or verified-external) AUTH_BEGIN tx hash
-     * identically regardless of which path wrote it — {@code KeriAuthBeginService
+     * identically regardless of which path wrote it — {@code AuthBeginLedgerUpdateHandler
      * #persistAuthBeginIfIdentityStillCurrent} is the sole writer for both the {@code verifyExternal}
      * skip and the async on-chain-confirmation path, and carries no "how did this get here" flag to
      * read back. Reporting anything other than a constant {@code false} here would be a guess, not a

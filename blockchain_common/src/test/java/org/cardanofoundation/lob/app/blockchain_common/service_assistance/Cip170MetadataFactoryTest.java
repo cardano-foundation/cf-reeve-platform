@@ -177,8 +177,10 @@ class Cip170MetadataFactoryTest {
         Map<String, Object> optionalM = new LinkedHashMap<>();
         optionalM.put("l", "attacker-controlled value");
 
+        byte[] emptyChain = new byte[0];
+        List<Long> cipLabels = List.of(1447L);
         IllegalArgumentException thrown = assertThrows(IllegalArgumentException.class,
-                () -> factory.authBeginMap(AID, LEAF_SCHEMA_SAID, new byte[0], optionalM, List.of(1447L)));
+                () -> factory.authBeginMap(AID, LEAF_SCHEMA_SAID, emptyChain, optionalM, cipLabels));
         assertTrue(thrown.getMessage().contains("\"l\""));
     }
 
