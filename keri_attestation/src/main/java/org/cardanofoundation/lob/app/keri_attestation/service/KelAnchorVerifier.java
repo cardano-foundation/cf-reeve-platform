@@ -69,7 +69,7 @@ public class KelAnchorVerifier {
         List<Map<String, Object>> events = new ArrayList<>();
         for (KeyEventRecord keyEventRecord : client.client().keyEvents().get(aid)) {
             KeyEvent ked = keyEventRecord.getKed();
-            if (ked != null && "ixn".equals(ked.getT())) {
+            if ("ixn".equals(ked.getT())) {
                 events.add(KEL_MAPPER.convertValue(ked, new TypeReference<Map<String, Object>>() {
                 }));
             }
