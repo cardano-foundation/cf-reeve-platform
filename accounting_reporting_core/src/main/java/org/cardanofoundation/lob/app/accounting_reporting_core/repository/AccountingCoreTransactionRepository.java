@@ -218,11 +218,14 @@ public interface AccountingCoreTransactionRepository extends JpaRepository<Trans
         """)
         List<TransactionEntity> findStuckTransactions(@Param("cutoffTime") LocalDateTime cutoffTime);
 
+        // Scoped to the organisation so that ids of another organisation are neither returned nor locked
         @Lock(LockModeType.PESSIMISTIC_WRITE)
         @Query("""
             SELECT t FROM accounting_reporting_core.TransactionEntity t
             WHERE t.id IN :transactionIds
+            AND t.organisation.id = :organisationId
             ORDER BY t.id ASC
             """)
-        List<TransactionEntity> findAllByIdWithPessimisticLock(@Param("transactionIds") Set<String> transactionIds);
+        List<TransactionEntity> findAllByIdAndOrganisationIdWithPessimisticLock(@Param("transactionIds") Set<String> transactionIds,
+                                                                                @Param("organisationId") String organisationId);
 }
