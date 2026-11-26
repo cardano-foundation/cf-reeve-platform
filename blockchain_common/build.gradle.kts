@@ -1,6 +1,6 @@
 dependencies {
     // Cip170MetadataFactory derives the label-170 digest via signify's CESR Diger.
-    implementation("id.veridian:signify:0.1.2-66227de-SNAPSHOT")
+    implementation("id.veridian:signify:0.1.3")
     // @DomainEvent on DocumentPublishCommand (moved here from document_vault, WS3 step 1).
     implementation("org.jmolecules:jmolecules-events")
     // The IPFS port + implementations live here so BOTH the publisher (which pins at

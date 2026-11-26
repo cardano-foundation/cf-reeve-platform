@@ -44,16 +44,6 @@ allprojects {
         mavenLocal()
         mavenCentral()
         maven {
-            name = "Central Portal Snapshots"
-            url = uri("https://central.sonatype.com/repository/maven-snapshots/")
-
-            // Only search this repository for the specific dependency
-            content {
-                includeModule("id.veridian", "signify")
-            }
-        }
-
-        maven {
             name = "local"
             url = uri("file://${project.layout.buildDirectory}/repo")
         }

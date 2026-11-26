@@ -4,5 +4,5 @@ dependencies {
     implementation(project(":support"))
     implementation(project(":organisation"))
     implementation(project(":blockchain_common"))
-    implementation("id.veridian:signify:0.1.2-66227de-SNAPSHOT")
+    implementation("id.veridian:signify:0.1.3")
 }
