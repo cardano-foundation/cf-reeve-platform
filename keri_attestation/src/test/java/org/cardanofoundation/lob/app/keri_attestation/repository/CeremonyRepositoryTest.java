@@ -2,6 +2,7 @@ package org.cardanofoundation.lob.app.keri_attestation.repository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -58,9 +59,9 @@ public class CeremonyRepositoryTest {
     // Envers falls back to its default revision entity, which does not match revinfo's columns.
     @EntityScan({"org.cardanofoundation.lob.app.keri_attestation",
             "org.cardanofoundation.lob.app.support.spring_audit.internal"})
-    // This package holds @Service/@Component classes (CeremonyService, CeremonyCleanupJob) to this package;
-    // they now get picked up by this scan too, so the properties they depend on must be bindable here
-    // just like in the real KeriAttestationModuleConfig pairing of ComponentScan + EnableConfigurationProperties.
+    // This package also holds services and components such as the ceremony service and the cleanup job.
+    // The scan picks them up too, so the properties they depend on must be bindable here, just like the
+    // component scan and configuration properties pairing in the real module config.
     @ComponentScan(basePackages = "org.cardanofoundation.lob.app.keri_attestation")
     @EnableConfigurationProperties(KeriAttestationProperties.class)
     @Import(TestContainerConfig.class)
@@ -126,8 +127,8 @@ public class CeremonyRepositoryTest {
         assertEquals("3", reloaded.getKelSequence());
         assertEquals("Eevent123", reloaded.getKelEventSaid());
         assertEquals("Eexn123", reloaded.getRequestExnSaid());
-        assertTrue(reloaded.getCreatedAt() != null);
-        assertTrue(reloaded.getUpdatedAt() != null);
+        assertNotNull(reloaded.getCreatedAt());
+        assertNotNull(reloaded.getUpdatedAt());
     }
 
     @Test
@@ -268,8 +269,8 @@ public class CeremonyRepositoryTest {
         assertEquals("a".repeat(64), reloaded.getAuthBeginTxHash());
         assertEquals(12345L, reloaded.getAuthBeginBlock());
         assertEquals(authBeginAt, reloaded.getAuthBeginAt());
-        assertTrue(reloaded.getCreatedAt() != null);
-        assertTrue(reloaded.getUpdatedAt() != null);
+        assertNotNull(reloaded.getCreatedAt());
+        assertNotNull(reloaded.getUpdatedAt());
 
         // a fresh link with no optional data set must round-trip nulls, not blow up on flush
         KeriIdentityLinkEntity bare = new KeriIdentityLinkEntity();
@@ -280,9 +281,9 @@ public class CeremonyRepositoryTest {
         em.clear();
 
         KeriIdentityLinkEntity reloadedBare = identityLinkRepository.findById("user-bare").orElseThrow();
-        assertFalse(reloadedBare.getAid() != null);
-        assertFalse(reloadedBare.getAuthBeginBlock() != null);
-        assertFalse(reloadedBare.getAuthBeginAt() != null);
+        assertNull(reloadedBare.getAid());
+        assertNull(reloadedBare.getAuthBeginBlock());
+        assertNull(reloadedBare.getAuthBeginAt());
     }
 
     /**
@@ -302,6 +303,9 @@ public class CeremonyRepositoryTest {
      */
     @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    // The sleep only widens the race window while the other thread blocks inside Postgres on the row
+    // lock; that wait is not observable from Java, so there is no condition to poll for.
+    @SuppressWarnings("java:S2925")
     void findByUserIdForUpdateSerializesRelinkAgainstAConcurrentCredentialWriteSoNoRowIsAMix() throws Exception {
         String userId = "user-race";
         TransactionTemplate tx = new TransactionTemplate(transactionManager);
@@ -376,7 +380,7 @@ public class CeremonyRepositoryTest {
             relinkThread.join(5_000);
             credentialWriterThread.join(5_000);
 
-            assertTrue(failure.get() == null, "no thread should have thrown: " + failure.get());
+            assertNull(failure.get(), "no thread should have thrown: " + failure.get());
             assertTrue(sawRelinkedBindingVersion.get(), "the credential-writer's locked read must observe the "
                     + "already-committed relink, not an interleaved value");
 
@@ -407,6 +411,8 @@ public class CeremonyRepositoryTest {
      */
     @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    // See above: the sleep widens the window in which the old lock order would deadlock in Postgres.
+    @SuppressWarnings("java:S2925")
     void relinkAndACompletionPathBothLockCeremonyBeforeLinkSoNoDeadlockIsPossible() throws Exception {
         String userId = "user-lock-order";
         String ceremonyId = "cer-lock-order";
@@ -479,7 +485,7 @@ public class CeremonyRepositoryTest {
 
             assertFalse(threadA.isAlive(), "thread A must complete -- no deadlock");
             assertFalse(threadB.isAlive(), "thread B must complete -- no deadlock");
-            assertTrue(failure.get() == null,
+            assertNull(failure.get(),
                     "no thread should have thrown (e.g. a Postgres deadlock error): " + failure.get());
             assertTrue(threadBAcquiredCeremonyLock.get(),
                     "thread B must have eventually acquired the ceremony lock after thread A released it");

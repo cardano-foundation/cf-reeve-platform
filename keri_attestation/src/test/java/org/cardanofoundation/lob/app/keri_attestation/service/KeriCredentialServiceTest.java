@@ -146,7 +146,7 @@ class KeriCredentialServiceTest {
     private KeriCredentialService service;
 
     @BeforeEach
-    void setUp() throws Exception {
+    void setUp() {
         lenient().when(keriClient.client()).thenReturn(client);
         lenient().when(client.ipex()).thenReturn(ipex);
         lenient().when(client.exchanges()).thenReturn(exchanges);
@@ -156,10 +156,10 @@ class KeriCredentialServiceTest {
         lenient().when(client.contacts()).thenReturn(contacts);
         lenient().when(client.notifications()).thenReturn(notifications);
         lenient().when(agentService.agentName()).thenReturn(AGENT_NAME);
-        // Receive-side diagnostics (logReceiveDiagnostics): agentPrefix/agentOobi/contacts.get/
-        // notifications.list are all called once, up front, at the start of every presentCredential
-        // call — stubbed to succeed here so the diagnostics never hit their own outer catch (which would
-        // otherwise mask a real wiring mistake in the diagnostic code itself behind a caught exception).
+        // Receive-side diagnostics call the agent prefix, agent OOBI, contact lookup and notification
+        // listing once, up front, at the start of every credential presentation. They are stubbed to
+        // succeed here so the diagnostics never hit their own outer catch, which would otherwise hide a
+        // real wiring mistake in the diagnostic code itself behind a caught exception.
         lenient().when(agentService.agentPrefix()).thenReturn("EAGENTPREFIX000000000000000000000000000");
         lenient().when(agentService.agentOobi()).thenReturn("http://keria.example/oobi/EAGENTPREFIX/agent");
         lenient().when(contacts.get(any())).thenReturn(Optional.empty());
@@ -408,7 +408,7 @@ class KeriCredentialServiceTest {
     }
 
     @Test
-    void presentCredentialReResolvesTheWalletOobiBeforeSendingTheApply() throws Exception {
+    void presentCredentialReResolvesTheWalletOobiBeforeSendingTheApply() {
         String walletOobiUrl = "https://keria-ext.dev.example.org/oobi/" + LINKED_AID + "/agent/EAGENT";
         KeriIdentityLinkEntity linkWithOobi = link(LINKED_AID);
         linkWithOobi.setOobiUrl(walletOobiUrl);
@@ -429,7 +429,7 @@ class KeriCredentialServiceTest {
     }
 
     @Test
-    void presentCredentialProceedsBestEffortWhenTheWalletOobiReResolveFails() throws Exception {
+    void presentCredentialProceedsBestEffortWhenTheWalletOobiReResolveFails() {
         String walletOobiUrl = "https://keria-ext.dev.example.org/oobi/" + LINKED_AID + "/agent/EAGENT";
         KeriIdentityLinkEntity linkWithOobi = link(LINKED_AID);
         linkWithOobi.setOobiUrl(walletOobiUrl);
@@ -450,7 +450,7 @@ class KeriCredentialServiceTest {
     }
 
     @Test
-    void presentCredentialApplyBuildFailureFailsWithCredentialRequestFailed() throws Exception {
+    void presentCredentialApplyBuildFailureFailsWithCredentialRequestFailed() {
         when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony(null)));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
@@ -468,7 +468,7 @@ class KeriCredentialServiceTest {
 
     @Test
     void presentCredentialSubmitApplyFailureFailsWithCredentialRequestFailedButStillPersistsRequestExnSaid()
-            throws Exception {
+            {
         when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony(null)));
         when(identityLinkRepository.findById(USER_ID)).thenReturn(Optional.of(link(LINKED_AID)));
@@ -489,7 +489,7 @@ class KeriCredentialServiceTest {
     }
 
     @Test
-    void presentCredentialRestoresTheInterruptFlagWhenTheClientReportsAnInterrupt() throws Exception {
+    void presentCredentialRestoresTheInterruptFlagWhenTheClientReportsAnInterrupt() {
         // The client wraps an interrupt in SignifyInterruptedException, which extends RuntimeException
         // -- NOT InterruptedException. A handler that tests only the checked type therefore matches
         // nothing the client throws, reports the interrupt as an ordinary step failure, and drops the
@@ -516,7 +516,7 @@ class KeriCredentialServiceTest {
     }
 
     @Test
-    void presentCredentialOfferOrGrantTimeoutFailsWithKeriWalletTimeoutAndNeverBuildsAgreeOrAdmits() throws Exception {
+    void presentCredentialOfferOrGrantTimeoutFailsWithKeriWalletTimeoutAndNeverBuildsAgreeOrAdmits() {
         KeriAttestationCeremonyEntity ceremony = ceremony(null);
         when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
@@ -541,7 +541,7 @@ class KeriCredentialServiceTest {
     }
 
     @Test
-    void presentCredentialGrantTimeoutFailsWithKeriWalletTimeoutAndNeverAdmits() throws Exception {
+    void presentCredentialGrantTimeoutFailsWithKeriWalletTimeoutAndNeverAdmits() {
         KeriAttestationCeremonyEntity ceremony = ceremony(null);
         when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
@@ -899,7 +899,7 @@ class KeriCredentialServiceTest {
 
     @Test
     void presentCredentialGrantArrivesDirectlyWithoutAnEmbeddedAcdcFailsWithCredentialRequestFailedAndNeverAdmits()
-            throws Exception {
+            {
         KeriAttestationCeremonyEntity ceremony = ceremony(null);
         when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.OOBI_RESOLVED,
                 CeremonyState.CREDENTIAL_REQUESTED, false)).thenReturn(Either.right(ceremony));
@@ -947,7 +947,7 @@ class KeriCredentialServiceTest {
 
     @Test
     void presentCredentialSchemaResolutionFailureReturnsKeriAgentUnavailableBeforeAnyCeremonyStateIsTouched()
-            throws Exception {
+            {
         String schemaUrl = SCHEMA_BASE_URL + "/" + SCHEMA_SAID;
         when(oobis.resolve(schemaUrl, null)).thenThrow(new RuntimeException("agent unreachable"));
 

@@ -91,14 +91,13 @@ public class CeremonyCleanupJob {
             // Re-fetch under the row lock and re-verify before writing — otherwise this sweep could
             // silently clobber a just-completed ceremony back to EXPIRED with no CAS to catch it,
             // since this entity deliberately has no @Version column (see its class javadoc).
-            Optional<KeriAttestationCeremonyEntity> locked = ceremonyRepository.findByIdForUpdate(candidate.getId());
-            if (locked.isEmpty()) {
+            Optional<KeriAttestationCeremonyEntity> stillOverdue = ceremonyRepository
+                    .findByIdForUpdate(candidate.getId())
+                    .filter(c -> !TERMINAL.contains(c.getState()) && !c.getExpiresAt().isAfter(now));
+            if (stillOverdue.isEmpty()) {
                 continue;
             }
-            KeriAttestationCeremonyEntity ceremony = locked.get();
-            if (TERMINAL.contains(ceremony.getState()) || ceremony.getExpiresAt().isAfter(now)) {
-                continue;
-            }
+            KeriAttestationCeremonyEntity ceremony = stillOverdue.get();
             ceremony.setState(CeremonyState.EXPIRED);
             ceremony.setUpdatedAt(now);
             ceremonyRepository.save(ceremony);
@@ -146,19 +145,14 @@ public class CeremonyCleanupJob {
             // Same race-safety idiom as expireOverdueCeremonies(): re-fetch under the row lock and
             // re-verify (including the precise per-state cutoff) before writing, since the discovery
             // read above is unlocked and this entity has no @Version column.
-            Optional<KeriAttestationCeremonyEntity> locked = ceremonyRepository.findByIdForUpdate(candidate.getId());
-            if (locked.isEmpty()) {
+            Optional<KeriAttestationCeremonyEntity> stillStale = ceremonyRepository
+                    .findByIdForUpdate(candidate.getId())
+                    .filter(c -> isStaleInWaitingState(c, budgets, now));
+            if (stillStale.isEmpty()) {
                 continue;
             }
-            KeriAttestationCeremonyEntity ceremony = locked.get();
+            KeriAttestationCeremonyEntity ceremony = stillStale.get();
             CeremonyState waitingState = ceremony.getState();
-            if (!WAITING.contains(waitingState)) {
-                continue;
-            }
-            LocalDateTime stepCutoff = now.minus(budgets.get(waitingState)).minus(properties.stepTimeoutGrace());
-            if (ceremony.getUpdatedAt().isAfter(stepCutoff)) {
-                continue;
-            }
             ceremony.setState(CeremonyState.FAILED);
             ceremony.setErrorTitle(KeriAttestationProblems.KERI_STEP_TIMED_OUT);
             ceremony.setErrorDetail(
@@ -171,6 +165,17 @@ public class CeremonyCleanupJob {
             log.info("keri_attestation cleanup failed {} stale waiting-step ceremony(ies) with {}", failedCount,
                     KeriAttestationProblems.KERI_STEP_TIMED_OUT);
         }
+    }
+
+    /** Still in a waiting state and idle past that state's precise budget plus grace. */
+    private boolean isStaleInWaitingState(KeriAttestationCeremonyEntity ceremony,
+            Map<CeremonyState, Duration> budgets, LocalDateTime now) {
+        CeremonyState waitingState = ceremony.getState();
+        if (!WAITING.contains(waitingState)) {
+            return false;
+        }
+        LocalDateTime stepCutoff = now.minus(budgets.get(waitingState)).minus(properties.stepTimeoutGrace());
+        return !ceremony.getUpdatedAt().isAfter(stepCutoff);
     }
 
     /** Per-state sweep budget: the maximum time a ceremony may legitimately sit in a given

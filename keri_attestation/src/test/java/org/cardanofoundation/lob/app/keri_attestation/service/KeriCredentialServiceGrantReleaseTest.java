@@ -83,7 +83,6 @@ class KeriCredentialServiceGrantReleaseTest {
     private static final String AGENT_NAME = "keriAttestationAgent";
     private static final String SCHEMA_SAID = "ESCHEMA00000000000000000000000000000000";
     private static final String SECOND_SCHEMA_SAID = "ESCHEMATWO0000000000000000000000000000";
-    private static final String FOREIGN_SCHEMA_SAID = "EFOREIGNSCHEMA000000000000000000000000";
     private static final String ROOT_AID = "EROOT00000000000000000000000000000000A";
     private static final String APPLY_SAID = "EAPPLYSAID00000000000000000000000000000";
     private static final String AGREE_SAID = "EAGREESAID00000000000000000000000000000";
@@ -132,7 +131,7 @@ class KeriCredentialServiceGrantReleaseTest {
     private SchemaOobiResolver schemaOobiResolver;
 
     @BeforeEach
-    void setUp() throws Exception {
+    void setUp() {
         lenient().when(keriClient.client()).thenReturn(client);
         lenient().when(client.ipex()).thenReturn(ipex);
         lenient().when(client.exchanges()).thenReturn(exchanges);
@@ -235,7 +234,7 @@ class KeriCredentialServiceGrantReleaseTest {
                         grantExn(SCHEMA_SAID), "/exn/ipex/grant")));
     }
 
-    private void admitSucceeds() throws Exception {
+    private void admitSucceeds() {
         Serder admitExn = serderWithSaid("EADMIT");
         when(ipex.admit(any())).thenReturn(new ExchangeMessageResult(admitExn, List.of("sig3"), "atc3"));
     }
@@ -250,7 +249,7 @@ class KeriCredentialServiceGrantReleaseTest {
     }
 
     @Test
-    void grantWithoutEmbeddedAcdcIsReleased() throws Exception {
+    void grantWithoutEmbeddedAcdcIsReleased() {
         beginFreshStep();
         when(mockCorrelator.awaitByRoute(eq(OFFER_OR_GRANT_ROUTES), any()))
                 .thenReturn(Optional.of(new CorrelatedNotification(GRANT_NOTIF_ID, GRANT_SAID,
@@ -261,7 +260,7 @@ class KeriCredentialServiceGrantReleaseTest {
     }
 
     @Test
-    void admitFailureReleasesTheGrant() throws Exception {
+    void admitFailureReleasesTheGrant() {
         beginFreshStep();
         acceptedDirectGrant();
         when(ipex.admit(any())).thenThrow(new IllegalStateException("admit refused"));

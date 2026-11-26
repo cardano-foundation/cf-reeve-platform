@@ -49,7 +49,7 @@ class CredentialCesrFetcherTest {
     }
 
     @SuppressWarnings("unchecked")
-    private void stubFetch(int status, String body) throws Exception {
+    private void stubFetch(int status, String body) {
         HttpResponse<String> response = mock(HttpResponse.class);
         when(response.statusCode()).thenReturn(status);
         if (status == 200) {
@@ -73,8 +73,8 @@ class CredentialCesrFetcherTest {
 
         fetcher.fetch(CREDENTIAL_SAID);
 
-        org.mockito.Mockito.verify(client).fetch(eq("/credentials/" + CREDENTIAL_SAID), eq("GET"), eq(null),
-                eq(java.util.Map.of("Accept", "application/json+cesr")));
+        org.mockito.Mockito.verify(client).fetch("/credentials/" + CREDENTIAL_SAID, "GET", null,
+                java.util.Map.of("Accept", "application/json+cesr"));
     }
 
     @Test

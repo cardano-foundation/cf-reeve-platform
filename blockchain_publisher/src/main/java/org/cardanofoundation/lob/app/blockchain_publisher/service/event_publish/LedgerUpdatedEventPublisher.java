@@ -46,7 +46,7 @@ public class LedgerUpdatedEventPublisher {
     public <E extends PublishableEntity> void send(String organisationId,
                                                    LedgerUpdateType type,
                                                    Set<E> entities) {
-        send(organisationId, type, entities, entity -> Set.of());
+        publish(organisationId, type, entities, entity -> Set.of());
     }
 
     /**
@@ -58,6 +58,14 @@ public class LedgerUpdatedEventPublisher {
                                                    LedgerUpdateType type,
                                                    Set<E> entities,
                                                    Function<E, Set<BlockchainReceipt>> extraReceipts) {
+        publish(organisationId, type, entities, extraReceipts);
+    }
+
+    /** Shared body of both {@code send} overloads, so neither calls the other through {@code this}. */
+    private <E extends PublishableEntity> void publish(String organisationId,
+                                                       LedgerUpdateType type,
+                                                       Set<E> entities,
+                                                       Function<E, Set<BlockchainReceipt>> extraReceipts) {
         if (entities.isEmpty()) {
             return;
         }

@@ -201,11 +201,11 @@ class VaultRepositoryIntegrationTest {
     @Test
     void wrappedRecordRoundTripsByteIdentical() {
         String blob = "{\"v\":1,\"wrappedPriv\":\"00ff\",\"unicode\":\"snowman \\u2603 emoji 🎉\"}";
-        WrappedRecordEntity record = new WrappedRecordEntity();
-        record.setId(new WrappedRecordId("acc1", "cred-1"));
-        record.setRecord(blob);
-        record.setVersion(1);
-        recordRepository.save(record);
+        WrappedRecordEntity wrappedRecord = new WrappedRecordEntity();
+        wrappedRecord.setId(new WrappedRecordId("acc1", "cred-1"));
+        wrappedRecord.setRecord(blob);
+        wrappedRecord.setVersion(1);
+        recordRepository.save(wrappedRecord);
 
         // force a genuine DB round-trip: without this, findById below would return the
         // same in-memory instance from the first-level cache instead of hitting PostgreSQL

@@ -1,7 +1,7 @@
 package org.cardanofoundation.lob.app.keri_attestation.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
@@ -88,15 +88,15 @@ class AttestationImportVerifierTest {
         return (String) new RemotesignRequestFactory().anchorRequestKed(AID, label, cardDigest).get("d");
     }
 
-    private void kelContains(String sequence, String eventSaid, String sealedDigest) throws Exception {
+    private void kelContains(String sequence, String eventSaid, String sealedDigest) {
         KeyEvent ked = new KeyEvent();
         ked.setT("ixn");
         ked.setS(sequence);
         ked.setD(eventSaid);
         ked.setA(List.of(Map.of("d", sealedDigest)));
-        KeyEventRecord record = new KeyEventRecord();
-        record.setKed(ked);
-        when(keyEvents.get(AID)).thenReturn(List.of(record));
+        KeyEventRecord keyEventRecord = new KeyEventRecord();
+        keyEventRecord.setKed(ked);
+        when(keyEvents.get(AID)).thenReturn(List.of(keyEventRecord));
     }
 
     private AttestationImportVerifier.CardAttestationClaim claim(String label, String assertedDigest,
@@ -144,7 +144,7 @@ class AttestationImportVerifierTest {
 
         assertTrue(result.isRight(), "a card attested under label 1447 must verify under label 1447");
         // The default-label SAID is a genuinely different value, so hardcoding 170 could not have passed.
-        assertFalse(expectedPayloadSaid(label, CARD_DIGEST).equals(expectedPayloadSaid(LABEL, CARD_DIGEST)));
+        assertNotEquals(expectedPayloadSaid(LABEL, CARD_DIGEST), expectedPayloadSaid(label, CARD_DIGEST));
     }
 
     @Test
@@ -198,7 +198,7 @@ class AttestationImportVerifierTest {
 
     /** A card body edited after attestation no longer digests to what the issuer signed. */
     @Test
-    void aCardWhoseAssertedDigestDisagreesWithTheRecomputedOneIsRejected() throws Exception {
+    void aCardWhoseAssertedDigestDisagreesWithTheRecomputedOneIsRejected() {
         Either<ProblemDetail, CredentialChainValidator.ValidatedCredential> result = verifier.verify(USER,
                 claim(LABEL, "EAlteredDigest", null, KEL_SEQUENCE, KEL_EVENT_SAID));
 
@@ -207,7 +207,7 @@ class AttestationImportVerifierTest {
     }
 
     @Test
-    void aCardWhoseAssertedPayloadSaidDisagreesWithTheDerivedOneIsRejected() throws Exception {
+    void aCardWhoseAssertedPayloadSaidDisagreesWithTheDerivedOneIsRejected() {
         Either<ProblemDetail, CredentialChainValidator.ValidatedCredential> result = verifier.verify(USER,
                 claim(LABEL, CARD_DIGEST, "ESomeoneElsesPayloadSaid", KEL_SEQUENCE, KEL_EVENT_SAID));
 
@@ -243,7 +243,7 @@ class AttestationImportVerifierTest {
     }
 
     @Test
-    void anUnreadableKelIsUnverifiableRatherThanInvalid() throws Exception {
+    void anUnreadableKelIsUnverifiableRatherThanInvalid() {
         when(keyEvents.get(AID)).thenThrow(new IllegalStateException("agent down"));
 
         Either<ProblemDetail, CredentialChainValidator.ValidatedCredential> result = verifier.verify(USER, validClaim());

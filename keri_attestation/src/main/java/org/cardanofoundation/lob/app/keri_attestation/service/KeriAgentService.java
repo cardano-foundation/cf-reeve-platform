@@ -39,7 +39,7 @@ public class KeriAgentService {
     private volatile String cachedAgentOobi;
 
     @PostConstruct
-    void init() throws Exception {
+    void init() {
         cachedAgentOobi = fetchAgentOobi();
         log.info("KERI agent {} ({}) OOBI: {}", identifier.name(), identifier.prefix(), cachedAgentOobi);
     }
@@ -64,7 +64,7 @@ public class KeriAgentService {
      * witness-visible OOBI. Here we index the first entry directly instead — same bracket-free result
      * for the common single-entry case, and well-defined (rather than mangled) when there are several.
      */
-    private String fetchAgentOobi() throws Exception {
+    private String fetchAgentOobi() {
         OOBI oobi = client.client().oobis().get(identifier.name(), AGENT_ROLE)
                 .orElseThrow(() -> new IllegalStateException(
                         "No OOBI available for KERI agent identifier " + identifier.name()));
@@ -74,6 +74,6 @@ public class KeriAgentService {
             throw new IllegalStateException(
                     "KERI agent OOBI response contained no oobis for identifier " + identifier.name());
         }
-        return oobisList.get(0).toString();
+        return oobisList.get(0);
     }
 }

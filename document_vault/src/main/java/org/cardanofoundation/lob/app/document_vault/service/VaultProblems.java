@@ -66,6 +66,14 @@ public final class VaultProblems {
         return of(HttpStatus.FORBIDDEN, USER_NOT_IN_ORGANISATION, detail);
     }
 
+    public static ProblemDetail of403NotOrgMember(String organisationId) {
+        return forbidden("Current user is not a member of organisation %s.".formatted(organisationId));
+    }
+
+    public static ProblemDetail of404DocumentNotFound(String documentId) {
+        return notFound(DOCUMENT_NOT_FOUND, "No document %s.".formatted(documentId));
+    }
+
     public static ProblemDetail conflict(String title, String detail) {
         return of(HttpStatus.CONFLICT, title, detail);
     }

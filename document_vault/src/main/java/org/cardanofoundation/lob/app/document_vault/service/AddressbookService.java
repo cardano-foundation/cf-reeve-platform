@@ -55,8 +55,7 @@ public class AddressbookService {
     public Either<ProblemDetail, PagedResponse<AddressbookEntryView>> list(String organisationId,
                                                                            Pageable pageable) {
         if (!securityHelper.canUserAccessOrg(organisationId)) {
-            return Either.left(VaultProblems.forbidden(
-                    "Current user is not a member of organisation %s.".formatted(organisationId)));
+            return Either.left(VaultProblems.of403NotOrgMember(organisationId));
         }
         Page<AddressbookEntryEntity> page = entryRepository.findByOrganisationId(organisationId, pageable);
         // One bulk lookup for the whole page, not one query per row.
@@ -151,8 +150,7 @@ public class AddressbookService {
 
     private Optional<ProblemDetail> checkOrganisation(String organisationId) {
         if (!securityHelper.canUserAccessOrg(organisationId)) {
-            return Optional.of(VaultProblems.forbidden(
-                    "Current user is not a member of organisation %s.".formatted(organisationId)));
+            return Optional.of(VaultProblems.of403NotOrgMember(organisationId));
         }
         if (organisationPublicApi.findByOrganisationId(organisationId).isEmpty()) {
             return Optional.of(VaultProblems.notFound(VaultProblems.ORGANISATION_NOT_FOUND,

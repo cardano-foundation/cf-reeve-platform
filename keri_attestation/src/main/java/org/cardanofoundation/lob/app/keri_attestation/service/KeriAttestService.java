@@ -52,12 +52,12 @@ import org.cardanofoundation.lob.app.keri_attestation.service.KeriNotificationCo
 @ConditionalOnProperty(prefix = "lob.keri-attestation.keria", name = "url")
 public class KeriAttestService {
 
-    private static final List<String> REMOTESIGN_REF_ROUTES =
-            List.of("/remotesign/ixn/ref", "/exn/remotesign/ixn/ref");
     private static final String REMOTESIGN_TOPIC = "remotesign";
     private static final String REMOTESIGN_REQUEST_ROUTE = "/remotesign/ixn/req";
     /** The ref's own route as it appears on the exn ({@code r}); the notification may carry it prefixed. */
     private static final String REMOTESIGN_REF_ROUTE = "/remotesign/ixn/ref";
+    private static final List<String> REMOTESIGN_REF_ROUTES =
+            List.of(REMOTESIGN_REF_ROUTE, "/exn" + REMOTESIGN_REF_ROUTE);
 
     /** Short wait before re-sending, to catch a late-arriving matching notification. Deliberately
      *  much shorter than {@link KeriAttestationProperties#remotesignTimeout()}, since it only catches
@@ -154,8 +154,8 @@ public class KeriAttestService {
         }
         log.info("remotesign ref received {}", ref.get().exnSaid());
 
-        return resolveAndComplete(ceremonyId, userId, generation, wallet.aid(), wallet.oobiUrl(),
-                sent.get().payloadSaid(), floorSequence.get(), ref.get());
+        return resolveAndComplete(ceremonyId, generation, wallet, sent.get().payloadSaid(), floorSequence.get(),
+                ref.get());
     }
 
     /** The linked wallet being attested with: its owner, AID and (possibly absent) OOBI URL. */
@@ -368,15 +368,16 @@ public class KeriAttestService {
      * <p>A {@code null} floor hard-fails before the candidate or the KEL is even looked at; it can
      * only occur for a ceremony that reached {@code ATTEST_REQUESTED} before the column existed.
      */
-    private Either<ProblemDetail, CeremonyView> resolveAndComplete(String ceremonyId, String userId, int generation,
-            String walletAid, String walletOobiUrl, String payloadSaid, String floorSequence,
-            CorrelatedNotification ref) {
+    private Either<ProblemDetail, CeremonyView> resolveAndComplete(String ceremonyId, int generation,
+            WalletContact wallet, String payloadSaid, String floorSequence, CorrelatedNotification ref) {
+        String userId = wallet.userId();
+        String walletAid = wallet.aid();
         try {
             if (floorSequence == null) {
                 return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
                         "no sequence floor recorded — re-attest");
             }
-            refreshWalletContact(userId, walletAid, walletOobiUrl);
+            refreshWalletContact(userId, walletAid, wallet.oobiUrl());
             Optional<Map<String, Object>> event = locateAnchoringEvent(walletAid, payloadSaid, floorSequence, ref);
             if (event.isEmpty()) {
                 return failAttest(ceremonyId, generation, KeriAttestationProblems.ATTEST_SEAL_MISMATCH,
@@ -444,11 +445,10 @@ public class KeriAttestService {
         Optional<String> currentSequence = queryLatestSequenceWithRetries(walletAid);
         List<Map<String, Object>> ixnEvents = anchorVerifier.fetchIxnEvents(walletAid);
         if (!candidate.isEmpty()) {
-            Map<String, Object> event = KelAnchorVerifier.locateCandidate(ixnEvents, candidate);
-            return event != null && KelAnchorVerifier.satisfiesFloorAndDigest(event, floorSequence, payloadSaid)
-                    ? Optional.of(event) : Optional.empty();
+            return KelAnchorVerifier.locateCandidate(ixnEvents, candidate)
+                    .filter(event -> KelAnchorVerifier.satisfiesFloorAndDigest(event, floorSequence, payloadSaid));
         }
-        return currentSequence.map(cs -> KelAnchorVerifier.scanForSealMatch(ixnEvents, floorSequence, cs, payloadSaid));
+        return currentSequence.flatMap(cs -> KelAnchorVerifier.scanForSealMatch(ixnEvents, floorSequence, cs, payloadSaid));
     }
 
     /**

@@ -56,8 +56,7 @@ public class VaultKeyService {
         String organisationId = request.getOrganisationId();
 
         if (!securityHelper.canUserAccessOrg(organisationId)) {
-            return Either.left(VaultProblems.forbidden(
-                    "Current user is not a member of organisation %s.".formatted(organisationId)));
+            return Either.left(VaultProblems.of403NotOrgMember(organisationId));
         }
         if (organisationPublicApi.findByOrganisationId(organisationId).isEmpty()) {
             return Either.left(VaultProblems.notFound(VaultProblems.ORGANISATION_NOT_FOUND,
@@ -100,8 +99,7 @@ public class VaultKeyService {
     public Either<ProblemDetail, PagedResponse<VaultKeyView>> listOrganisationKeys(String organisationId,
                                                                                    Pageable pageable) {
         if (!securityHelper.canUserAccessOrg(organisationId)) {
-            return Either.left(VaultProblems.forbidden(
-                    "Current user is not a member of organisation %s.".formatted(organisationId)));
+            return Either.left(VaultProblems.of403NotOrgMember(organisationId));
         }
         Page<VaultKeyEntity> page = keyRepository.findByOrganisationId(organisationId, pageable);
         Map<String, CredentialAttestationView> verdicts = attestationsFor(page);
@@ -119,8 +117,7 @@ public class VaultKeyService {
     public Either<ProblemDetail, PagedResponse<RecipientKeyView>> listRecipients(String organisationId,
                                                                                  Pageable pageable) {
         if (!securityHelper.canUserAccessOrg(organisationId)) {
-            return Either.left(VaultProblems.forbidden(
-                    "Current user is not a member of organisation %s.".formatted(organisationId)));
+            return Either.left(VaultProblems.of403NotOrgMember(organisationId));
         }
         List<RecipientKeyView> addressable = Stream.concat(
                         keyRepository.findByOrganisationId(organisationId).stream()

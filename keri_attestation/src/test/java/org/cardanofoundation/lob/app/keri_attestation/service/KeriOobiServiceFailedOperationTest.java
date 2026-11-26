@@ -79,7 +79,7 @@ class KeriOobiServiceFailedOperationTest {
     }
 
     @Test
-    void failedResolveIs422() throws Exception {
+    void failedResolveIs422() {
         FailedOOBIOperation failed = new FailedOOBIOperation()
                 .name("oobi.EAID12345")
                 .error(new OperationStatus().code(404).message("unable to resolve OOBI"));

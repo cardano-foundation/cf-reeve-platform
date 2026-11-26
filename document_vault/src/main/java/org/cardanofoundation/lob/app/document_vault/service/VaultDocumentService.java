@@ -94,8 +94,7 @@ public class VaultDocumentService {
     public Either<ProblemDetail, DocumentUploadedView> upload(UploadDocumentRequest request) {
         String organisationId = request.getOrganisationId();
         if (!securityHelper.canUserAccessOrg(organisationId)) {
-            return Either.left(VaultProblems.forbidden(
-                    "Current user is not a member of organisation %s.".formatted(organisationId)));
+            return Either.left(VaultProblems.of403NotOrgMember(organisationId));
         }
         // Structural checks first: a malformed envelope should not cost an organisation lookup.
         if (!SUPPORTED_ENVELOPE_VERSIONS.contains(request.getEnvelopeVersion())) {
@@ -219,8 +218,7 @@ public class VaultDocumentService {
         Optional<VaultDocumentEntity> documentM = documentRepository.findByIdForUpdate(documentId)
                 .filter(found -> found.getOrganisationId().equals(organisationId));
         if (documentM.isEmpty()) {
-            return Either.left(VaultProblems.notFound(VaultProblems.DOCUMENT_NOT_FOUND,
-                    "No document %s.".formatted(documentId)));
+            return Either.left(VaultProblems.of404DocumentNotFound(documentId));
         }
         VaultDocumentEntity document = documentM.get();
         if (document.getStatus() != VaultDocumentStatus.DRAFT) {
@@ -321,13 +319,11 @@ public class VaultDocumentService {
     public Either<ProblemDetail, VaultDocumentEntity> loadForAttestation(String documentId, String userId) {
         Optional<VaultDocumentEntity> documentM = documentRepository.findById(documentId);
         if (documentM.isEmpty()) {
-            return Either.left(VaultProblems.notFound(VaultProblems.DOCUMENT_NOT_FOUND,
-                    "No document %s.".formatted(documentId)));
+            return Either.left(VaultProblems.of404DocumentNotFound(documentId));
         }
         VaultDocumentEntity document = documentM.get();
         if (!securityHelper.canUserAccessOrg(document.getOrganisationId())) {
-            return Either.left(VaultProblems.forbidden(
-                    "Current user is not a member of organisation %s.".formatted(document.getOrganisationId())));
+            return Either.left(VaultProblems.of403NotOrgMember(document.getOrganisationId()));
         }
         if (document.getStatus() != VaultDocumentStatus.DRAFT) {
             return Either.left(VaultProblems.conflict(VaultProblems.ALREADY_PUBLISHED,
@@ -377,8 +373,7 @@ public class VaultDocumentService {
                                                                    @Nullable String q,
                                                                    Pageable pageable) {
         if (!securityHelper.canUserAccessOrg(organisationId)) {
-            return Either.left(VaultProblems.forbidden(
-                    "Current user is not a member of organisation %s.".formatted(organisationId)));
+            return Either.left(VaultProblems.of403NotOrgMember(organisationId));
         }
         String accountId = securityHelper.getCurrentUserId();
         Page<VaultDocumentEntity> page = documentRepository.search(organisationId, accountId,
@@ -472,8 +467,7 @@ public class VaultDocumentService {
         Optional<VaultDocumentEntity> documentM = documentRepository.findByIdForUpdate(documentId)
                 .filter(found -> found.getOrganisationId().equals(organisationId));
         if (documentM.isEmpty()) {
-            return Optional.of(VaultProblems.notFound(VaultProblems.DOCUMENT_NOT_FOUND,
-                    "No document %s.".formatted(documentId)));
+            return Optional.of(VaultProblems.of404DocumentNotFound(documentId));
         }
         VaultDocumentEntity document = documentM.get();
         if (document.getStatus() != VaultDocumentStatus.DRAFT) {

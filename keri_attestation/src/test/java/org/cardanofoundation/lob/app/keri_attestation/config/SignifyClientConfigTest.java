@@ -69,7 +69,7 @@ class SignifyClientConfigTest {
         return appender;
     }
 
-    private static SignifyClient clientWithWitnesses(List<String> witnesses) throws Exception {
+    private static SignifyClient clientWithWitnesses(List<String> witnesses) {
         KeyStateRecord state = mock(KeyStateRecord.class);
         when(state.getB()).thenReturn(witnesses);
         HabState hab = mock(HabState.class);

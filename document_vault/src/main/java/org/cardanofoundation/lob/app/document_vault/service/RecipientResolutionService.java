@@ -47,8 +47,7 @@ public class RecipientResolutionService {
     public Either<ProblemDetail, List<RecipientKeyView>> resolve(ResolveRecipientsRequest request) {
         String organisationId = request.getOrganisationId();
         if (!securityHelper.canUserAccessOrg(organisationId)) {
-            return Either.left(VaultProblems.forbidden(
-                    "Current user is not a member of organisation %s.".formatted(organisationId)));
+            return Either.left(VaultProblems.of403NotOrgMember(organisationId));
         }
         String senderId = securityHelper.getCurrentUserId();
 

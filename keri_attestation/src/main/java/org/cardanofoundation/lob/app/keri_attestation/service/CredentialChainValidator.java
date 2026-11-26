@@ -115,55 +115,101 @@ public class CredentialChainValidator {
                     + "identified unambiguously.");
         }
 
-        List<Map<String, Object>> parsed = CESRStreamUtil.parseCESRData(fullCesr);
+        Either<ProblemDetail, IndexedChain> indexed = indexChain(CESRStreamUtil.parseCESRData(fullCesr));
+        if (indexed.isLeft()) {
+            return Either.left(indexed.getLeft());
+        }
+        IndexedChain chain = indexed.get();
 
-        Map<String, Map<String, Object>> acdcBySaid = new LinkedHashMap<>();
-        Map<String, Map<String, Object>> issByCredentialSaid = new HashMap<>();
-        Map<String, String> registryControllerByRegistryId = new HashMap<>();
-        Set<String> revokedCredentialSaids = new HashSet<>();
+        Map<String, Object> leaf = chain.acdcBySaid().get(expectedCredentialSaid);
+        if (leaf == null) {
+            return reject("Credential %s is not present in the chain.".formatted(expectedCredentialSaid));
+        }
+        Either<ProblemDetail, CredentialSchema> leafSchemaCheck = checkLeaf(leaf, expectedCredentialSaid,
+                expectedIssueeAid, claimedSchemaSaid);
+        if (leafSchemaCheck.isLeft()) {
+            return Either.left(leafSchemaCheck.getLeft());
+        }
+        CredentialSchema schema = leafSchemaCheck.get();
+        String leafSchema = (String) leaf.get("s");
+
+        String leafIssuer = (String) leaf.get("i");
+        if (leafIssuer == null) {
+            return reject("Credential %s has no issuer (i) — malformed chain.".formatted(expectedCredentialSaid));
+        }
+
+        Set<String> rootIssuers = new LinkedHashSet<>();
+        Either<ProblemDetail, Void> ancestry = validateAncestry(leaf, new HashSet<>(), chain, rootIssuers);
+        if (ancestry.isLeft()) {
+            return Either.left(ancestry.getLeft());
+        }
+
+        Either<ProblemDetail, String> anchor = checkTrust(schema, leafIssuer, rootIssuers);
+        if (anchor.isLeft()) {
+            return Either.left(anchor.getLeft());
+        }
+
+        return Either.right(new ValidatedCredential(expectedCredentialSaid, leafSchema, schema.displayName(),
+                leafIssuer, anchor.get(), schema.trustModel(), claims(leaf), schema.policyFingerprint()));
+    }
+
+    /** The presented stream, indexed by what the validation needs to look up. */
+    private record IndexedChain(Map<String, Map<String, Object>> acdcBySaid,
+            Map<String, Map<String, Object>> issByCredentialSaid,
+            Map<String, String> registryControllerByRegistryId,
+            Set<String> revokedCredentialSaids) {
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Either<ProblemDetail, IndexedChain> indexChain(List<Map<String, Object>> parsed) {
+        IndexedChain chain = new IndexedChain(new LinkedHashMap<>(), new HashMap<>(), new HashMap<>(),
+                new HashSet<>());
 
         for (Map<String, Object> eventData : parsed) {
             Map<String, Object> event = (Map<String, Object>) eventData.get("event");
             Object t = event.get("t");
-            if (t == null) {
-                if (isAcdc(event)) {
-                    String said = (String) event.get("d");
-                    // Two ACDCs claiming one SAID: at most one can be genuine, and letting the later
-                    // silently replace the earlier hands the choice of which to an attacker.
-                    if (acdcBySaid.putIfAbsent(said, event) != null) {
-                        return reject("Credential %s appears more than once in the chain with different "
-                                + "contents.".formatted(said));
-                    }
-                }
-                continue;
-            }
-            switch (t.toString()) {
-                case "iss" -> issByCredentialSaid.put((String) event.get("i"), event);
-                // Registry inception: names the AID that controls the registry ("ii"). Needed to check
-                // that a credential was issued from a registry its own issuer controls.
-                case "vcp" -> {
-                    // A registry's id IS the SAID of its inception event, so a vcp whose own d does not
-                    // equal the registry id it claims is simply somebody else's registry id with an
-                    // attacker's controller written under it.
-                    String registryId = (String) event.get("i");
-                    if (registryId != null && registryId.equals(event.get("d"))) {
-                        registryControllerByRegistryId.put(registryId, (String) event.get("ii"));
-                    }
-                }
-                // KERI TELs are append-only and revocation is terminal — a rev event can never be
-                // "undone" by a later iss for the same credential SAID (SAIDs are fixed at issuance),
-                // so presence anywhere in the stream is sufficient; stream order need not be checked.
-                case "rev" -> revokedCredentialSaids.add((String) event.get("i"));
-                default -> {
-                    // icp/ixn/rot/vcp/... are irrelevant to content validation.
+            if (t != null) {
+                indexTelEvent(t.toString(), event, chain);
+            } else if (isAcdc(event)) {
+                String said = (String) event.get("d");
+                // Two ACDCs claiming one SAID: at most one can be genuine, and letting the later
+                // silently replace the earlier hands the choice of which to an attacker.
+                if (chain.acdcBySaid().putIfAbsent(said, event) != null) {
+                    return reject(("Credential %s appears more than once in the chain with different "
+                            + "contents.").formatted(said));
                 }
             }
         }
+        return Either.right(chain);
+    }
 
-        Map<String, Object> leaf = acdcBySaid.get(expectedCredentialSaid);
-        if (leaf == null) {
-            return reject("Credential %s is not present in the chain.".formatted(expectedCredentialSaid));
+    private static void indexTelEvent(String type, Map<String, Object> event, IndexedChain chain) {
+        switch (type) {
+            case "iss" -> chain.issByCredentialSaid().put((String) event.get("i"), event);
+            // Registry inception: names the AID that controls the registry ("ii"). Needed to check
+            // that a credential was issued from a registry its own issuer controls.
+            case "vcp" -> {
+                // A registry's id IS the SAID of its inception event, so a vcp whose own d does not
+                // equal the registry id it claims is simply somebody else's registry id with an
+                // attacker's controller written under it.
+                String registryId = (String) event.get("i");
+                if (registryId != null && registryId.equals(event.get("d"))) {
+                    chain.registryControllerByRegistryId().put(registryId, (String) event.get("ii"));
+                }
+            }
+            // KERI TELs are append-only and revocation is terminal — a rev event can never be
+            // "undone" by a later iss for the same credential SAID (SAIDs are fixed at issuance),
+            // so presence anywhere in the stream is sufficient; stream order need not be checked.
+            case "rev" -> chain.revokedCredentialSaids().add((String) event.get("i"));
+            default -> {
+                // icp/ixn/rot/vcp/... are irrelevant to content validation.
+            }
         }
+    }
+
+    /** The leaf is issued to the expected holder and carries the claimed, accepted schema. */
+    private Either<ProblemDetail, CredentialSchema> checkLeaf(Map<String, Object> leaf,
+            String expectedCredentialSaid, String expectedIssueeAid, String claimedSchemaSaid) {
         String leafIssuee = issuee(leaf);
         if (!expectedIssueeAid.equals(leafIssuee)) {
             return reject("Credential %s is issued to %s, not to %s."
@@ -180,26 +226,7 @@ public class CredentialChainValidator {
             return reject("Credential %s has schema %s, which this deployment does not accept."
                     .formatted(expectedCredentialSaid, leafSchema));
         }
-
-        String leafIssuer = (String) leaf.get("i");
-        if (leafIssuer == null) {
-            return reject("Credential %s has no issuer (i) — malformed chain.".formatted(expectedCredentialSaid));
-        }
-
-        Set<String> rootIssuers = new LinkedHashSet<>();
-        Either<ProblemDetail, Void> ancestry = validateAncestry(leaf, new HashSet<>(), acdcBySaid,
-                issByCredentialSaid, registryControllerByRegistryId, revokedCredentialSaids, rootIssuers);
-        if (ancestry.isLeft()) {
-            return Either.left(ancestry.getLeft());
-        }
-
-        Either<ProblemDetail, String> anchor = checkTrust(schema, leafIssuer, rootIssuers);
-        if (anchor.isLeft()) {
-            return Either.left(anchor.getLeft());
-        }
-
-        return Either.right(new ValidatedCredential(expectedCredentialSaid, leafSchema, schema.displayName(),
-                leafIssuer, anchor.get(), schema.trustModel(), claims(leaf), schema.policyFingerprint()));
+        return Either.right(schema);
     }
 
     /**
@@ -222,13 +249,13 @@ public class CredentialChainValidator {
             return Either.right(leafIssuer);
         }
         if (rootIssuers.isEmpty()) {
-            return reject("Credential chain for schema %s terminates at no root, so it cannot be traced "
-                    + "to a trusted root.".formatted(schema.displayName()));
+            return reject(("Credential chain for schema %s terminates at no root, so it cannot be traced "
+                    + "to a trusted root.").formatted(schema.displayName()));
         }
         for (String root : rootIssuers) {
             if (!anchors.contains(root)) {
-                return reject("Credential chain for schema %s terminates at root issuer %s, which is not "
-                        + "a trusted root.".formatted(schema.displayName(), root));
+                return reject(("Credential chain for schema %s terminates at root issuer %s, which is not "
+                        + "a trusted root.").formatted(schema.displayName(), root));
             }
         }
         return Either.right(rootIssuers.iterator().next());
@@ -249,11 +276,8 @@ public class CredentialChainValidator {
      * arise for the linear, one-edge-per-level chains this ecosystem actually issues (root → QVI → LE →
      * ...), so it is not specifically handled.
      */
-    @SuppressWarnings("unchecked")
     private Either<ProblemDetail, Void> validateAncestry(Map<String, Object> node, Set<String> visited,
-            Map<String, Map<String, Object>> acdcBySaid, Map<String, Map<String, Object>> issByCredentialSaid,
-            Map<String, String> registryControllerByRegistryId, Set<String> revokedCredentialSaids,
-            Set<String> rootIssuers) {
+            IndexedChain chain, Set<String> rootIssuers) {
 
         String nodeSaid = (String) node.get("d");
         if (!visited.add(nodeSaid)) {
@@ -267,8 +291,8 @@ public class CredentialChainValidator {
         if (authentic.isLeft()) {
             return authentic;
         }
-        Either<ProblemDetail, Void> tel = checkTel(nodeSaid, (String) node.get("ri"), issByCredentialSaid,
-                revokedCredentialSaids);
+        Either<ProblemDetail, Void> tel = checkTel(nodeSaid, (String) node.get("ri"), chain.issByCredentialSaid(),
+                chain.revokedCredentialSaids());
         if (tel.isLeft()) {
             return tel;
         }
@@ -284,7 +308,7 @@ public class CredentialChainValidator {
         }
 
         Either<ProblemDetail, Void> registryOwned = checkRegistryBelongsToIssuer(nodeSaid, nodeIssuer,
-                (String) node.get("ri"), registryControllerByRegistryId);
+                (String) node.get("ri"), chain.registryControllerByRegistryId());
         if (registryOwned.isLeft()) {
             return registryOwned;
         }
@@ -296,35 +320,49 @@ public class CredentialChainValidator {
         }
 
         for (Map.Entry<String, Object> edgeEntry : edges) {
-            Object edgeValue = edgeEntry.getValue();
-            Map<String, Object> edge = edgeValue instanceof Map<?, ?> m ? (Map<String, Object>) m : null;
-            String parentSaid = edge != null ? (String) edge.get("n") : null;
-            Map<String, Object> parent = parentSaid != null ? acdcBySaid.get(parentSaid) : null;
-            if (parent == null) {
-                return reject("Credential %s edge '%s' references unknown parent credential %s."
-                        .formatted(nodeSaid, edgeEntry.getKey(), parentSaid));
+            Either<ProblemDetail, Map<String, Object>> parent = resolveParent(nodeSaid, nodeIssuer, edgeEntry,
+                    chain.acdcBySaid());
+            if (parent.isLeft()) {
+                return Either.left(parent.getLeft());
             }
-            String parentIssuee = issuee(parent);
-            if (!nodeIssuer.equals(parentIssuee)) {
-                return reject("Credential %s issuer %s does not match parent credential %s's issuee %s."
-                        .formatted(nodeSaid, nodeIssuer, parentSaid, parentIssuee));
-            }
-            // The edge states which schema the parent is expected to be. Not checking it lets an
-            // intermediary cite an unrelated credential from a trusted issuer as authority for a
-            // schema that credential says nothing about.
-            Object edgeSchema = edge.get("s");
-            if (edgeSchema != null && !edgeSchema.equals(parent.get("s"))) {
-                return reject(("Credential %s edge '%s' expects parent schema %s but credential %s has "
-                        + "schema %s.").formatted(nodeSaid, edgeEntry.getKey(), edgeSchema, parentSaid,
-                        parent.get("s")));
-            }
-            Either<ProblemDetail, Void> parentResult = validateAncestry(parent, visited, acdcBySaid,
-                    issByCredentialSaid, registryControllerByRegistryId, revokedCredentialSaids, rootIssuers);
+            Either<ProblemDetail, Void> parentResult = validateAncestry(parent.get(), visited, chain, rootIssuers);
             if (parentResult.isLeft()) {
                 return parentResult;
             }
         }
         return Either.right(null);
+    }
+
+    /**
+     * The parent credential an edge cites: present in the chain, issued to this node's issuer, and of
+     * the schema the edge says it should be.
+     */
+    @SuppressWarnings("unchecked")
+    private static Either<ProblemDetail, Map<String, Object>> resolveParent(String nodeSaid, String nodeIssuer,
+            Map.Entry<String, Object> edgeEntry, Map<String, Map<String, Object>> acdcBySaid) {
+        Object edgeValue = edgeEntry.getValue();
+        Map<String, Object> edge = edgeValue instanceof Map<?, ?> m ? (Map<String, Object>) m : null;
+        String parentSaid = edge != null ? (String) edge.get("n") : null;
+        Map<String, Object> parent = parentSaid != null ? acdcBySaid.get(parentSaid) : null;
+        if (parent == null) {
+            return reject("Credential %s edge '%s' references unknown parent credential %s."
+                    .formatted(nodeSaid, edgeEntry.getKey(), parentSaid));
+        }
+        String parentIssuee = issuee(parent);
+        if (!nodeIssuer.equals(parentIssuee)) {
+            return reject("Credential %s issuer %s does not match parent credential %s's issuee %s."
+                    .formatted(nodeSaid, nodeIssuer, parentSaid, parentIssuee));
+        }
+        // The edge states which schema the parent is expected to be. Not checking it lets an
+        // intermediary cite an unrelated credential from a trusted issuer as authority for a
+        // schema that credential says nothing about.
+        Object edgeSchema = edge.get("s");
+        if (edgeSchema != null && !edgeSchema.equals(parent.get("s"))) {
+            return reject(("Credential %s edge '%s' expects parent schema %s but credential %s has "
+                    + "schema %s.").formatted(nodeSaid, edgeEntry.getKey(), edgeSchema, parentSaid,
+                    parent.get("s")));
+        }
+        return Either.right(parent);
     }
 
     /**

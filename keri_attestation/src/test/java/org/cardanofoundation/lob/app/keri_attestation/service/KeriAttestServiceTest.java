@@ -245,9 +245,9 @@ class KeriAttestServiceTest {
         ked.setS(sequence);
         ked.setD(said);
         ked.setA(seals);
-        KeyEventRecord record = new KeyEventRecord();
-        record.setKed(ked);
-        return record;
+        KeyEventRecord keyEventRecord = new KeyEventRecord();
+        keyEventRecord.setKed(ked);
+        return keyEventRecord;
     }
 
     private static CeremonyView ceremonyView(CeremonyState state) {
@@ -255,7 +255,7 @@ class KeriAttestServiceTest {
                 null, null);
     }
 
-    private Serder stubHappySend() throws Exception {
+    private Serder stubHappySend() {
         when(identifiers.get(AGENT_NAME)).thenReturn(Optional.of(habState(AGENT_PREFIX)));
         Serder builtExn = serderWithSaid(NEW_REQUEST_EXN_SAID);
         when(exchanges.createExchangeMessage(any(), eq("/remotesign/ixn/req"), anyMap(), anyMap(), eq(WALLET_AID),
@@ -268,7 +268,7 @@ class KeriAttestServiceTest {
     /** Stubs the key-state query ({@code keyStates.query} + {@code operations.wait}) that
      *  {@code queryLatestSequenceWithRetries} performs — used both by the pre-send floor query and by
      *  {@code resolveAndComplete}'s no-candidate bounded-scan fallback (the current-sequence query). */
-    private void stubKeyStateSequence(String sequence) throws Exception {
+    private void stubKeyStateSequence(String sequence) {
         // query() is the NETWORK refresh and stays stubbed, because the code under test must keep
         // making it: without it the agent never sees the event the wallet just signed.
         lenient().when(keyStates.query(eq(WALLET_AID), any())).thenReturn(null);
@@ -567,7 +567,7 @@ class KeriAttestServiceTest {
     // ==================== attest: retry pre-check ====================
 
     @Test
-    void attestRetryWithLateArrivedCorrelatedRefCompletesWithoutResending() throws Exception {
+    void attestRetryWithLateArrivedCorrelatedRefCompletesWithoutResending() {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
         ceremony.setKelFloorSequence(FLOOR_SEQUENCE);
         ceremony.setPayloadSaid(PAYLOAD_SAID);
@@ -823,7 +823,7 @@ class KeriAttestServiceTest {
     }
 
     @Test
-    void attestWithNullFloorAndNoExplicitCandidateRefusesToScanAndFails() throws Exception {
+    void attestWithNullFloorAndNoExplicitCandidateRefusesToScanAndFails() {
         // A null floor (a pre-upgrade in-flight ceremony that reached ATTEST_REQUESTED before the
         // kel_floor_sequence column existed) must fail outright via the retry-with-late-ref path, never
         // falling back to the bounded scan.
@@ -846,7 +846,7 @@ class KeriAttestServiceTest {
     }
 
     @Test
-    void attestWithNullFloorStillFailsEvenWithAValidExplicitCandidate() throws Exception {
+    void attestWithNullFloorStillFailsEvenWithAValidExplicitCandidate() {
         KeriAttestationCeremonyEntity ceremony = ceremony(CeremonyState.ATTEST_REQUESTED, OLD_REQUEST_EXN_SAID);
         assertNull(ceremony.getKelFloorSequence());
         when(ceremonyService.beginStep(CEREMONY_ID, ORGANISATION_ID, USER_ID, CeremonyState.AUTH_BEGIN_CONFIRMED,
