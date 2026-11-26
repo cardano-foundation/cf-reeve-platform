@@ -5,11 +5,9 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 
-import org.cardanofoundation.lob.app.support.crypto.SecretCipherConfig;
-
 @Configuration
 @ConditionalOnProperty(name = "lob.netsuite.enabled", havingValue = "true", matchIfMissing = false)
 @ComponentScan(basePackages = {"org.cardanofoundation.lob.app.organisation", "org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter"})
-@Import(SecretCipherConfig.class)
+@Import(NetsuiteCryptoConfig.class)
 public class NetsuiteModuleConfig {
 }

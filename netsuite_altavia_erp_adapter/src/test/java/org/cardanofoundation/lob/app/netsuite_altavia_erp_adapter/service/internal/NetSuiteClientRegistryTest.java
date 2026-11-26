@@ -27,7 +27,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.client.NetSuiteClient;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.domain.entity.NetSuiteConfigEntity;
 import org.cardanofoundation.lob.app.netsuite_altavia_erp_adapter.repository.NetSuiteConfigRepository;
-import org.cardanofoundation.lob.app.support.crypto.SecretCipher;
+import org.cardanofoundation.lob.app.support.crypto.SecretDecryptor;
 
 @ExtendWith(MockitoExtension.class)
 class NetSuiteClientRegistryTest {
@@ -37,13 +37,13 @@ class NetSuiteClientRegistryTest {
     @Mock
     private NetSuiteConfigRepository repository;
     @Mock
-    private SecretCipher secretCipher;
+    private SecretDecryptor secretDecryptor;
 
     private NetSuiteClientRegistry registry;
 
     @BeforeEach
     void setUp() {
-        registry = new NetSuiteClientRegistry(repository, secretCipher, new ObjectMapper(),
+        registry = new NetSuiteClientRegistry(repository, secretDecryptor, new ObjectMapper(),
                 RestClient.create(), 100,
                 Clock.fixed(Instant.parse("2026-08-14T10:00:00Z"), ZoneOffset.UTC));
     }
@@ -53,7 +53,7 @@ class NetSuiteClientRegistryTest {
                 .organisationId(ORG)
                 .baseUrl("https://base").tokenUrl("https://token")
                 .clientId("client").certificateId("cert")
-                .privateKeyEncrypted("v1:ENVELOPE")
+                .privateKeyEncrypted("ENCRYPTED")
                 .revision(1L)
                 .createdAt(Instant.EPOCH).updatedAt(Instant.EPOCH)
                 .build();
@@ -73,7 +73,7 @@ class NetSuiteClientRegistryTest {
     @Test
     void buildsAClientFromTheDecryptedConfiguration() {
         when(repository.findById(ORG)).thenReturn(Optional.of(config()));
-        when(secretCipher.decrypt("v1:ENVELOPE")).thenReturn("PEM");
+        when(secretDecryptor.decrypt("ENCRYPTED", ORG)).thenReturn("PEM");
 
         Either<ProblemDetail, NetSuiteClient> result = registry.forOrganisation(ORG);
 
@@ -84,7 +84,7 @@ class NetSuiteClientRegistryTest {
     @Test
     void cachesTheClientSoRepeatedLookupsDoNotHitTheDatabase() {
         when(repository.findById(ORG)).thenReturn(Optional.of(config()));
-        when(secretCipher.decrypt("v1:ENVELOPE")).thenReturn("PEM");
+        when(secretDecryptor.decrypt("ENCRYPTED", ORG)).thenReturn("PEM");
 
         NetSuiteClient first = registry.forOrganisation(ORG).get();
         NetSuiteClient second = registry.forOrganisation(ORG).get();
@@ -99,15 +99,15 @@ class NetSuiteClientRegistryTest {
                 .organisationId("org-2")
                 .baseUrl("https://other").tokenUrl("https://othertoken")
                 .clientId("otherclient").certificateId("othercert")
-                .privateKeyEncrypted("v1:OTHER")
+                .privateKeyEncrypted("OTHERENCRYPTED")
                 .revision(1L)
                 .createdAt(Instant.EPOCH).updatedAt(Instant.EPOCH)
                 .build();
 
         when(repository.findById(ORG)).thenReturn(Optional.of(config()));
         when(repository.findById("org-2")).thenReturn(Optional.of(other));
-        when(secretCipher.decrypt("v1:ENVELOPE")).thenReturn("PEM");
-        when(secretCipher.decrypt("v1:OTHER")).thenReturn("OTHERPEM");
+        when(secretDecryptor.decrypt("ENCRYPTED", ORG)).thenReturn("PEM");
+        when(secretDecryptor.decrypt("OTHERENCRYPTED", "org-2")).thenReturn("OTHERPEM");
 
         NetSuiteClient first = registry.forOrganisation(ORG).get();
         NetSuiteClient second = registry.forOrganisation("org-2").get();
@@ -120,7 +120,7 @@ class NetSuiteClientRegistryTest {
     @Test
     void rebuildsTheClientAfterEviction() {
         when(repository.findById(ORG)).thenReturn(Optional.of(config()));
-        when(secretCipher.decrypt("v1:ENVELOPE")).thenReturn("PEM");
+        when(secretDecryptor.decrypt("ENCRYPTED", ORG)).thenReturn("PEM");
 
         NetSuiteClient first = registry.forOrganisation(ORG).get();
         registry.evict(ORG);
@@ -133,7 +133,7 @@ class NetSuiteClientRegistryTest {
     @Test
     void surfacesADecryptionFailureAsAProblemRatherThanThrowing() {
         when(repository.findById(ORG)).thenReturn(Optional.of(config()));
-        when(secretCipher.decrypt("v1:ENVELOPE")).thenThrow(new IllegalStateException("wrong key"));
+        when(secretDecryptor.decrypt("ENCRYPTED", ORG)).thenThrow(new IllegalStateException("wrong key"));
 
         Either<ProblemDetail, NetSuiteClient> result = registry.forOrganisation(ORG);
 
@@ -147,7 +147,7 @@ class NetSuiteClientRegistryTest {
         // slow step, so evict there. The caller still gets a usable client for the work already
         // in flight, but it must not be pinned into the cache over the newer configuration.
         when(repository.findById(ORG)).thenReturn(Optional.of(config()));
-        when(secretCipher.decrypt("v1:ENVELOPE")).thenAnswer(invocation -> {
+        when(secretDecryptor.decrypt("ENCRYPTED", ORG)).thenAnswer(invocation -> {
             registry.evict(ORG);
             return "PEM";
         });
@@ -157,8 +157,8 @@ class NetSuiteClientRegistryTest {
         assertThat(first).isNotNull();
 
         // A subsequent lookup must rebuild rather than serve the stale client.
-        reset(secretCipher);
-        when(secretCipher.decrypt("v1:ENVELOPE")).thenReturn("PEM");
+        reset(secretDecryptor);
+        when(secretDecryptor.decrypt("ENCRYPTED", ORG)).thenReturn("PEM");
         NetSuiteClient second = registry.forOrganisation(ORG).get();
 
         assertThat(second).isNotSameAs(first);

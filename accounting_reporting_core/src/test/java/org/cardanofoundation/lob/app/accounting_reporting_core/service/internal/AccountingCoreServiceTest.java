@@ -255,4 +255,17 @@ class AccountingCoreServiceTest {
         assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
     }
 
+    @Test
+    void scheduleReIngestionForFailed_notFound_whenBatchDoesNotBelongToOrganisation() {
+        when(transactionBatchRepository.findByIdAndFilteringParametersOrganisationId("batch-1", "org-123"))
+                .thenReturn(List.of());
+
+        Either<ProblemDetail, Void> result = accountingCoreService.scheduleReIngestionForFailed("batch-1", "org-123");
+
+        assertThat(result.isLeft()).isTrue();
+        assertThat(result.getLeft().getTitle()).isEqualTo("TX_BATCH_NOT_FOUND");
+        assertThat(result.getLeft().getStatus()).isEqualTo(HttpStatus.NOT_FOUND.value());
+        verify(transactionBatchRepository).findByIdAndFilteringParametersOrganisationId("batch-1", "org-123");
+    }
+
 }

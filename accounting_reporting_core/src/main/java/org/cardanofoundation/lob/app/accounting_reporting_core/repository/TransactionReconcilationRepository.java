@@ -11,7 +11,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.rec
 
 public interface TransactionReconcilationRepository extends JpaRepository<ReconcilationEntity, String> {
 
-    Optional<ReconcilationEntity> findTopByOrderByCreatedAtDesc();
+    Optional<ReconcilationEntity> findTopByOrganisationIdOrderByCreatedAtDesc(String organisationId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<ReconcilationEntity> findReconcilationEntityById(String id);

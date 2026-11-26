@@ -1,0 +1,16 @@
+DOMAIN=example.org
+KC_HOSTNAME=keycloak.${DOMAIN}
+KC_FRONTEND_HOSTNAME=https://keycloak.${DOMAIN}
+API_FRONTEND_HOSTNAME=https://api.${DOMAIN}
+YACI_VIEWER_HOSTNAME=yaci-viewer.${DOMAIN}
+YACI_BLOCKFROST_HOSTNAME=yaci-blockfrost.${DOMAIN}
+FOLLOWER_APP_HOSTNAME=follower-app.${DOMAIN}
+API_HOSTNAME=api.${DOMAIN}
+FRONTEND_HOSTNAME=${DOMAIN}
+FRONTEND_URL=https://${FRONTEND_HOSTNAME}
+LOB_CORS_ALLOWED_ORIGINS=https://${DOMAIN}
+
+# NetSuite credential encryption (RSA pair, Base64 DER). Generate per environment:
+# see certs/netsuiteConfiguration.md. api gets only the PUBLIC key, publisher only the PRIVATE key.
+LOB_CONFIG_ENCRYPTION_PUBLIC_KEY=
+LOB_CONFIG_ENCRYPTION_PRIVATE_KEY=

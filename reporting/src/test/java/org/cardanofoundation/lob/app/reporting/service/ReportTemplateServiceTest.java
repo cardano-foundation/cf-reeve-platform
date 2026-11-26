@@ -37,9 +37,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import org.cardanofoundation.lob.app.organisation.domain.entity.AccountingRegime;
 import org.cardanofoundation.lob.app.organisation.domain.entity.ChartOfAccount;
-import org.cardanofoundation.lob.app.organisation.repository.AccountingRegimeRepository;
 import org.cardanofoundation.lob.app.organisation.repository.ChartOfAccountRepository;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateDto;
 import org.cardanofoundation.lob.app.reporting.dto.ReportTemplateFieldDto;
@@ -50,6 +48,7 @@ import org.cardanofoundation.lob.app.reporting.dto.ValidationRuleDto;
 import org.cardanofoundation.lob.app.reporting.dto.ValidationRuleTermDto;
 import org.cardanofoundation.lob.app.reporting.mapper.ReportTemplateMapper;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportEntity;
+import org.cardanofoundation.lob.app.reporting.model.entity.ReportStandardEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateFieldEntity;
 import org.cardanofoundation.lob.app.reporting.model.entity.ReportTemplateValidationRuleEntity;
@@ -60,6 +59,7 @@ import org.cardanofoundation.lob.app.reporting.model.enums.ReportFieldDateRange;
 import org.cardanofoundation.lob.app.reporting.model.enums.ReportTemplateType;
 import org.cardanofoundation.lob.app.reporting.model.enums.TermOperation;
 import org.cardanofoundation.lob.app.reporting.model.enums.TermSide;
+import org.cardanofoundation.lob.app.reporting.repository.ReportStandardRepository;
 import org.cardanofoundation.lob.app.reporting.repository.ReportTemplateRepository;
 import org.cardanofoundation.lob.app.reporting.repository.ReportingRepository;
 import org.cardanofoundation.lob.app.reporting.typeValidations.ReportTemplateTypeValidator;
@@ -83,7 +83,7 @@ class ReportTemplateServiceTest {
     private ReportingService reportingService;
 
     @Mock
-    private AccountingRegimeRepository accountingRegimeRepository;
+    private ReportStandardRepository reportStandardRepository;
 
     private ReportTemplateService reportTemplateService;
 
@@ -93,12 +93,12 @@ class ReportTemplateServiceTest {
 
     @BeforeEach
     void setUp() {
-        lenient().when(accountingRegimeRepository.findAllByOrganisationId("org123")).thenReturn(Set.of(
-                new AccountingRegime(new AccountingRegime.Id("org123", "IFRS"), "IFRS", true),
-                new AccountingRegime(new AccountingRegime.Id("org123", "GAAP"), "GAAP", true),
-                new AccountingRegime(new AccountingRegime.Id("org123", "OLD"), "Old Regime", false)));
+        lenient().when(reportStandardRepository.findAllByOrganisationId("org123")).thenReturn(Set.of(
+                new ReportStandardEntity(new ReportStandardEntity.Id("org123", "IFRS"), "IFRS", true),
+                new ReportStandardEntity(new ReportStandardEntity.Id("org123", "GAAP"), "GAAP", true),
+                new ReportStandardEntity(new ReportStandardEntity.Id("org123", "OLD"), "Old Standard", false)));
         reportTemplateService = new ReportTemplateService(reportTemplateRepository, reportTemplateMapper, chartOfAccountRepository,
-                reportingRepository, validator, reportTemplateTypeValidator, reportingService, new AccountingRegimeResolver(accountingRegimeRepository));
+                reportingRepository, validator, reportTemplateTypeValidator, reportingService, new ReportStandardResolver(reportStandardRepository));
 
         // Setup test data
         templateDto = new ReportTemplateDto();
@@ -107,7 +107,7 @@ class ReportTemplateServiceTest {
         templateDto.setOrganisationId("org123");
         templateDto.setReportTemplateType("BALANCE_SHEET");
         templateDto.setDataMode("SYSTEM");
-        templateDto.setAccountingRegime("IFRS");
+        templateDto.setReportStandard("IFRS");
         templateDto.setFields(new ArrayList<>());
         templateDto.setValidationRules(new ArrayList<>());
 
@@ -117,7 +117,7 @@ class ReportTemplateServiceTest {
         templateEntity.setName("Test Template");
         templateEntity.setVer(1L);
         templateEntity.setReportTemplateType(ReportTemplateType.BALANCE_SHEET);
-        templateEntity.setAccountingRegime("IFRS");
+        templateEntity.setReportStandard("IFRS");
         templateEntity.setFields(new ArrayList<>());
 
         templateResponseDto = new ReportTemplateResponseDto();
@@ -936,53 +936,54 @@ class ReportTemplateServiceTest {
     }
 
     // -------------------------------------------------------------------------
-    // checkAccountingRegimeImmutable
+    // checkReportStandardImmutable
     // -------------------------------------------------------------------------
 
     @Test
-    void checkAccountingRegimeImmutable_regimeUnchanged_returnsRight() {
+    void checkReportStandardImmutable_standardUnchanged_returnsRight() {
         ReportTemplateEntity existing = new ReportTemplateEntity();
         existing.setId("abc");
-        existing.setAccountingRegime("IFRS");
-        templateDto.setAccountingRegime("IFRS");
+        existing.setReportStandard("IFRS");
+        templateDto.setReportStandard("IFRS");
 
-        Either<ProblemDetail, Void> result = reportTemplateService.checkAccountingRegimeImmutable(existing, templateDto);
+        Either<ProblemDetail, Void> result = reportTemplateService.checkReportStandardImmutable(existing, templateDto);
 
         assertTrue(result.isRight());
         verify(reportingRepository, never()).existsByReportTemplateIdAndLedgerDispatchApprovedTrue(any());
     }
 
     @Test
-    void checkAccountingRegimeImmutable_regimeChangedNoPublishedReport_returnsRight() {
+    void checkReportStandardImmutable_standardChangedNoPublishedReport_returnsRight() {
         ReportTemplateEntity existing = new ReportTemplateEntity();
         existing.setId("abc");
-        existing.setAccountingRegime("IFRS");
-        templateDto.setAccountingRegime("GAAP");
+        existing.setReportStandard("IFRS");
+        templateDto.setReportStandard("GAAP");
         when(reportingRepository.existsByReportTemplateIdAndLedgerDispatchApprovedTrue("abc")).thenReturn(false);
 
-        Either<ProblemDetail, Void> result = reportTemplateService.checkAccountingRegimeImmutable(existing, templateDto);
+        Either<ProblemDetail, Void> result = reportTemplateService.checkReportStandardImmutable(existing, templateDto);
 
         assertTrue(result.isRight());
     }
 
     @Test
-    void checkAccountingRegimeImmutable_regimeChangedWithPublishedReport_returnsLeft() {
+    void checkReportStandardImmutable_standardChangedWithPublishedReport_returnsLeft() {
         ReportTemplateEntity existing = new ReportTemplateEntity();
         existing.setId("abc");
         existing.setName("Test Template");
-        existing.setAccountingRegime("IFRS");
-        templateDto.setAccountingRegime("GAAP");
+        existing.setReportStandard("IFRS");
+        templateDto.setReportStandard("GAAP");
         when(reportingRepository.existsByReportTemplateIdAndLedgerDispatchApprovedTrue("abc")).thenReturn(true);
 
-        Either<ProblemDetail, Void> result = reportTemplateService.checkAccountingRegimeImmutable(existing, templateDto);
+        Either<ProblemDetail, Void> result = reportTemplateService.checkReportStandardImmutable(existing, templateDto);
 
         assertTrue(result.isLeft());
-        assertEquals("ACCOUNTING_REGIME_IMMUTABLE_AFTER_PUBLISH", result.getLeft().getTitle());
+        assertEquals("REPORT_STANDARD_IMMUTABLE_AFTER_PUBLISH", result.getLeft().getTitle());
+        assertEquals("The standard of template 'Test Template' cannot be changed because it has at least one published report.", result.getLeft().getDetail());
         assertEquals(409, result.getLeft().getStatus());
     }
 
     @Test
-    void update_BlockedWhenAccountingRegimeChangedAfterPublish() {
+    void update_BlockedWhenReportStandardChangedAfterPublish() {
         // Given
         ReportTemplateEntity existing = new ReportTemplateEntity();
         existing.setId("abc");
@@ -990,7 +991,7 @@ class ReportTemplateServiceTest {
         existing.setName(templateDto.getName());
         existing.setDataMode(DataMode.valueOf(templateDto.getDataMode()));
         existing.setReportTemplateType(ReportTemplateType.valueOf(templateDto.getReportTemplateType()));
-        existing.setAccountingRegime("GAAP");
+        existing.setReportStandard("GAAP");
         existing.setValidationRules(List.of());
 
         when(reportTemplateRepository.findLatestByOrganisationIdAndId("org123", "abc"))
@@ -1000,56 +1001,56 @@ class ReportTemplateServiceTest {
         when(errors.getAllErrors()).thenReturn(List.of());
         when(validator.validateObject(any())).thenReturn(errors);
 
-        // When — templateDto.accountingRegime is "IFRS" (set in @BeforeEach), existing is "GAAP"
+        // When — templateDto.reportStandard is "IFRS" (set in @BeforeEach), existing is "GAAP"
         Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
 
         // Then
         assertTrue(result.isLeft());
-        assertEquals("ACCOUNTING_REGIME_IMMUTABLE_AFTER_PUBLISH", result.getLeft().getTitle());
+        assertEquals("REPORT_STANDARD_IMMUTABLE_AFTER_PUBLISH", result.getLeft().getTitle());
         verify(reportTemplateRepository, never()).save(any());
     }
 
     @Test
-    void create_UnknownAccountingRegime_Rejected() {
-        templateDto.setAccountingRegime("test");
+    void create_UnknownReportStandard_Rejected() {
+        templateDto.setReportStandard("test");
         stubValidatorPasses();
 
         Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
 
         assertTrue(result.isLeft());
-        assertEquals("INVALID_ACCOUNTING_REGIME", result.getLeft().getTitle());
-        assertEquals("Accounting regime not found: test. Options are: GAAP, IFRS, Not applicable", result.getLeft().getDetail());
+        assertEquals("INVALID_REPORT_STANDARD", result.getLeft().getTitle());
+        assertEquals("Standard not found: test. Options are: GAAP, IFRS, Not applicable", result.getLeft().getDetail());
         verify(reportTemplateRepository, never()).save(any());
     }
 
     @Test
-    void create_InactiveAccountingRegime_Rejected() {
-        templateDto.setAccountingRegime("Old Regime");
+    void create_InactiveReportStandard_Rejected() {
+        templateDto.setReportStandard("Old Standard");
         stubValidatorPasses();
 
         Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
 
         assertTrue(result.isLeft());
-        assertEquals("INVALID_ACCOUNTING_REGIME", result.getLeft().getTitle());
+        assertEquals("INVALID_REPORT_STANDARD", result.getLeft().getTitle());
         verify(reportTemplateRepository, never()).save(any());
     }
 
     @Test
-    void create_MissingAccountingRegime_Rejected() {
-        templateDto.setAccountingRegime(null);
+    void create_MissingReportStandard_Rejected() {
+        templateDto.setReportStandard(null);
         stubValidatorPasses();
 
         Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
 
         assertTrue(result.isLeft());
-        assertEquals("INVALID_ACCOUNTING_REGIME", result.getLeft().getTitle());
-        assertEquals("Accounting regime is required", result.getLeft().getDetail());
+        assertEquals("INVALID_REPORT_STANDARD", result.getLeft().getTitle());
+        assertEquals("Standard is required", result.getLeft().getDetail());
         verify(reportTemplateRepository, never()).save(any());
     }
 
     @Test
-    void create_AccountingRegimeMatchedCaseInsensitively_StoresLabel() {
-        templateDto.setAccountingRegime(" ifrs ");
+    void create_ReportStandardMatchedCaseInsensitively_StoresLabel() {
+        templateDto.setReportStandard(" ifrs ");
         stubValidatorPasses();
         when(reportTemplateRepository.findLatestByOrganisationIdAndName("org123", "Test Template")).thenReturn(Optional.empty());
         when(reportTemplateMapper.toEntity(eq(templateDto), isNull())).thenReturn(templateEntity);
@@ -1060,12 +1061,12 @@ class ReportTemplateServiceTest {
         Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.create(templateDto);
 
         assertTrue(result.isRight());
-        assertEquals("IFRS", templateDto.getAccountingRegime());
+        assertEquals("IFRS", templateDto.getReportStandard());
     }
 
     @Test
-    void create_NotApplicableAccountingRegime_Accepted() {
-        templateDto.setAccountingRegime("Not applicable");
+    void create_NotApplicableReportStandard_Accepted() {
+        templateDto.setReportStandard("Not applicable");
         stubValidatorPasses();
         when(reportTemplateRepository.findLatestByOrganisationIdAndName("org123", "Test Template")).thenReturn(Optional.empty());
         when(reportTemplateMapper.toEntity(eq(templateDto), isNull())).thenReturn(templateEntity);
@@ -1079,9 +1080,9 @@ class ReportTemplateServiceTest {
     }
 
     @Test
-    void update_LegacyTemplateWithoutRegime_SavedUnchanged() {
-        // Templates created before the field existed have no regime; the template builder resends it as null
-        templateDto.setAccountingRegime(null);
+    void update_LegacyTemplateWithoutStandard_SavedUnchanged() {
+        // Templates created before the field existed have no standard; the template builder resends it as null
+        templateDto.setReportStandard(null);
         ReportTemplateEntity existing = existingTemplate(null);
         stubInPlaceUpdate(existing);
 
@@ -1092,9 +1093,9 @@ class ReportTemplateServiceTest {
     }
 
     @Test
-    void update_DeactivatedRegimeUnchanged_Saved() {
-        templateDto.setAccountingRegime("Old Regime");
-        ReportTemplateEntity existing = existingTemplate("Old Regime");
+    void update_DeactivatedStandardUnchanged_Saved() {
+        templateDto.setReportStandard("Old Standard");
+        ReportTemplateEntity existing = existingTemplate("Old Standard");
         stubInPlaceUpdate(existing);
 
         Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
@@ -1104,8 +1105,8 @@ class ReportTemplateServiceTest {
     }
 
     @Test
-    void update_RegimeChangedToUnknown_Rejected() {
-        templateDto.setAccountingRegime("test");
+    void update_StandardChangedToUnknown_Rejected() {
+        templateDto.setReportStandard("test");
         ReportTemplateEntity existing = existingTemplate("IFRS");
         when(reportTemplateRepository.findLatestByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(existing));
         stubValidatorPasses();
@@ -1113,13 +1114,13 @@ class ReportTemplateServiceTest {
         Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
 
         assertTrue(result.isLeft());
-        assertEquals("INVALID_ACCOUNTING_REGIME", result.getLeft().getTitle());
+        assertEquals("INVALID_REPORT_STANDARD", result.getLeft().getTitle());
         verify(reportTemplateRepository, never()).save(any());
     }
 
     @Test
-    void update_RegimeRemovedFromTemplateThatHasOne_Rejected() {
-        templateDto.setAccountingRegime(null);
+    void update_StandardRemovedFromTemplateThatHasOne_Rejected() {
+        templateDto.setReportStandard(null);
         ReportTemplateEntity existing = existingTemplate("IFRS");
         when(reportTemplateRepository.findLatestByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(existing));
         stubValidatorPasses();
@@ -1127,18 +1128,18 @@ class ReportTemplateServiceTest {
         Either<ProblemDetail, ReportTemplateResponseDto> result = reportTemplateService.update(templateDto);
 
         assertTrue(result.isLeft());
-        assertEquals("Accounting regime is required", result.getLeft().getDetail());
+        assertEquals("Standard is required", result.getLeft().getDetail());
         verify(reportTemplateRepository, never()).save(any());
     }
 
-    private ReportTemplateEntity existingTemplate(String accountingRegime) {
+    private ReportTemplateEntity existingTemplate(String reportStandard) {
         ReportTemplateEntity existing = new ReportTemplateEntity();
         existing.setId("abc");
         existing.setVer(1L);
         existing.setName(templateDto.getName());
         existing.setDataMode(DataMode.valueOf(templateDto.getDataMode()));
         existing.setReportTemplateType(ReportTemplateType.valueOf(templateDto.getReportTemplateType()));
-        existing.setAccountingRegime(accountingRegime);
+        existing.setReportStandard(reportStandard);
         existing.setValidationRules(List.of());
         return existing;
     }
@@ -1162,11 +1163,11 @@ class ReportTemplateServiceTest {
     @Test
     void delete_Success() {
         // Given
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(templateEntity));
         when(reportingRepository.findByReportTemplateId("abc")).thenReturn(new ArrayList<>());
 
         // When
-        Either<ProblemDetail, Void> result = reportTemplateService.delete("abc");
+        Either<ProblemDetail, Void> result = reportTemplateService.delete("org123", "abc");
 
         // Then
         assertTrue(result.isRight());
@@ -1176,10 +1177,10 @@ class ReportTemplateServiceTest {
     @Test
     void delete_TemplateNotFound() {
         // Given
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.empty());
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.empty());
 
         // When
-        Either<ProblemDetail, Void> result = reportTemplateService.delete("abc");
+        Either<ProblemDetail, Void> result = reportTemplateService.delete("org123", "abc");
 
         // Then
         assertTrue(result.isLeft());
@@ -1193,11 +1194,11 @@ class ReportTemplateServiceTest {
         ReportEntity report = new ReportEntity();
         report.setId("abc");
 
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(templateEntity));
         when(reportingRepository.findByReportTemplateId("abc")).thenReturn(List.of(report));
 
         // When
-        Either<ProblemDetail, Void> result = reportTemplateService.delete("abc");
+        Either<ProblemDetail, Void> result = reportTemplateService.delete("org123", "abc");
 
         // Then
         assertTrue(result.isLeft());
@@ -1208,11 +1209,11 @@ class ReportTemplateServiceTest {
     @Test
     void findById_Success() {
         // Given
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.of(templateEntity));
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.of(templateEntity));
         when(reportTemplateMapper.toResponseDto(templateEntity)).thenReturn(templateResponseDto);
 
         // When
-        Optional<ReportTemplateResponseDto> result = reportTemplateService.findById("abc");
+        Optional<ReportTemplateResponseDto> result = reportTemplateService.findByOrganisationIdAndId("org123", "abc");
         // Then
         assertTrue(result.isPresent());
         assertEquals("Test Template", result.get().getName());
@@ -1221,10 +1222,10 @@ class ReportTemplateServiceTest {
     @Test
     void findById_NotFound() {
         // Given
-        when(reportTemplateRepository.findById("abc")).thenReturn(Optional.empty());
+        when(reportTemplateRepository.findByOrganisationIdAndId("org123", "abc")).thenReturn(Optional.empty());
 
         // When
-        Optional<ReportTemplateResponseDto> result = reportTemplateService.findById("abc");
+        Optional<ReportTemplateResponseDto> result = reportTemplateService.findByOrganisationIdAndId("org123", "abc");
 
         // Then
         assertFalse(result.isPresent());

@@ -50,18 +50,26 @@ public class TransactionConverter {
         ArrayList<TxLine> searchResultsByOrganisation = new ArrayList<>();
         LinkedHashSet<Transaction> transactions = new LinkedHashSet<>();
 
-        for (TxLine txLine : txLines) {
-            Either<FatalError, String> localOrgIdE = getOrganisationIdFromTxLine(txLine);
+        Set<Long> unmappedSubsidiaries = new LinkedHashSet<>();
 
-            if (localOrgIdE.isEmpty()) {
-                return Either.left(localOrgIdE.getLeft());
+        for (TxLine txLine : txLines) {
+            Optional<String> localOrgIdM = getOrganisationIdFromTxLine(txLine);
+
+            // A subsidiary without an organisation mapping cannot belong to the organisation being
+            // extracted, so its lines are skipped rather than failing the whole batch.
+            if (localOrgIdM.isEmpty()) {
+                unmappedSubsidiaries.add(txLine.subsidiary());
+                continue;
             }
 
-            String localOrgId = localOrgIdE.get();
-
-            if (localOrgId.equals(organisationId)) {
+            if (localOrgIdM.get().equals(organisationId)) {
                 searchResultsByOrganisation.add(txLine);
             }
+        }
+
+        if (!unmappedSubsidiaries.isEmpty()) {
+            log.info("Ignoring NetSuite lines from subsidiaries without an organisation mapping: {}, netsuiteInstanceId: {}, organisationId: {}",
+                    unmappedSubsidiaries, netsuiteInstanceId, organisationId);
         }
 
         Map<String, List<TxLine>> searchResultItemsPerTransactionNumber = searchResultsByOrganisation.stream().collect(groupingBy(TxLine::transactionNumber));
@@ -312,21 +320,8 @@ public class TransactionConverter {
         return Optional.empty();
     }
 
-    private Either<FatalError, String> getOrganisationIdFromTxLine(TxLine txLine) {
-        Optional<String> organisationIdM = codesMappingService.getCodeMapping(netsuiteInstanceId, txLine.subsidiary(), ORGANISATION);
-
-        if (organisationIdM.isEmpty()) {
-            String message = "Organisation not imported: no organisation mapping for NetSuite subsidiary " + txLine.subsidiary();
-            Map<String, Object> bag = Map.<String, Object>of(
-                    BAG_ERROR, Map.of(BAG_CODE, "ORGANISATION_NOT_IMPORTED", BAG_MESSAGE, message),
-                    Constants.NETSUITE_BAG_TECHNICAL_ERROR_MESSAGE, message,
-                    "netsuiteInstanceId", netsuiteInstanceId,
-                    "subsidiary", txLine.subsidiary());
-
-            return Either.left(new FatalError(ADAPTER_ERROR, "ORGANISATION_NOT_IMPORTED", bag));
-        }
-
-        return Either.right(organisationIdM.orElseThrow());
+    private Optional<String> getOrganisationIdFromTxLine(TxLine txLine) {
+        return codesMappingService.getCodeMapping(netsuiteInstanceId, txLine.subsidiary(), ORGANISATION);
     }
 
     private Optional<String> projectCode(String organisationId, TxLine txLine) {

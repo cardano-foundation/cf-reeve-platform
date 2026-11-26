@@ -8,8 +8,11 @@ import java.util.Optional;
 import java.util.Set;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
+
+import org.springframework.http.ProblemDetail;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 
@@ -21,6 +24,7 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.domain.entity.Tra
 import org.cardanofoundation.lob.app.accounting_reporting_core.resource.requests.ReconciliationRejectionCodeRequest;
 import org.cardanofoundation.lob.app.blockchain_common.domain.LedgerDispatchStatus;
 
+@Builder
 @Getter
 @Setter
 @AllArgsConstructor
@@ -70,6 +74,8 @@ public class TransactionView {
     private Set<TransactionItemView> items = new LinkedHashSet<>();
 
     private Set<ViolationView> violations = new LinkedHashSet<>();
+
+    private Optional<ProblemDetail> error;
 
     public enum ReconciliationCodeView {
         OK,

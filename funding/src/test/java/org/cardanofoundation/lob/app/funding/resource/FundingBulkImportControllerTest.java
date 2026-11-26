@@ -78,7 +78,7 @@ class FundingBulkImportControllerTest {
 
     @Test
     void downloadTemplate_streamsFromTemplateService() throws Exception {
-        ResponseEntity<StreamingResponseBody> response = controller.downloadTemplate(FundingCsvFileType.PROJECTS_MILESTONES);
+        ResponseEntity<StreamingResponseBody> response = controller.downloadTemplate(FundingCsvFileType.PROJECTS_MILESTONES, "org1");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getHeaders().getFirst("Content-Disposition"))
@@ -92,7 +92,7 @@ class FundingBulkImportControllerTest {
 
     @Test
     void downloadTemplate_usesFileTypeSpecificFilename() {
-        ResponseEntity<StreamingResponseBody> response = controller.downloadTemplate(FundingCsvFileType.EVENTS);
+        ResponseEntity<StreamingResponseBody> response = controller.downloadTemplate(FundingCsvFileType.EVENTS, "org1");
 
         assertThat(response.getHeaders().getFirst("Content-Disposition"))
                 .isEqualTo("attachment; filename=\"funding_events_template.csv\"");
@@ -128,13 +128,13 @@ class FundingBulkImportControllerTest {
 
     @Test
     void exportProjectsMilestones_returnsErrorStatus_withoutStreaming_whenValidationFails() {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "User does not have access to this organisation");
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, "User does not have access to this organisation");
         problem.setTitle(ErrorTitleConstants.UNAUTHORIZED);
         when(fundingCsvExportService.validateExport(ORG_ID)).thenReturn(Optional.of(problem));
 
         ResponseEntity<?> response = controller.exportProjectsMilestones(ORG_ID, null, PAGEABLE);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(response.getBody()).isSameAs(problem);
         verify(fundingCsvExportService, never()).writeProjectsMilestonesExport(any(), any(), any(), any());
     }

@@ -72,7 +72,7 @@ class FundingCsvExportServiceTest {
         Optional<ProblemDetail> error = exportService.validateExport(ORG_ID);
 
         assertThat(error).isPresent();
-        assertThat(error.get().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(error.get().getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
     }
 
     @Test

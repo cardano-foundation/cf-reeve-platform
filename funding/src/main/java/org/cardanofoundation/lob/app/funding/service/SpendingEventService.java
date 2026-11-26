@@ -49,6 +49,8 @@ import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
 @Transactional(readOnly = true)
 public class SpendingEventService {
 
+    private static final String EVENT_NOT_FOUND_LOG = "Event not found: {}";
+
     private final FundingEventRepository fundingEventRepository;
     private final FundingProjectRepository projectRepository;
     private final EventMilestoneAllocationRepository milestoneAllocationRepository;
@@ -62,36 +64,64 @@ public class SpendingEventService {
     // View-returning API (used by the controller — carries the ProblemDetail)
     // -------------------------------------------------------------------------
 
-    public PagedResponse<SpendingEventView> listEvents(String organisationId, Optional<EventStatus> status,
-            Optional<EventType> eventType, Pageable pageable) {
+    public PagedResponse<SpendingEventView> listEvents(String organisationId, SpendingEventFilterRequest filter,
+            Pageable pageable) {
         if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
             return PagedResponse.error(Problems.unauthorized());
         }
         if (organisationPublicApi.findByOrganisationId(organisationId).isEmpty()) {
             return PagedResponse.error(Problems.organisationNotFound(organisationId));
         }
-        return PagedResponse.of(findByOrganisationIdAndFilter(organisationId, status, eventType, pageable), this::toView);
+        Optional<ProblemDetail> invalidFilter = validateFilter(filter);
+        if (invalidFilter.isPresent()) {
+            return PagedResponse.error(invalidFilter.get());
+        }
+        return PagedResponse.of(findByOrganisationIdAndFilter(organisationId, filter, pageable), this::toView);
     }
 
-    public PagedResponse<SpendingEventView> listEventsByProject(String projectId, Optional<EventStatus> status,
-            Optional<EventType> eventType, Pageable pageable) {
-        Optional<ProjectEntity> projectM = projectRepository.findById(projectId);
-        if (projectM.isEmpty()) {
-            return PagedResponse.error(Problems.notFound("Project not found: " + projectId, ErrorTitleConstants.PROJECT_NOT_FOUND));
+    /** Rejects ranges that can never match: inverted date/amount ranges and negative amount bounds. */
+    private static Optional<ProblemDetail> validateFilter(SpendingEventFilterRequest filter) {
+        if (filter.getDateFrom() != null && filter.getDateTo() != null && filter.getDateFrom().isAfter(filter.getDateTo())) {
+            return Optional.of(Problems.badRequest(
+                    "Event date 'from' (%s) must not be after 'to' (%s).".formatted(filter.getDateFrom(), filter.getDateTo()),
+                    ErrorTitleConstants.EVENT_FILTER_INVALID));
         }
-        if (!keycloakSecurityHelper.canUserAccessOrg(projectM.get().getOrganisationId())) {
+        if (isNegative(filter.getMinAmount()) || isNegative(filter.getMaxAmount())) {
+            return Optional.of(Problems.badRequest(
+                    "Amount filters must not be negative.", ErrorTitleConstants.EVENT_FILTER_INVALID));
+        }
+        if (filter.getMinAmount() != null && filter.getMaxAmount() != null
+                && filter.getMinAmount().compareTo(filter.getMaxAmount()) > 0) {
+            return Optional.of(Problems.badRequest(
+                    "Minimum amount (%s) must not be greater than maximum amount (%s).".formatted(
+                            filter.getMinAmount().toPlainString(), filter.getMaxAmount().toPlainString()),
+                    ErrorTitleConstants.EVENT_FILTER_INVALID));
+        }
+        return Optional.empty();
+    }
+
+    private static boolean isNegative(BigDecimal amount) {
+        return amount != null && amount.signum() < 0;
+    }
+
+    public PagedResponse<SpendingEventView> listEventsByProject(String projectId, String organisationId, Optional<EventStatus> status,
+            Optional<EventType> eventType, Pageable pageable) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
             return PagedResponse.error(Problems.unauthorized());
+        }
+        if (projectRepository.findByIdAndOrganisationId(projectId, organisationId).isEmpty()) {
+            return PagedResponse.error(Problems.notFound("Project not found: " + projectId, ErrorTitleConstants.PROJECT_NOT_FOUND));
         }
         return PagedResponse.of(findByProjectIdAndFilter(projectId, status, eventType, pageable), this::toView);
     }
 
-    public SpendingEventView getEvent(String eventId) {
-        Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);
+    public SpendingEventView getEvent(String eventId, String organisationId) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return SpendingEventView.error(Problems.unauthorized());
+        }
+        Optional<FundingEventEntity> eventM = fundingEventRepository.findByIdAndOrganisationId(eventId, organisationId).stream().findFirst();
         if (eventM.isEmpty()) {
             return SpendingEventView.error(Problems.eventNotFound(eventId));
-        }
-        if (!keycloakSecurityHelper.canUserAccessOrg(eventM.get().getOrganisationId())) {
-            return SpendingEventView.error(Problems.unauthorized());
         }
         return toView(eventM.get());
     }
@@ -103,9 +133,8 @@ public class SpendingEventService {
 
     @Transactional
     public SpendingEventView updateEvent(String eventId, SpendingEventCreateRequest request) {
-        Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId);
-        if (denied.isPresent()) {
-            return SpendingEventView.error(denied.get());
+        if (!keycloakSecurityHelper.canUserAccessOrg(request.getOrganisationId())) {
+            return SpendingEventView.error(Problems.unauthorized());
         }
         return update(eventId, request).fold(this::rollbackAndError, this::toView);
     }
@@ -124,16 +153,19 @@ public class SpendingEventService {
     }
 
     @Transactional
-    public SpendingEventView publishEvent(String eventId) {
-        // The locked read must be the first load of this event in the transaction (no
-        // denyIfNoEventAccess beforehand): an already-managed entity is not refreshed by the locking
-        // query, so a concurrent publish would be judged against stale, pre-commit state.
-        Either<ProblemDetail, FundingEventEntity> eventOrError = findEventForUpdateOrError(eventId);
+    public SpendingEventView publishEvent(String eventId, String organisationId) {
+        // The org check needs no DB read, so it can run first; the locked read must still be the first
+        // load of this event in the transaction (no denyIfNoEventAccess beforehand): an already-managed
+        // entity is not refreshed by the locking query, so a concurrent publish would be judged against
+        // stale, pre-commit state. An event of another organisation is reported as not found.
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
+            return SpendingEventView.error(Problems.unauthorized());
+        }
+        Either<ProblemDetail, FundingEventEntity> eventOrError = findEventForUpdateOrError(eventId)
+                .filterOrElse(event -> organisationId.equals(event.getOrganisationId()),
+                        ignored -> Problems.eventNotFound(eventId));
         if (eventOrError.isLeft()) {
             return SpendingEventView.error(eventOrError.getLeft());
-        }
-        if (!keycloakSecurityHelper.canUserAccessOrg(eventOrError.get().getOrganisationId())) {
-            return SpendingEventView.error(Problems.unauthorized());
         }
         return publish(eventOrError.get()).fold(SpendingEventView::error, this::toView);
     }
@@ -186,8 +218,8 @@ public class SpendingEventService {
     }
 
     @Transactional
-    public Optional<ProblemDetail> deleteEvent(String eventId) {
-        Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId);
+    public Optional<ProblemDetail> deleteEvent(String eventId, String organisationId) {
+        Optional<ProblemDetail> denied = denyIfNoEventAccess(eventId, organisationId);
         if (denied.isPresent()) {
             return denied;
         }
@@ -215,11 +247,13 @@ public class SpendingEventService {
         return OrphanEventsCleanupView.success(FundingCascadeDeleteService.toAffectedEventViews(orphans));
     }
 
-    /** 401 when the event exists and the caller cannot access its organisation; empty otherwise. */
-    private Optional<ProblemDetail> denyIfNoEventAccess(String eventId) {
-        Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);
-        if (eventM.isPresent() && !keycloakSecurityHelper.canUserAccessOrg(eventM.get().getOrganisationId())) {
+    /** 403 when the caller cannot access the organisation, 404 when no event exists for that id within it. */
+    private Optional<ProblemDetail> denyIfNoEventAccess(String eventId, String organisationId) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(organisationId)) {
             return Optional.of(Problems.unauthorized());
+        }
+        if (fundingEventRepository.findByIdAndOrganisationId(eventId, organisationId).isEmpty()) {
+            return Optional.of(Problems.eventNotFound(eventId));
         }
         return Optional.empty();
     }
@@ -230,14 +264,28 @@ public class SpendingEventService {
 
     public Page<FundingEventEntity> findByOrganisationIdAndFilter(
             String organisationId,
-            Optional<EventStatus> status,
-            Optional<EventType> eventType,
+            SpendingEventFilterRequest filter,
             Pageable pageable) {
         return fundingEventRepository.findByOrganisationIdAndFilter(
                 organisationId,
-                status.orElse(null),
-                eventType.orElse(null),
+                emptyToNull(filter.getStatuses()),
+                emptyToNull(filter.getEventTypes()),
+                blankToNull(filter.getProjectTitle()),
+                blankToNull(filter.getCurrency()),
+                filter.getDateFrom(),
+                filter.getDateTo(),
+                filter.getMinAmount(),
+                filter.getMaxAmount(),
                 pageable);
+    }
+
+    // The repository query treats null as "filter off"; an empty list or blank string must mean the same.
+    private static <T> List<T> emptyToNull(List<T> values) {
+        return values == null || values.isEmpty() ? null : values;
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     public Page<FundingEventEntity> findByProjectIdAndFilter(
@@ -254,6 +302,9 @@ public class SpendingEventService {
 
     @Transactional
     public Either<ProblemDetail, FundingEventEntity> create(SpendingEventCreateRequest request) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(request.getOrganisationId())) {
+            return Either.left(Problems.unauthorized());
+        }
         FundingEventEntity event = toEntity(request);
         if (fundingEventRepository.existsById(event.getId())) {
             // Named by the natural key that actually determines the id (see FundingEventEntity#id) —
@@ -271,10 +322,15 @@ public class SpendingEventService {
 
     @Transactional
     public Either<ProblemDetail, FundingEventEntity> update(String eventId, SpendingEventCreateRequest request) {
-        Either<ProblemDetail, FundingEventEntity> eventOrError = findEventOrError(eventId);
-        if (eventOrError.isLeft()) return eventOrError;
-
-        FundingEventEntity event = eventOrError.get();
+        // The event's organisation is fixed at creation, and the permission was checked in the request's: an event of
+        // any other organisation is not found, so the update can't target another organisation's projects either
+        Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId)
+                .filter(found -> found.getOrganisationId().equals(request.getOrganisationId()));
+        if (eventM.isEmpty()) {
+            log.warn(EVENT_NOT_FOUND_LOG, eventId);
+            return Either.left(Problems.eventNotFound(eventId));
+        }
+        FundingEventEntity event = eventM.get();
 
         Optional<ProblemDetail> draftProblem = requireDraft(event, "Cannot update event with Funding ID %s: it is already published");
         if (draftProblem.isPresent()) return Either.left(draftProblem.get());
@@ -290,13 +346,7 @@ public class SpendingEventService {
             event.setStatus(EventStatus.DRAFT);
         }
 
-        // The event's identity — organisation and type — is fixed at creation; the update payload
-        // must not silently target another organisation's projects or change the event's semantics.
-        if (!event.getOrganisationId().equals(request.getOrganisationId())) {
-            return Either.left(Problems.badRequest(
-                    "organisationId %s does not match the event's organisation".formatted(request.getOrganisationId()),
-                    ErrorTitleConstants.ORGANISATION_MISMATCH));
-        }
+        // The event's type is fixed at creation; the update payload must not change the event's semantics.
         if (event.getEventType() != request.getEventType()) {
             return Either.left(Problems.badRequest(
                     "eventType cannot be changed on update (event is %s)".formatted(event.getEventType()),
@@ -541,7 +591,7 @@ public class SpendingEventService {
     private Either<ProblemDetail, FundingEventEntity> findEventForUpdateOrError(String eventId) {
         Optional<FundingEventEntity> eventM = fundingEventRepository.findByIdForUpdate(eventId);
         if (eventM.isEmpty()) {
-            log.warn("Event not found: {}", eventId);
+            log.warn(EVENT_NOT_FOUND_LOG, eventId);
             return Either.left(Problems.eventNotFound(eventId));
         }
         return Either.right(eventM.get());
@@ -550,7 +600,7 @@ public class SpendingEventService {
     private Either<ProblemDetail, FundingEventEntity> findEventOrError(String eventId) {
         Optional<FundingEventEntity> eventM = fundingEventRepository.findById(eventId);
         if (eventM.isEmpty()) {
-            log.warn("Event not found: {}", eventId);
+            log.warn(EVENT_NOT_FOUND_LOG, eventId);
             return Either.left(Problems.eventNotFound(eventId));
         }
         return Either.right(eventM.get());

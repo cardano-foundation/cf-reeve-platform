@@ -1,0 +1,332 @@
+services:
+
+  postgres:
+    image: postgres:17
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - lob
+
+  frontend:
+    profiles: [frontend]
+    image: pro.registry.gitlab.metadata.dev.cf-deployments.org/base-infrastructure/docker-registry/cf-lob-frontend:${FRONTEND_DOCKER_TAG:-main}
+    networks:
+      - lob
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      VITE_APP_VERSION: $npm_package_version
+      VITE_APP_API_URL: ${API_FRONTEND_HOSTNAME:-http://localhost:9000}
+      VITE_KEYCLOAK_URL: ${KC_FRONTEND_HOSTNAME:-http://localhost:8080}
+      VITE_KEYCLOAK_REALM: reeve-master
+      VITE_KEYCLOAK_CLIENT_ID: webclient
+      VITE_PUBLIC_INTERFACE_OFF: ${VITE_PUBLIC_INTERFACE_OFF:-true}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend-http.entrypoints=web"
+      - "traefik.http.routers.frontend-http.rule=Host(`${FRONTEND_HOSTNAME:-example.com}`)"
+      - "traefik.http.routers.frontend-https.rule=Host(`${FRONTEND_HOSTNAME:-example.com}`)"
+      - "traefik.http.routers.frontend-https.entrypoints=websecure"
+      - "traefik.http.routers.frontend-https.tls=true"
+      - "traefik.http.middlewares.https-redirect.headers.customrequestheaders.X-Forwarded-Proto=https"
+
+  publisher:
+    build:
+      context: .
+    environment:
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${OAUTH2_ISSUER_URI:-http://localhost:8080/realms/reeve-master}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${OAUTH2_JWK_SET_URI:-http://keycloak:8080/realms/reeve-master/protocol/openid-connect/certs}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWS_ALGORITHMS: ${OAUTH2_JWS_ALGORITHMS:-RS256}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${OAUTH2_AUDIENCE:-reeve-api}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUTHORITIES_CLAIM_NAME: ${OAUTH2_AUTHORITIES_CLAIM_NAME:-roles}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUTHORITY_PREFIX: ${OAUTH2_AUTHORITY_PREFIX:-ROLE_}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_PRINCIPAL_CLAIM_NAME: ${OAUTH2_PRINCIPAL_CLAIM_NAME:-preferred_username}
+      # Only used for dev and mocking netsuit
+      LOB_MOCK_RESULT_PATH: /app/cf-application/src/main/resources/json/NetSuiteIngestionMock.json
+      SPRING_PROFILES_ACTIVE: dev--yaci-dev-kit,kafka-ssl
+      DB_URL: ${DB_USER:-jdbc:postgresql://postgres:5432/postgres}
+      lob_owner_account_mnemonic: ${LOB_OWNER_ACCOUNT_MNEMONIC:-test test test test test test test test test test test test test test test test test test test test test test test sauce}
+      LOB_ACCOUNTING_REPORTING_CORE_ENABLED: false
+      LOB_ORGANISATION_ENABLED: false
+      # Decrypt-only half of the RSA key pair: this service runs the netsuite module.
+      # The api never gets this key - it can only encrypt. See certs/netsuiteConfiguration.md.
+      LOB_CONFIG_ENCRYPTION_PRIVATE_KEY: ${LOB_CONFIG_ENCRYPTION_PRIVATE_KEY:?Generate the encryption key pair - see certs/netsuiteConfiguration.md}
+      LOB_BLOCKCHAIN_READER_ENABLED: true
+      LOB_BLOCKCHAIN_PUBLISHER_ENABLED: true
+      LOB_NETSUITE_ENABLED: true
+      SERVER_PORT: 9001
+      LOB_BLOCKFROST_URL: http://yaci-cli:8080/api/v1/
+      LOB_BLOCKCHAIN_READER_LOB_FOLLOWER_BASE_URL: http://follower-app:9090/api
+      SPRING_KAFKA_ENABLED: true
+      KAFKA_SSL_TRUSTSTORE_PASSWORD: ${KAFKA_SSL_TRUSTSTORE_PASSWORD}
+      KAFKA_SSL_KEYSTORE_PASSWORD: ${KAFKA_SSL_KEYSTORE_PASSWORD}
+      KAFKA_SSL_KEY_PASSWORD: ${KAFKA_SSL_KEY_PASSWORD}
+    working_dir: /app
+    entrypoint: ${ENTRYPOINT:-java -jar /app.jar}
+    networks:
+      - lob
+    ports:
+      - "9001:9001"
+    volumes:
+      - ./:/app/
+      - ${LOCAL_KAFKA_CLIENT_SSL_KEYSTORE_PATH:-./certs/ssl/kafka.client.keystore.jks}:/etc/kafka/secrets/kafka.keystore.jks
+      - ${LOCAL_KAFKA_CLIENT_SSL_TRUSTSTORE_PATH:-./certs/ssl/kafka.client.truststore.jks}:/etc/kafka/secrets/kafka.truststore.jks
+  api:
+    build:
+      context: .
+    environment:
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${OAUTH2_ISSUER_URI:-http://localhost:8080/realms/reeve-master}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${OAUTH2_JWK_SET_URI:-http://keycloak:8080/realms/reeve-master/protocol/openid-connect/certs}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWS_ALGORITHMS: ${OAUTH2_JWS_ALGORITHMS:-RS256}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${OAUTH2_AUDIENCE:-reeve-api}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUTHORITIES_CLAIM_NAME: ${OAUTH2_AUTHORITIES_CLAIM_NAME:-roles}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUTHORITY_PREFIX: ${OAUTH2_AUTHORITY_PREFIX:-ROLE_}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_PRINCIPAL_CLAIM_NAME: ${OAUTH2_PRINCIPAL_CLAIM_NAME:-preferred_username}
+      SPRINGDOC_API_DOCS_ENABLED: true
+      SPRINGDOC_SWAGGER_UI_ENABLED: true
+      SPRINGDOC_SWAGGER_UI_PATH: /swagger-ui.html
+      # Only used for dev and mocking netsuit
+      LOB_CORS_ALLOWED_ORIGINS: ${LOB_CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      LOB_MOCK_RESULT_PATH: /app/cf-application/src/main/resources/json/NetSuiteIngestionMock.json
+      SPRING_PROFILES_ACTIVE: dev--yaci-dev-kit,kafka-ssl
+      DB_URL: ${DB_USER:-jdbc:postgresql://postgres:5432/postgres}
+      lob_owner_account_mnemonic: ${LOB_OWNER_ACCOUNT_MNEMONIC:-test test test test test test test test test test test test test test test test test test test test test test test sauce}
+      LOB_ACCOUNTING_REPORTING_CORE_ENABLED: true
+      LOB_ORGANISATION_ENABLED: true
+      # Encrypt-only half of the RSA key pair: this service runs the organisation module
+      # and can never decrypt stored credentials. See certs/netsuiteConfiguration.md.
+      LOB_CONFIG_ENCRYPTION_PUBLIC_KEY: ${LOB_CONFIG_ENCRYPTION_PUBLIC_KEY:?Generate the encryption key pair - see certs/netsuiteConfiguration.md}
+      LOB_BLOCKCHAIN_READER_ENABLED: false
+      LOB_BLOCKCHAIN_PUBLISHER_ENABLED: false
+      LOB_NETSUITE_ENABLED: false
+      SPRING_KAFKA_ENABLED: true
+      SERVER_PORT: 9000
+      KAFKA_SSL_TRUSTSTORE_PASSWORD: ${KAFKA_SSL_TRUSTSTORE_PASSWORD}
+      KAFKA_SSL_KEYSTORE_PASSWORD: ${KAFKA_SSL_KEYSTORE_PASSWORD}
+      KAFKA_SSL_KEY_PASSWORD: ${KAFKA_SSL_KEY_PASSWORD}
+    working_dir: /app
+    entrypoint: ${ENTRYPOINT:-java -jar /app.jar}
+    networks:
+      - lob
+    ports:
+      - "9000:9000"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend-http.entrypoints=web"
+      - "traefik.http.routers.backend-http.rule=Host(`${API_HOSTNAME:-api.example.com}`)"
+      - "traefik.http.routers.backend-https.rule=Host(`${API_HOSTNAME:-api.example.com}`)"
+      - "traefik.http.routers.backend-https.entrypoints=websecure"
+      - "traefik.http.routers.backend-https.tls=true"
+      - "traefik.http.middlewares.https-redirect.headers.customrequestheaders.X-Forwarded-Proto=https"
+    volumes:
+      - ./:/app/
+      - ${LOCAL_KAFKA_CLIENT_SSL_KEYSTORE_PATH:-./certs/ssl/kafka.client.keystore.jks}:/etc/kafka/secrets/kafka.keystore.jks
+      - ${LOCAL_KAFKA_CLIENT_SSL_TRUSTSTORE_PATH:-./certs/ssl/kafka.client.truststore.jks}:/etc/kafka/secrets/kafka.truststore.jks
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7
+    command: start-dev --import-realm
+    depends_on:
+      - postgres
+      - keycloak-theme-setup
+    networks:
+      - lob
+    environment:
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      KC_METRICS_ENABLED: ${KC_METRICS_ENABLED:-true}
+      KC_HEALTH_ENABLED: ${KC_HEALTH_ENABLED:-true}
+      KC_HOSTNAME: ${KC_HOSTNAME-localhost}
+      KC_IMPORT: ${KC_IMPORT:-/opt/keycloak/data/import/realm-export.json}
+      KC_HTTP_ENABLED: true
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_PORT: ${KC_HTTP_PORT:-8080}
+      KC_HTTPS_PORT: ${KC_HTTP_PORT:-8443}
+      KC_DB: ${KC_DB:-postgres}
+      KC_DB_URL_HOST: ${KC_DB_URL_HOST:-postgres}
+      KC_DB_URL_PORT: ${KC_DB_URL_PORT:-5432}
+      KC_DB_USERNAME: ${KC_DB_USERNAME:-postgres}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD:-postgres}
+    ports:
+      - ${EXPOSED_KC_HTTP_PORT:-8080}:${KC_HTTP_PORT:-8080}
+      - ${EXPOSED_KC_HTTPS_PORT:-8443}:${KC_HTTPS_PORT:-8443}
+      - ${EXPOSED_KC_HEALTH_PORT:-8082}:9000
+    volumes:
+      - ./keycloak-config:/opt/keycloak/data/import
+      - keycloak-providers:/opt/keycloak/providers
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.keycloak-http.entrypoints=web"
+      - "traefik.http.routers.keycloak-http.rule=Host(`${KC_HOSTNAME:-keycloak.example.com}`)"
+      - "traefik.http.routers.keycloak-https.rule=Host(`${KC_HOSTNAME:-keycloak.example.com}`)"
+      - "traefik.http.routers.keycloak-https.entrypoints=websecure"
+      - "traefik.http.routers.keycloak-https.tls=true"
+      - "traefik.http.middlewares.https-redirect.headers.customrequestheaders.X-Forwarded-Proto=https"
+      - "traefik.http.services.keycloak.loadbalancer.server.port=${KC_HTTP_PORT:-8080}"
+
+  keycloak-theme-setup:
+    image: pro.registry.gitlab.metadata.dev.cf-deployments.org/base-infrastructure/docker-registry/cf-lob-keycloak-theme:main-c2af9c0-GHRUN13586557057
+    entrypoint: /bin/sh -c "cp -a /reeve-theme.jar /opt/keycloak/providers/"
+    volumes:
+      - keycloak-providers:/opt/keycloak/providers
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    networks:
+      - lob
+    restart: always
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+  init-kafka:
+    image: alpine
+    entrypoint: [ "/bin/sh", "-c" ]
+    command:
+      - |
+        mkdir -p /etc/kafka/secrets && \
+        echo "$KAFKA_SSL_KEYSTORE_PASSWORD" > /etc/kafka/secrets/keystore_creds && \
+        echo "$KAFKA_SSL_TRUSTSTORE_PASSWORD" > /etc/kafka/secrets/truststore_creds && \
+        echo "$KAFKA_SSL_KEY_PASSWORD" > /etc/kafka/secrets/key_creds && \
+        cp /local/kafka.keystore.jks etc/kafka/secrets/kafka.keystore.jks && \
+        cp /local/kafka.truststore.jks /etc/kafka/secrets/kafka.truststore.jks && \
+        ls -l /etc/kafka/secrets  # Debugging
+    volumes:
+      - kafka-secrets:/etc/kafka/secrets
+      - ${LOCAL_KAFKA_BROKER_SSL_KEYSTORE_PATH:-./certs/ssl/kafka.broker.keystore.jks}:/local/kafka.keystore.jks
+      - ${LOCAL_KAFKA_BROKER_SSL_TRUSTSTORE_PATH:-./certs/ssl/kafka.broker.truststore.jks}:/local/kafka.truststore.jks
+    environment:
+      KAFKA_SSL_KEYSTORE_PASSWORD: ${KAFKA_SSL_KEYSTORE_PASSWORD}
+      KAFKA_SSL_TRUSTSTORE_PASSWORD: ${KAFKA_SSL_TRUSTSTORE_PASSWORD}
+      KAFKA_SSL_KEY_PASSWORD: ${KAFKA_SSL_KEY_PASSWORD}
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    networks:
+      - lob
+    restart: always
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "9093:9093"  # Make sure SSL port is exposed
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+      # Listener configuration
+      KAFKA_LISTENERS: SSL://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: SSL://kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: SSL:SSL
+
+      # SSL configuration
+      KAFKA_SSL_KEYSTORE_FILENAME: kafka.keystore.jks
+      KAFKA_SSL_KEYSTORE_CREDENTIALS: keystore_creds
+      KAFKA_SSL_KEY_CREDENTIALS: key_creds
+      KAFKA_SSL_TRUSTSTORE_FILENAME: kafka.truststore.jks
+      KAFKA_SSL_TRUSTSTORE_CREDENTIALS: truststore_creds
+      KAFKA_SSL_CLIENT_AUTH: required
+      # Disable hostname verification
+      KAFKA_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM: ""
+
+      # Inter-broker communication
+      KAFKA_SECURITY_INTER_BROKER_PROTOCOL: SSL
+    volumes:
+      - kafka-secrets:/etc/kafka/secrets
+#        - ${LOCAL_KAFKA_SSL_KEYSTORE_PATH}:/etc/kafka/secrets/kafka.keystore.jks
+#        - ${LOCAL_KAFKA_SSL_TRUSTSTORE_PATH}:/etc/kafka/secrets/kafka.truststore.jks
+  follower-app:
+    image: pro.registry.gitlab.metadata.dev.cf-deployments.org/base-infrastructure/docker-registry/cf-reeve-follower-app:main
+    networks:
+      - lob
+    ports:
+      - "9090:9090"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev--yaci-dev-kit
+      DB_URL: ${DB_USER:-jdbc:postgresql://postgres:5432/postgres?currentSchema=lob_follower_service}
+      LOB_BLOCKFROST_URL: http://yaci-cli:8080/api/v1/
+      STORE_CARDANO_HOST: ${STORE_CARDANO_HOST:-yaci-cli}
+      STORE_CARDANO_PORT: ${STORE_CARDANO_PORT:-3001}
+      STORE_CARDANO_PROTOCOL_MAGIC: ${STORE_CARDANO_PROTOCOL_MAGIC:-42}
+
+  yaci-cli:
+    image: bloxbean/yaci-cli:0.10.2
+    networks:
+      - lob
+    env_file:
+      - ./yaci-config/env
+      - ./yaci-config/node.properties
+    volumes:
+      - ./yaci-config/node.properties:/app/config/node.properties
+      - yaci-data:/clusters
+    ports:
+      - "3001:3001"
+      - "8081:8080"
+    entrypoint: [ "/app/yaci-cli", "create-node", "-o", "--start" ]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.yaci-bf-http.entrypoints=web"
+      - "traefik.http.routers.yaci-bf-http.rule=Host(`${YACI_BLOCKFROST_HOSTNAME:-yaci-blockfrost.example.com}`)"
+      - "traefik.http.routers.yaci-bf-https.rule=Host(`${YACI_BLOCKFROST_HOSTNAME:-yaci-blockfrost.example.com}`)"
+      - "traefik.http.routers.yaci-bf-https.entrypoints=websecure"
+      - "traefik.http.routers.yaci-bf-https.tls=true"
+      - "traefik.http.services.yaci-bf-https.loadbalancer.server.port=8080"
+      - "traefik.http.middlewares.https-redirect.headers.customrequestheaders.X-Forwarded-Proto=https"
+
+  yaci-viewer:
+    image: bloxbean/yaci-viewer:0.10.2
+    ports:
+      - "5173:5173"
+    env_file:
+      - ./yaci-config/env
+    networks:
+      - lob
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.yaci-viewer-http.entrypoints=web"
+      - "traefik.http.routers.yaci-viewer-http.rule=Host(`${YACI_VIEWER_HOSTNAME:-yaci-viewer.example.com}`)"
+      - "traefik.http.routers.yaci-viewer-https.rule=Host(`${YACI_VIEWER_HOSTNAME:-yaci-viewer.example.com}`)"
+      - "traefik.http.routers.yaci-viewer-https.entrypoints=websecure"
+      - "traefik.http.routers.yaci-viewer-https.tls=true"
+      - "traefik.http.middlewares.https-redirect.headers.customrequestheaders.X-Forwarded-Proto=https"
+
+  traefik:
+    profiles: [traefik]
+    image: "traefik:v2.9"
+    container_name: "traefik"
+    command:
+      - "--log.level=DEBUG"
+      - "--accesslog.filepath=/dev/stdout"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+    ports:
+      - "443:443"
+      - "80:80"
+        #- "8080:8080"
+    volumes:
+      - "/var/lib/letsencrypt:/letsencrypt"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    networks:
+      - lob
+
+volumes:
+  postgres-data:
+  keycloak-providers:
+  yaci-data:
+  kafka-secrets:
+
+networks:
+  lob:
+    name: lob

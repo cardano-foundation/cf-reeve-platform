@@ -70,12 +70,13 @@ class API3MetadataSerialiserTest {
         assertThat(metadataMap.get("data")).isNotNull();
         MetadataMap data = (MetadataMap) metadataMap.get("data");
         assertThat(data.get("test123")).isEqualTo("5");
-        // No accounting regime set on the entity -> field must be omitted from the on-chain schema
+        // No standard set on the entity -> field must be omitted from the on-chain schema
+        assertThat(metadataMap.get("standard")).isNull();
         assertThat(metadataMap.get("accounting_regime")).isNull();
     }
 
     @Test
-    void serializeReportEntity_withAccountingRegime_shouldIncludeItInSchema() {
+    void serializeReportEntity_withStandard_shouldPublishItUnderStandardKey() {
         org.cardanofoundation.lob.app.organisation.domain.entity.Organisation org = mock(org.cardanofoundation.lob.app.organisation.domain.entity.Organisation.class);
         when(organisationPublicApi.findByOrganisationId("org123"))
                 .thenReturn(Optional.of(org));
@@ -90,15 +91,18 @@ class API3MetadataSerialiserTest {
         reportEntity.setReportTemplateType(ReportTemplateType.BALANCE_SHEET);
         reportEntity.setDataMode(DataMode.SYSTEM);
         reportEntity.setReportVer(1L);
-        reportEntity.setAccountingRegime("IFRS");
+        reportEntity.setReportStandard("IFRS");
 
         MetadataMap metadataMap = serialiser.serialiseToMetadataMap(reportEntity, CREATION_SLOT);
 
-        assertThat(metadataMap.get("accounting_regime")).isEqualTo("IFRS");
+        assertThat(metadataMap.get("standard")).isEqualTo("IFRS");
+        // Legacy key (metadata version <= 1.2) must no longer be published
+        assertThat(metadataMap.get("accounting_regime")).isNull();
+        assertThat(((MetadataMap) metadataMap.get("metadata")).get("version")).isEqualTo("1.3");
     }
 
     @Test
-    void serializeReportEntity_withNullAccountingRegime_shouldOmitFromSchema() {
+    void serializeReportEntity_withNullStandard_shouldOmitFromSchema() {
         org.cardanofoundation.lob.app.organisation.domain.entity.Organisation org = mock(org.cardanofoundation.lob.app.organisation.domain.entity.Organisation.class);
         when(organisationPublicApi.findByOrganisationId("org123"))
                 .thenReturn(Optional.of(org));
@@ -113,10 +117,11 @@ class API3MetadataSerialiserTest {
         reportEntity.setReportTemplateType(ReportTemplateType.BALANCE_SHEET);
         reportEntity.setDataMode(DataMode.SYSTEM);
         reportEntity.setReportVer(1L);
-        reportEntity.setAccountingRegime(null); // legacy template predating this field
+        reportEntity.setReportStandard(null); // legacy template predating this field
 
         MetadataMap metadataMap = serialiser.serialiseToMetadataMap(reportEntity, CREATION_SLOT);
 
+        assertThat(metadataMap.get("standard")).isNull();
         assertThat(metadataMap.get("accounting_regime")).isNull();
     }
 

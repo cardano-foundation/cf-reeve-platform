@@ -61,7 +61,7 @@ public class ReportTemplateService {
     private final Validator validator;
     private final ReportTemplateTypeValidator reportTemplateTypeValidator;
     private final ReportingService reportingService;
-    private final AccountingRegimeResolver accountingRegimeResolver;
+    private final ReportStandardResolver reportStandardResolver;
 
     private Either<ProblemDetail, Void> validateReport(ReportTemplateDto dto) {
         Either<ProblemDetail, Void> errorDetails = validateReportTemplateDto(dto);
@@ -97,29 +97,29 @@ public class ReportTemplateService {
     }
 
     /**
-     * The accounting regime rules shared by create, update and the CSV import. A new template, or a changed
-     * regime, must be one the organisation offers, and is stored as its exact label. An unchanged one is
-     * accepted as-is (null on templates created before the field existed, or a regime deactivated since),
+     * The report standard rules shared by create, update and the CSV import. A new template, or a changed
+     * standard, must be one the organisation offers, and is stored as its exact label. An unchanged one is
+     * accepted as-is (null on templates created before the field existed, or a standard deactivated since),
      * since the template builder resends it unchanged. Either way it can't change once the template has a
      * published report.
      */
-    Either<ProblemDetail, Void> validateAccountingRegime(ReportTemplateDto dto, Optional<ReportTemplateEntity> existing) {
-        boolean unchanged = existing.isPresent() && Objects.equals(existing.get().getAccountingRegime(), dto.getAccountingRegime());
+    Either<ProblemDetail, Void> validateReportStandard(ReportTemplateDto dto, Optional<ReportTemplateEntity> existing) {
+        boolean unchanged = existing.isPresent() && Objects.equals(existing.get().getReportStandard(), dto.getReportStandard());
         if (!unchanged) {
-            Either<ProblemDetail, String> accountingRegime = accountingRegimeResolver.resolve(dto.getOrganisationId(), dto.getAccountingRegime());
-            if (accountingRegime.isLeft()) {
-                return Either.left(accountingRegime.getLeft());
+            Either<ProblemDetail, String> reportStandard = reportStandardResolver.resolve(dto.getOrganisationId(), dto.getReportStandard());
+            if (reportStandard.isLeft()) {
+                return Either.left(reportStandard.getLeft());
             }
-            dto.setAccountingRegime(accountingRegime.get());
+            dto.setReportStandard(reportStandard.get());
         }
-        return existing.map(template -> checkAccountingRegimeImmutable(template, dto)).orElse(Either.right(null));
+        return existing.map(template -> checkReportStandardImmutable(template, dto)).orElse(Either.right(null));
     }
 
-    Either<ProblemDetail, Void> checkAccountingRegimeImmutable(ReportTemplateEntity existing, ReportTemplateDto dto) {
-        boolean regimeChanged = !Objects.equals(existing.getAccountingRegime(), dto.getAccountingRegime());
-        if (regimeChanged && reportingRepository.existsByReportTemplateIdAndLedgerDispatchApprovedTrue(existing.getId())) {
-            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The accounting regime of template '" + existing.getName() + "' cannot be changed because it has at least one published report.");
-            problem.setTitle("ACCOUNTING_REGIME_IMMUTABLE_AFTER_PUBLISH");
+    Either<ProblemDetail, Void> checkReportStandardImmutable(ReportTemplateEntity existing, ReportTemplateDto dto) {
+        boolean standardChanged = !Objects.equals(existing.getReportStandard(), dto.getReportStandard());
+        if (standardChanged && reportingRepository.existsByReportTemplateIdAndLedgerDispatchApprovedTrue(existing.getId())) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The standard of template '" + existing.getName() + "' cannot be changed because it has at least one published report.");
+            problem.setTitle(Constants.REPORT_STANDARD_IMMUTABLE_AFTER_PUBLISH);
             return Either.left(problem);
         }
         return Either.right(null);
@@ -146,8 +146,8 @@ public class ReportTemplateService {
         log.info("Creating report template: {}", dto.getName());
         Either<ProblemDetail, Void> validateReport = validateReport(dto);
         if (validateReport.isLeft()) return Either.left(validateReport.getLeft());
-        Either<ProblemDetail, Void> accountingRegime = validateAccountingRegime(dto, Optional.empty());
-        if (accountingRegime.isLeft()) return Either.left(accountingRegime.getLeft());
+        Either<ProblemDetail, Void> reportStandard = validateReportStandard(dto, Optional.empty());
+        if (reportStandard.isLeft()) return Either.left(reportStandard.getLeft());
         // Check if a template with the same name already exists for this organisation
         Optional<ReportTemplateEntity> existingTemplateOpt =
                 reportTemplateRepository.findLatestByOrganisationIdAndName(dto.getOrganisationId(), dto.getName());
@@ -286,9 +286,9 @@ public class ReportTemplateService {
             problem.setTitle("Invalid Report Template Type");
             return Either.left(problem);
         }
-        Either<ProblemDetail, Void> accountingRegime = validateAccountingRegime(dto, Optional.of(existing));
-        if (accountingRegime.isLeft()) {
-            return Either.left(accountingRegime.getLeft());
+        Either<ProblemDetail, Void> reportStandard = validateReportStandard(dto, Optional.of(existing));
+        if (reportStandard.isLeft()) {
+            return Either.left(reportStandard.getLeft());
         }
 
         // Check if there are any reports using this template
@@ -375,8 +375,8 @@ public class ReportTemplateService {
     }
 
     @Transactional(readOnly = true)
-    public Optional<ReportTemplateResponseDto> findById(String id) {
-        return reportTemplateRepository.findById(id)
+    public Optional<ReportTemplateResponseDto> findByOrganisationIdAndId(String organisationId, String id) {
+        return reportTemplateRepository.findByOrganisationIdAndId(organisationId, id)
                 .map(reportTemplateMapper::toResponseDto);
     }
 
@@ -406,10 +406,10 @@ public class ReportTemplateService {
                 .build();
     }
 
-    public Either<ProblemDetail, Void> delete(String id) {
+    public Either<ProblemDetail, Void> delete(String organisationId, String id) {
         log.info("Deleting report template id: {}", id);
 
-        Optional<ReportTemplateEntity> templateOpt = reportTemplateRepository.findById(id);
+        Optional<ReportTemplateEntity> templateOpt = reportTemplateRepository.findByOrganisationIdAndId(organisationId, id);
         if (templateOpt.isEmpty()) {
             ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Report template with ID " + id + " does not exist");
             problem.setTitle("TEMPLATE_NOT_FOUND");

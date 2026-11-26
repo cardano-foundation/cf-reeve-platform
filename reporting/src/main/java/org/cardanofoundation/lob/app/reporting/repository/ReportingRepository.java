@@ -45,12 +45,13 @@ public interface ReportingRepository extends JpaRepository<ReportEntity, String>
             SELECT DISTINCT r FROM ReportEntity r
             JOIN r.reportTemplate.fields rf
             JOIN rf.mappingAccounts coa
-            WHERE coa.id.customerCode IN (
-                SELECT coa.id.customerCode
-                FROM ChartOfAccount coa2
-                JOIN accounting_reporting_core.TransactionItemEntity item
-                ON (coa2.id.customerCode = item.accountDebit.code OR coa2.id.customerCode = item.accountCredit.code)
+            WHERE r.organisationId = coa.id.organisationId
+            AND EXISTS (
+                SELECT 1
+                FROM accounting_reporting_core.TransactionItemEntity item
                 WHERE item.transaction.id IN :txIds
+                AND item.transaction.organisation.id = coa.id.organisationId
+                AND (item.accountDebit.code = coa.id.customerCode OR item.accountCredit.code = coa.id.customerCode)
             )
         """)
     List<ReportEntity> findAffectedByTxId(@Param("txIds") List<String> txIds);

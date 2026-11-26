@@ -1,0 +1,2 @@
+org.springframework.boot.env.EnvironmentPostProcessor=\
+org.cardanofoundation.lob.app.support.security.access.PermissionCatalogueEnvironmentPostProcessor

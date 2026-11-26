@@ -26,8 +26,7 @@ public class ErrorTitleConstants {
     public static final String UNABLE_TO_FIND_REFERENCE_CODE_BY_ID_S_AND_S_S = "Unable to find reference code by Id: %s and %s:%s";
     public static final String ACCOUNT_EVENT_NOT_FOUND = "ACCOUNT_EVENT_NOT_FOUND";
     public static final String VALIDATION_ERROR = "VALIDATION_ERROR";
+    public static final String CSV_HEADER_ERROR = "CSV_HEADER_ERROR";
     public static final String OPENING_BALANCE_VALIDATION_ERROR = "OPENING_BALANCE_VALIDATION_ERROR";
     public static final String VAT_RATE_CANNOT_BE_NEGATIVE = "VAT_RATE_CANNOT_BE_NEGATIVE";
-    public static final String ACCOUNTING_REGIME_NOT_FOUND = "ACCOUNTING_REGIME_NOT_FOUND";
-    public static final String ACCOUNTING_REGIME_ALREADY_EXISTS = "ACCOUNTING_REGIME_ALREADY_EXISTS";
 }

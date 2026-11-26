@@ -29,7 +29,7 @@ public class ReportConverter {
                 .year(event.getYear())
                 .dataMode(event.getDataMode())
                 .reportData(event.getReportData())
-                .accountingRegime(event.getAccountingRegime())
+                .reportStandard(event.getReportStandard())
                 .l1SubmissionData(L1SubmissionData.builder()
                 .publishStatus(blockchainPublishStatusMapper.convert(event.getDispatchStatus()))
                 .build())

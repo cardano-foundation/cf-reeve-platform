@@ -1,5 +1,7 @@
 package org.cardanofoundation.lob.app.funding.repository;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -21,6 +23,9 @@ public interface FundingEventRepository extends JpaRepository<FundingEventEntity
 
     Page<FundingEventEntity> findByOrganisationId(String organisationId, Pageable pageable);
 
+    /** Resolves an event only when it actually belongs to the given organisation (ownership check). */
+    Set<FundingEventEntity> findByIdAndOrganisationId(String id, String organisationId);
+
     /**
      * Row-locked read used by publish: a concurrent publish of the same event (same or another request)
      * blocks here until the first one commits, then sees it PUBLISHED — so an event can never be
@@ -30,16 +35,44 @@ public interface FundingEventRepository extends JpaRepository<FundingEventEntity
     @Query("SELECT e FROM funding.FundingEventEntity e WHERE e.id = :id")
     Optional<FundingEventEntity> findByIdForUpdate(@Param("id") String id);
 
+    /**
+     * Organisation events list with optional, AND-combined filters; a {@code null} argument disables its
+     * filter. Project title matching is an {@code EXISTS} over the event's milestone allocations (matching
+     * the milestone's project or, for a sub-project, its parent) so an event allocated to several matching
+     * projects is returned once and the page count stays correct. Currency matches either the reporting or
+     * the foreign (spend) currency.
+     */
     @Query("""
             SELECT e FROM funding.FundingEventEntity e
             WHERE e.organisationId = :organisationId
-            AND (:status IS NULL OR e.status = :status)
-            AND (:eventType IS NULL OR e.eventType = :eventType)
+            AND (:statuses IS NULL OR e.status IN :statuses)
+            AND (:eventTypes IS NULL OR e.eventType IN :eventTypes)
+            AND (:currency IS NULL OR LOWER(e.currencyRcy) = LOWER(CAST(:currency AS string))
+                 OR LOWER(e.currencyFcy) = LOWER(CAST(:currency AS string)))
+            AND (CAST(:dateFrom AS LocalDate) IS NULL OR e.eventDate >= :dateFrom)
+            AND (CAST(:dateTo AS LocalDate) IS NULL OR e.eventDate <= :dateTo)
+            AND (CAST(:minAmount AS BigDecimal) IS NULL OR e.totalAmount >= :minAmount)
+            AND (CAST(:maxAmount AS BigDecimal) IS NULL OR e.totalAmount <= :maxAmount)
+            AND (:projectTitle IS NULL OR EXISTS (
+                SELECT a FROM funding.EventMilestoneAllocationEntity a
+                JOIN a.milestone m
+                JOIN m.project p
+                LEFT JOIN p.parentProject pp
+                WHERE a.event = e
+                AND (LOWER(p.projectTitle) LIKE LOWER(CONCAT('%', CAST(:projectTitle AS string), '%'))
+                     OR LOWER(pp.projectTitle) LIKE LOWER(CONCAT('%', CAST(:projectTitle AS string), '%')))
+            ))
             """)
     Page<FundingEventEntity> findByOrganisationIdAndFilter(
             @Param("organisationId") String organisationId,
-            @Param("status") EventStatus status,
-            @Param("eventType") EventType eventType,
+            @Param("statuses") List<EventStatus> statuses,
+            @Param("eventTypes") List<EventType> eventTypes,
+            @Param("projectTitle") String projectTitle,
+            @Param("currency") String currency,
+            @Param("dateFrom") LocalDate dateFrom,
+            @Param("dateTo") LocalDate dateTo,
+            @Param("minAmount") BigDecimal minAmount,
+            @Param("maxAmount") BigDecimal maxAmount,
             Pageable pageable);
 
     @Query("""

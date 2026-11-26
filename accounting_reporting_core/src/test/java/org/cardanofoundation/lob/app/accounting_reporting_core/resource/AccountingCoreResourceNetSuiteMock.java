@@ -5,7 +5,9 @@ import static org.mockito.Mockito.mockStatic;
 
 import java.lang.reflect.Field;
 import java.nio.file.Path;
+import java.util.List;
 
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 
 import org.flywaydb.core.internal.util.FileUtils;
@@ -31,6 +33,13 @@ class AccountingCoreResourceNetSuiteMockTest {
         Field field = AccountingCoreResourceNetSuiteMock.class.getDeclaredField("mockResultPath");
         field.setAccessible(true);
         field.set(controller, mockResultPath);
+    }
+
+    @Test
+    void existsOnlyInLocalProfiles() {
+        Profile profile = AccountingCoreResourceNetSuiteMock.class.getAnnotation(Profile.class);
+
+        assertEquals(List.of("dev--yaci-dev-kit", "local"), List.of(profile.value()));
     }
 
     @Test

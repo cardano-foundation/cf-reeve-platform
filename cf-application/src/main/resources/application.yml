@@ -1,0 +1,434 @@
+server:
+  port: ${SERVER_PORT:9000}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: ${WEB_EXPOSURE_INCLUDE:health,info,prometheus,metrics,flyway}
+  endpoint:
+    metrics:
+      access: read_only
+    health:
+      show-details: ${MANAGEMENT_ENDPOINT_SHOW_DETAILS:when-authorized}
+      probes:
+        enabled: true
+    env:
+      access: none
+    configprops:
+      access: none
+    heapdump:
+      access: none
+    mappings:
+      access: none
+    loggers:
+      access: none
+    conditions:
+      access: none
+    beans:
+      access: none
+  metrics:
+    enable:
+      all: true
+spring:
+  task:
+    execution:
+      thread-name-prefix: lob-service-task-executor-
+      pool:
+        core-size: 2
+        max-size: 50
+        queue-capacity: 10000
+  kafka:
+    enabled: true
+    bootstrap-servers: kafka:9092
+    consumer:
+      # No global group-id — each @KafkaListener gets its own group to avoid
+      # cross-topic rebalance storms during rolling updates.
+      # group-id must be set explicitly on each @KafkaListener or via per-module properties.
+      auto-offset-reset: latest
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        # KIP-848: Use the new consumer group protocol for incremental cooperative rebalancing.
+        # This replaces the classic stop-the-world rebalances.
+        group.protocol: consumer
+        spring:
+          json:
+            trusted:
+              packages: '*'
+        fetch:
+            max:
+                bytes: 15728640 # 15MB
+      enable-auto-commit: false
+      auto-commit-interval: 1000
+    producer:
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      retries: 5
+      properties:
+        enable.idempotence: true
+        max:
+          request:
+            size: 15728640 # 15MB
+  rabbitmq:
+    enabled: false
+
+  threads:
+    virtual:
+      enabled: true
+
+  jpa:
+    properties:
+      org:
+        hibernate:
+          envers:
+            embeddable_set_ordinal_field_name: "ord"
+            audit_table_suffix: _aud
+            store_data_at_delete: true
+#          format_sql: true
+    open-in-view: false
+#    show-sql: true
+
+  sql:
+    init:
+      mode: never
+      #schema-locations: classpath:db/schema.sql
+
+  datasource:
+    name: ${DB_NAME:lob_service}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/postgres?currentSchema=lob_service}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: ${DB_DRIVER_CLASS_NAME:org.postgresql.Driver}
+
+    hikari:
+      minimum-idle: ${DB_MIN_IDLE:5}
+      # on peak load there can be a lot of connections and this should be able to handle it
+      maximum-pool-size: ${DB_MAX_POOL_SIZE:100}
+      idle-timeout: ${DB_IDLE_TIMEOUT:30000}
+      schema: ${DB_SCHEMA:lob_service}
+      #auto-commit: ${DB_AUTO_COMMIT:false}
+      connection-timeout: ${DB_CONNECTION_TIMEOUT:50000}
+
+    jpa:
+      database-platform: ${DB_DIALECT:org.hibernate.dialect.PostgreSQLDialect}
+      hibernate:
+        ddl-auto: none
+        show_sql: ${JPA_SHOW_SQL:false}
+  flyway:
+    out-of-order: false
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/postgres}
+    user: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+    schemas: ${DB_SCHEMA:lob_service}
+    # baselineOnMigrate this will create a baseline version if none exists (https://flywaydb.org/documentation/configuration/parameters/baselineOnMigrate)
+    baselineOnMigrate: true
+    enabled: true
+    validateMigrationNaming: true
+  web:
+    resources:
+      add-mappings: false
+    # disable static content handling
+    spring.web.resources.add-mappings: false
+    spring.mvc.throw-exception-if-no-handler-found: true
+    # force charset in request and responses
+  servlet:
+    encoding:
+      force: true
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+    exposure:
+      include: ${WEB_EXPOSURE_INCLUDE:health,info,prometheus,metrics,flyway,applicationmodules}
+
+  artemis:
+    embedded:
+      topics=target: target
+
+  main:
+    allow-bean-definition-overriding: true
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OAUTH2_ISSUER_URI:http://localhost:8080/realms/reeve-master}
+          jwk-set-uri: ${OAUTH2_JWK_SET_URI:http://localhost:8080/realms/reeve-master/protocol/openid-connect/certs}
+          jws-algorithms: ${OAUTH2_JWS_ALGORITHMS:RS256}
+          audiences: ${OAUTH2_AUDIENCE:reeve-api}
+          authorities-claim-name: ${OAUTH2_AUTHORITIES_CLAIM_NAME:roles}
+          authority-prefix: ${OAUTH2_AUTHORITY_PREFIX:ROLE_}
+          principal-claim-name: ${OAUTH2_PRINCIPAL_CLAIM_NAME:preferred_username}
+
+  health:
+    enabled: ${HEALTH_ENABLED:true}
+
+  endpoint:
+    health:
+      show-details: ${MANAGEMENT_ENDPOINT_SHOW_DETAILS:always}
+
+lob:
+  # Default path is for Docker
+  mock-result-path: ${LOB_MOCK_RESULT_PATH:/app/cf-application/src/main/resources/db/migrations/postgresql/cf-reeve-db-migrations/NetSuiteIngestionMock.json}
+  indexer:
+    enabled: ${LOB_INDEXER_ENABLED:true}
+    url: ${LOB_INDEXER_BASE_URL:http://localhost:9002/}
+    connect-timeout: ${LOB_INDEXER_CONNECT_TIMEOUT:5000}
+    read-timeout: ${LOB_INDEXER_READ_TIMEOUT:30000}
+  blockchain_reader:
+    enabled: ${LOB_BLOCKCHAIN_READER_ENABLED:false}
+  accounting_reporting_core:
+    enabled: ${LOB_ACCOUNTING_REPORTING_CORE_ENABLED:false}
+    rules:
+      sanity_check_fields: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_SANITY_CHECK_FIELDS:true}
+      transaction_type_unknown: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_TRANSACTION_TYPE_UNKNOWN:true}
+      discard_zero_balance_tx_items: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_DISCARD_ZERO_BALANCE_TX_ITEMS:true}
+      amounts_fcy_check: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_AMOUNTS_FCY_CHECK:true}
+      amounts_lcy_check: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_AMOUNTS_LCY_CHECK:true}
+      amount_lcy_balance_zeros_out_check: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_AMOUNT_LCY_BALANCE_ZEROS_OUT_CHECK:true}
+      amount_fcy_balance_zeros_out_check: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_AMOUNT_FCY_BALANCE_ZEROS_OUT_CHECK:true}
+      journal_account_credit_enrichment: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_JOURNAL_ACCOUNT_CREDIT_ENRICHMENT:true}
+      organisation_conversion: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_ORGANISATION_CONVERSION:true}
+      document_conversion: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_DOCUMENT_CONVERSION:true}
+      cost_center_conversion: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_COST_CENTER_CONVERSION:true}
+      project_conversion: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_PROJECT_CONVERSION:true}
+      account_event_codes_conversion: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_ACCOUNT_EVENT_CODES_CONVERSION:true}
+      discard_same_account_code: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_DISCARD_SAME_ACCOUNT_CODE:true}
+      tx_items_amounts_summing: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_TX_ITEMS_AMOUNTS_SUMMING:true}
+      amounts_lcy_after_summing_check: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_AMOUNTS_LCY_AFTER_SUMMING_CHECK:true}
+      account_code_debit_check: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_ACCOUNT_CODE_DEBIT_CHECK:true}
+      account_code_credit_check: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_ACCOUNT_CODE_CREDIT_CHECK:true}
+      document_must_be_present: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_DOCUMENT_MUST_BE_PRESENT:true}
+      check_if_all_tx_items_are_erased: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_CHECK_IF_ALL_TX_ITEMS_ARE_ERASED:true}
+      net_off_credit_debit: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_NET_OFF_CREDIT_DEBIT:true}
+      line_item_debit_credit_accounts_check: ${LOB_ACCOUNTING_REPORTING_CORE_RULES_LINE_ITEM_DEBIT_CREDIT_ACCOUNTS_CHECK:true}
+    jobs:
+      unstuck:
+        enabled: ${LOB_ACCOUNTING_REPORTING_CORE_JOBS_UNSTUCK_ENABLED:true}
+        delay: ${LOB_ACCOUNTING_REPORTING_CORE_JOBS_UNSTUCK_DELAY:PT30M}
+        initial_delay: ${LOB_ACCOUNTING_REPORTING_CORE_JOBS_UNSTUCK_INITIAL_DELAY:PT1M}
+        stuck_delay: ${LOB_ACCOUNTING_REPORTING_CORE_JOBS_UNSTUCK_STUCK_DELAY:PT10M}
+    debounce:
+      duration: ${LOB_ACCOUNTING_REPORTING_CORE_DEBOUNCE_DURATION:PT10S}
+    consumer-group: lob-consumer-accounting-core
+    topics:
+      transaction-batch-failed-event: accounting_reporting_core.domain.event.extraction.TransactionBatchFailedEvent
+      transaction-batch-started-event: accounting_reporting_core.domain.event.extraction.TransactionBatchStartedEvent
+      transaction-batch-chunk-event: accounting_reporting_core.domain.event.extraction.TransactionBatchChunkEvent
+      reconcilation-failed-event: accounting_reporting_core.domain.event.reconcilation.ReconcilationFailedEvent
+      reconcilation-started-event: accounting_reporting_core.domain.event.reconcilation.ReconcilationStartedEvent
+      reconcilation-chunk-event: accounting_reporting_core.domain.event.reconcilation.ReconcilationChunkEvent
+      reconcilation-finalisation-event: accounting_reporting_core.domain.event.reconcilation.ReconcilationFinalisationEvent
+      validate-ingestion-response-event: accounting_reporting_core.domain.event.extraction.ValidateIngestionResponseEvent
+  organisation:
+    enabled: ${LOB_ORGANISATION_ENABLED:false}
+    consumer-group: lob-consumer-organisation
+    topics:
+      netsuite-config-applied: organisation.domain.event.netsuite.NetSuiteConfigAppliedEvent
+  blockchain_publisher:
+    ipfs:
+      enabled: ${LOB_BLOCKCHAIN_PUBLISHER_IPFS_ENABLED:false}
+      local:
+        enabled: ${LOB_BLOCKCHAIN_PUBLISHER_IPFS_LOCAL_ENABLED:false}
+        node: ${LOB_BLOCKCHAIN_PUBLISHER_IPFS_LOCAL_NODE:127.0.0.1:5001}
+      blockfrost:
+        enabled: ${LOB_BLOCKCHAIN_PUBLISHER_IPFS_BLOCKFROST_ENABLED:false}
+        url: ${LOB_BLOCKCHAIN_PUBLISHER_IPFS_BLOCKFROST_URL:https://ipfs.blockfrost.io/api/v0/ipfs/add}
+        project-id: ${LOB_BLOCKCHAIN_PUBLISHER_IPFS_BLOCKFROST_PROJECT_ID:DUMMY_KEY}
+    rollback:
+      enabled: ${LOB_BLOCKCHAIN_PUBLISHER_ROLLBACK_ENABLED:false}
+    enabled: ${LOB_BLOCKCHAIN_PUBLISHER_ENABLED:false}
+    maxDelay: ${LOB_BLOCKCHAIN_PUBLISHER_MAX_DELAY:PT5M}
+    consumer-group: lob-consumer-blockchain-publisher
+    topics:
+      transaction-ledger-update-commander: accounting_reporting_core.domain.event.ledger.TransactionLedgerUpdateCommand
+      transaction-status-request-event: accounting_reporting_core.domain.event.ledger.TransactionStatusRequestEvent
+      tx-rollback-event: accounting_reporting_core.domain.event.ledger.TxRollbackEvent
+      ledger-update-command: blockchain_common.domain.LedgerUpdateEvent
+    keri:
+      enabled: ${LOB_BLOCKCHAIN_PUBLISHER_KERI_ENABLED:false}
+      url: ${LOB_BLOCKCHAIN_PUBLISHER_KERI_URL:http://127.0.0.1:3901}
+      booturl: ${LOB_BLOCKCHAIN_PUBLISHER_KERI_BOOTURL:http://127.0.0.1:3903}
+      metadata_label: ${LOB_BLOCKCHAIN_PUBLISHER_KERI_METADATA_LABEL:170}
+      identifier:
+        bran: ${LOB_BLOCKCHAIN_PUBLISHER_KERI_IDENTIFIER_BRAN:0ADF2TpptgqcDE5IQUF1H}
+        name: ${LOB_BLOCKCHAIN_PUBLISHER_KERI_IDENTIFIER_NAME:reeve}
+        role: ${LOB_BLOCKCHAIN_PUBLISHER_KERI_IDENTIFIER_ROLE:agent}
+  document_vault:
+    enabled: ${LOB_DOCUMENT_VAULT_ENABLED:false}
+    # One group PER LISTENER, not one per module. Two members of the same group subscribing to
+    # different topic sets is a rebalance anti-pattern, and two sharing a group on the SAME topic split
+    # its partitions rather than each receiving every record (a live defect elsewhere in this file).
+    # These two listeners also run in different services, so they must never be group-mates.
+    publish-command-consumer-group: lob-consumer-document-publish
+    ledger-update-consumer-group: lob-consumer-document-vault-ledger
+    topics:
+      # Raised by document_vault on the api service, consumed by blockchain_publisher on the publisher
+      # service. Without this the two tiers cannot exchange a publish at all.
+      document-publish-command: blockchain_common.domain.events.DocumentPublishCommand
+    dispatch:
+      fixed_delay: ${LOB_DOCUMENT_VAULT_DISPATCH_FIXED_DELAY:PT1M}
+      initial_delay: ${LOB_DOCUMENT_VAULT_DISPATCH_INITIAL_DELAY:PT10S}
+      batch-size: ${LOB_DOCUMENT_VAULT_DISPATCH_BATCH_SIZE:50}
+    # Upload limits enforced by VaultDocumentService and WrappedRecordService.
+    max-document-bytes: ${LOB_DOCUMENT_VAULT_MAX_DOCUMENT_BYTES:10485760}
+    max-slots: ${LOB_DOCUMENT_VAULT_MAX_SLOTS:64}
+    max-record-bytes: ${LOB_DOCUMENT_VAULT_MAX_RECORD_BYTES:8192}
+    # DocumentRetentionJob purges DRAFT envelopes older than retention-days; 0 disables it.
+    retention-days: ${LOB_DOCUMENT_VAULT_RETENTION_DAYS:0}
+    retention-cron: "${LOB_DOCUMENT_VAULT_RETENTION_CRON:0 0 3 * * *}"
+  # Wallet-driven KERI/Veridian attestation (CIP-170) for document_vault publishes.
+  # Independent of the legacy backend-driven lob.blockchain-publisher.keri above — both can coexist.
+  keri-attestation:
+    enabled: ${LOB_KERI_ATTESTATION_ENABLED:false}
+    # One group PER LISTENER. keri_attestation raises the AUTH_BEGIN publish command on the api
+    # service and consumes the resulting ledger update there; blockchain_publisher consumes the
+    # command on the publisher service.
+    publish-command-consumer-group: lob-consumer-auth-begin-publish
+    ledger-update-consumer-group: lob-consumer-keri-attestation-ledger
+    topics:
+      # Raised by keri_attestation on the api service, consumed by blockchain_publisher on the
+      # publisher service. This module owns no wallet, so without this an AUTH_BEGIN is never published.
+      auth-begin-publish-command: blockchain_common.domain.events.AuthBeginPublishCommand
+    keria:
+      url: ${LOB_KERI_ATTESTATION_KERIA_URL:http://127.0.0.1:3901}
+      boot-url: ${LOB_KERI_ATTESTATION_KERIA_BOOTURL:http://127.0.0.1:3903}
+      # STABLE passcode — derives the agent's KERI keystore/AID. Must be a fixed value: an empty bran
+      # makes the backend mint a NEW random agent identity on every restart, which breaks existing
+      # Veridian wallet pairings (inbound IPEX notifications stop arriving). Mirrors the stable default
+      # the blockchain-publisher KERI identifier uses above. Override per-deployment via the env var.
+      bran: ${LOB_KERI_ATTESTATION_KERIA_BRAN:0A98gEaYge5XlagRM9okY}
+    identifier-name: ${LOB_KERI_ATTESTATION_IDENTIFIER_NAME:reeve-attestation}
+    credential-policy:
+      # Only schema-base-url is still read here; the deprecated schema-saids / trusted-root-aids are
+      # superseded by credential-schemas below.
+      schema-base-url: ${LOB_KERI_ATTESTATION_SCHEMA_BASE_URL:https://cred-issuance.dev.ecosyseng.cf-deployments.org/oobi}
+    # Which credential schemas this deployment accepts, and who may issue them. Adding one is a
+    # configuration change, not a code change. CredentialSchemaRegistry VALIDATES THIS AT STARTUP and
+    # refuses to boot on a problem, so a deployment cannot come up looking healthy while trusting anyone.
+    #
+    #   trust-model: CHAINED    -> the issuance chain must terminate at one of trusted-roots (vLEI shape)
+    #   trust-model: STANDALONE -> the credential's own issuer must be one of trusted-issuers
+    #
+    # Foundation Employee is configured and live: its issuer AID and OOBI are known, so the entry
+    # ships active. The OOBI is what lets the agent ask that issuer's registry whether a credential is
+    # still issued — configuring the AID without it would leave every verification unable to answer,
+    # and failing closed.
+    #
+    # vLEI is left commented out because its GLEIF root AID is deployment-specific and has no safe
+    # default. Uncommenting it with a blank trusted-roots would REFUSE TO START, on purpose: a schema
+    # with no trust anchors reads as "trust anyone".
+    credential-schemas:
+      - said: ${LOB_KERI_ATTESTATION_EMPLOYEE_SCHEMA_SAID:EL9oOWU_7zQn_rD--Xsgi3giCWnFDaNvFMUGTOZx1ARO}
+        name: "Foundation Employee"
+        trust-model: STANDALONE
+        trusted-roots: []
+        trusted-issuers:
+          - ${LOB_KERI_ATTESTATION_EMPLOYEE_ISSUER_AID:EOcGYMIaKnF4_cpkcWhZVzoHcS0EauVQeWdSipHAfTrd}
+        oobis: ${LOB_KERI_ATTESTATION_EMPLOYEE_OOBIS:https://keria-ext.dev.ecosyseng.cf-deployments.org/oobi/EOcGYMIaKnF4_cpkcWhZVzoHcS0EauVQeWdSipHAfTrd/agent/EFrACXBZnest_9ldYyGcnKdele6tW50Xot6JEzvslUAU}
+    # - said: ${LOB_KERI_ATTESTATION_VLEI_SCHEMA_SAID:EBfdlu8R27Fbx-ehrqwImnK-8Cm79sqbAQ4MmvEAYqao}
+    #   name: "vLEI Legal Entity"
+    #   trust-model: CHAINED
+    #   trusted-roots:
+    #     - ${LOB_KERI_ATTESTATION_VLEI_GLEIF_ROOT_AID:}
+    #   trusted-issuers: []
+    #   oobis: ${LOB_KERI_ATTESTATION_VLEI_OOBIS:}
+  transaction:
+    ipfs:
+      enabled: ${LOB_TRANSACTION_IPFS_ENABLED:false}
+  reporting:
+    enabled: ${LOB_REPORTING_ENABLED:false}
+    consumer-group: lob-consumer-reporting
+    topics:
+      publish-report-event: reporting.dto.events.PublishReportEvent
+  funding:
+    enabled: ${LOB_FUNDING_ENABLED:true}
+    ipfs:
+      enabled: ${LOB_FUNDING_IPFS_ENABLED:false}
+    publish:
+      fixed_delay: ${LOB_FUNDING_PUBLISH_FIXED_DELAY:PT10S}
+      initial_delay: ${LOB_FUNDING_PUBLISH_INITIAL_DELAY:PT10S}
+      batch_size: ${LOB_FUNDING_PUBLISH_BATCH_SIZE:100}
+    topics:
+      spending-events-publish-command: funding.domain.events.SpendingEventsPublishCommand
+  cors:
+    allowed:
+      origins: ${LOB_CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  dispatching:
+    strategy:
+      type: ${LOB_DISPATCHING_STRATEGY_TYPE:DELAYED}
+
+  netsuite:
+    enabled: ${LOB_NETSUITE_ENABLED:false}
+    financial:
+      period:
+        source: EXPLICIT
+    consumer-group: lob-consumer-netsuite
+    # Separate group: the main netsuite group is shared with CSV-only workers, which cannot
+    # apply a configuration and would consume-and-discard these records.
+    config-consumer-group: lob-consumer-netsuite-config
+    topics:
+      scheduled-ingestion-event: accounting_reporting_core.domain.event.extraction.ScheduledIngestionEvent
+      validate-ingestion-event: accounting_reporting_core.domain.event.extraction.ValidateIngestionEvent
+      transaction-batch-created-event: accounting_reporting_core.domain.event.extraction.TransactionBatchCreatedEvent
+      scheduled-reconcilation-event: accounting_reporting_core.domain.event.reconcilation.ScheduledReconcilationEvent
+      reconcilation-created-event: accounting_reporting_core.domain.event.reconcilation.ReconcilationCreatedEvent
+      netsuite-config-upserted: organisation.domain.event.netsuite.NetSuiteConfigUpsertedEvent
+    client:
+      # Credentials are no longer configured here. They are stored per organisation in
+      # netsuite_adapter_organisation_config and administered through
+      # POST/PUT /api/v1/organisations/{orgId}/netsuite-configuration.
+      # Only operator-level tuning remains global.
+      recordspercall: ${LOB_NETSUITE_CLIENT_RECORDSPERCALL:10000}
+      timeout-seconds: ${LOB_NETSUITE_CLIENT_TIMEOUT_SECONDS:300}
+  csv:
+    enabled: ${LOB_CSV_ENABLED:false}
+    delimiter: ${LOB_CSV_DELIMITER:,}
+    send-batch-size: ${LOB_CSV_SEND_BATCH_SIZE:100}
+  l1:
+    transaction:
+      metadata:
+        validation:
+          enable: ${LOB_L1_TRANSACTION_METADATA_VALIDATION_ENABLED:true}
+      metadata_label: ${LOB_L1_TRANSACTION_METADATA_LABEL:1447}
+  security:
+    config-encryption:
+      # RSA key pair, Base64 of DER. The api (organisation module) needs only the PUBLIC key and
+      # can encrypt but never decrypt; the publisher (netsuite module) needs only the PRIVATE key.
+      # Generation and rollout: certs/netsuiteConfiguration.md. No defaults on purpose — the
+      # affected module fails fast at startup when its key is missing.
+      public-key: ${LOB_CONFIG_ENCRYPTION_PUBLIC_KEY:}
+      private-key: ${LOB_CONFIG_ENCRYPTION_PRIVATE_KEY:}
+    clamav:
+      enabled: ${LOB_SECURITY_CLAMAV_ENABLED:false}
+      host: ${LOB_SECURITY_CLAMAV_HOST:localhost}
+      port: ${LOB_SECURITY_CLAMAV_PORT:3310}
+  # Keycloak (lob.keycloak.admin) and the permission catalogue (lob.permissions) are configured in cf-lob-platform:
+  # the connection defaults in KeycloakAdminProperties, overridden with LOB_KEYCLOAK_ADMIN_* (the secret is required),
+  # and the catalogue in support/src/main/resources/org/cardanofoundation/lob/support/reeve-permissions.yml.
+  # Which role holds which permission is defined in keycloak-migrations and keycloak-config/realm-export.json.
+
+# yaci store
+store:
+  cardano:
+    host: ${STORE_CARDANO_HOST:preprod-node.world.dev.cardano.org}
+    port: ${STORE_CARDANO_PORT:30000}
+    # protocol magic 1 = Cardano PreProd network
+    protocol-magic: ${STORE_CARDANO_PROTOCOL_MAGIC:1}
+
+    sync-start-blockhash: ${STORE_CARDANO_SYNC_START_BLOCKHASH:274218b4101de63d02dd38fa0ff9be75a1c146667f4aa67fe8a04e462c8c55b1}
+    sync-start-slot: ${STORE_CARDANO_SYNC_START_SLOT:67868386}
+
+  blocks.epoch-calculation-interval: 86400
+  blocks.epoch-calculation-enabled: false
+
+apiPrefix: ${API_PREFIX:/yaci-api}
+
+springdoc:
+  api-docs.enabled: ${SPRINGDOC_API_DOCS_ENABLED:true}
+  swagger-ui:
+    enabled: ${SPRINGDOC_SWAGGER_UI_ENABLED:true}
+    path: ${SPRINGDOC_SWAGGER_UI_PATH:/swagger-ui.html}
+    oauth:
+      client-id: webclient
+      realm: reeve-master
+    oauth2-redirect-url: ${OAUTH2_REDIRECT_URL:http://localhost:9000/swagger-ui/oauth2-redirect.html}

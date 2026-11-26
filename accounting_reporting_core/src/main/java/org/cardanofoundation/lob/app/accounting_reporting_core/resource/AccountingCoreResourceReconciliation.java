@@ -1,5 +1,6 @@
 package org.cardanofoundation.lob.app.accounting_reporting_core.resource;
 
+import static org.springframework.http.HttpStatus.FORBIDDEN;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
 import java.util.Map;
@@ -19,6 +20,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -37,6 +39,8 @@ import org.cardanofoundation.lob.app.accounting_reporting_core.resource.views.Re
 import org.cardanofoundation.lob.app.accounting_reporting_core.service.internal.AccountingCoreService;
 import org.cardanofoundation.lob.app.accounting_reporting_core.utils.PageableFieldMappings;
 import org.cardanofoundation.lob.app.support.database.JpaSortFieldValidator;
+import org.cardanofoundation.lob.app.support.security.KeycloakSecurityHelper;
+import org.cardanofoundation.lob.app.support.security.OrgAccessDenied;
 
 @RestController
 @CrossOrigin(origins = "http://localhost:3000")
@@ -48,6 +52,7 @@ public class AccountingCoreResourceReconciliation {
     private final AccountingCorePresentationViewService accountingCorePresentationService;
     private final AccountingCoreService accountingCoreService;
     private final JpaSortFieldValidator jpaSortFieldValidator;
+    private final KeycloakSecurityHelper keycloakSecurityHelper;
 
     @Tag(name = "Reconciliation", description = "Reconciliation API")
     @Operation(description = "Start the Reconciliation", responses = {
@@ -56,8 +61,12 @@ public class AccountingCoreResourceReconciliation {
             )
     })
     @PostMapping(value = "/reconcile/trigger", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can(#body?.organisationId, 'transactions', 'reconcilate')")
     public ResponseEntity<ReconcileResponseView> reconcileTriggerAction(@Valid @RequestBody ReconciliationRequest body) {
+        if (!keycloakSecurityHelper.canUserAccessOrg(body.getOrganisationId())) {
+            return ResponseEntity.status(FORBIDDEN.value())
+                    .body(ReconcileResponseView.createFail("NO_ACCESS_TO_ORG", body.getDateFrom(), body.getDateTo(), OrgAccessDenied.problem()));
+        }
         return accountingCoreService.scheduleReconcilation(body.getOrganisationId(), body.getDateFrom(), body.getDateTo(), body.getExtractorType(), Optional.ofNullable(body.getFile()), body.getParameters()).fold(
                 problem -> ResponseEntity.status(problem.getStatus()).body(ReconcileResponseView.createFail(problem.getTitle(), body.getDateFrom(), body.getDateTo(), problem)),
                 success -> ResponseEntity.ok(ReconcileResponseView.createSuccess("We have received your reconcile request now.", body.getDateFrom(), body.getDateTo()))
@@ -65,6 +74,7 @@ public class AccountingCoreResourceReconciliation {
     }
 
     @PostMapping(value = "/reconcile/triggercsv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("@permissions.can(#body?.organisationId, 'transactions', 'reconcilate')")
     public ResponseEntity<ReconcileResponseView> reconcileTriggerCsvAction(@ModelAttribute ReconciliationRequest body) {
         return reconcileTriggerAction(body);
     }
@@ -76,7 +86,7 @@ public class AccountingCoreResourceReconciliation {
     })
     @Tag(name = "Reconciliation", description = "Reconciliation API")
     @PostMapping(value = "/transactions-reconcile", produces = "application/json")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can(#body?.organisationId, 'transactions', 'reconcilate_view')")
     public ResponseEntity<?> reconcileStart(@Valid @RequestBody ReconciliationFilterRequest body,
                                             @PageableDefault(size = Integer.MAX_VALUE) Pageable pageable) {
         Either<ProblemDetail, Pageable> pageableEither = jpaSortFieldValidator.convertPageable(pageable,
@@ -96,8 +106,8 @@ public class AccountingCoreResourceReconciliation {
     })
     @Tag(name = "Reconciliation", description = "Reconciliation API")
     @GetMapping(value = "/transactions-rejection-codes", produces = "application/json")
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
-    public ResponseEntity<ReconciliationRejectionCodeRequest[]> reconciliationRejectionCode() {
+    @PreAuthorize("@permissions.can(#organisationId, 'transactions', 'view')")
+    public ResponseEntity<ReconciliationRejectionCodeRequest[]> reconciliationRejectionCode(@RequestParam @Parameter(example = "75f95560c1d883ee7628993da5adf725a5d97a13929fd4f477be0faf5020ca94") String organisationId) {
         return ResponseEntity.ok().body(ReconciliationRejectionCodeRequest.values());
     }
 
@@ -108,7 +118,7 @@ public class AccountingCoreResourceReconciliation {
             )
     })
     @PostMapping(value = "/reconciliation-statistic", produces = APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasRole(@securityConfig.getManagerRole()) or hasRole(@securityConfig.getAuditorRole()) or hasRole(@securityConfig.getAccountantRole()) or hasRole(@securityConfig.getAdminRole())")
+    @PreAuthorize("@permissions.can(#body?.organisationId, 'transactions', 'reconcilate_view')")
     public ResponseEntity<Map<String, ReconciliationStatisticView>> reconciliationStatistic(@Valid @RequestBody ReconciliationStatisticRequest body) {
         Map<String, ReconciliationStatisticView> result = accountingCorePresentationService.getReconciliationStatisticByDateRange(body);
         return ResponseEntity.ok().body(result);
